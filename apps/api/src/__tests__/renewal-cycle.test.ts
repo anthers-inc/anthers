@@ -16,9 +16,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test"
 import { db } from "@anthers/db/client";
 import {
 	badges,
-	billingAccounts,
+	billingReductions,
 	invoices,
-	supportReductions,
+	stripeCustomers,
 	userBadges,
 	users,
 } from "@anthers/db/schema";
@@ -179,25 +179,25 @@ afterAll(() => {
 
 beforeEach(async () => {
 	fake.reset();
-	await db.delete(supportReductions).where(eq(supportReductions.userId, supporterId));
+	await db.delete(billingReductions).where(eq(billingReductions.userId, supporterId));
 });
 
 /** Point the billing row at a subscription so `POST /account` takes the change path. */
 async function withSubscription(customerId = "cus_under_test") {
 	await db
-		.insert(billingAccounts)
+		.insert(stripeCustomers)
 		.values({ userId: supporterId, stripeCustomerId: customerId, stripeSubscriptionId: SUB_ID })
 		.onConflictDoUpdate({
-			target: billingAccounts.userId,
+			target: stripeCustomers.userId,
 			set: { stripeCustomerId: customerId, stripeSubscriptionId: SUB_ID },
 		});
 }
 
 async function clearSubscription() {
 	await db
-		.update(billingAccounts)
+		.update(stripeCustomers)
 		.set({ stripeSubscriptionId: "", currentPeriodStart: null })
-		.where(eq(billingAccounts.userId, supporterId));
+		.where(eq(stripeCustomers.userId, supporterId));
 }
 
 /**
@@ -304,8 +304,8 @@ describe("a new subscription is anchored to the 1st", () => {
 
 		const rows = await db
 			.select()
-			.from(supportReductions)
-			.where(eq(supportReductions.userId, supporterId));
+			.from(billingReductions)
+			.where(eq(billingReductions.userId, supporterId));
 
 		const cycle = nextCycleKey(currentCycleKey());
 		const today = new Date().getUTCDate();
@@ -417,11 +417,11 @@ describe("a change splits by direction, per destination", () => {
 		await setSupport({ anthersSupport: 12, directed: [{ creatorId, amount: 4 }] });
 		const [row] = await db
 			.select()
-			.from(supportReductions)
+			.from(billingReductions)
 			.where(
 				and(
-					eq(supportReductions.userId, supporterId),
-					eq(supportReductions.destination, String(ANTHERS_ID)),
+					eq(billingReductions.userId, supporterId),
+					eq(billingReductions.destination, String(ANTHERS_ID)),
 				),
 			);
 
@@ -442,8 +442,8 @@ describe("a change splits by direction, per destination", () => {
 		await setSupport({ anthersSupport: 3, directed: [{ creatorId, amount: 4 }] });
 		const rows = await db
 			.select()
-			.from(supportReductions)
-			.where(eq(supportReductions.userId, supporterId));
+			.from(billingReductions)
+			.where(eq(billingReductions.userId, supporterId));
 		expect(rows).toHaveLength(0);
 	});
 });
@@ -541,12 +541,12 @@ describe("what is in force does not drop until the cycle turns", () => {
 
 	beforeEach(async () => {
 		await db
-			.update(billingAccounts)
+			.update(stripeCustomers)
 			.set({
 				stripeCustomerId: "cus_under_test",
 				currentPeriodStart: new Date(SEPT * 1000),
 			})
-			.where(eq(billingAccounts.userId, supporterId));
+			.where(eq(stripeCustomers.userId, supporterId));
 		// The in-force Badge fixture: a $12 Anthers rung held this cycle. What the webhooks
 		// find "in force" is this holding, read by `heldOnOrgLadder` below.
 		await holdOrgRung(supporterId, "12.00");
@@ -596,8 +596,8 @@ describe("what is in force does not drop until the cycle turns", () => {
 		);
 		const [acct] = await db
 			.select()
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, supporterId));
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, supporterId));
 		expect(cycleKeyFor(acct.currentPeriodStart as Date)).toBe("2026-10-01");
 	});
 });
@@ -621,12 +621,12 @@ describe("a renewal that fails", () => {
 	beforeEach(async () => {
 		await withSubscription();
 		await db
-			.update(billingAccounts)
+			.update(stripeCustomers)
 			.set({
 				currentPeriodStart: new Date(monthStart * 1000),
 				isActive: true,
 			})
-			.where(eq(billingAccounts.userId, supporterId));
+			.where(eq(stripeCustomers.userId, supporterId));
 		// The supporter's holding on the creator: a $5 Badge, held this cycle. Under the
 		// discrete-picks model the holding names the rung rather than carrying an amount,
 		// so the fixture creates the issuer's badge at that threshold first — the same
@@ -705,10 +705,10 @@ describe("a renewal that fails", () => {
 		expect(await holdingsThisMonth()).toHaveLength(0);
 		const [acct] = await db
 			.select({
-				subId: billingAccounts.stripeSubscriptionId,
+				subId: stripeCustomers.stripeSubscriptionId,
 			})
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, supporterId));
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, supporterId));
 		// Kept, so that paying what is owed makes the same subscription active again.
 		expect(acct.subId).toBe(SUB_ID);
 	});
@@ -773,7 +773,7 @@ function draftInvoice(opts: {
 }
 
 async function owe(destination: string, amount: string, cycle = "2026-10-01") {
-	await db.insert(supportReductions).values({
+	await db.insert(billingReductions).values({
 		userId: supporterId,
 		billingCycle: cycle,
 		destination,
@@ -831,8 +831,8 @@ describe("the reduction is spent on the draft renewal", () => {
 
 		const [row] = await db
 			.select()
-			.from(supportReductions)
-			.where(eq(supportReductions.userId, supporterId));
+			.from(billingReductions)
+			.where(eq(billingReductions.userId, supporterId));
 		expect(row.appliedAt).not.toBeNull();
 		expect(row.appliedInvoiceId).toBe("in_under_test");
 	});
@@ -857,11 +857,11 @@ describe("the reduction is spent on the draft renewal", () => {
 
 		const carried = await db
 			.select()
-			.from(supportReductions)
+			.from(billingReductions)
 			.where(
 				and(
-					eq(supportReductions.userId, supporterId),
-					eq(supportReductions.billingCycle, "2026-11-01"),
+					eq(billingReductions.userId, supporterId),
+					eq(billingReductions.billingCycle, "2026-11-01"),
 				),
 			);
 		expect(carried).toHaveLength(1);

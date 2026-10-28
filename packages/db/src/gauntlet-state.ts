@@ -8,7 +8,7 @@
  * without Stripe configured and needs a running `stripe listen` forwarder when it is. The e2e spec's default (Stripe-free) mode therefore
  * UI-walks everything that doesn't bill — follow, comment, the giving stepper — and
  * hops the *billing* facts here, at the same rows the webhooks would have written:
- * the user's `billing_accounts` row and a completed `purchases` row. Under the Badge
+ * the user's `stripe_customers` row and a completed `purchases` row. Under the Badge
  * model the **amounts are `user_badges` holdings**, which is what the `--give` hop
  * writes; the two amount columns the old `accounts` table carried are gone.
  * The full-Stripe walk (`GAUNTLET_STRIPE=1`) skips this tool entirely.
@@ -340,7 +340,7 @@ async function main(): Promise<void> {
 	// Report the state actually in the database — the numbers the caller should trust.
 	// The Anthers side reads the held Badge's threshold summed over the Anthers ladder —
 	// the same derivation `heldAnthersBadgeAmount` takes, and the reason the report does
-	// not echo the flag it was handed; the budget side reads the `billing_accounts`
+	// not echo the flag it was handed; the budget side reads the `stripe_customers`
 	// balance the budget hop writes. The Anthers account is found by its handle's first
 	// label, exactly as `gauntlet-support.ts` finds it for the write — the retired shape
 	// identified the ladder by a $0 rung that no longer exists (2026-10-03).

@@ -1450,6 +1450,13 @@
       "when": 1793169470084,
       "tag": "20261028-063750_sour_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 207,
+      "version": "7",
+      "when": 1793187084132,
+      "tag": "20261028-113124_narrow_omega_red",
+      "breakpoints": true
     }
   ]
 }

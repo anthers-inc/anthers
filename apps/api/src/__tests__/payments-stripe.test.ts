@@ -22,15 +22,15 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	accessReceipts,
 	badgeCharges,
 	badges,
 	basketItems,
-	billingAccounts,
-	crfLedger,
+	billingReductions,
+	charitableLedger,
+	purchaseReceipts,
 	purchases,
-	stripeAccounts,
-	supportReductions,
+	stripeConnectAccounts,
+	stripeCustomers,
 	userBadges,
 	users,
 	workAssets,
@@ -377,7 +377,7 @@ const run = crypto.randomUUID().slice(0, 8);
 const creatorName = `pay_creator_${run}`;
 const buyerName = `pay_buyer_${run}`;
 const subscriberName = `pay_sub_${run}`;
-/** Owns the reconcile-on-read tests' separate `stripe_accounts` row (UNIQUE user). */
+/** Owns the reconcile-on-read tests' separate `stripe_connect_accounts` row (UNIQUE user). */
 const reconName = `pay_recon_${run}`;
 
 let fake: Fake;
@@ -589,13 +589,13 @@ describe("Payments not configured — every guarded route refuses", () => {
 			billingCycle: sql`to_char(now(), 'YYYY-MM-01')`,
 		});
 		await db
-			.insert(billingAccounts)
+			.insert(stripeCustomers)
 			.values({
 				userId: subscriberId,
 				stripeSubscriptionId: `sub_${uid()}`,
 			})
 			.onConflictDoUpdate({
-				target: billingAccounts.userId,
+				target: stripeCustomers.userId,
 				set: { canceledAt: null },
 			});
 
@@ -609,8 +609,8 @@ describe("Payments not configured — every guarded route refuses", () => {
 
 		const [acct] = await db
 			.select()
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, subscriberId));
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, subscriberId));
 		expect(acct.canceledAt).toBeNull();
 		// And the holding still stands — the database did not move.
 		const [stillHeld] = await db
@@ -630,9 +630,9 @@ describe("Payments not configured — every guarded route refuses", () => {
 	it("refuses to resume — and leaves the cancellation in place", async () => {
 		const canceledAt = new Date();
 		await db
-			.update(billingAccounts)
+			.update(stripeCustomers)
 			.set({ canceledAt })
-			.where(eq(billingAccounts.userId, subscriberId));
+			.where(eq(stripeCustomers.userId, subscriberId));
 
 		await withoutStripe(async () => {
 			const res = await req("/api/subscriptions/resume", {
@@ -644,8 +644,8 @@ describe("Payments not configured — every guarded route refuses", () => {
 
 		const [acct] = await db
 			.select()
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, subscriberId));
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, subscriberId));
 		expect(acct.canceledAt).not.toBeNull();
 	});
 });
@@ -750,12 +750,14 @@ describe("Webhook signature verification", () => {
 		});
 
 		it("delivers account.updated through the connect secret — the case this exists for", async () => {
-			// `subscriberId`, not `creatorId`: `stripe_accounts.user_id` is UNIQUE, so
+			// `subscriberId`, not `creatorId`: `stripe_connect_accounts.user_id` is UNIQUE, so
 			// claiming a user another webhook test also attaches an account to makes that
 			// test fail on its insert — a failure that reads as a bug in the code under test
 			// and is really this fixture standing on its toes.
 			const acctId = `acct_${uid()}`;
-			await db.insert(stripeAccounts).values({ userId: subscriberId, stripeAccountId: acctId });
+			await db
+				.insert(stripeConnectAccounts)
+				.values({ userId: subscriberId, stripeAccountId: acctId });
 
 			const res = await sendWebhook(
 				stripeEvent("account.updated", {
@@ -771,8 +773,8 @@ describe("Webhook signature verification", () => {
 
 			const [row] = await db
 				.select()
-				.from(stripeAccounts)
-				.where(eq(stripeAccounts.stripeAccountId, acctId));
+				.from(stripeConnectAccounts)
+				.where(eq(stripeConnectAccounts.stripeAccountId, acctId));
 			expect(row.onboardingComplete).toBe(true);
 		});
 	});
@@ -828,7 +830,10 @@ describe("Webhook: payment_intent.succeeded", () => {
 		// The always-zero purchase-fee ledger row is gone with its column (the accounts
 		// split) — a completed Work purchase books nothing by itself. The row that remains
 		// meaningful is the refund shortfall, which `refunds.test.ts` owns.
-		const ledger = await db.select().from(crfLedger).where(eq(crfLedger.purchaseId, pending.id));
+		const ledger = await db
+			.select()
+			.from(charitableLedger)
+			.where(eq(charitableLedger.purchaseId, pending.id));
 		expect(ledger).toHaveLength(0);
 
 		// The reader's space is owed a receipt: the row is the worklist the sweep drains, and
@@ -836,8 +841,8 @@ describe("Webhook: payment_intent.succeeded", () => {
 		// job, so a webhook that lands is a receipt that will follow.
 		const owed = await db
 			.select()
-			.from(accessReceipts)
-			.where(eq(accessReceipts.purchaseId, pending.id));
+			.from(purchaseReceipts)
+			.where(eq(purchaseReceipts.purchaseId, pending.id));
 		expect(owed).toHaveLength(1);
 		expect(owed[0]).toMatchObject({
 			kind: "purchase",
@@ -854,8 +859,8 @@ describe("Webhook: payment_intent.succeeded", () => {
 		expect(still.status).toBe("completed");
 		const stillOwed = await db
 			.select()
-			.from(accessReceipts)
-			.where(eq(accessReceipts.purchaseId, pending.id));
+			.from(purchaseReceipts)
+			.where(eq(purchaseReceipts.purchaseId, pending.id));
 		expect(stillOwed).toHaveLength(1);
 	});
 
@@ -938,7 +943,10 @@ describe("Webhook: payment_intent.succeeded", () => {
 			.where(eq(purchases.stripePaymentIntentId, sessionId));
 		expect(row.status).toBe("pending");
 		// And no ledger entry was booked for the refused completion.
-		const ledger = await db.select().from(crfLedger).where(eq(crfLedger.purchaseId, row.id));
+		const ledger = await db
+			.select()
+			.from(charitableLedger)
+			.where(eq(charitableLedger.purchaseId, row.id));
 		expect(ledger).toHaveLength(0);
 	});
 
@@ -995,7 +1003,7 @@ describe("Webhook: payment_intent.succeeded", () => {
 			stripePaymentIntentId: sessionId,
 			status: "pending",
 		});
-		await db.delete(billingAccounts).where(eq(billingAccounts.userId, buyerId));
+		await db.delete(stripeCustomers).where(eq(stripeCustomers.userId, buyerId));
 
 		const session = fakeSessionFor(piId, { taxCents: 0, customer: customerId });
 		session.id = sessionId;
@@ -1008,9 +1016,9 @@ describe("Webhook: payment_intent.succeeded", () => {
 		expect((await sendWebhook(event)).status).toBe(200);
 
 		const [acct] = await db
-			.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, buyerId));
+			.select({ stripeCustomerId: stripeCustomers.stripeCustomerId })
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, buyerId));
 		expect(acct?.stripeCustomerId).toBe(customerId);
 	});
 
@@ -1029,7 +1037,7 @@ describe("Webhook: payment_intent.succeeded", () => {
 			stripePaymentIntentId: sessionId,
 			status: "pending",
 		});
-		await db.delete(billingAccounts).where(eq(billingAccounts.userId, buyerId));
+		await db.delete(stripeCustomers).where(eq(stripeCustomers.userId, buyerId));
 
 		const session = fakeSessionFor(piId, { taxCents: 0, customer: null });
 		session.id = sessionId;
@@ -1043,8 +1051,8 @@ describe("Webhook: payment_intent.succeeded", () => {
 
 		const accts = await db
 			.select()
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, buyerId));
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, buyerId));
 		expect(accts).toHaveLength(0);
 	});
 
@@ -1066,10 +1074,10 @@ describe("Webhook: payment_intent.succeeded", () => {
 			status: "pending",
 		});
 		await db
-			.insert(billingAccounts)
+			.insert(stripeCustomers)
 			.values({ userId: buyerId, stripeCustomerId: settledCustomerId })
 			.onConflictDoUpdate({
-				target: billingAccounts.userId,
+				target: stripeCustomers.userId,
 				set: { stripeCustomerId: settledCustomerId },
 			});
 
@@ -1084,9 +1092,9 @@ describe("Webhook: payment_intent.succeeded", () => {
 		expect((await sendWebhook(event)).status).toBe(200);
 
 		const [acct] = await db
-			.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, buyerId));
+			.select({ stripeCustomerId: stripeCustomers.stripeCustomerId })
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, buyerId));
 		expect(acct?.stripeCustomerId).toBe(settledCustomerId);
 	});
 });
@@ -1095,7 +1103,7 @@ describe("Webhook: the per-creator split at completion", () => {
 	// Two connected creators, one Work each — the minimum shape that exercises
 	// grouping: one charge, two creators' shares to move, one transfer each. Both are
 	// THIS describe's own users, deliberately not the shared `creatorId`: several other
-	// describes insert `stripe_accounts` rows for it, and a describe-level connect here
+	// describes insert `stripe_connect_accounts` rows for it, and a describe-level connect here
 	// would race theirs on the table's one-account-per-user shape.
 	let firstCreatorId = 0;
 	let firstWorkId = 0;
@@ -1105,8 +1113,8 @@ describe("Webhook: the per-creator split at completion", () => {
 	let secondAcctId = "";
 
 	async function connect(userId: number, acctId: string) {
-		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, userId));
-		await db.insert(stripeAccounts).values({
+		await db.delete(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, userId));
+		await db.insert(stripeConnectAccounts).values({
 			userId,
 			stripeAccountId: acctId,
 			chargesEnabled: true,
@@ -1395,7 +1403,7 @@ describe("Webhook: payment_intent.payment_failed", () => {
 describe("Webhook: account.updated", () => {
 	it("syncs the connected account's capabilities", async () => {
 		const acctId = `acct_${uid()}`;
-		await db.insert(stripeAccounts).values({ userId: creatorId, stripeAccountId: acctId });
+		await db.insert(stripeConnectAccounts).values({ userId: creatorId, stripeAccountId: acctId });
 
 		await sendWebhook(
 			stripeEvent("account.updated", {
@@ -1409,8 +1417,8 @@ describe("Webhook: account.updated", () => {
 
 		const [row] = await db
 			.select()
-			.from(stripeAccounts)
-			.where(eq(stripeAccounts.stripeAccountId, acctId));
+			.from(stripeConnectAccounts)
+			.where(eq(stripeConnectAccounts.stripeAccountId, acctId));
 		expect(row.chargesEnabled).toBe(true);
 		expect(row.payoutsEnabled).toBe(true);
 		expect(row.onboardingComplete).toBe(true);
@@ -1421,7 +1429,7 @@ describe("Webhook: account.updated", () => {
 		// Stripe having approved the account, and treating it as such would route a
 		// destination charge at an account that cannot receive it.
 		const acctId = `acct_${uid()}`;
-		await db.insert(stripeAccounts).values({ userId: buyerId, stripeAccountId: acctId });
+		await db.insert(stripeConnectAccounts).values({ userId: buyerId, stripeAccountId: acctId });
 
 		await sendWebhook(
 			stripeEvent("account.updated", {
@@ -1435,8 +1443,8 @@ describe("Webhook: account.updated", () => {
 
 		const [row] = await db
 			.select()
-			.from(stripeAccounts)
-			.where(eq(stripeAccounts.stripeAccountId, acctId));
+			.from(stripeConnectAccounts)
+			.where(eq(stripeConnectAccounts.stripeAccountId, acctId));
 		expect(row.onboardingComplete).toBe(false);
 	});
 });
@@ -1447,23 +1455,23 @@ describe("GET /stripe/onboard — reconcile on read", () => {
 	 * rows when `account.updated` deliveries were missed; the GET route now asks Stripe
 	 * when the row says incomplete and syncs it through the webhook's own derivation.
 	 * These tests own a separate user so shared fixture rows are left untouched —
-	 * `stripe_accounts.user_id` is UNIQUE and the suite's other sections rely on theirs.
+	 * `stripe_connect_accounts.user_id` is UNIQUE and the suite's other sections rely on theirs.
 	 */
 	let reconCookie: string;
 	let reconId: number;
 
 	async function strandedRow() {
-		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
+		await db.delete(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, reconId));
 		const acctId = `acct_${uid()}`;
-		await db.insert(stripeAccounts).values({ userId: reconId, stripeAccountId: acctId });
+		await db.insert(stripeConnectAccounts).values({ userId: reconId, stripeAccountId: acctId });
 		return acctId;
 	}
 
 	/** A row already in agreement with Stripe — the case no reconcile is needed for. */
 	async function knownGoodRow() {
-		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
+		await db.delete(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, reconId));
 		const acctId = `acct_${uid()}`;
-		await db.insert(stripeAccounts).values({
+		await db.insert(stripeConnectAccounts).values({
 			userId: reconId,
 			stripeAccountId: acctId,
 			chargesEnabled: true,
@@ -1481,7 +1489,7 @@ describe("GET /stripe/onboard — reconcile on read", () => {
 		// Creator-chosen payouts (2026-09-14) mean no schedule until the creator picks one;
 		// Stripe's Express default is daily, and the first live onboarding came out of that
 		// flow enrolled in it. The create call's `settings` is where the default is refused.
-		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
+		await db.delete(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, reconId));
 
 		const res = await req("/api/payments/stripe/onboard", {
 			method: "POST",
@@ -1513,8 +1521,8 @@ describe("GET /stripe/onboard — reconcile on read", () => {
 		// settings card — now agrees with Stripe without another live read.
 		const [row] = await db
 			.select()
-			.from(stripeAccounts)
-			.where(eq(stripeAccounts.stripeAccountId, acctId));
+			.from(stripeConnectAccounts)
+			.where(eq(stripeConnectAccounts.stripeAccountId, acctId));
 		expect(row.onboardingComplete).toBe(true);
 		expect(row.chargesEnabled).toBe(true);
 		expect(row.payoutsEnabled).toBe(true);
@@ -1541,8 +1549,8 @@ describe("GET /stripe/onboard — reconcile on read", () => {
 			// arrives by the same path. The gate's verdict is Stripe's own.
 			const [row] = await db
 				.select()
-				.from(stripeAccounts)
-				.where(eq(stripeAccounts.stripeAccountId, acctId));
+				.from(stripeConnectAccounts)
+				.where(eq(stripeConnectAccounts.stripeAccountId, acctId));
 			expect(row.onboardingComplete).toBe(false);
 			expect(row.chargesEnabled).toBe(false);
 		} finally {
@@ -1551,8 +1559,8 @@ describe("GET /stripe/onboard — reconcile on read", () => {
 	});
 
 	it("costs no Stripe read when the row already agrees with Stripe", async () => {
-		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
-		await db.insert(stripeAccounts).values({
+		await db.delete(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, reconId));
+		await db.insert(stripeConnectAccounts).values({
 			userId: reconId,
 			stripeAccountId: `acct_${uid()}`,
 			chargesEnabled: true,
@@ -1650,7 +1658,7 @@ describe("GET /stripe/onboard — reconcile on read", () => {
 	});
 
 	it("gives a creator with no account the not-connected shape at detail", async () => {
-		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
+		await db.delete(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, reconId));
 
 		const res = await req("/api/payments/stripe/onboard?detail=1", {
 			headers: { Cookie: reconCookie },
@@ -1673,7 +1681,7 @@ describe("GET /stripe/onboard — reconcile on read", () => {
 	});
 
 	it("refuses the Dashboard door to a creator with no connected account", async () => {
-		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, reconId));
+		await db.delete(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, reconId));
 
 		const res = await req("/api/payments/stripe/dashboard-link", {
 			method: "POST",
@@ -1690,10 +1698,10 @@ describe("Webhook: customer.subscription.*", () => {
 	beforeAll(async () => {
 		subId = `sub_${uid()}`;
 		await db
-			.insert(billingAccounts)
+			.insert(stripeCustomers)
 			.values({ userId: subscriberId, stripeCustomerId: customerId })
 			.onConflictDoUpdate({
-				target: billingAccounts.userId,
+				target: stripeCustomers.userId,
 				set: { stripeCustomerId: customerId, stripeSubscriptionId: "" },
 			});
 	}, DB_SETUP_TIMEOUT);
@@ -1730,8 +1738,8 @@ describe("Webhook: customer.subscription.*", () => {
 		expect(await heldOnOrgLadder(subscriberId)).toBe(9);
 		const [acct] = await db
 			.select()
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, subscriberId));
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, subscriberId));
 		expect(acct.isActive).toBe(true);
 		expect(acct.stripeSubscriptionId).toBe(subId);
 		// The period end reads off the ITEM, not the subscription — the 2026-02 API move.
@@ -1758,8 +1766,8 @@ describe("Webhook: customer.subscription.*", () => {
 		);
 		const [acct] = await db
 			.select()
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, subscriberId));
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, subscriberId));
 		expect(acct.canceledAt).not.toBeNull();
 		expect(await heldOnOrgLadder(subscriberId)).toBe(3);
 	});
@@ -1776,8 +1784,8 @@ describe("Webhook: customer.subscription.*", () => {
 		expect(await heldOnOrgLadder(subscriberId)).toBe(3);
 		const [acct] = await db
 			.select()
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, subscriberId));
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, subscriberId));
 		expect(acct.stripeSubscriptionId).toBe(subId);
 	});
 
@@ -1793,8 +1801,8 @@ describe("Webhook: customer.subscription.*", () => {
 		expect(await heldOnOrgLadder(subscriberId)).toBe(0);
 		const [acct] = await db
 			.select()
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, subscriberId));
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, subscriberId));
 		expect(acct.stripeSubscriptionId).toBe("");
 		expect(acct.canceledAt).toBeNull();
 	});
@@ -1826,8 +1834,8 @@ describe("Basket checkout — one charge, one card fee", () => {
 	let otherCreatorWorkId = 0;
 
 	async function connect(userId: number) {
-		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, userId));
-		await db.insert(stripeAccounts).values({
+		await db.delete(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, userId));
+		await db.insert(stripeConnectAccounts).values({
 			userId,
 			stripeAccountId: `acct_${uid()}`,
 			chargesEnabled: true,
@@ -2275,8 +2283,8 @@ describe("Checkout — session construction under automatic tax", () => {
 
 	/** A creator who can actually be paid — now a precondition of checkout, not a mode. */
 	async function connectCreator(acctId = `acct_${uid()}`) {
-		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, creatorId));
-		await db.insert(stripeAccounts).values({
+		await db.delete(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, creatorId));
+		await db.insert(stripeConnectAccounts).values({
 			userId: creatorId,
 			stripeAccountId: acctId,
 			chargesEnabled: true,
@@ -2340,7 +2348,7 @@ describe("Checkout — session construction under automatic tax", () => {
 		// Customer at Stripe behind. Something to reuse: `customer` — the session pays on
 		// the record the saved address (or subscription) already made, so one buyer
 		// accumulates into one Customer rather than one per flow.
-		await db.delete(billingAccounts).where(eq(billingAccounts.userId, buyerId));
+		await db.delete(stripeCustomers).where(eq(stripeCustomers.userId, buyerId));
 		const { res: noneRes } = await checkout();
 		expect(noneRes.status).toBe(200);
 		const none = fake.lastCall("checkout.sessions.create")
@@ -2353,9 +2361,9 @@ describe("Checkout — session construction under automatic tax", () => {
 
 		const savedId = `cus_saved_${uid()}`;
 		await db
-			.insert(billingAccounts)
+			.insert(stripeCustomers)
 			.values({ userId: buyerId, stripeCustomerId: savedId })
-			.onConflictDoUpdate({ target: billingAccounts.userId, set: { stripeCustomerId: savedId } });
+			.onConflictDoUpdate({ target: stripeCustomers.userId, set: { stripeCustomerId: savedId } });
 		const { res: reuseRes } = await checkout();
 		expect(reuseRes.status).toBe(200);
 		const reuse = fake.lastCall("checkout.sessions.create")
@@ -2373,7 +2381,7 @@ describe("Checkout — session construction under automatic tax", () => {
 	// nothing asserted it. A connected creator is now a precondition, and the failure is
 	// loud: no session is created at all, so no money moves that nobody can settle.
 	it("refuses checkout, and creates no session, when the creator can't be paid", async () => {
-		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, creatorId));
+		await db.delete(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, creatorId));
 
 		const { res } = await checkout();
 		expect(res.status).toBe(409);
@@ -2383,8 +2391,8 @@ describe("Checkout — session construction under automatic tax", () => {
 	});
 
 	it("refuses when onboarding started but payouts are not enabled", async () => {
-		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, creatorId));
-		await db.insert(stripeAccounts).values({
+		await db.delete(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, creatorId));
+		await db.insert(stripeConnectAccounts).values({
 			userId: creatorId,
 			stripeAccountId: `acct_${uid()}`,
 			chargesEnabled: true,
@@ -2635,14 +2643,14 @@ describe("Webhook: the Badge first transaction's completion", () => {
 		// completion's split must never receive badge money even when the issuer COULD
 		// take a transfer, which is exactly the shape the mixed-charge test pins.
 		workCreatorId = (await signUp(`badge_wcreator_${run}`)).id;
-		await db.insert(stripeAccounts).values({
+		await db.insert(stripeConnectAccounts).values({
 			userId: workCreatorId,
 			stripeAccountId: `acct_${uid()}`,
 			chargesEnabled: true,
 			payoutsEnabled: true,
 			onboardingComplete: true,
 		});
-		await db.insert(stripeAccounts).values({
+		await db.insert(stripeConnectAccounts).values({
 			userId: issuerId,
 			stripeAccountId: `acct_badgeissuer_${uid()}`,
 			chargesEnabled: true,
@@ -2736,9 +2744,9 @@ describe("Webhook: the Badge first transaction's completion", () => {
 		// The buyer's subscription is live, with no line for the issuer yet — the existing
 		// subscription's issuer line join, the badge-purchase half of the raise.
 		await db
-			.insert(billingAccounts)
+			.insert(stripeCustomers)
 			.values({ userId: buyer, stripeCustomerId: `cus_${uid()}`, stripeSubscriptionId: subId })
-			.onConflictDoUpdate({ target: billingAccounts.userId, set: { stripeSubscriptionId: subId } });
+			.onConflictDoUpdate({ target: stripeCustomers.userId, set: { stripeSubscriptionId: subId } });
 		fake.responses["subscriptions.retrieve"] = subscription({ id: subId, anthers: 3 });
 
 		const { sessionId, event } = completedSession(buyer, { paymentMethod: false });
@@ -2786,8 +2794,8 @@ describe("Webhook: the Badge first transaction's completion", () => {
 		// figure the model's own raise path records.
 		const owed = await db
 			.select()
-			.from(supportReductions)
-			.where(eq(supportReductions.userId, buyer));
+			.from(billingReductions)
+			.where(eq(billingReductions.userId, buyer));
 		expect(owed).toHaveLength(1);
 		expect(owed[0].billingCycle).toBe(nextCycleKey(cycleKeyFor(new Date())));
 		expect(new Decimal(owed[0].amount).toFixed(2)).toBe(reductionFor(6, new Date()).toFixed(2));
@@ -2891,9 +2899,9 @@ describe("Webhook: the Badge first transaction's completion", () => {
 		// latch has to protect from a second delivery's half-run.
 		const subId = `sub_${uid()}`;
 		await db
-			.insert(billingAccounts)
+			.insert(stripeCustomers)
 			.values({ userId: buyer, stripeSubscriptionId: subId })
-			.onConflictDoUpdate({ target: billingAccounts.userId, set: { stripeSubscriptionId: subId } });
+			.onConflictDoUpdate({ target: stripeCustomers.userId, set: { stripeSubscriptionId: subId } });
 		fake.responses["subscriptions.retrieve"] = subscription({ id: subId, anthers: 3 });
 
 		const { sessionId, event } = completedSession(buyer, { paymentMethod: false });
@@ -2901,14 +2909,14 @@ describe("Webhook: the Badge first transaction's completion", () => {
 
 		expect((await sendWebhook(event)).status).toBe(200);
 		expect(
-			await db.select().from(supportReductions).where(eq(supportReductions.userId, buyer)),
+			await db.select().from(billingReductions).where(eq(billingReductions.userId, buyer)),
 		).toHaveLength(1);
 
 		// A second delivery may write nothing: the row is completed, so the badge half
 		// never runs again — no second reduction, no second line move.
 		expect((await sendWebhook(event)).status).toBe(200);
 		expect(
-			await db.select().from(supportReductions).where(eq(supportReductions.userId, buyer)),
+			await db.select().from(billingReductions).where(eq(billingReductions.userId, buyer)),
 		).toHaveLength(1);
 		expect(fake.callsTo("subscriptions.update")).toHaveLength(1);
 
@@ -2940,9 +2948,9 @@ describe("Webhook: the Badge first transaction's completion", () => {
 
 		const subId = `sub_${uid()}`;
 		await db
-			.insert(billingAccounts)
+			.insert(stripeCustomers)
 			.values({ userId: buyer, stripeSubscriptionId: subId })
-			.onConflictDoUpdate({ target: billingAccounts.userId, set: { stripeSubscriptionId: subId } });
+			.onConflictDoUpdate({ target: stripeCustomers.userId, set: { stripeSubscriptionId: subId } });
 		// The Anthers line exists, stamped "anthers" — the retired literal still read as it.
 		fake.responses["subscriptions.retrieve"] = subscription({ id: subId, anthers: 3 });
 
@@ -3008,7 +3016,7 @@ describe("The badge checkout routes", () => {
 				})
 				.returning({ id: badges.id })
 		)[0].id;
-		await db.insert(stripeAccounts).values({
+		await db.insert(stripeConnectAccounts).values({
 			userId: issuerId2,
 			stripeAccountId: `acct_${uid()}`,
 			chargesEnabled: true,
@@ -3218,9 +3226,9 @@ describe("The badge checkout routes", () => {
 		const pastBuyer = await signUp(`route_past_${run}`);
 		const subId = `sub_${uid()}`;
 		await db
-			.insert(billingAccounts)
+			.insert(stripeCustomers)
 			.values({ userId: pastBuyer.id, stripeSubscriptionId: subId })
-			.onConflictDoUpdate({ target: billingAccounts.userId, set: { stripeSubscriptionId: subId } });
+			.onConflictDoUpdate({ target: stripeCustomers.userId, set: { stripeSubscriptionId: subId } });
 		fake.responses["subscriptions.retrieve"] = subscription({ id: subId, status: "past_due" });
 
 		const res = await req("/api/payments/badges/checkout", {
@@ -3264,7 +3272,7 @@ describe("The badge checkout routes", () => {
 	});
 
 	it("skips the connected-account precondition for Anthers as the issuer — its money is already platform-side", async () => {
-		// (no stripe_accounts row for the Anthers account — the rung checkout works, because
+		// (no stripe_connect_accounts row for the Anthers account — the rung checkout works, because
 		// the Anthers ladder's money never needs a transfer to be receivable)
 		const anthersId = await anthersUserId();
 		const [anthersRung] = await db

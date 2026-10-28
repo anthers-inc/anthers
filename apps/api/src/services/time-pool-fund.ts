@@ -8,7 +8,7 @@
  * time-pool-fund.ts` carries the arithmetic; `financial_plan_settings` carries the
  * shares — the plan tool's settings row is the raw data host this mechanism reads).
  *
- * One row per cycle in `time_pool_fund_ledger` is the published record:
+ * One row per cycle in `pool_fund_ledger` is the published record:
  *
  * - **Actual** — the cycle ended or is in flight, computed from that cycle's own
  *   booked Anthers holdings. An ended cycle's holdings may still grow through
@@ -34,7 +34,7 @@ import { db } from "@anthers/db/client";
 import {
 	attentionEvents,
 	badges,
-	timePoolFundLedger,
+	poolFundLedger,
 	userBadges,
 	userCycles,
 } from "@anthers/db/schema";
@@ -170,8 +170,8 @@ async function actualizeCycle(cycle: CycleKey, now: Date) {
 
 	const [existing] = await db
 		.select()
-		.from(timePoolFundLedger)
-		.where(eq(timePoolFundLedger.billingCycle, cycle))
+		.from(poolFundLedger)
+		.where(eq(poolFundLedger.billingCycle, cycle))
 		.limit(1);
 
 	// The frozen count rule: a count is taken once, after the cycle ended, and never
@@ -207,12 +207,9 @@ async function actualizeCycle(cycle: CycleKey, now: Date) {
 	};
 
 	if (existing) {
-		await db
-			.update(timePoolFundLedger)
-			.set(values)
-			.where(eq(timePoolFundLedger.billingCycle, cycle));
+		await db.update(poolFundLedger).set(values).where(eq(poolFundLedger.billingCycle, cycle));
 	} else {
-		await db.insert(timePoolFundLedger).values({ billingCycle: cycle, ...values });
+		await db.insert(poolFundLedger).values({ billingCycle: cycle, ...values });
 	}
 	return { ...fund, activeFreeAccounts: active };
 }
@@ -277,9 +274,9 @@ export async function publishFundLedger(now: Date = new Date()): Promise<number>
 	// is — the current cycle's live count — because on the path's first cycles there
 	// is no frozen history to project from.
 	const [projection] = await db
-		.select({ count: timePoolFundLedger.activeFreeAccounts })
-		.from(timePoolFundLedger)
-		.where(sql`${timePoolFundLedger.billingCycle} = ${current}`)
+		.select({ count: poolFundLedger.activeFreeAccounts })
+		.from(poolFundLedger)
+		.where(sql`${poolFundLedger.billingCycle} = ${current}`)
 		.limit(1);
 	const settings = await loadPlanSettings();
 	const rootPool = await smallestPaidPool();
@@ -314,12 +311,12 @@ async function insertFutureRow(
 	now: Date,
 ): Promise<void> {
 	const [existing] = await db
-		.select({ id: timePoolFundLedger.id })
-		.from(timePoolFundLedger)
-		.where(eq(timePoolFundLedger.billingCycle, cycle))
+		.select({ id: poolFundLedger.id })
+		.from(poolFundLedger)
+		.where(eq(poolFundLedger.billingCycle, cycle))
 		.limit(1);
 	if (existing) return;
-	await db.insert(timePoolFundLedger).values({
+	await db.insert(poolFundLedger).values({
 		billingCycle: cycle,
 		status,
 		charitableRevenue: recurring.toFixed(2),
@@ -350,8 +347,8 @@ export async function publishedFundLedger(): Promise<
 > {
 	const rows = await db
 		.select()
-		.from(timePoolFundLedger)
-		.orderBy(desc(timePoolFundLedger.billingCycle))
+		.from(poolFundLedger)
+		.orderBy(desc(poolFundLedger.billingCycle))
 		.limit(24);
 	return rows.map((row) => ({
 		billingCycle: row.billingCycle,

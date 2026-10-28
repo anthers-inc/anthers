@@ -14,9 +14,9 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	badges,
-	billingAccounts,
 	poolDistributions,
 	stickers,
+	stripeCustomers,
 	userBadges,
 } from "@anthers/db/schema";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
@@ -63,14 +63,14 @@ async function seedCycle(
 	// the Anthers rung held below (the badge-holdings shape, since the amount columns are
 	// the old table's).
 	const [acct] = await db
-		.insert(billingAccounts)
+		.insert(stripeCustomers)
 		.values({
 			userId,
 			currentPeriodStart: PERIOD_START,
 			currentPeriodEnd: PERIOD_END,
 			isActive: true,
 		})
-		.returning({ id: billingAccounts.id });
+		.returning({ id: stripeCustomers.id });
 	{
 		const anthersId = await ensureAnthersLadder();
 		const threshold = anthersSupport.toFixed(2);

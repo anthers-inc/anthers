@@ -13,7 +13,12 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { notifications, stripeAccounts, works, workTranscodingJobs } from "@anthers/db/schema";
+import {
+	notifications,
+	stripeConnectAccounts,
+	works,
+	workTranscodingJobs,
+} from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
@@ -323,9 +328,9 @@ describe("the release-scheduled sweep", () => {
 		const workId = await stage(creator.id);
 		const at = await makeDue(workId);
 		await db
-			.update(stripeAccounts)
+			.update(stripeConnectAccounts)
 			.set({ payoutsEnabled: false })
-			.where(eq(stripeAccounts.userId, creator.id));
+			.where(eq(stripeConnectAccounts.userId, creator.id));
 		try {
 			await releaseScheduled();
 			await releaseScheduled();

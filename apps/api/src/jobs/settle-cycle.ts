@@ -38,12 +38,12 @@
 import { db } from "@anthers/db";
 import {
 	badgeCharges,
+	charitableLedger,
 	creatorCredits,
-	crfLedger,
 	invoiceLines,
 	invoices,
-	monthSettlements,
 	poolDistributions,
+	settlementMonths,
 	userCycles,
 	users,
 } from "@anthers/db/schema";
@@ -429,12 +429,12 @@ async function settleSupporterMonth(
 		}
 		const marker = `[settle u${userId} ${month}]`;
 		const [booked] = await tx
-			.select({ total: sql<string>`COALESCE(SUM(${crfLedger.amount}), 0)` })
-			.from(crfLedger)
-			.where(like(crfLedger.description, `${marker}%`));
+			.select({ total: sql<string>`COALESCE(SUM(${charitableLedger.amount}), 0)` })
+			.from(charitableLedger)
+			.where(like(charitableLedger.description, `${marker}%`));
 		const inflowDelta = CENTS(inflow.minus(new Decimal(booked?.total ?? 0)));
 		if (!inflowDelta.isZero()) {
-			await tx.insert(crfLedger).values({
+			await tx.insert(charitableLedger).values({
 				amount: inflowDelta.toFixed(2),
 				description: `${marker} remainder from $${anthersDollars.toFixed(2)} to Anthers (Time Pool $${month$.timePool.toFixed(2)}, undistributed $${undistributed.toFixed(2)})`,
 			});
@@ -571,9 +571,9 @@ export async function settleCycle(
 			.from(invoices)
 			.where(and(eq(invoices.billingCycle, month), eq(invoices.settledAt, now)));
 		await db
-			.insert(monthSettlements)
+			.insert(settlementMonths)
 			.values({ billingCycle: month, settledAt: now, invoiceCount: count })
-			.onConflictDoNothing({ target: monthSettlements.billingCycle });
+			.onConflictDoNothing({ target: settlementMonths.billingCycle });
 	}
 
 	console.log(`settle: ${months.join(", ")} — ${supporters} supporter month(s) credited`);

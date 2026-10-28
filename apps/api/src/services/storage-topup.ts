@@ -39,7 +39,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { badges, billingAccounts, userBadges, userCycles, users } from "@anthers/db/schema";
+import { badges, stripeCustomers, userBadges, userCycles, users } from "@anthers/db/schema";
 import { previousCycleKey } from "@anthers/shared/billing-cycle";
 import {
 	STORAGE_LADDER_GIB,
@@ -108,9 +108,9 @@ export async function addTopUpToInvoice(invoice: Stripe.Invoice): Promise<number
 	if (!customerId) return 0;
 
 	const [acct] = await db
-		.select({ userId: billingAccounts.userId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.stripeCustomerId, customerId))
+		.select({ userId: stripeCustomers.userId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.stripeCustomerId, customerId))
 		.limit(1);
 	if (!acct) return 0;
 

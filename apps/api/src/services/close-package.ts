@@ -47,7 +47,7 @@
  *
  * 3. **The charitable ledger draws no journal line.** Badge revenue already books the
  *    supporter's whole Anthers line and the Time Pool expense debits against it, so a
- *    remainder line would double-count; the `crf_ledger` movements are carried in the
+ *    remainder line would double-count; the `charitable_ledger` movements are carried in the
  *    settlement schedule as supporting detail instead. The Anthers-funded free Time Pool —
  *    a free account's pool, Anthers' own money spent on their behalf — is a genuine
  *    program-service expense against that same revenue, booked on its own line so the two
@@ -77,12 +77,12 @@
  *
  * ⚠️ **Read-only.** Nothing here writes; the rows it reads are written by the checkout
  * webhook (`purchases`), `services/invoices.ts` (`invoices`), `jobs/settle-cycle.ts`
- * (`creator_credits`, `month_settlements`, `crf_ledger`) and `services/refunds.ts`, and
+ * (`creator_credits`, `settlement_months`, `charitable_ledger`) and `services/refunds.ts`, and
  * reaching around them is the bug the one-writer rule names.
  */
 
 import { db } from "@anthers/db/client";
-import { crfLedger, invoiceLines } from "@anthers/db/schema";
+import { charitableLedger, invoiceLines } from "@anthers/db/schema";
 import Decimal from "decimal.js";
 import { inArray, sql } from "drizzle-orm";
 import { parseFilingPeriod, rowsOf } from "./books.js";
@@ -144,7 +144,7 @@ export interface CreditGroupRow {
 	total: string;
 }
 
-/** A `crf_ledger` movement — supporting detail for the schedules, never a journal line. */
+/** A `charitable_ledger` movement — supporting detail for the schedules, never a journal line. */
 export interface LedgerRow {
 	id: number;
 	amount: string;
@@ -253,7 +253,7 @@ const BOUNDARY_NOTES = [
 
 /**
  * Assemble the close package for one settled month, named as `2026-09`. A month that has not
- * settled is refused rather than estimated, because `month_settlements` is the explicit
+ * settled is refused rather than estimated, because `settlement_months` is the explicit
  * state the 2026-09-14 decision settled on and an estimated close would state creator
  * balances the settlement run has not written.
  */
@@ -274,7 +274,7 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 
 	const [marker] = rowsOf<{ settled_at: string }>(
 		await db.execute(sql`
-			SELECT settled_at FROM month_settlements WHERE billing_cycle = ${cycle} LIMIT 1
+			SELECT settled_at FROM settlement_months WHERE billing_cycle = ${cycle} LIMIT 1
 		`),
 	);
 	if (!marker) {
@@ -440,7 +440,7 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 	}>(
 		await db.execute(sql`
 			SELECT id, amount, description, created_at
-			FROM crf_ledger
+			FROM charitable_ledger
 			WHERE description LIKE ${`[settle u% ${cycle}] %`}
 			ORDER BY id
 		`),
@@ -448,15 +448,15 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 	const shortfallRows = refundedPurchases.length
 		? await db
 				.select({
-					id: crfLedger.id,
-					amount: crfLedger.amount,
-					description: crfLedger.description,
-					createdAt: crfLedger.createdAt,
+					id: charitableLedger.id,
+					amount: charitableLedger.amount,
+					description: charitableLedger.description,
+					createdAt: charitableLedger.createdAt,
 				})
-				.from(crfLedger)
+				.from(charitableLedger)
 				.where(
 					inArray(
-						crfLedger.purchaseId,
+						charitableLedger.purchaseId,
 						refundedPurchases.map((r) => r.id),
 					),
 				)

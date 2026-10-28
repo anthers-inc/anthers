@@ -33,11 +33,11 @@ import { db } from "@anthers/db/client";
 import {
 	badgeCharges,
 	badges,
-	billingAccounts,
 	disputes,
 	invoices,
 	purchases,
-	stripeAccounts,
+	stripeConnectAccounts,
+	stripeCustomers,
 	userBadges,
 	users,
 	works,
@@ -285,9 +285,9 @@ async function resolveBadgePurchase(
 	// the checkout's job — `atCheckout` gates it, so a quote stays free of processor calls.
 	if (opts?.atCheckout) {
 		const [acct] = await db
-			.select({ stripeSubscriptionId: billingAccounts.stripeSubscriptionId })
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, userId))
+			.select({ stripeSubscriptionId: stripeCustomers.stripeSubscriptionId })
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, userId))
 			.limit(1);
 		if (acct?.stripeSubscriptionId) {
 			const sub = await retrieveSubscription(acct.stripeSubscriptionId);
@@ -867,9 +867,9 @@ function badgeLineItem(
  */
 async function hasActiveSupportSubscription(userId: number): Promise<boolean> {
 	const [acct] = await db
-		.select({ stripeSubscriptionId: billingAccounts.stripeSubscriptionId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
+		.select({ stripeSubscriptionId: stripeCustomers.stripeSubscriptionId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	if (!acct?.stripeSubscriptionId) return false;
 	const sub = await retrieveSubscription(acct.stripeSubscriptionId);
@@ -1040,7 +1040,7 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	// when Stripe created it (`if_required`); linking it here is what makes the buyer's
 	// NEXT purchase reuse that one instead of leaving a second customer object behind.
 	// No-op when the session carries no customer (the ordinary opted-out buyer) and
-	// never overwrites the id `billingAccounts` already holds. The buyer's own id rides
+	// never overwrites the id `stripeCustomers` already holds. The buyer's own id rides
 	// the intent's metadata, which every purchase surface stamps. A Badge's recurrence
 	// needs this link done BEFORE the support half below runs — it looks the customer id
 	// up through the same column.
@@ -1468,8 +1468,8 @@ const paymentRoutes = new Hono()
 
 		const [account] = await db
 			.select()
-			.from(stripeAccounts)
-			.where(eq(stripeAccounts.userId, user.id))
+			.from(stripeConnectAccounts)
+			.where(eq(stripeConnectAccounts.userId, user.id))
 			.limit(1);
 
 		if (!account) {
@@ -1502,9 +1502,9 @@ const paymentRoutes = new Hono()
 			if (liveAcct?.details_submitted) {
 				const patch = stripeFlagPatchFromAccount(liveAcct);
 				await db
-					.update(stripeAccounts)
+					.update(stripeConnectAccounts)
 					.set({ ...patch, updatedAt: new Date() })
-					.where(eq(stripeAccounts.stripeAccountId, account.stripeAccountId));
+					.where(eq(stripeConnectAccounts.stripeAccountId, account.stripeAccountId));
 				// The row object above is stale the moment the patch writes; respond from the
 				// patch so the creator is told Stripe's truth this load, not the pre-sync row.
 				// ⚠️ The detail view is NOT preempted by this: a tab load that reconciles is
@@ -1594,8 +1594,8 @@ const paymentRoutes = new Hono()
 		// Check for existing Stripe account
 		const [existing] = await db
 			.select()
-			.from(stripeAccounts)
-			.where(eq(stripeAccounts.userId, user.id))
+			.from(stripeConnectAccounts)
+			.where(eq(stripeConnectAccounts.userId, user.id))
 			.limit(1);
 
 		if (existing?.onboardingComplete) {
@@ -1621,7 +1621,9 @@ const paymentRoutes = new Hono()
 			// Null only when payments are unconfigured, which the guard above already refused.
 			accountId = account?.id ?? "";
 			if (!accountId) return c.json({ error: "Payments are not configured." }, 503);
-			await db.insert(stripeAccounts).values({ userId: user.id, stripeAccountId: accountId });
+			await db
+				.insert(stripeConnectAccounts)
+				.values({ userId: user.id, stripeAccountId: accountId });
 		}
 
 		// Return here after the hosted flow; the account.updated webhook syncs enablement.
@@ -1650,8 +1652,8 @@ const paymentRoutes = new Hono()
 
 		const [account] = await db
 			.select()
-			.from(stripeAccounts)
-			.where(eq(stripeAccounts.userId, user.id))
+			.from(stripeConnectAccounts)
+			.where(eq(stripeConnectAccounts.userId, user.id))
 			.limit(1);
 		if (!account) {
 			return c.json({ error: "Connect a Stripe account first." }, 409);
@@ -1771,8 +1773,8 @@ const paymentRoutes = new Hono()
 
 		const [creatorAccount] = await db
 			.select()
-			.from(stripeAccounts)
-			.where(eq(stripeAccounts.userId, work.creatorId))
+			.from(stripeConnectAccounts)
+			.where(eq(stripeConnectAccounts.userId, work.creatorId))
 			.limit(1);
 		if (!creatorAccount?.onboardingComplete || !creatorAccount.payoutsEnabled) {
 			return c.json({ error: "This creator can't accept payments yet." }, 409);
@@ -2187,8 +2189,8 @@ const paymentRoutes = new Hono()
 		const accounts = creatorsToCheck.length
 			? await db
 					.select()
-					.from(stripeAccounts)
-					.where(inArray(stripeAccounts.userId, creatorsToCheck))
+					.from(stripeConnectAccounts)
+					.where(inArray(stripeConnectAccounts.userId, creatorsToCheck))
 			: [];
 		for (const creatorId of creatorsToCheck) {
 			const account = accounts.find((a) => a.userId === creatorId);
@@ -2491,8 +2493,8 @@ const paymentRoutes = new Hono()
 		if (one.issuer.id !== (await anthersUserId())) {
 			const [account] = await db
 				.select()
-				.from(stripeAccounts)
-				.where(eq(stripeAccounts.userId, one.issuer.id))
+				.from(stripeConnectAccounts)
+				.where(eq(stripeConnectAccounts.userId, one.issuer.id))
 				.limit(1);
 			if (!account?.onboardingComplete || !account.payoutsEnabled)
 				return c.json({ error: "This creator can't accept payments yet." }, 409);
@@ -2979,9 +2981,9 @@ const paymentRoutes = new Hono()
 			// writer and the reconcile-on-read in the GET route cannot drift apart.
 			const acct = event.data.object as Stripe.Account;
 			await db
-				.update(stripeAccounts)
+				.update(stripeConnectAccounts)
 				.set({ ...stripeFlagPatchFromAccount(acct), updatedAt: new Date() })
-				.where(eq(stripeAccounts.stripeAccountId, acct.id));
+				.where(eq(stripeConnectAccounts.stripeAccountId, acct.id));
 		} else if (
 			event.type === "customer.subscription.created" ||
 			event.type === "customer.subscription.updated" ||

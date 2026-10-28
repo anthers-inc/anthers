@@ -87,7 +87,7 @@ import {
 	creatorCredits,
 	creatorTransferCredits,
 	creatorTransfers,
-	stripeAccounts,
+	stripeConnectAccounts,
 	users,
 } from "@anthers/db/schema";
 import Decimal from "decimal.js";
@@ -304,9 +304,9 @@ async function transferOneCreator(
 	// send money for this account, so the row exists; reading it here keeps the standing
 	// check the single gate rather than adding a second, subtly-different one.
 	const [account] = await db
-		.select({ stripeAccountId: stripeAccounts.stripeAccountId })
-		.from(stripeAccounts)
-		.where(eq(stripeAccounts.userId, creatorId))
+		.select({ stripeAccountId: stripeConnectAccounts.stripeAccountId })
+		.from(stripeConnectAccounts)
+		.where(eq(stripeConnectAccounts.userId, creatorId))
 		.limit(1);
 	if (!account) return false;
 

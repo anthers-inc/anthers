@@ -24,8 +24,8 @@
 import { db } from "@anthers/db/client";
 import {
 	badges,
-	billingAccounts,
 	invoices,
+	stripeCustomers,
 	userBadges,
 	userCycles,
 	works,
@@ -273,8 +273,8 @@ export async function ensureCreatorProduct(creatorId: number, handle: string): P
 	if (!paymentsConfigured()) throw new Error("Stripe not configured");
 	const [acct] = await db
 		.select()
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, creatorId))
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, creatorId))
 		.limit(1);
 	const taxCode = await creatorProductTaxCode(creatorId);
 	if (acct?.stripeProductId) {
@@ -282,9 +282,9 @@ export async function ensureCreatorProduct(creatorId: number, handle: string): P
 		if (acct.stripeProductTaxCode !== taxCode) {
 			await updateProduct(acct.stripeProductId, { tax_code: taxCode }).catch(() => null);
 			await db
-				.update(billingAccounts)
+				.update(stripeCustomers)
 				.set({ stripeProductTaxCode: taxCode, updatedAt: new Date() })
-				.where(eq(billingAccounts.userId, creatorId));
+				.where(eq(stripeCustomers.userId, creatorId));
 		}
 		return acct.stripeProductId;
 	}
@@ -296,9 +296,9 @@ export async function ensureCreatorProduct(creatorId: number, handle: string): P
 	});
 	if (!product) throw new Error("Stripe not configured");
 	await db
-		.update(billingAccounts)
+		.update(stripeCustomers)
 		.set({ stripeProductId: product.id, stripeProductTaxCode: taxCode, updatedAt: new Date() })
-		.where(eq(billingAccounts.userId, creatorId));
+		.where(eq(stripeCustomers.userId, creatorId));
 	return product.id;
 }
 
@@ -583,8 +583,8 @@ export async function ensureStripeCustomer(userId: number, email: string): Promi
 	if (!paymentsConfigured()) throw new Error("Stripe not configured");
 	const [acct] = await db
 		.select()
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	if (acct?.stripeCustomerId) return acct.stripeCustomerId;
 	const customer = await createCustomer({
@@ -598,10 +598,10 @@ export async function ensureStripeCustomer(userId: number, email: string): Promi
 	// not persisted. Adulthood verification is the caller for whom "never billed" is the
 	// normal case.
 	await db
-		.insert(billingAccounts)
+		.insert(stripeCustomers)
 		.values({ userId, stripeCustomerId: customer.id })
 		.onConflictDoUpdate({
-			target: billingAccounts.userId,
+			target: stripeCustomers.userId,
 			set: { stripeCustomerId: customer.id, updatedAt: new Date() },
 		});
 	return customer.id;
@@ -614,9 +614,9 @@ export async function ensureStripeCustomer(userId: number, email: string): Promi
  */
 export async function stripeCustomerIdFor(userId: number): Promise<string | null> {
 	const [acct] = await db
-		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
+		.select({ stripeCustomerId: stripeCustomers.stripeCustomerId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	return acct?.stripeCustomerId || null;
 }
@@ -638,16 +638,16 @@ export async function linkCheckoutCustomer(
 ): Promise<void> {
 	if (!customerId) return;
 	const [acct] = await db
-		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
+		.select({ stripeCustomerId: stripeCustomers.stripeCustomerId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	if (acct?.stripeCustomerId) return;
 	await db
-		.insert(billingAccounts)
+		.insert(stripeCustomers)
 		.values({ userId, stripeCustomerId: customerId })
 		.onConflictDoUpdate({
-			target: billingAccounts.userId,
+			target: stripeCustomers.userId,
 			set: { stripeCustomerId: customerId, updatedAt: new Date() },
 		});
 }
@@ -691,9 +691,9 @@ export interface SavedBillingAddress {
 export async function savedBillingAddress(userId: number): Promise<SavedBillingAddress | null> {
 	if (!paymentsConfigured()) return null;
 	const [acct] = await db
-		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
+		.select({ stripeCustomerId: stripeCustomers.stripeCustomerId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	if (!acct?.stripeCustomerId) return null;
 	const customer = await retrieveCustomer(acct.stripeCustomerId);
@@ -758,9 +758,9 @@ export async function clearSavedBillingAddress(
 ): Promise<"cleared" | "none" | "failed"> {
 	if (!paymentsConfigured()) return "none";
 	const [acct] = await db
-		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
+		.select({ stripeCustomerId: stripeCustomers.stripeCustomerId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	if (!acct?.stripeCustomerId) return "none";
 	try {
@@ -792,8 +792,8 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 	const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
 	const [acct] = await db
 		.select()
-		.from(billingAccounts)
-		.where(eq(billingAccounts.stripeCustomerId, customerId))
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.stripeCustomerId, customerId))
 		.limit(1);
 	if (!acct) return;
 
@@ -807,14 +807,14 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		// Ignore a stale subscription that isn't the account's current one.
 		if (acct.stripeSubscriptionId && acct.stripeSubscriptionId !== sub.id) return;
 		await db
-			.update(billingAccounts)
+			.update(stripeCustomers)
 			.set({
 				stripeSubscriptionId: "",
 				isActive: true,
 				canceledAt: null,
 				updatedAt: new Date(),
 			})
-			.where(eq(billingAccounts.id, acct.id));
+			.where(eq(stripeCustomers.id, acct.id));
 		await lapseUnpaidMonth(acct.userId);
 		return;
 	}
@@ -829,12 +829,12 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 	if (sub.status === "unpaid") {
 		if (acct.stripeSubscriptionId && acct.stripeSubscriptionId !== sub.id) return;
 		await db
-			.update(billingAccounts)
+			.update(stripeCustomers)
 			.set({
 				isActive: false,
 				updatedAt: new Date(),
 			})
-			.where(eq(billingAccounts.id, acct.id));
+			.where(eq(stripeCustomers.id, acct.id));
 		await lapseUnpaidMonth(acct.userId);
 		return;
 	}
@@ -878,7 +878,7 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 	const heldAnthers = await heldAnthersBadgeAmountForSync(acct.userId);
 
 	await db
-		.update(billingAccounts)
+		.update(stripeCustomers)
 		.set({
 			stripeSubscriptionId: sub.id,
 			isActive: active,
@@ -887,7 +887,7 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 			canceledAt: sub.cancel_at_period_end ? new Date() : null,
 			updatedAt: new Date(),
 		})
-		.where(eq(billingAccounts.id, acct.id));
+		.where(eq(stripeCustomers.id, acct.id));
 
 	if (active) {
 		// The in-force Anthers figure — possibly the higher, held-over one — is what the
@@ -1152,8 +1152,8 @@ export async function applyBadgeRecurrence(
 
 	const [acct] = await db
 		.select()
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	const sub = acct?.stripeSubscriptionId
 		? await retrieveSubscription(acct.stripeSubscriptionId)

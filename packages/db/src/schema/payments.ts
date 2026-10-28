@@ -25,7 +25,7 @@ import { works } from "./content.js";
 import { badges, creatorCredits, invoices } from "./subscriptions.js";
 
 // org — a creator's Stripe Connect account. Money; org-only.
-export const stripeAccounts = pgTable("stripe_accounts", {
+export const stripeConnectAccounts = pgTable("stripe_connect_accounts", {
 	id: serial("id").primaryKey(),
 	userId: integer("user_id")
 		.notNull()
@@ -271,8 +271,8 @@ export const purchases = pgTable(
 //
 // `kind` is `purchase` or `refund`: a refund is a second signed record that references the
 // first, never an edit to it.
-export const accessReceipts = pgTable(
-	"access_receipts",
+export const purchaseReceipts = pgTable(
+	"purchase_receipts",
 	{
 		id: serial("id").primaryKey(),
 		purchaseId: integer("purchase_id")
@@ -299,9 +299,9 @@ export const accessReceipts = pgTable(
 	(table) => [
 		// One purchase receipt and one refund record per purchase; a redelivered webhook
 		// inserts nothing.
-		uniqueIndex("uq_access_receipts_purchase_kind").on(table.purchaseId, table.kind),
+		uniqueIndex("uq_purchase_receipts_purchase_kind").on(table.purchaseId, table.kind),
 		// The sweep's query: whatever is still owed, oldest first.
-		index("idx_access_receipts_state").on(table.state),
+		index("idx_purchase_receipts_state").on(table.state),
 	],
 );
 
@@ -569,9 +569,12 @@ export const badgeCharges = pgTable(
 	],
 );
 
-// org — the CRF (Creator Resilience Fund) ledger. Org money record.
-export const crfLedger = pgTable(
-	"crf_ledger",
+// org — the charitable ledger. Org money record.
+//
+// The fund that named it, the Creator Resilience Fund, was retired with the hosting subsidy;
+// what the rows carry now is the charitable remainder each purchase leaves behind.
+export const charitableLedger = pgTable(
+	"charitable_ledger",
 	{
 		id: serial("id").primaryKey(),
 		amount: numeric("amount").notNull(),
@@ -579,7 +582,7 @@ export const crfLedger = pgTable(
 		description: text("description").notNull(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_crf_ledger_purchase").on(table.purchaseId)],
+	(table) => [index("idx_charitable_ledger_purchase").on(table.purchaseId)],
 );
 
 /**

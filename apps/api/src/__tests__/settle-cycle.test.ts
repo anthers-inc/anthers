@@ -20,15 +20,15 @@ import { db } from "@anthers/db/client";
 import {
 	badgeCharges,
 	badges,
-	billingAccounts,
+	charitableLedger,
 	creatorCredits,
-	crfLedger,
 	invoiceLines,
 	invoices,
-	monthSettlements,
 	poolDistributions,
+	poolFundLedger,
+	settlementMonths,
 	stickers,
-	timePoolFundLedger,
+	stripeCustomers,
 	userBadges,
 	userCycles,
 } from "@anthers/db/schema";
@@ -76,22 +76,26 @@ beforeEach(async () => {
 	const ids = [...madeUserIds];
 	madeUserIds.length = 0;
 	for (const userId of ids) {
-		await db.delete(crfLedger).where(like(crfLedger.description, `[settle u${userId} %`));
+		await db
+			.delete(charitableLedger)
+			.where(like(charitableLedger.description, `[settle u${userId} %`));
 	}
 	await purgeAccountIds(ids);
-	await db.delete(timePoolFundLedger).where(inArray(timePoolFundLedger.billingCycle, [MONTH]));
+	await db.delete(poolFundLedger).where(inArray(poolFundLedger.billingCycle, [MONTH]));
 });
 
 afterAll(async () => {
 	// The ledger rows reference no user, so they are found by the marker they carry; the month
 	// markers reference nothing at all. Both go before the accounts do.
 	for (const userId of madeUserIds) {
-		await db.delete(crfLedger).where(like(crfLedger.description, `[settle u${userId} %`));
+		await db
+			.delete(charitableLedger)
+			.where(like(charitableLedger.description, `[settle u${userId} %`));
 	}
 	if (markedMonths.length > 0) {
-		await db.delete(monthSettlements).where(inArray(monthSettlements.billingCycle, markedMonths));
+		await db.delete(settlementMonths).where(inArray(settlementMonths.billingCycle, markedMonths));
 	}
-	await db.delete(timePoolFundLedger).where(inArray(timePoolFundLedger.billingCycle, [MONTH]));
+	await db.delete(poolFundLedger).where(inArray(poolFundLedger.billingCycle, [MONTH]));
 });
 
 async function makeUser(kind: string): Promise<number> {
@@ -114,14 +118,14 @@ async function makeUserWithCookie(kind: string) {
 async function makeSupporter(today = 12) {
 	const userId = await makeUser("supporter");
 	const [acct] = await db
-		.insert(billingAccounts)
+		.insert(stripeCustomers)
 		.values({
 			userId,
 			currentPeriodStart: new Date(`${MONTH}T00:00:00Z`),
 			currentPeriodEnd: new Date("2031-06-01T00:00:00Z"),
 			isActive: true,
 		})
-		.returning({ id: billingAccounts.id });
+		.returning({ id: stripeCustomers.id });
 	await holdOrgRung(userId, today.toFixed(2), MONTH);
 	return { userId, accountId: acct.id };
 }
@@ -180,7 +184,7 @@ async function publishFundRow(activeFreeAccounts: number, foundation = 100): Pro
 		billingCycle: MONTH,
 		foundation: foundation.toFixed(2),
 	});
-	await db.insert(timePoolFundLedger).values({
+	await db.insert(poolFundLedger).values({
 		billingCycle: MONTH,
 		status: "actual",
 		charitableRevenue: foundation.toFixed(2),
@@ -278,9 +282,9 @@ async function creditsFrom(userId: number) {
 /** Everything settlement booked to the charitable ledger for this supporter's month. */
 async function inflowFrom(userId: number): Promise<string> {
 	const rows = await db
-		.select({ amount: crfLedger.amount })
-		.from(crfLedger)
-		.where(like(crfLedger.description, `[settle u${userId} ${MONTH}]%`));
+		.select({ amount: charitableLedger.amount })
+		.from(charitableLedger)
+		.where(like(charitableLedger.description, `[settle u${userId} ${MONTH}]%`));
 	return rows.reduce((sum, r) => sum.plus(r.amount), new Decimal(0)).toFixed(2);
 }
 
@@ -390,8 +394,8 @@ describe("settling a month from what was paid for it", () => {
 		expect((await creditsFrom(userId)).rows).toHaveLength(first.rows.length);
 		const ledger = await db
 			.select()
-			.from(crfLedger)
-			.where(like(crfLedger.description, `[settle u${userId} ${MONTH}]%`));
+			.from(charitableLedger)
+			.where(like(charitableLedger.description, `[settle u${userId} ${MONTH}]%`));
 		expect(ledger).toHaveLength(1);
 	});
 
@@ -567,14 +571,14 @@ describe("the month's rows and its marker", () => {
 
 		await settleCycle({ userId, now: inFebruary });
 		expect(
-			await db.select().from(monthSettlements).where(eq(monthSettlements.billingCycle, month)),
+			await db.select().from(settlementMonths).where(eq(settlementMonths.billingCycle, month)),
 		).toHaveLength(0);
 
 		await settleCycle({ now: inFebruary });
 		const [marker] = await db
 			.select()
-			.from(monthSettlements)
-			.where(eq(monthSettlements.billingCycle, month));
+			.from(settlementMonths)
+			.where(eq(settlementMonths.billingCycle, month));
 		expect(marker?.settledAt.getTime()).toBe(inFebruary.getTime());
 	});
 });

@@ -18,14 +18,14 @@
  * processor's transaction reference — the same reference that is already on the reader's
  * emailed receipt.
  *
- * ⚠️ **The write is a row on `access_receipts` first, then a background write.** The payment
+ * ⚠️ **The write is a row on `purchase_receipts` first, then a background write.** The payment
  * webhook stamps the purchase and inserts a `pending` row; the sweep drains it, because a
  * webhook must not fail on another server being down. A receipt that never lands stays a
  * `failed` row with the message, which is the difference between a promise that broke and
  * one nobody notices.
  */
 import { db } from "@anthers/db";
-import { accessReceipts, purchases, users, works } from "@anthers/db/schema";
+import { purchaseReceipts, purchases, users, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import {
 	accessIssuerOrigin,
@@ -206,7 +206,7 @@ export async function oweAccessReceipt(
 	now: Date = new Date(),
 ): Promise<void> {
 	await db
-		.insert(accessReceipts)
+		.insert(purchaseReceipts)
 		.values({
 			purchaseId,
 			kind,

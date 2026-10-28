@@ -36,7 +36,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { comments, monthSettlements, reviews, stickers, works } from "@anthers/db/schema";
+import { comments, reviews, settlementMonths, stickers, works } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, isNull, or, type SQL } from "drizzle-orm";
 import { commentAncestry, commentRoots, threadCommentIds } from "./comment-thread.js";
 
@@ -57,7 +57,7 @@ export type StickerExecutor = typeof db | Tx;
 /**
  * The months settlement has closed, of those asked about.
  *
- * 🚨 **Read from `month_settlements` and from nothing else.** A distribution row is the nightly
+ * 🚨 **Read from `settlement_months` and from nothing else.** A distribution row is the nightly
  * estimate and exists from a month's first night, so treating one as settled made every takedown
  * after the first day void nothing. One marker per month is right because every account renews
  * on the 1st, so a month means the same window for every giver.
@@ -65,9 +65,9 @@ export type StickerExecutor = typeof db | Tx;
 async function settledCycles(cycles: string[]): Promise<Set<string>> {
 	if (cycles.length === 0) return new Set();
 	const rows = await db
-		.select({ cycle: monthSettlements.billingCycle })
-		.from(monthSettlements)
-		.where(inArray(monthSettlements.billingCycle, cycles));
+		.select({ cycle: settlementMonths.billingCycle })
+		.from(settlementMonths)
+		.where(inArray(settlementMonths.billingCycle, cycles));
 	return new Set(rows.map((r) => r.cycle));
 }
 

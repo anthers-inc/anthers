@@ -21,12 +21,12 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	badges,
-	billingAccounts,
 	comments,
 	posts,
 	reviews,
 	stickers,
-	stripeAccounts,
+	stripeConnectAccounts,
+	stripeCustomers,
 	userBadges,
 	users,
 } from "@anthers/db/schema";
@@ -63,7 +63,7 @@ async function signUp(username: string) {
  */
 async function atSupport(userId: number, dollars: number, cycle: string): Promise<void> {
 	await db
-		.insert(billingAccounts)
+		.insert(stripeCustomers)
 		.values({
 			userId,
 			currentPeriodStart: new Date(`${cycle}T00:00:00Z`),
@@ -407,9 +407,9 @@ describe("giving a Sticker", () => {
 
 	it("🚨 refuses a Sticker for a creator Stripe is holding, and directs nothing", async () => {
 		await db
-			.update(stripeAccounts)
+			.update(stripeConnectAccounts)
 			.set({ payoutsEnabled: false })
-			.where(eq(stripeAccounts.userId, creatorId));
+			.where(eq(stripeConnectAccounts.userId, creatorId));
 		const before = (await db.select().from(stickers).where(eq(stickers.giverId, giverId))).length;
 		try {
 			const res = await give(giverCookie, {

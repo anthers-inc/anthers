@@ -43,7 +43,7 @@ export async function createConnectAccount(
 /**
  * Mirrors `stripe.accounts.retrieve` — the connected account's live state, read by
  * `GET /stripe/onboard` (the reconcile-on-read self-heal, and the `?detail` shape the
- * Studio Payments tab renders): when our `stripe_accounts` row disagrees with Stripe,
+ * Studio Payments tab renders): when our `stripe_connect_accounts` row disagrees with Stripe,
  * Stripe is what the row should say. Returns null when payments are unconfigured; callers
  * keep their 503 / skip behavior.
  */

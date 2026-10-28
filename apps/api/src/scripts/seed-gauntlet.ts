@@ -48,7 +48,7 @@ import {
 	poolDistributions,
 	posts,
 	purchases,
-	stripeAccounts,
+	stripeConnectAccounts,
 	userBadges,
 	users,
 	workAssets,
@@ -325,7 +325,7 @@ async function ensureCreator(inst: Instance): Promise<number> {
  * checkout.
  *
  * This exists because the link is the one part of the onboarding that does *not* survive.
- * The `acct_…` lives at Stripe and persists forever, but `stripe_accounts.user_id` cascades
+ * The `acct_…` lives at Stripe and persists forever, but `stripe_connect_accounts.user_id` cascades
  * on delete, so any DB rebuild silently drops the row and the fixture had no way to restore
  * it — which is exactly how a creator onboarded on 2026-07-23 was still reported "not
  * connected" a week later. Set the var and the link is reproducible instead of manual.
@@ -335,13 +335,13 @@ async function ensureCreatorConnect(creatorId: number): Promise<void> {
 	if (!acctId) return;
 
 	const [existing] = await db
-		.select({ id: stripeAccounts.id })
-		.from(stripeAccounts)
-		.where(eq(stripeAccounts.userId, creatorId))
+		.select({ id: stripeConnectAccounts.id })
+		.from(stripeConnectAccounts)
+		.where(eq(stripeConnectAccounts.userId, creatorId))
 		.limit(1);
 	if (existing) {
 		await db
-			.update(stripeAccounts)
+			.update(stripeConnectAccounts)
 			.set({
 				stripeAccountId: acctId,
 				chargesEnabled: true,
@@ -349,9 +349,9 @@ async function ensureCreatorConnect(creatorId: number): Promise<void> {
 				onboardingComplete: true,
 				updatedAt: new Date(),
 			})
-			.where(eq(stripeAccounts.id, existing.id));
+			.where(eq(stripeConnectAccounts.id, existing.id));
 	} else {
-		await db.insert(stripeAccounts).values({
+		await db.insert(stripeConnectAccounts).values({
 			userId: creatorId,
 			stripeAccountId: acctId,
 			chargesEnabled: true,

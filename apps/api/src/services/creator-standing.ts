@@ -33,7 +33,7 @@
  * nothing else would notice.
  */
 import { db } from "@anthers/db/client";
-import { stripeAccounts, users } from "@anthers/db/schema";
+import { stripeConnectAccounts, users } from "@anthers/db/schema";
 import { eq, type SQL, sql } from "drizzle-orm";
 import { canBePaid } from "./payouts.js";
 
@@ -48,7 +48,7 @@ export function isCreatorWhere(userColumn: SQL | unknown): SQL {
 	return sql`(
 		${userColumn} IN (SELECT c.id FROM ${users} c WHERE c.creator_mode = true)
 		AND ${userColumn} IN (
-			SELECT sa.user_id FROM ${stripeAccounts} sa
+			SELECT sa.user_id FROM ${stripeConnectAccounts} sa
 			WHERE sa.onboarding_complete = true AND sa.payouts_enabled = true
 		)
 	)`;

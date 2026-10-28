@@ -19,7 +19,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { badges, billingAccounts, userBadges, userCycles, users } from "@anthers/db/schema";
+import { badges, stripeCustomers, userBadges, userCycles, users } from "@anthers/db/schema";
 import { currentCycleKey, previousCycleKey } from "@anthers/shared/billing-cycle";
 import { STORAGE_LADDER_GIB, STORAGE_PER_GIB_MONTH } from "@anthers/shared/constants";
 import { and, eq } from "drizzle-orm";
@@ -186,10 +186,10 @@ beforeAll(async () => {
 	// nothing and every customer-id lookup would miss (found by probe). Inserted, the
 	// way `renewal-cycle.test.ts`'s `withSubscription` does it.
 	await db
-		.insert(billingAccounts)
+		.insert(stripeCustomers)
 		.values({ userId, stripeCustomerId: CUSTOMER })
 		.onConflictDoUpdate({
-			target: billingAccounts.userId,
+			target: stripeCustomers.userId,
 			set: { stripeCustomerId: CUSTOMER },
 		});
 }, DB_SETUP_TIMEOUT);
@@ -264,7 +264,7 @@ describe("addTopUpToInvoice — the draft-renewal window", () => {
 		const meteredCycle = previousCycleKey(currentCycleKey());
 		await meterBytes(400, meteredCycle);
 
-		// 🚨 Suspension lives on `users`, not on billing_accounts — the schema has no
+		// 🚨 Suspension lives on `users`, not on stripe_customers — the schema has no
 		// suspendedAt on the billing row, and the service reads users directly.
 		await db.update(users).set({ suspendedAt: new Date() }).where(eq(users.id, userId));
 		expect(await addTopUpToInvoice(draftRenewal())).toBe(0);

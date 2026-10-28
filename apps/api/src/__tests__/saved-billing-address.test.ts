@@ -5,14 +5,14 @@
  *
  * 🚨 **The assertions that matter most are about WHERE the address is and WHOSE write it
  * is.** The address must never land in a column (nothing Anthers keeps survives these
- * routes but the `billing_accounts` customer id the feature already carries for
+ * routes but the `stripe_customers` customer id the feature already carries for
  * subscriptions), checkout's prefill must be a read, and the clear must reach Stripe's
  * customer — which is recorded here on the *parameters we sent Stripe*, the only thing
  * we control, the same place every other Stripe assertion in this app is made.
  */
 import { afterAll, beforeAll, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { billingAccounts } from "@anthers/db/schema";
+import { stripeCustomers } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import app from "../index";
@@ -137,9 +137,9 @@ it("saves to the Stripe Customer, never into a column", async () => {
 	// The Customer was created on first save, the address written onto it — and the
 	// recorded params are the whole of what Anthers persisted.
 	const [row] = await db
-		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId));
+		.select({ stripeCustomerId: stripeCustomers.stripeCustomerId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId));
 	expect(row?.stripeCustomerId).toMatch(/^cus_/);
 	if (!row?.stripeCustomerId) throw new Error("unreachable");
 	const updates = fake.callsTo("customers.update");
@@ -158,9 +158,9 @@ it("saves to the Stripe Customer, never into a column", async () => {
 
 it("prefills from what Stripe holds, and from nothing else", async () => {
 	const [row] = await db
-		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId));
+		.select({ stripeCustomerId: stripeCustomers.stripeCustomerId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId));
 	fake.state.customer = {
 		id: row?.stripeCustomerId ?? "",
 		name: ADDRESS.name,
@@ -190,9 +190,9 @@ it("prefills from what Stripe holds, and from nothing else", async () => {
 
 it("refuses to prefill an address for a non-US country", async () => {
 	const [row] = await db
-		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId));
+		.select({ stripeCustomerId: stripeCustomers.stripeCustomerId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId));
 	fake.state.customer = {
 		id: row?.stripeCustomerId ?? "",
 		name: null,
@@ -234,9 +234,9 @@ it("clears by unsetting the field pair at Stripe", async () => {
 	expect(updates.length).toBe(2);
 	const [afterId, afterParams] = updates[1].args as [string, Record<string, unknown>];
 	const [row] = await db
-		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId));
+		.select({ stripeCustomerId: stripeCustomers.stripeCustomerId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId));
 	if (!row?.stripeCustomerId) throw new Error("unreachable");
 	expect(afterId).toBe(row.stripeCustomerId);
 	expect(afterParams).toEqual({ name: "", address: "" });

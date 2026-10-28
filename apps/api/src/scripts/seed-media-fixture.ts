@@ -40,7 +40,7 @@ import {
 import {
 	projectItems,
 	projects,
-	stripeAccounts,
+	stripeConnectAccounts,
 	users,
 	workCaptionTracks,
 	workPages,
@@ -448,7 +448,7 @@ async function ensureCreator(): Promise<number> {
  */
 async function ensurePayouts(userId: number): Promise<void> {
 	await db
-		.insert(stripeAccounts)
+		.insert(stripeConnectAccounts)
 		.values({
 			userId,
 			stripeAccountId: `acct_fixture_${userId}`,
@@ -457,7 +457,7 @@ async function ensurePayouts(userId: number): Promise<void> {
 			chargesEnabled: true,
 		})
 		.onConflictDoUpdate({
-			target: stripeAccounts.userId,
+			target: stripeConnectAccounts.userId,
 			set: { onboardingComplete: true, payoutsEnabled: true, chargesEnabled: true },
 		});
 }

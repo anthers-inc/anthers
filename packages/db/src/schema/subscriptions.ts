@@ -47,7 +47,7 @@ import { purchases } from "./payments.js";
 // org — a user's billing relationship (Stripe customer, subscription, period) stays with
 // the org by the treasury rule. The `isSelfHosting` flag is a creator-side claim but the
 // org prices it.
-export const billingAccounts = pgTable("billing_accounts", {
+export const stripeCustomers = pgTable("stripe_customers", {
 	id: serial("id").primaryKey(),
 	userId: integer("user_id")
 		.notNull()
@@ -356,7 +356,7 @@ export const userPreferences = pgTable("user_preferences", {
 	 * the registry and the default story live in `@anthers/shared/creator-emails`.
 	 * The Studio's Communications table is the only writer.
 	 *
-	 * ⚠️ **This moved off `stripe_accounts` deliberately** (2026-10-19): the old single
+	 * ⚠️ **This moved off `stripe_connect_accounts` deliberately** (2026-10-19): the old single
 	 * boolean gated three different mails at once, so a creator who wanted payout mail
 	 * but not sale mail had no way to say it. The migration carries a stored `false`
 	 * into all three kinds, and a `true` or null into an empty map (every kind's default,
@@ -485,8 +485,8 @@ export const userCycles = pgTable(
 // reduction is a promise about a future charge to that account, and there is no future charge
 // once the account is gone — unlike `pool_distributions`, which is a record of money that
 // already moved and therefore has to outlive both accounts.
-export const supportReductions = pgTable(
-	"support_reductions",
+export const billingReductions = pgTable(
+	"billing_reductions",
 	{
 		id: serial("id").primaryKey(),
 		userId: integer("user_id")
@@ -520,7 +520,7 @@ export const supportReductions = pgTable(
 	(table) => [
 		// The read is always "what does this account have owed against this cycle", across every
 		// destination at once, because a renewal invoice discounts all of its lines in one pass.
-		index("idx_support_reductions_user_cycle").on(table.userId, table.billingCycle),
+		index("idx_billing_reductions_user_cycle").on(table.userId, table.billingCycle),
 	],
 );
 
@@ -617,7 +617,7 @@ export const invoices = pgTable(
  * with every total still adding up.
  *
  * ⚠️ **`creator_id` is nullable and null means the Anthers line**, resolved from the stamp at
- * write time rather than stored twice. That differs from `support_reductions.destination`,
+ * write time rather than stored twice. That differs from `billing_reductions.destination`,
  * which keeps the raw text because its job is to be *compared* against a Stripe stamp; this
  * one's job is to credit an account, so it holds the thing a credit needs. An unparseable
  * stamp resolves to null and is credited to Anthers, which is `itemsFromSub`'s documented
@@ -662,7 +662,7 @@ export const invoiceLines = pgTable(
  * invoice for this month accounted for".
  */
 // org — the state of the month's books. Money cannot federate.
-export const monthSettlements = pgTable("month_settlements", {
+export const settlementMonths = pgTable("settlement_months", {
 	id: serial("id").primaryKey(),
 	/** `YYYY-MM-01`, one row per month. */
 	billingCycle: text("billing_cycle").notNull().unique(),
@@ -1093,8 +1093,8 @@ export const poolDistributions = pgTable(
 // it survives — the same point-in-time discipline as `attention_events.publicAccess`.
 // Revenue, pool and slice restate (upward while the future is concerned; to actuals
 // at cycle start); the count never does.
-export const timePoolFundLedger = pgTable(
-	"time_pool_fund_ledger",
+export const poolFundLedger = pgTable(
+	"pool_fund_ledger",
 	{
 		id: serial("id").primaryKey(),
 		// ISO `YYYY-MM-01`, the same cycle shape `pool_distributions` writes.
@@ -1145,7 +1145,7 @@ export const timePoolFundLedger = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [uniqueIndex("uq_time_pool_fund_cycle").on(table.billingCycle)],
+	(table) => [uniqueIndex("uq_pool_fund_cycle").on(table.billingCycle)],
 );
 
 /**
@@ -1278,7 +1278,7 @@ export const badges = pgTable(
 		 * ladder can be taxed differently (one carries a physical good, one is pure
 		 * support). Created on first use by `ensureBadgeProduct`, which mirrors
 		 * `ensureCreatorProduct`'s lazy create-and-restamp shape; empty string is the
-		 * not-yet-created state, exactly as `billing_accounts` spells it.
+		 * not-yet-created state, exactly as `stripe_customers` spells it.
 		 */
 		stripeProductId: text("stripe_product_id").default(""),
 		stripeProductTaxCode: text("stripe_product_tax_code").default(""),
@@ -1545,7 +1545,7 @@ export const stickers = pgTable(
 		 * 2026-09-04). They broke no rule, and a creator has to stay free to take a Work
 		 * out of circulation without it costing them money already given.
 		 *
-		 * ⚠️ **Only ever set on a month that has not settled** — `month_settlements` says which
+		 * ⚠️ **Only ever set on a month that has not settled** — `settlement_months` says which
 		 * have. Once settlement has credited the month, the money is owed to somebody and this
 		 * becomes a claim about the past rather than a routing instruction.
 		 */

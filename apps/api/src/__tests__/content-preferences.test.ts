@@ -21,7 +21,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { billingAccounts, userPreferences, users } from "@anthers/db/schema";
+import { stripeCustomers, userPreferences, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import app from "../index";
@@ -113,10 +113,10 @@ async function reset(opts: { customerId: string }) {
 		.values({ userId, ...prefSet })
 		.onConflictDoUpdate({ target: userPreferences.userId, set: prefSet });
 	await db
-		.insert(billingAccounts)
+		.insert(stripeCustomers)
 		.values({ userId, stripeCustomerId: opts.customerId })
 		.onConflictDoUpdate({
-			target: billingAccounts.userId,
+			target: stripeCustomers.userId,
 			set: { stripeCustomerId: opts.customerId },
 		});
 }

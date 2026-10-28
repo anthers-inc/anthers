@@ -21,7 +21,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { stripeAccounts, users } from "@anthers/db/schema";
+import { stripeConnectAccounts, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { userByName } from "./handles";
 
@@ -43,7 +43,7 @@ export async function enablePayouts(name: string): Promise<void> {
 export async function enablePayoutsFor(userId: number): Promise<void> {
 	await db.update(users).set({ creatorMode: true }).where(eq(users.id, userId));
 	await db
-		.insert(stripeAccounts)
+		.insert(stripeConnectAccounts)
 		.values({
 			userId,
 			// Marked as a fixture so it is obvious in a database nobody expected to contain
@@ -54,7 +54,7 @@ export async function enablePayoutsFor(userId: number): Promise<void> {
 			chargesEnabled: true,
 		})
 		.onConflictDoUpdate({
-			target: stripeAccounts.userId,
+			target: stripeConnectAccounts.userId,
 			set: { onboardingComplete: true, payoutsEnabled: true, chargesEnabled: true },
 		});
 }

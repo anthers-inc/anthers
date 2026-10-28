@@ -20,7 +20,7 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
 import { GAUNTLET_CREATOR_EMAIL, GAUNTLET_WALKER_EMAIL } from "@anthers/db/gauntlet";
-import { stripeAccounts, users } from "@anthers/db/schema";
+import { stripeConnectAccounts, users } from "@anthers/db/schema";
 import { expect, test as setup } from "@playwright/test";
 import { eq } from "drizzle-orm";
 import { createSession } from "../../../api/src/services/auth";
@@ -56,7 +56,7 @@ setup("reset the gauntlet fixture and sign the user in", async () => {
 		.limit(1);
 	expect(fixtureCreator, "the gauntlet fixture creator exists").toBeTruthy();
 	await db
-		.insert(stripeAccounts)
+		.insert(stripeConnectAccounts)
 		.values({
 			userId: fixtureCreator!.id,
 			// A local run with a real test-mode account keeps using it; everywhere else a
@@ -69,7 +69,7 @@ setup("reset the gauntlet fixture and sign the user in", async () => {
 			chargesEnabled: true,
 		})
 		.onConflictDoUpdate({
-			target: stripeAccounts.userId,
+			target: stripeConnectAccounts.userId,
 			set: { onboardingComplete: true, payoutsEnabled: true, chargesEnabled: true },
 		});
 	// The GAUNTLET's media is deliberately NOT seeded here. The walk's own `beforeAll`

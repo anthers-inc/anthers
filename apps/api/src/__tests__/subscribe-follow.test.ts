@@ -16,7 +16,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { badges, billingAccounts, follows, notifications, users } from "@anthers/db/schema";
+import { badges, follows, notifications, stripeCustomers, users } from "@anthers/db/schema";
 import { and, eq, like } from "drizzle-orm";
 import { applyDirectedSupport, syncSubscriptionToAccount } from "../services/billing.js";
 import { blockUser } from "../services/blocks.js";
@@ -145,9 +145,9 @@ describe("subscribing to a Badge follows its creator", () => {
 		// another suite's row. The follow itself was created by the first test's apply —
 		// this follower is the one whose holding rides the canceled subscription.
 		await db
-			.update(billingAccounts)
+			.update(stripeCustomers)
 			.set({ stripeCustomerId: `cus_${PREFIX}` })
-			.where(eq(billingAccounts.userId, follower.userId));
+			.where(eq(stripeCustomers.userId, follower.userId));
 		await syncSubscriptionToAccount({
 			id: "sub_test_canceled",
 			object: "subscription",

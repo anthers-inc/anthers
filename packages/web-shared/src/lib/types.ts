@@ -1262,7 +1262,7 @@ export interface BadgeView {
 }
 
 /**
- * The user's billing-machinery row (`billing_accounts`): what Stripe needs to charge and
+ * The user's billing-machinery row (`stripe_customers`): what Stripe needs to charge and
  * reconcile. Nothing here is an amount the user gives — under the Badge model those
  * dollars are `user_badges` holdings, and `/subscriptions/me` reports the held Badge
  * beside this row.

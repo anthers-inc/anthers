@@ -397,7 +397,7 @@ describe("what 'deleted' means, table by table", () => {
 			["follows", "follower_id"],
 			["user_library_items", "user_id"],
 			["attention_events", "user_id"],
-			["billing_accounts", "user_id"],
+			["stripe_customers", "user_id"],
 			["user_preferences", "user_id"],
 		] as const) {
 			const rows = await db.execute(

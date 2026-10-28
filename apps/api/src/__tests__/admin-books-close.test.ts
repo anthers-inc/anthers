@@ -29,8 +29,8 @@ import {
 	creatorCredits,
 	invoiceLines,
 	invoices,
-	monthSettlements,
 	purchases,
+	settlementMonths,
 } from "@anthers/db/schema";
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
@@ -119,7 +119,7 @@ let creatorId: number;
 /** The Stripe ids this suite inserted, so nothing else's rows are touched. */
 const invoiceStripeIds: string[] = [];
 const intentIds: string[] = [];
-/** The cycles this suite marked settled — `month_settlements` is purged by nothing else. */
+/** The cycles this suite marked settled — `settlement_months` is purged by nothing else. */
 const markedCycles: string[] = [];
 
 beforeAll(async () => {
@@ -219,9 +219,9 @@ async function insertCredit(kind: string, fundedBy: string, amount: string, cycl
 async function markSettled(cycle: string) {
 	markedCycles.push(cycle);
 	await db
-		.insert(monthSettlements)
+		.insert(settlementMonths)
 		.values({ billingCycle: cycle, settledAt: new Date("2019-11-02T06:00:00Z"), invoiceCount: 0 })
-		.onConflictDoNothing({ target: monthSettlements.billingCycle });
+		.onConflictDoNothing({ target: settlementMonths.billingCycle });
 }
 
 async function closePackage(period: string): Promise<Response> {
@@ -471,7 +471,7 @@ afterAll(async () => {
 		await db.delete(purchases).where(eq(purchases.stripePaymentIntentId, pi));
 	}
 	for (const cycle of markedCycles) {
-		await db.delete(monthSettlements).where(eq(monthSettlements.billingCycle, cycle));
+		await db.delete(settlementMonths).where(eq(settlementMonths.billingCycle, cycle));
 	}
 	await db.delete(creatorCredits).where(eq(creatorCredits.billingCycle, CYCLE));
 	await db.delete(creatorCredits).where(eq(creatorCredits.billingCycle, "2019-12-01"));

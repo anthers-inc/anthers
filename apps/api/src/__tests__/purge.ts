@@ -26,9 +26,9 @@
 import { db } from "@anthers/db/client";
 import {
 	abuseReports,
+	charitableLedger,
 	comments,
 	creatorCredits,
-	crfLedger,
 	dmcaNotices,
 	invoices,
 	legalHolds,
@@ -140,7 +140,7 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 			);
 
 		// Money. A purchase outlives the Work, the creator and the buyer by design, so it is
-		// reachable from none of them once they are gone. The CRF ledger's only FK is
+		// reachable from none of them once they are gone. The charitable ledger's only FK is
 		// `purchase_id → purchases ON DELETE SET NULL`, so dropping a purchase without first
 		// taking the ledger rows that point at it does not clean them up — it *orphans* them
 		// here, which is how this purge's own pass was the largest single source of residue.
@@ -150,7 +150,7 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 			.where(or(inArray(purchases.buyerId, ids), inArray(purchases.creatorId, ids)));
 		const purchaseIds = ownedPurchases.map((p) => p.id);
 		if (purchaseIds.length > 0) {
-			await db.delete(crfLedger).where(inArray(crfLedger.purchaseId, purchaseIds));
+			await db.delete(charitableLedger).where(inArray(charitableLedger.purchaseId, purchaseIds));
 		}
 		await db
 			.delete(purchases)
@@ -184,7 +184,9 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 					.where(inArray(purchases.workId, workIds))
 			).map((p) => p.id);
 			if (workPurchaseIds.length > 0) {
-				await db.delete(crfLedger).where(inArray(crfLedger.purchaseId, workPurchaseIds));
+				await db
+					.delete(charitableLedger)
+					.where(inArray(charitableLedger.purchaseId, workPurchaseIds));
 			}
 			await db.delete(purchases).where(inArray(purchases.workId, workIds));
 			await db.delete(mediaQuarantine).where(inArray(mediaQuarantine.workId, workIds));
@@ -221,7 +223,7 @@ export async function purgeWorkIds(workIds: number[]): Promise<void> {
 		.where(inArray(purchases.workId, workIds));
 	const purchaseIds = purchasesHere.map((r) => r.id);
 	if (purchaseIds.length > 0) {
-		await db.delete(crfLedger).where(inArray(crfLedger.purchaseId, purchaseIds));
+		await db.delete(charitableLedger).where(inArray(charitableLedger.purchaseId, purchaseIds));
 	}
 	await db.delete(purchases).where(inArray(purchases.workId, workIds));
 	await db.delete(mediaQuarantine).where(inArray(mediaQuarantine.workId, workIds));

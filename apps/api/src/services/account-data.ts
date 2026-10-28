@@ -44,7 +44,6 @@ import { db } from "@anthers/db/client";
 import {
 	attentionEvents,
 	badges,
-	billingAccounts,
 	comments,
 	follows,
 	moderationReports,
@@ -53,7 +52,8 @@ import {
 	projects,
 	purchases,
 	reviews,
-	stripeAccounts,
+	stripeConnectAccounts,
+	stripeCustomers,
 	userBadges,
 	userBlocks,
 	userCycles,
@@ -122,7 +122,7 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 		db.select().from(works).where(eq(works.creatorId, userId)),
 		db.select().from(projects).where(eq(projects.creatorId, userId)),
 		db.select().from(purchases).where(eq(purchases.buyerId, userId)),
-		db.select().from(billingAccounts).where(eq(billingAccounts.userId, userId)),
+		db.select().from(stripeCustomers).where(eq(stripeCustomers.userId, userId)),
 		db.select().from(userPreferences).where(eq(userPreferences.userId, userId)),
 		db.select().from(userCycles).where(eq(userCycles.userId, userId)),
 		db.select().from(attentionEvents).where(eq(attentionEvents.userId, userId)),
@@ -130,7 +130,7 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 		db.select().from(poolDistributions).where(eq(poolDistributions.subscriberId, userId)),
 		db.select().from(badges).where(eq(badges.creatorId, userId)),
 		db.select().from(moderationReports).where(eq(moderationReports.reporterId, userId)),
-		db.select().from(stripeAccounts).where(eq(stripeAccounts.userId, userId)),
+		db.select().from(stripeConnectAccounts).where(eq(stripeConnectAccounts.userId, userId)),
 	]);
 
 	return {
@@ -211,7 +211,7 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			userBadges: badgeRows,
 			poolDistributions: distributionRows,
 			badges: ladderRows,
-			// Note `crf_ledger` is deliberately NOT here: it is a platform-level ledger
+			// Note `charitable_ledger` is deliberately NOT here: it is a platform-level ledger
 			// keyed on a purchase with no user reference at all, so it is not personal data
 			// about anyone — the purchase row it points at is what belongs to a person, and
 			// that is exported above.

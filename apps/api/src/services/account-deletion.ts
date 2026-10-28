@@ -447,7 +447,7 @@ export async function eraseAccount(
 	if (user.atprotoDid) await revokeAtprotoGrant(user.atprotoDid);
 
 	// 🚨 **The saved billing address is cleared from Stripe BEFORE the wipe**, because the
-	// wipe is what erases the `billing_accounts` row that knows which customer to clear —
+	// wipe is what erases the `stripe_customers` row that knows which customer to clear —
 	// after it, the promise "deleting your account clears the saved address from Stripe"
 	// would be unkeepable by anybody. The policy line (Privacy Policy, *What we collect*)
 	// commits Anthers to exactly this, so a Stripe failure DEFERS the deletion the same
