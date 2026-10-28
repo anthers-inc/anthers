@@ -24,8 +24,8 @@
  */
 
 import { db } from "@anthers/db/client";
-import { abuseReports, moderationReports, outboundEmails } from "@anthers/db/schema";
-import { eq, isNull, or, sql } from "drizzle-orm";
+import { outboundEmails } from "@anthers/db/schema";
+import { eq, sql } from "drizzle-orm";
 
 /**
  * Events worth recording, mapped from Resend's `email.*` type names.
@@ -76,47 +76,9 @@ export interface DeliveryEvent {
  */
 export async function recordDeliveryEvent(input: DeliveryEvent): Promise<{ matched: number }> {
 	if (!input.messageId) return { matched: 0 };
-	const incomingIsTerminal = TERMINAL_EVENTS.has(input.event);
 
-	// Only overwrite when the incoming event is at least as conclusive as what is stored:
-	// anything may replace an empty slot or a non-terminal one, and only a terminal event
-	// may replace a terminal one.
-	const mayOverwrite = incomingIsTerminal
-		? undefined
-		: or(
-				isNull(moderationReports.escalationDeliveryEvent),
-				sql`${moderationReports.escalationDeliveryEvent} NOT IN ('delivered','bounced','complained','failed','canceled')`,
-			);
-
-	const reports = await db
-		.update(moderationReports)
-		.set({ escalationDeliveryEvent: input.event, escalationDeliveryAt: input.occurredAt })
-		.where(
-			mayOverwrite
-				? sql`${moderationReports.escalationMessageId} = ${input.messageId} AND (${mayOverwrite})`
-				: eq(moderationReports.escalationMessageId, input.messageId),
-		)
-		.returning({ id: moderationReports.id });
-
-	const mayOverwriteAbuse = incomingIsTerminal
-		? undefined
-		: or(
-				isNull(abuseReports.escalationDeliveryEvent),
-				sql`${abuseReports.escalationDeliveryEvent} NOT IN ('delivered','bounced','complained','failed','canceled')`,
-			);
-
-	const abuse = await db
-		.update(abuseReports)
-		.set({ escalationDeliveryEvent: input.event, escalationDeliveryAt: input.occurredAt })
-		.where(
-			mayOverwriteAbuse
-				? sql`${abuseReports.escalationMessageId} = ${input.messageId} AND (${mayOverwriteAbuse})`
-				: eq(abuseReports.escalationMessageId, input.messageId),
-		)
-		.returning({ id: abuseReports.id });
-
-	// The user-facing halves — notifications and receipts — are one ledger now, so one
-	// update covers both. The same ordering rule as the reports, in the form a single
+	// Everything Anthers mails is one ledger now — notifications, receipts, reminders and
+	// escalations — so one update covers them all. The ordering rule is the form a single
 	// nullable column can hold: anything fills an unanswered event, and a non-terminal
 	// event never replaces a terminal one — a late `sent` must not erase a known bounce.
 	// (A terminal event has the same guard: a terminal over a terminal is not an upgrade,
@@ -130,9 +92,7 @@ export async function recordDeliveryEvent(input: DeliveryEvent): Promise<{ match
 		.where(sql`${outboundEmails.messageId} = ${input.messageId} AND ${mailGuard}`)
 		.returning({ id: outboundEmails.id });
 
-	return {
-		matched: reports.length + abuse.length + mailUpdates.length,
-	};
+	return { matched: mailUpdates.length };
 }
 
 export interface StoredDelivery {
@@ -169,30 +129,16 @@ export async function deliveryForReport(
 	kind: "abuse" | "report",
 	reportId: number,
 ): Promise<{ messageId: string | null; status: StoredDelivery | null }> {
-	if (kind === "abuse") {
-		const [row] = await db
-			.select({
-				messageId: abuseReports.escalationMessageId,
-				event: abuseReports.escalationDeliveryEvent,
-				at: abuseReports.escalationDeliveryAt,
-			})
-			.from(abuseReports)
-			.where(eq(abuseReports.id, reportId))
-			.limit(1);
-		if (!row) return { messageId: null, status: null };
-		return {
-			messageId: row.messageId,
-			status: row.event ? classifyStoredEvent(row.event, row.at) : null,
-		};
-	}
+	const key =
+		kind === "abuse" ? `abuse-escalation:${reportId}` : `moderation-escalation:${reportId}`;
 	const [row] = await db
 		.select({
-			messageId: moderationReports.escalationMessageId,
-			event: moderationReports.escalationDeliveryEvent,
-			at: moderationReports.escalationDeliveryAt,
+			messageId: outboundEmails.messageId,
+			event: outboundEmails.deliveryEvent,
+			at: outboundEmails.deliveryEventAt,
 		})
-		.from(moderationReports)
-		.where(eq(moderationReports.id, reportId))
+		.from(outboundEmails)
+		.where(eq(outboundEmails.dedupeKey, key))
 		.limit(1);
 	if (!row) return { messageId: null, status: null };
 	return {

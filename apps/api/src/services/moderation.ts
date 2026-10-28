@@ -33,12 +33,14 @@ import {
 	invoices,
 	moderationActions,
 	moderationReports,
+	outboundEmails,
 	posts,
 	reviews,
 	sessions,
 	users,
 	works,
 } from "@anthers/db/schema";
+import { ABUSE_EMAIL } from "@anthers/shared/constants";
 import { verdictLabel } from "@anthers/shared/content";
 import {
 	isLegalReason,
@@ -262,14 +264,21 @@ export async function escalateReport(reportId: number): Promise<boolean> {
 			reason: moderationReports.reason,
 			details: moderationReports.details,
 			createdAt: moderationReports.createdAt,
-			escalatedAt: moderationReports.escalatedAt,
 		})
 		.from(moderationReports)
 		.where(eq(moderationReports.id, reportId))
 		.limit(1);
 
 	if (!report) return false;
-	if (report.escalatedAt) return true; // Already told somebody; don't tell them twice.
+	// One alert per report, ever: the ledger row is the latch. A row with no `sentAt` is a
+	// send that was decided on and did not go, which the retry sweep picks up again.
+	const mailKey = `moderation-escalation:${report.id}`;
+	const [existing] = await db
+		.select({ id: outboundEmails.id, sentAt: outboundEmails.sentAt })
+		.from(outboundEmails)
+		.where(eq(outboundEmails.dedupeKey, mailKey))
+		.limit(1);
+	if (existing?.sentAt) return true;
 	if (!isLegalReason(report.reason)) return false;
 
 	const label = moderationReasonLabel(report.reason);
@@ -284,16 +293,34 @@ export async function escalateReport(reportId: number): Promise<boolean> {
 		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook. Do not open the content.</p>",
 	].join("\n");
 
+	// The row is written BEFORE the send, so a crash between them loses an alert rather
+	// than duplicating one — and a refused send leaves `sentAt` null, which is what the
+	// retry sweep selects on. The provider's id is stamped with the send, so the delivery
+	// webhook can say what actually became of the message.
+	const [mailRow] = existing
+		? [existing]
+		: await db
+				.insert(outboundEmails)
+				.values({
+					dedupeKey: mailKey,
+					kind: "escalation",
+					recipient: ABUSE_EMAIL,
+					subject,
+					detail: {
+						reportKind: "moderation_report",
+						reportId: String(report.id),
+						reason: report.reason,
+					},
+				})
+				.returning({ id: outboundEmails.id, sentAt: outboundEmails.sentAt });
+
 	const { sent, messageId } = await sendAbuseAlert({ subject, html });
 	if (!sent) return false;
 
-	// The provider's id is stored beside the stamp, because the stamp alone can only ever
-	// say "Resend accepted it". With the id, `GET /api/admin/escalation-delivery` can ask
-	// what actually became of the message — which is the question the alert exists to answer.
 	await db
-		.update(moderationReports)
-		.set({ escalatedAt: new Date(), escalationMessageId: messageId })
-		.where(eq(moderationReports.id, reportId));
+		.update(outboundEmails)
+		.set({ sentAt: new Date(), messageId })
+		.where(eq(outboundEmails.id, mailRow.id));
 	return true;
 }
 
@@ -309,10 +336,14 @@ export async function pendingEscalations(): Promise<number[]> {
 	const rows = await db
 		.select({ id: moderationReports.id })
 		.from(moderationReports)
+		.leftJoin(
+			outboundEmails,
+			eq(outboundEmails.dedupeKey, sql`'moderation-escalation:' || ${moderationReports.id}`),
+		)
 		.where(
 			and(
-				isNull(moderationReports.escalatedAt),
 				inArray(moderationReports.reason, [...LEGAL_MODERATION_REASONS]),
+				isNull(outboundEmails.sentAt),
 			),
 		)
 		.orderBy(moderationReports.createdAt);
@@ -1254,12 +1285,12 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 	//    surplus rows on a page-sized list.
 	const reportRows = await db
 		.select({
+			id: moderationReports.id,
 			subjectType: moderationReports.subjectType,
 			subjectId: moderationReports.subjectId,
 			status: moderationReports.status,
 			reason: moderationReports.reason,
 			details: moderationReports.details,
-			escalatedAt: moderationReports.escalatedAt,
 		})
 		.from(moderationReports)
 		.where(
@@ -1268,6 +1299,26 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 				[...items.values()].map((i) => i.subjectId),
 			),
 		);
+
+	// The escalation evidence lives on the mail ledger now; one query answers the whole
+	// page. A report with no sent row has nobody outside the console told yet.
+	const escalatedAtById = new Map<number, Date>();
+	if (reportRows.length > 0) {
+		const mails = await db
+			.select({ dedupeKey: outboundEmails.dedupeKey, sentAt: outboundEmails.sentAt })
+			.from(outboundEmails)
+			.where(
+				inArray(
+					outboundEmails.dedupeKey,
+					reportRows.map((r) => `moderation-escalation:${r.id}`),
+				),
+			);
+		for (const mail of mails) {
+			if (!mail.sentAt) continue;
+			const id = Number(mail.dedupeKey.split(":")[1]);
+			if (Number.isFinite(id)) escalatedAtById.set(id, mail.sentAt);
+		}
+	}
 
 	for (const r of reportRows) {
 		const item = items.get(key(r.subjectType, r.subjectId));
@@ -1278,17 +1329,18 @@ export async function loadQueue(filter: QueueFilter): Promise<QueueItem[]> {
 		if (r.details) item.details.push(r.details);
 
 		// Only legal reasons are ever owed an alert, so only they may answer this. An
-		// ordinary report has a permanently null `escalated_at`, and folding those in would
-		// make every spam report read as "nobody was told" — which is true and is not a
-		// problem, and would bury the case where it IS a problem.
+		// ordinary report has no alert at all, and folding those in would make every spam
+		// report read as "nobody was told" — which is true and is not a problem, and would
+		// bury the case where it IS a problem.
 		if (!isLegalReason(r.reason)) continue;
-		if (r.escalatedAt) {
-			const stamp = r.escalatedAt.toISOString();
+		const escalatedAt = escalatedAtById.get(r.id);
+		if (escalatedAt) {
+			const stamp = escalatedAt.toISOString();
 			if (!item.lastEscalatedAt || stamp > item.lastEscalatedAt) item.lastEscalatedAt = stamp;
 		}
 		// False wins over true: one un-alerted legal report is the thing worth surfacing,
 		// however many of its neighbors went out.
-		item.legalAlerted = item.legalAlerted === false ? false : Boolean(r.escalatedAt);
+		item.legalAlerted = item.legalAlerted === false ? false : Boolean(escalatedAt);
 	}
 
 	// 4. Attach the most recent decision, so a hidden item shows who hid it and why.

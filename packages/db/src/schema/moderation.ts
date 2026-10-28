@@ -101,57 +101,9 @@ export const moderationReports = pgTable(
 		 * Also what keeps the sweep from rescanning settled rows forever.
 		 */
 		redactedAt: timestamp("redacted_at", { withTimezone: true }),
-		/**
-		 * When somebody was actually told, out of band, that this report exists.
-		 *
-		 * Only floor-level reasons (`LEGAL_MODERATION_REASONS`) ever get a value here;
-		 * everything else stays null forever and is answered by an operator opening the
-		 * console. **Null on a floor report means the alert has not gone out yet**, which
-		 * is what the retry sweep selects on.
-		 *
-		 * 🚨 The column exists because the alert has to be *durable*, and an email is not.
-		 * Sending inline and hoping is how "a queue nobody watches" becomes "an email
-		 * nobody sent" one layer down — the same class of defect as a retention promise
-		 * with no sweep behind it. The report row is written first and committed, so the
-		 * worst case is a late alert rather than a lost one.
-		 */
-		escalatedAt: timestamp("escalated_at", { withTimezone: true }),
-		/**
-		 * Resend's own id for the alert, stored so delivery is checkable rather than assumed.
-		 *
-		 * ⭐ **`escalated_at` says the provider ACCEPTED the message; this is what lets
-		 * anybody find out what happened next.** Without it the strongest claim available is
-		 * *"we handed it to Resend and it did not complain"*, which is a fact about our side
-		 * of a network call rather than about a human being told. With it,
-		 * `emailDeliveryStatus` can ask whether the receiving server took it.
-		 *
-		 * Null on an alert that never went, and null on one sent before this column existed.
-		 */
-		escalationMessageId: text("escalation_message_id"),
-		/**
-		 * What the provider last told us became of that message — `delivered`, `bounced`,
-		 * `complained`, and so on.
-		 *
-		 * ⭐ **Pushed to us by a webhook rather than polled.** Asking Resend directly would
-		 * need an API key that can READ mail, and the production key is send-only by
-		 * design; broadening it would widen the blast radius of the credential most exposed
-		 * in production, to answer a question the provider is willing to simply tell us.
-		 * So `POST /api/webhooks/resend` records the answer as it arrives.
-		 *
-		 * ⚠️ **Delivered is not read.** This says the receiving server accepted the message,
-		 * never that a person saw it — mail filed into spam is `delivered` here and is still
-		 * a failure of the thing the alert is for.
-		 */
-		escalationDeliveryEvent: text("escalation_delivery_event"),
-		/** When that event happened, per the provider. Null until one arrives. */
-		escalationDeliveryAt: timestamp("escalation_delivery_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		// The retry sweep's index: floor reports still waiting to be escalated. Partial
-		// would be tighter, but the table is small and the predicate is on two columns
-		// the sweep already filters by.
-		index("idx_moderation_reports_escalation").on(table.escalatedAt, table.reason),
 		// One standing report per person per item — re-reporting is a no-op, so a
 		// single user can't inflate the count the queue sorts by.
 		uniqueIndex("uq_moderation_report_reporter_subject").on(
@@ -262,42 +214,6 @@ export const abuseReports = pgTable(
 		/** Set only when the reporter happened to be signed in. Usually null. */
 		reporterId: integer("reporter_id").references(() => users.id, { onDelete: "set null" }),
 		status: text("status").notNull().default("open"), // open | resolved | dismissed
-		/**
-		 * When a human was actually told, out of band. Null means the alert is still owed,
-		 * which is what the retry sweep selects on — the same durability design as
-		 * `moderation_reports.escalated_at`, and for the same reason: an email is not a
-		 * record, so the row commits first and the send follows.
-		 */
-		escalatedAt: timestamp("escalated_at", { withTimezone: true }),
-		/**
-		 * Resend's own id for the alert, stored so delivery is checkable rather than assumed.
-		 *
-		 * ⭐ **`escalated_at` says the provider ACCEPTED the message; this is what lets
-		 * anybody find out what happened next.** Without it the strongest claim available is
-		 * *"we handed it to Resend and it did not complain"*, which is a fact about our side
-		 * of a network call rather than about a human being told. With it,
-		 * `emailDeliveryStatus` can ask whether the receiving server took it.
-		 *
-		 * Null on an alert that never went, and null on one sent before this column existed.
-		 */
-		escalationMessageId: text("escalation_message_id"),
-		/**
-		 * What the provider last told us became of that message — `delivered`, `bounced`,
-		 * `complained`, and so on.
-		 *
-		 * ⭐ **Pushed to us by a webhook rather than polled.** Asking Resend directly would
-		 * need an API key that can READ mail, and the production key is send-only by
-		 * design; broadening it would widen the blast radius of the credential most exposed
-		 * in production, to answer a question the provider is willing to simply tell us.
-		 * So `POST /api/webhooks/resend` records the answer as it arrives.
-		 *
-		 * ⚠️ **Delivered is not read.** This says the receiving server accepted the message,
-		 * never that a person saw it — mail filed into spam is `delivered` here and is still
-		 * a failure of the thing the alert is for.
-		 */
-		escalationDeliveryEvent: text("escalation_delivery_event"),
-		/** When that event happened, per the provider. Null until one arrives. */
-		escalationDeliveryAt: timestamp("escalation_delivery_at", { withTimezone: true }),
 		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 		/** The admin account that closed it. A public report is only ever answered by Anthers. */
 		resolvedBy: integer("resolved_by").references(() => adminAccounts.id, { onDelete: "set null" }),
@@ -306,8 +222,6 @@ export const abuseReports = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		// The retry sweep's selection: reports nobody has been told about yet.
-		index("idx_abuse_reports_escalation").on(table.escalatedAt, table.reason),
 		index("idx_abuse_reports_status").on(table.status, table.createdAt),
 		index("idx_abuse_reports_work").on(table.workId),
 		index("idx_abuse_reports_resolved_by").on(table.resolvedBy),

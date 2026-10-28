@@ -17,15 +17,17 @@
  * `services/dmca.ts` — a public, no-auth statutory intake with its own queue.
  *
  * ⭐ **The durability design is inherited from `escalateReport` and is the same one.**
- * The row commits, then the send follows, and `escalated_at` is what says a human was
- * actually told. A `try/catch` that logs turns *"a queue nobody watches"* into *"an email
- * nobody sent"*, one layer down; the retry sweep re-selects anything still null. That
- * matters more here than for an in-app report, because the person who filed this may have
- * no account and therefore no other way to ever hear anything.
+ * The row commits, then the send follows, and its `outbound_emails` row is what says a
+ * human was actually told. A `try/catch` that logs turns *"a queue nobody watches"* into
+ * *"an email nobody sent"*, one layer down; the retry sweep re-selects anything the
+ * ledger has no send stamp for. That matters more here than for an in-app report, because
+ * the person who filed this may have no account and therefore no other way to ever hear
+ * anything.
  */
 
 import { db } from "@anthers/db/client";
-import { abuseReports, works } from "@anthers/db/schema";
+import { abuseReports, outboundEmails, works } from "@anthers/db/schema";
+import { ABUSE_EMAIL } from "@anthers/shared/constants";
 import {
 	isLegalReason,
 	LEGAL_MODERATION_REASONS,
@@ -126,7 +128,15 @@ export async function escalateAbuseReport(reportId: number): Promise<boolean> {
 		.limit(1);
 
 	if (!report) return false;
-	if (report.escalatedAt) return true; // Already told somebody; don't tell them twice.
+	// One alert per report, ever: the ledger row is the latch. A row without a send stamp
+	// is an alert that was decided on and did not go, which the retry sweep tries again.
+	const mailKey = `abuse-escalation:${report.id}`;
+	const [existing] = await db
+		.select({ id: outboundEmails.id, sentAt: outboundEmails.sentAt })
+		.from(outboundEmails)
+		.where(eq(outboundEmails.dedupeKey, mailKey))
+		.limit(1);
+	if (existing?.sentAt) return true;
 	if (!isLegalReason(report.reason)) return false;
 
 	const label = moderationReasonLabel(report.reason);
@@ -146,15 +156,34 @@ export async function escalateAbuseReport(reportId: number): Promise<boolean> {
 		"<p>If this is child sexual abuse material, an enticement of a child, or child sex trafficking, stop here and follow the incident runbook. Do not open the content.</p>",
 	].join("\n");
 
+	// The row is written BEFORE the send, so a crash between them loses an alert rather
+	// than duplicating one; a refused send leaves `sentAt` null for the sweep.
+	const [mailRow] = existing
+		? [existing]
+		: await db
+				.insert(outboundEmails)
+				.values({
+					dedupeKey: mailKey,
+					kind: "escalation",
+					recipient: ABUSE_EMAIL,
+					subject,
+					detail: {
+						reportKind: "abuse_report",
+						reportId: String(report.id),
+						reason: report.reason,
+					},
+				})
+				.returning({ id: outboundEmails.id, sentAt: outboundEmails.sentAt });
+
 	const { sent, messageId } = await sendAbuseAlert({ subject, html });
 	if (!sent) return false;
 
-	// See the note on the same write in `services/moderation.ts` — the id is what makes
-	// delivery checkable rather than merely assumed.
+	// The provider's id rides with the stamp so the delivery webhook can say what became of
+	// the message, which is the question the alert exists to answer.
 	await db
-		.update(abuseReports)
-		.set({ escalatedAt: new Date(), escalationMessageId: messageId })
-		.where(eq(abuseReports.id, reportId));
+		.update(outboundEmails)
+		.set({ sentAt: new Date(), messageId })
+		.where(eq(outboundEmails.id, mailRow.id));
 	return true;
 }
 
@@ -170,10 +199,14 @@ export async function pendingAbuseEscalations(): Promise<number[]> {
 	const rows = await db
 		.select({ id: abuseReports.id })
 		.from(abuseReports)
+		.leftJoin(
+			outboundEmails,
+			eq(outboundEmails.dedupeKey, sql`'abuse-escalation:' || ${abuseReports.id}`),
+		)
 		.where(
 			and(
-				isNull(abuseReports.escalatedAt),
 				inArray(abuseReports.reason, [...LEGAL_MODERATION_REASONS]),
+				isNull(outboundEmails.sentAt),
 			),
 		)
 		.orderBy(abuseReports.createdAt);
@@ -277,6 +310,25 @@ export async function loadAbuseQueue(
 		.orderBy(desc(abuseReports.createdAt))
 		.limit(opts.limit ?? 200);
 
+	// The alert evidence lives on the mail ledger; one query answers the page.
+	const escalatedAtById = new Map<number, Date>();
+	if (rows.length > 0) {
+		const mails = await db
+			.select({ dedupeKey: outboundEmails.dedupeKey, sentAt: outboundEmails.sentAt })
+			.from(outboundEmails)
+			.where(
+				inArray(
+					outboundEmails.dedupeKey,
+					rows.map((r) => `abuse-escalation:${r.id}`),
+				),
+			);
+		for (const mail of mails) {
+			if (!mail.sentAt) continue;
+			const id = Number(mail.dedupeKey.split(":")[1]);
+			if (Number.isFinite(id)) escalatedAtById.set(id, mail.sentAt);
+		}
+	}
+
 	return rows.map((r) => ({
 		id: r.id,
 		url: r.url,
@@ -285,7 +337,7 @@ export async function loadAbuseQueue(
 		details: r.details,
 		reporterEmail: r.reporterEmail,
 		status: r.status,
-		escalatedAt: r.escalatedAt?.toISOString() ?? null,
+		escalatedAt: escalatedAtById.get(r.id)?.toISOString() ?? null,
 		createdAt: r.createdAt.toISOString(),
 	}));
 }
