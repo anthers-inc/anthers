@@ -1036,7 +1036,9 @@ const workBaseSchema = z
 		// type = "image": the alt text of the image the Work is, rendered as the img's alt
 		// beside the image itself. No sanitizer either — an img attribute, never markup.
 		imageAlt: z.string().max(1000).optional(),
-		metadata: z.record(z.unknown()).optional().default({}),
+		// The fulfillment details a physical good or a service carries, in the creator's
+		// own words. Creator-only; the public serializer never sends it.
+		note: z.string().max(2000).optional().default(""),
 		/**
 		 * The name of the CURRENT media version, empty to leave it unnamed. A reader sees it
 		 * beside the version's date once the version was added after the Work was released;
@@ -1366,23 +1368,6 @@ type WebBuildFileRow = typeof webBuildFiles.$inferSelect;
 type WebBuildWithFiles = WebBuildRow & { files: WebBuildFileRow[] };
 
 /**
- * Drop internal-only keys from metadata before it reaches a client.
- *
- * 🚨 **`clientVariants` is retired but this must keep stripping it.** It was the
- * client-transcode transport — a pre-encoded MP4 ladder the browser or desktop uploaded
- * for `package-video` to remux — removed on 2026-08-17 with the on-device encoders.
- * Nothing writes it any more, but it lives in the `metadata` jsonb of every Work uploaded
- * that way, and the values are **storage keys**. Deleting this strip because the producer
- * is gone would start leaking them from existing rows; the guard outlives the feature.
- */
-function stripInternalMetadata(metadata: unknown): Record<string, unknown> {
-	if (!metadata || typeof metadata !== "object") return {};
-	const { clientVariants, ...rest } = metadata as Record<string, unknown>;
-	void clientVariants;
-	return rest;
-}
-
-/**
  * Queue processing for a library content item that has a source needing it. Video →
  * HLS transcode; audio → normalize. Fired on library upload (POST /works) and when the
  * source changes (PATCH), NEVER on post save — processing is a library concern, not a
@@ -1709,7 +1694,7 @@ async function serializeWork(
 		// The image Work's set, ordered; other kinds carry nothing here.
 		gallery,
 		estimatedReadMinutes: item.estimatedReadMinutes,
-		metadata: stripInternalMetadata(item.metadata),
+		note: item.note,
 		visibility: item.visibility,
 		releasedAt: item.releasedAt,
 		maturity: item.maturity,
@@ -2650,8 +2635,6 @@ async function serializeWorkForUser(
 		versionLabel: work.versionLabel,
 		createdAt: work.createdAt,
 		updatedAt: work.updatedAt,
-		// `clientVariants` are an internal packaging detail (storage keys) — never expose.
-		metadata: stripInternalMetadata(work.metadata),
 		// The creator's prose. For a text Work this IS the deliverable; for any other type
 		// it is the notes that come with it. Either way it rides with the payload and is
 		// gated — `description` is the public blurb that stays visible when locked.
@@ -5497,7 +5480,7 @@ const contentRoutes = new Hono()
 					data.type === "text" && (bodyHtml || data.body)
 						? estimateReadMinutes(bodyHtml || (data.body ?? ""))
 						: null,
-				metadata: data.metadata ?? {},
+				note: data.note ?? "",
 				versionLabel: data.versionLabel?.trim() ?? "",
 				visibility: "private",
 				// Declared here or left `unrated` for the editor to ask about. Either way it
@@ -6694,7 +6677,7 @@ const contentRoutes = new Hono()
 		if (data.thumbnailCrop !== undefined) updates.thumbnailCrop = data.thumbnailCrop;
 		if (data.embedUrl !== undefined) updates.embedUrl = data.embedUrl;
 		if (data.durationSeconds !== undefined) updates.durationSeconds = data.durationSeconds;
-		if (data.metadata !== undefined) updates.metadata = data.metadata;
+		if (data.note !== undefined) updates.note = data.note;
 		// The current version's name. Editing it is a correction to what a reader sees only
 		// when that version came after release; a version that is already archived keeps the
 		// name it carried then.
