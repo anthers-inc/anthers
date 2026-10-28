@@ -31,9 +31,10 @@
  * a switch that quietly didn't apply to half the messages was the reason the single
  * boolean predates this map.
  *
- * **3. The record is the deliverable.** `notifications` rows are evidence that we
- * told someone, and `emailSentAt` is deliberately distinct from `createdAt` so
- * "recorded but not emailed" stays a visible state rather than being assumed away.
+ * **3. The record is the deliverable.** The `notifications` row is evidence that we told
+ * someone; the `outbound_emails` row keyed on it is evidence that we mailed them and what
+ * the provider said. The two are separate states on purpose — "recorded but not emailed"
+ * stays visible rather than being assumed away.
  *
  * **4. Idempotency is the caller's natural key.** Every consumer here is a scheduled
  * job re-evaluating the same rows nightly. Without `dedupeKey` the rescue-window
@@ -48,7 +49,7 @@
 
 import { randomBytes } from "node:crypto";
 import { db } from "@anthers/db/client";
-import { notifications, userPreferences, users } from "@anthers/db/schema";
+import { notifications, outboundEmails, userPreferences, users } from "@anthers/db/schema";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { EMAIL_LINK_COLOR, escapeHtml, sendEmail, shell } from "./email.js";
 
@@ -246,21 +247,36 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
 	if (!wantsEmail)
 		return { created: true, notificationId: row.id, emailIntended: false, emailed: false };
 
-	// The row now learns its own intent — the write the failed-mail panel keys on. Done
-	// before the send so a crash mid-send leaves the row DECIDED rather than ambiguous.
-	await db.update(notifications).set({ emailIntended: true }).where(eq(notifications.id, row.id));
+	// The ledger row learns the intent by existing, written BEFORE the send so a crash
+	// mid-send leaves a decided row (`sentAt` null) rather than an ambiguous one. It is
+	// keyed on the notification's own dedupe key, so the in-app record and its mail are
+	// the same fact told once.
+	const [mail] = await db
+		.insert(outboundEmails)
+		.values({
+			dedupeKey: `notification:${input.dedupeKey}`,
+			kind: "notification",
+			recipient: user.email,
+			userId: input.userId,
+			subject: input.title,
+			detail: { notificationKind: input.kind, category: input.category },
+		})
+		.onConflictDoNothing({ target: outboundEmails.dedupeKey })
+		.returning({ id: outboundEmails.id });
 
-	const { sent, messageId } = await sendEmail({
-		to: user.email,
-		subject: input.title,
-		html: renderEmail(input, { group, unsubscribeToken: token, userId: input.userId }),
-	});
+	const { sent, messageId } = mail
+		? await sendEmail({
+				to: user.email,
+				subject: input.title,
+				html: renderEmail(input, { group, unsubscribeToken: token, userId: input.userId }),
+			})
+		: { sent: false, messageId: null };
 
-	if (sent) {
+	if (sent && mail) {
 		await db
-			.update(notifications)
-			.set({ emailSentAt: new Date(), emailMessageId: messageId })
-			.where(eq(notifications.id, row.id));
+			.update(outboundEmails)
+			.set({ sentAt: new Date(), messageId })
+			.where(eq(outboundEmails.id, mail.id));
 	}
 
 	return { created: true, notificationId: row.id, emailIntended: true, emailed: sent };

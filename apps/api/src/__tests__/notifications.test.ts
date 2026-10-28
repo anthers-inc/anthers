@@ -21,7 +21,13 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { notifications, purchases, userPreferences, users } from "@anthers/db/schema";
+import {
+	notifications,
+	outboundEmails,
+	purchases,
+	userPreferences,
+	users,
+} from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { eraseAccount } from "../services/account-deletion.js";
@@ -183,8 +189,12 @@ describe("the opt-out line", () => {
 			.from(notifications)
 			.where(eq(notifications.dedupeKey, `test-activity-optout:${id}`));
 		expect(row).toBeDefined();
-		// And the evidence stays honest: recorded, not emailed, and distinguishable.
-		expect(row.emailSentAt).toBeNull();
+		// And the evidence stays honest: recorded in-app, no mail row written at all.
+		const mails = await db
+			.select({ id: outboundEmails.id })
+			.from(outboundEmails)
+			.where(eq(outboundEmails.dedupeKey, `notification:test-activity-optout:${id}`));
+		expect(mails).toHaveLength(0);
 	});
 
 	it("🚨 resolves an UNMAPPED activity kind to email-on regardless of the map", async () => {
@@ -292,7 +302,11 @@ describe("per-group delivery", () => {
 			.from(notifications)
 			.where(eq(notifications.dedupeKey, `test-group-app:${id}`));
 		expect(row).toBeDefined();
-		expect(row.emailSentAt).toBeNull();
+		const mails = await db
+			.select({ id: outboundEmails.id })
+			.from(outboundEmails)
+			.where(eq(outboundEmails.dedupeKey, `notification:test-group-app:${id}`));
+		expect(mails).toHaveLength(0);
 	});
 
 	it("emails when the mode says so, and stays silent when the wildcard says otherwise", async () => {
