@@ -32,7 +32,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { assets, transcodingJobs, works } from "@anthers/db/schema";
+import { workAssets, works, workTranscodingJobs } from "@anthers/db/schema";
 import { and, eq, isNotNull, isNull, not, or } from "drizzle-orm";
 import { isUnderHold } from "../services/legal-hold.js";
 import { purgeWorkMedia } from "../services/media-purge.js";
@@ -94,11 +94,11 @@ export async function runWithdrawnSweep(now = new Date()): Promise<SweepResult> 
 		}
 		const [item] = await db.select().from(works).where(eq(works.id, work.id)).limit(1);
 		if (!item) continue;
-		const [workAssets, jobRows] = await Promise.all([
-			db.select().from(assets).where(eq(assets.workId, work.id)),
-			db.select().from(transcodingJobs).where(eq(transcodingJobs.workId, work.id)),
+		const [assetRows, jobRows] = await Promise.all([
+			db.select().from(workAssets).where(eq(workAssets.workId, work.id)),
+			db.select().from(workTranscodingJobs).where(eq(workTranscodingJobs.workId, work.id)),
 		]);
-		await purgeWorkMedia(item, workAssets, jobRows);
+		await purgeWorkMedia(item, assetRows, jobRows);
 		await db.update(works).set({ mediaPurgedAt: now }).where(eq(works.id, work.id));
 		sweptCount += 1;
 	}

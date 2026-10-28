@@ -419,7 +419,7 @@ export function unlockRoute(
  * Two things deliberately live OUTSIDE this function, and both would cost it its purity:
  * the Public Access meter (an account's allowance is not a property of a Work — see the
  * wiki's *What Is Free, and What Is Gated*) and the Library (a Library entry is curation, and
- * `resolveAccess` must never learn to read `library_items`).
+ * `resolveAccess` must never learn to read `user_library_items`).
  * The reader-facing statement of this branch's rule is the wiki's
  * *What Is Free, and What Is Gated* § Goods Are Never Locked, and the verdicts are
  * pinned in `goods-works-access.test.ts`.

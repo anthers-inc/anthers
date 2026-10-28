@@ -15,7 +15,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { mediaScans, transcodingJobs, workPages, works } from "@anthers/db/schema";
+import { mediaScans, workPages, works, workTranscodingJobs } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
@@ -138,9 +138,9 @@ describe("a video Work whose file has not arrived", () => {
 
 	it("does not ask for a thumbnail once processing has finished", async () => {
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "completed", progress: 100 })
-			.where(eq(transcodingJobs.workId, workId));
+			.where(eq(workTranscodingJobs.workId, workId));
 		// Nothing took one on the creator's behalf, and release no longer asks for one: a Work
 		// with no thumbnail shows its kind's poster instead (Parker, 2026-10-24). What is still
 		// owed is the scan of the video's own bytes.
@@ -188,8 +188,8 @@ describe("each kind with a file is processed by its medium's pipeline", () => {
 			expect(res.status).toBe(200);
 			const [job] = await db
 				.select()
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.workId, workId));
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.workId, workId));
 			expect(job?.mediaType).toBe(mediaType);
 			expect(sent.find((s) => s.name === queueName)?.data).toEqual({ jobId: job?.id });
 
@@ -223,9 +223,9 @@ describe("a comic's pages do not wait on panel work", () => {
 				.status,
 		).toBe(200);
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "completed", progress: 100 })
-			.where(eq(transcodingJobs.workId, workId));
+			.where(eq(workTranscodingJobs.workId, workId));
 		const [page] = await db
 			.insert(workPages)
 			.values({

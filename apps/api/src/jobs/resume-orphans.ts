@@ -19,7 +19,7 @@
  */
 
 import { db } from "@anthers/db";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { routePagedIngest } from "../lib/paged-ingest.js";
 import { listSourceFiles } from "../services/work-source-files.js";
@@ -59,7 +59,7 @@ export interface ResumeSummary {
 	/** Rows left alone because their `mediaType` has no queue. */
 	skipped: number;
 	/** Queued pg-boss jobs deleted because their `jobId` no longer resolves to a row —
-	 * stranded by a trash cascade, which deletes `transcoding_jobs` inside the API process
+	 * stranded by a trash cascade, which deletes `work_transcoding_jobs` inside the API process
 	 * while a queue job for it still sits here. */
 	retired: number;
 }
@@ -126,7 +126,7 @@ export const MAX_TRANSCODE_RESUMES = 3;
  * Those are recorded failed rather than re-sent, which is the same outcome the handler
  * would reach and, unlike re-sending, takes the row out of the pending/processing set for
  * good. Re-sending them meant every worker boot fired a burst of guaranteed-failing jobs
- * that grew without bound: the API suites insert `transcoding_jobs` rows directly to
+ * that grew without bound: the API suites insert `work_transcoding_jobs` rows directly to
  * simulate encode state, and against a shared dev database those accumulate — 463 of them
  * by 2026-08-11, replayed in full on every `make dev`.
  *
@@ -161,20 +161,20 @@ export async function resumeOrphanedTranscodes(
 
 	const orphans = await db
 		.select({
-			id: transcodingJobs.id,
-			workId: transcodingJobs.workId,
-			mediaType: transcodingJobs.mediaType,
-			resumeCount: transcodingJobs.resumeCount,
+			id: workTranscodingJobs.id,
+			workId: workTranscodingJobs.workId,
+			mediaType: workTranscodingJobs.mediaType,
+			resumeCount: workTranscodingJobs.resumeCount,
 			sourceKey: works.sourceKey,
 			// The Work's kind, which `listSourceFiles`' fallback reads to say what mime its
 			// one-file set carries (the image kind stores display URLs, not PDF keys).
 			type: works.type,
-			errorMessage: transcodingJobs.errorMessage,
-			interruptedGracefully: transcodingJobs.interruptedGracefully,
+			errorMessage: workTranscodingJobs.errorMessage,
+			interruptedGracefully: workTranscodingJobs.interruptedGracefully,
 		})
-		.from(transcodingJobs)
-		.innerJoin(works, eq(works.id, transcodingJobs.workId))
-		.where(inArray(transcodingJobs.status, ["pending", "processing"]));
+		.from(workTranscodingJobs)
+		.innerJoin(works, eq(works.id, workTranscodingJobs.workId))
+		.where(inArray(workTranscodingJobs.status, ["pending", "processing"]));
 	if (orphans.length === 0) {
 		summary.retired = await retireLingeringQueueJobs(lingering);
 		return summary;
@@ -197,7 +197,7 @@ export async function resumeOrphanedTranscodes(
 		const blankError = exhausted.filter((job) => !job.errorMessage);
 		if (blankError.length > 0) {
 			await db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set({
 					status: "failed",
 					errorMessage:
@@ -206,7 +206,7 @@ export async function resumeOrphanedTranscodes(
 				})
 				.where(
 					inArray(
-						transcodingJobs.id,
+						workTranscodingJobs.id,
 						blankError.map((job) => job.id),
 					),
 				);
@@ -215,11 +215,11 @@ export async function resumeOrphanedTranscodes(
 		const withError = exhausted.filter((job) => job.errorMessage);
 		if (withError.length > 0) {
 			await db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set({ status: "failed", updatedAt: new Date() })
 				.where(
 					inArray(
-						transcodingJobs.id,
+						workTranscodingJobs.id,
 						withError.map((job) => job.id),
 					),
 				);
@@ -232,7 +232,7 @@ export async function resumeOrphanedTranscodes(
 	const unsourced = orphans.filter((job) => !job.sourceKey);
 	if (unsourced.length > 0) {
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({
 				status: "failed",
 				errorMessage: "No source file on content item",
@@ -240,7 +240,7 @@ export async function resumeOrphanedTranscodes(
 			})
 			.where(
 				inArray(
-					transcodingJobs.id,
+					workTranscodingJobs.id,
 					unsourced.map((job) => job.id),
 				),
 			);
@@ -269,7 +269,7 @@ export async function resumeOrphanedTranscodes(
 		const q = RESUME_QUEUE[job.mediaType];
 		if (!q) {
 			await db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set({
 					status: "pending",
 					progress: 0,
@@ -279,7 +279,7 @@ export async function resumeOrphanedTranscodes(
 					interruptedGracefully: false,
 					updatedAt: new Date(),
 				})
-				.where(eq(transcodingJobs.id, job.id));
+				.where(eq(workTranscodingJobs.id, job.id));
 			console.warn(`Cannot resume job ${job.id}: unknown mediaType "${job.mediaType}"`);
 			summary.skipped++;
 			continue;
@@ -300,9 +300,9 @@ export async function resumeOrphanedTranscodes(
 						? error.message
 						: "This ebook's source set could not be routed for processing";
 				await db
-					.update(transcodingJobs)
+					.update(workTranscodingJobs)
 					.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
-					.where(eq(transcodingJobs.id, job.id));
+					.where(eq(workTranscodingJobs.id, job.id));
 				summary.failed++;
 				continue;
 			}
@@ -317,7 +317,7 @@ export async function resumeOrphanedTranscodes(
 		// in the name and the comment.)
 		const charge = job.interruptedGracefully ? {} : { resumeCount: job.resumeCount + 1 };
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({
 				status: "pending",
 				progress: 0,
@@ -325,7 +325,7 @@ export async function resumeOrphanedTranscodes(
 				updatedAt: new Date(),
 				...charge,
 			})
-			.where(eq(transcodingJobs.id, job.id));
+			.where(eq(workTranscodingJobs.id, job.id));
 		await send(target, { jobId: job.id });
 		summary.resumed++;
 	}
@@ -354,7 +354,7 @@ const QUEUE_ACCESS: LingeringQueueAccess = {
 };
 
 /**
- * Delete queued pg-boss jobs whose `jobId` no longer resolves to a `transcoding_jobs` row.
+ * Delete queued pg-boss jobs whose `jobId` no longer resolves to a `work_transcoding_jobs` row.
  *
  * The trash cascade deletes a Work inside the API process — cascading its transcoding rows
  * with it — while the pg-boss job enqueued for it sits queued in the worker's tables. The
@@ -376,7 +376,9 @@ export async function retireLingeringQueueJobs(
 
 	const queueNames = [...new Set(Object.values(RESUME_QUEUE).filter(Boolean))] as string[];
 	const known = new Set(
-		(await db.select({ id: transcodingJobs.id }).from(transcodingJobs)).map((row) => row.id),
+		(await db.select({ id: workTranscodingJobs.id }).from(workTranscodingJobs)).map(
+			(row) => row.id,
+		),
 	);
 
 	let retired = 0;
@@ -404,7 +406,7 @@ export async function retireLingeringQueueJobs(
  */
 export async function markBenignInterrupted(): Promise<void> {
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ interruptedGracefully: true })
-		.where(inArray(transcodingJobs.status, ["pending", "processing"]));
+		.where(inArray(workTranscodingJobs.status, ["pending", "processing"]));
 }

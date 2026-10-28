@@ -23,7 +23,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { sessions, users } from "@anthers/db/schema";
+import { userSessions, users } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
@@ -181,9 +181,9 @@ describe("the export contains no credentials", () => {
 		expect(text).not.toContain("$argon2");
 
 		const sessionRows = await db
-			.select({ token: sessions.token })
-			.from(sessions)
-			.where(eq(sessions.userId, subjectId));
+			.select({ token: userSessions.token })
+			.from(userSessions)
+			.where(eq(userSessions.userId, subjectId));
 		expect(sessionRows.length).toBeGreaterThan(0);
 		for (const s of sessionRows) {
 			// The live token in the cookie that fetched this very file.

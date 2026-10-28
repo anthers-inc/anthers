@@ -15,7 +15,7 @@
  *   row ever written kept its `ip_address` and `user_agent`.
  *
  * 🚨 **The reason neither was caught is the reason these assertions are written the way
- * they are.** Every user of `sessions` already filters on `expiresAt > now()`, so a
+ * they are.** Every user of `user_sessions` already filters on `expiresAt > now()`, so a
  * test that asks "can I still use this session?" passes identically against a working
  * cleanup and against no cleanup at all. It has to assert **rows removed**. Likewise the
  * storage sweep has no observable effect on any API response — nothing 404s differently
@@ -29,7 +29,7 @@
 
 import { afterAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { poolDistributions, purchases, sessions, users, works } from "@anthers/db/schema";
+import { poolDistributions, purchases, userSessions, users, works } from "@anthers/db/schema";
 import { eq, inArray, lt } from "drizzle-orm";
 import { eraseAccount } from "../services/account-deletion.js";
 import { deleteExpiredSessions } from "../services/auth.js";
@@ -196,7 +196,7 @@ describe("expired credentials are actually deleted", () => {
 			const past = new Date(Date.now() - 60_000);
 			const future = new Date(Date.now() + 3_600_000);
 
-			await db.insert(sessions).values([
+			await db.insert(userSessions).values([
 				{ userId, token: `dead_${SUFFIX}`, expiresAt: past, ipAddress: "203.0.113.9" },
 				{ userId, token: `live_${SUFFIX}`, expiresAt: future, ipAddress: "203.0.113.9" },
 			]);
@@ -208,9 +208,9 @@ describe("expired credentials are actually deleted", () => {
 			expect(removed).toBeGreaterThan(0);
 
 			const rows = await db
-				.select({ token: sessions.token })
-				.from(sessions)
-				.where(eq(sessions.userId, userId));
+				.select({ token: userSessions.token })
+				.from(userSessions)
+				.where(eq(userSessions.userId, userId));
 			const tokens = rows.map((r) => r.token);
 			expect(tokens).toContain(`live_${SUFFIX}`);
 			expect(tokens).not.toContain(`dead_${SUFFIX}`);
@@ -225,9 +225,9 @@ describe("expired credentials are actually deleted", () => {
 			// address and user-agent are the payload, and they sit on the row.
 			await deleteExpiredSessions();
 			const stragglers = await db
-				.select({ id: sessions.id })
-				.from(sessions)
-				.where(lt(sessions.expiresAt, new Date()));
+				.select({ id: userSessions.id })
+				.from(userSessions)
+				.where(lt(userSessions.expiresAt, new Date()));
 			expect(stragglers).toHaveLength(0);
 		},
 		DB_SETUP_TIMEOUT,

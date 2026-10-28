@@ -21,7 +21,7 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { libraryItems, purchases, works } from "@anthers/db/schema";
+import { purchases, userLibraryItems, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
@@ -511,9 +511,9 @@ describe("the Library", () => {
 		expect(res.status).toBe(200);
 		const items = (await res.json()).items as { id: number }[];
 		const mine = await db
-			.select({ id: libraryItems.id })
-			.from(libraryItems)
-			.where(eq(libraryItems.userId, userId));
+			.select({ id: userLibraryItems.id })
+			.from(userLibraryItems)
+			.where(eq(userLibraryItems.userId, userId));
 		const mineIds = new Set(mine.map((m) => m.id));
 		expect(items.every((i) => !mineIds.has(i.id))).toBe(true);
 	});

@@ -66,7 +66,7 @@ import {
 	posts,
 	purchases,
 	reviews,
-	sessions,
+	userSessions,
 	users,
 	works,
 } from "@anthers/db/schema";
@@ -186,10 +186,10 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		exportRow,
 	] = await Promise.all([
 		countRows("follows", "follower_id"),
-		countRows("library_items", "user_id"),
+		countRows("user_library_items", "user_id"),
 		countRows("user_blocks", "blocker_id"),
 		countRows("attention_events", "user_id"),
-		countRows("sessions", "user_id"),
+		countRows("user_sessions", "user_id"),
 		countRows("comments", "user_id"),
 		countRows("reviews", "user_id"),
 		countRows("posts", "creator_id"),
@@ -289,7 +289,7 @@ export async function requestDeletion(
 	const scheduledFor = new Date(Date.now() + DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000);
 	await db.transaction(async (tx) => {
 		await tx.update(users).set({ deletionRequestedAt: scheduledFor }).where(eq(users.id, userId));
-		await tx.delete(sessions).where(eq(sessions.userId, userId));
+		await tx.delete(userSessions).where(eq(userSessions.userId, userId));
 	});
 	return { ok: true, scheduledFor: scheduledFor.toISOString() };
 }
@@ -470,7 +470,7 @@ export async function eraseAccount(
 	const unkept = workIds.filter((id) => !keptWorkIds.includes(id));
 
 	// Enumerated BEFORE the wipe, for the same reason the buyer list is: this reads
-	// `works`, `assets` and `transcoding_jobs`, and the transaction is about to delete
+	// `works`, `work_assets` and `work_transcoding_jobs`, and the transaction is about to delete
 	// them — run it after and it finds nothing and silently sweeps nothing, which is
 	// exactly the failure this closes (until 2026-08-12 account deletion made no
 	// object-storage calls at all, so a deleted profile's avatar stayed publicly

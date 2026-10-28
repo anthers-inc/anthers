@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Reading positions — the only writer of `reading_positions`.
+ * Reading positions — the only writer of `user_reading_positions`.
  *
  * Single-writer in the same family as `services/library.ts` and `services/moderation.ts`:
  * the rows are the continue-reading rail's data and the readers' cross-device resume, and
@@ -26,11 +26,11 @@
  * its keys meaning.
  */
 
-import { db, readingPositions, works } from "@anthers/db";
+import { db, userReadingPositions, works } from "@anthers/db";
 import type { InferSelectModel } from "drizzle-orm";
 import { and, desc, eq } from "drizzle-orm";
 
-export type ReadingPosition = InferSelectModel<typeof readingPositions>;
+export type ReadingPosition = InferSelectModel<typeof userReadingPositions>;
 
 /** Why a position write was refused, when it was. */
 export type PositionRefusal = "not_found" | "not_released";
@@ -42,9 +42,9 @@ export type PositionRefusal = "not_found" | "not_released";
 export async function listPositions(userId: number): Promise<ReadingPosition[]> {
 	return db
 		.select()
-		.from(readingPositions)
-		.where(eq(readingPositions.userId, userId))
-		.orderBy(desc(readingPositions.updatedAt));
+		.from(userReadingPositions)
+		.where(eq(userReadingPositions.userId, userId))
+		.orderBy(desc(userReadingPositions.updatedAt));
 }
 
 /**
@@ -76,10 +76,10 @@ export async function upsertPosition(
 
 	const clamped = Math.min(1, Math.max(0, progress));
 	await db
-		.insert(readingPositions)
+		.insert(userReadingPositions)
 		.values({ userId, workId, progress: clamped, position })
 		.onConflictDoUpdate({
-			target: [readingPositions.userId, readingPositions.workId],
+			target: [userReadingPositions.userId, userReadingPositions.workId],
 			set: {
 				progress: clamped,
 				position,
@@ -101,8 +101,8 @@ export async function findPosition(
 ): Promise<ReadingPosition | null> {
 	const [row] = await db
 		.select()
-		.from(readingPositions)
-		.where(and(eq(readingPositions.userId, userId), eq(readingPositions.workId, workId)))
+		.from(userReadingPositions)
+		.where(and(eq(userReadingPositions.userId, userId), eq(userReadingPositions.workId, workId)))
 		.limit(1);
 	return row ?? null;
 }

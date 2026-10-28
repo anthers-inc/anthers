@@ -15,7 +15,7 @@
  */
 
 import { db } from "@anthers/db";
-import { transcodingJobs } from "@anthers/db/schema";
+import { workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { processAudio } from "./process-audio.js";
 import { refreshQueuePositions } from "./queue-position.js";
@@ -29,9 +29,9 @@ export const DISPATCH: Record<string, ((jobId: number) => Promise<void>) | undef
 
 export async function runMediaJob(jobId: number): Promise<void> {
 	const [job] = await db
-		.select({ mediaType: transcodingJobs.mediaType })
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, jobId))
+		.select({ mediaType: workTranscodingJobs.mediaType })
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId))
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 
@@ -50,9 +50,9 @@ export async function runMediaJob(jobId: number): Promise<void> {
 		const message = `TranscodingJob ${jobId} carries media type "${job.mediaType}", which the media lane does not process`;
 		console.error(`[media] ${message}`);
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 		await refreshQueuePositions();
 		return;
 	}

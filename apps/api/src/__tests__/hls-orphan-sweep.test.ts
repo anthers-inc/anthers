@@ -15,7 +15,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { transcodingJobs } from "@anthers/db/schema";
+import { workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { sweepOrphanedVideoHlsPrefixes } from "../services/media-purge.js";
 import { storage } from "../services/storage/index.js";
@@ -58,7 +58,7 @@ describe("the HLS orphan sweep", () => {
 		referencedPrefix = `creators/${referencedId}/videos/hls/${RUN}-referenced/`;
 		await stage(referencedPrefix);
 		await stage(`creators/${referencedId}/videos/hls/${RUN}-dangling/`);
-		await db.insert(transcodingJobs).values({
+		await db.insert(workTranscodingJobs).values({
 			workId: work.id,
 			mediaType: "video",
 			status: "completed",
@@ -80,7 +80,7 @@ describe("the HLS orphan sweep", () => {
 		liveWorkId = liveWork.id;
 		await stage(`creators/${liveCreatorId}/videos/hls/${RUN}-live-dangling/`);
 		const [job] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId: liveWork.id, mediaType: "video", status: "pending" })
 			.returning();
 		liveJobId = job.id;
@@ -89,8 +89,8 @@ describe("the HLS orphan sweep", () => {
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {
-		await db.delete(transcodingJobs).where(eq(transcodingJobs.id, liveJobId));
-		await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, liveWorkId));
+		await db.delete(workTranscodingJobs).where(eq(workTranscodingJobs.id, liveJobId));
+		await db.delete(workTranscodingJobs).where(eq(workTranscodingJobs.workId, liveWorkId));
 		// The Works cascade with their accounts; the prefixes this suite staged go too.
 		await storage.deletePrefix(`creators/${referencedId}/`);
 		await storage.deletePrefix(`creators/${liveCreatorId}/`);

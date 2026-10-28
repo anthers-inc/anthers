@@ -18,7 +18,13 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, libraryItems, purchases, workMediaVersions, works } from "@anthers/db/schema";
+import {
+	purchases,
+	userLibraryItems,
+	workAssets,
+	workMediaVersions,
+	works,
+} from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { runWithdrawnSweep } from "../jobs/withdrawn-sweep.js";
 import { placeHold } from "../services/legal-hold.js";
@@ -47,7 +53,7 @@ async function withdrawnWork(opts: { title: string; withdrawnDaysAgo?: number })
 	const key = `creators/${creatorId}/assets/${work.id}/build.zip`;
 	await storage.upload(key, new Uint8Array(2048), "application/octet-stream", "private");
 	storedKeys.push(key);
-	await db.insert(assets).values({
+	await db.insert(workAssets).values({
 		workId: work.id,
 		file: key,
 		filename: "build.zip",
@@ -98,9 +104,9 @@ async function preserved(workId: number): Promise<boolean> {
 /** Whether the Work's stored asset still exists — the media's presence, from the object. */
 async function mediaExists(workId: number): Promise<boolean> {
 	const [asset] = await db
-		.select({ file: assets.file })
-		.from(assets)
-		.where(eq(assets.workId, workId));
+		.select({ file: workAssets.file })
+		.from(workAssets)
+		.where(eq(workAssets.workId, workId));
 	if (!asset) return false;
 	return await storage.exists(asset.file);
 }
@@ -188,9 +194,9 @@ describe("coming into the program", () => {
 		// ⭐ **The write is one-way.** A Library entry can be removed, but a Work Anthers has
 		// undertaken to keep is not un-kept by somebody tidying their library.
 		const [item] = await db
-			.select({ id: libraryItems.id })
-			.from(libraryItems)
-			.where(eq(libraryItems.userId, otherBuyerId));
+			.select({ id: userLibraryItems.id })
+			.from(userLibraryItems)
+			.where(eq(userLibraryItems.userId, otherBuyerId));
 		expect(item).toBeDefined();
 		await removeItem(otherBuyerId, item!.id);
 		expect(await preserved(work.id)).toBe(true);

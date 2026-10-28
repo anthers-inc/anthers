@@ -33,10 +33,10 @@
  */
 import { db } from "@anthers/db";
 import {
-	assets,
 	users,
-	webBuildFiles,
-	webBuilds,
+	workAssets,
+	workBuildFiles,
+	workBuilds,
 	workSourceFiles,
 	works,
 } from "@anthers/db/schema";
@@ -542,9 +542,9 @@ async function manifestFilesFor(work: {
 	sourceOriginalKey: string | null;
 }): Promise<ManifestFile[]> {
 	const [assetRows, sourceRows, buildRows] = await Promise.all([
-		db.select().from(assets).where(eq(assets.workId, work.id)),
+		db.select().from(workAssets).where(eq(workAssets.workId, work.id)),
 		db.select().from(workSourceFiles).where(eq(workSourceFiles.workId, work.id)),
-		db.select().from(webBuilds).where(eq(webBuilds.workId, work.id)),
+		db.select().from(workBuilds).where(eq(workBuilds.workId, work.id)),
 	]);
 
 	const files: ManifestFile[] = [];
@@ -594,9 +594,9 @@ async function manifestFilesFor(work: {
 	const build = buildRows.find((row) => row.isPrimary) ?? buildRows[0];
 	if (build && work.creatorId !== null) {
 		const buildFiles = await db
-			.select({ fileSize: webBuildFiles.fileSize })
-			.from(webBuildFiles)
-			.where(eq(webBuildFiles.buildId, build.id));
+			.select({ fileSize: workBuildFiles.fileSize })
+			.from(workBuildFiles)
+			.where(eq(workBuildFiles.buildId, build.id));
 		files.push({
 			name: build.entryPath,
 			key: `creators/${work.creatorId}/web-builds/${build.id}/`,

@@ -3,14 +3,14 @@
  * The release gate's playable arm — `unreadyWorks`, where the processing wait lives.
  *
  * Publish-early (2026-10-18) opened the gate to a video whose ladder still fills in:
- * the one fact that makes that safe is `transcoding_jobs.playable_at`, written at the
+ * the one fact that makes that safe is `work_transcoding_jobs.playable_at`, written at the
  * first rung's upload. These pin the whole shape: playable-in-progress releases, an
  * un-playable in-progress row still waits as before, and a failed or canceled row is
  * unready through its own branch (`creatorStalled`) rather than the wait.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { inArray } from "drizzle-orm";
 import { unreadyWorks } from "../services/work-release.js";
 import { createAccount } from "./account-fixture.js";
@@ -43,7 +43,7 @@ const created = (async () => {
 	}
 
 	const [playableRow] = await db
-		.insert(transcodingJobs)
+		.insert(workTranscodingJobs)
 		.values({
 			workId: workIds[0],
 			mediaType: "video",
@@ -53,19 +53,19 @@ const created = (async () => {
 			playableAt: new Date(),
 			etaSeconds: 2460,
 		})
-		.returning({ id: transcodingJobs.id });
+		.returning({ id: workTranscodingJobs.id });
 	const [bareRow] = await db
-		.insert(transcodingJobs)
+		.insert(workTranscodingJobs)
 		.values({ workId: workIds[1], mediaType: "video", status: "processing", progress: 12 })
-		.returning({ id: transcodingJobs.id });
+		.returning({ id: workTranscodingJobs.id });
 	const [failedRow] = await db
-		.insert(transcodingJobs)
+		.insert(workTranscodingJobs)
 		.values({ workId: workIds[2], mediaType: "video", status: "failed", playableAt: new Date() })
-		.returning({ id: transcodingJobs.id });
+		.returning({ id: workTranscodingJobs.id });
 	const [canceledRow] = await db
-		.insert(transcodingJobs)
+		.insert(workTranscodingJobs)
 		.values({ workId: workIds[3], mediaType: "video", status: "canceled" })
-		.returning({ id: transcodingJobs.id });
+		.returning({ id: workTranscodingJobs.id });
 	for (const r of [playableRow, bareRow, failedRow, canceledRow]) rowIds.push(r.id);
 })();
 
@@ -76,7 +76,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
 	if (workIds.length > 0)
-		await db.delete(transcodingJobs).where(inArray(transcodingJobs.workId, workIds));
+		await db.delete(workTranscodingJobs).where(inArray(workTranscodingJobs.workId, workIds));
 	if (workIds.length > 0) await db.delete(works).where(inArray(works.id, workIds));
 });
 

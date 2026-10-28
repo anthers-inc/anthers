@@ -12,10 +12,10 @@
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	assets,
 	users,
-	webBuildFiles,
-	webBuilds,
+	workAssets,
+	workBuildFiles,
+	workBuilds,
 	workMediaVersions,
 	workSourceFiles,
 	works,
@@ -107,10 +107,10 @@ describe("a Work's archived media versions", () => {
 		await db.update(works).set({ versionAddedAt: before }).where(eq(works.id, work.id));
 
 		const [oldBuild] = await db
-			.insert(webBuilds)
+			.insert(workBuilds)
 			.values({ workId: work.id, label: "Old", entryPath: "index.html", isPrimary: true })
 			.returning();
-		await db.insert(webBuildFiles).values({
+		await db.insert(workBuildFiles).values({
 			buildId: oldBuild.id,
 			path: "index.html",
 			storageKey: `creators/${ownerId}/web-builds/${oldBuild.id}/index.html`,
@@ -118,10 +118,10 @@ describe("a Work's archived media versions", () => {
 			mimeType: "text/html",
 		});
 		const [nextBuild] = await db
-			.insert(webBuilds)
+			.insert(workBuilds)
 			.values({ workId: work.id, label: "Next", entryPath: "index.html" })
 			.returning();
-		await db.insert(webBuildFiles).values({
+		await db.insert(workBuildFiles).values({
 			buildId: nextBuild.id,
 			path: "index.html",
 			storageKey: `creators/${ownerId}/web-builds/${nextBuild.id}/index.html`,
@@ -141,7 +141,7 @@ describe("a Work's archived media versions", () => {
 		expect(res.status).toBe(200);
 
 		// One build stands: the promoted one, as primary.
-		const builds = await db.select().from(webBuilds).where(eq(webBuilds.workId, work.id));
+		const builds = await db.select().from(workBuilds).where(eq(workBuilds.workId, work.id));
 		expect(builds.map((build) => [build.label, build.isPrimary])).toEqual([["Next", true]]);
 
 		// The old build is the archived version — and the promoted build is not.
@@ -474,7 +474,7 @@ describe("a Work's archived media versions", () => {
 		const uploadedAt = new Date("2026-02-03T04:05:06.000Z");
 		await db.update(works).set({ versionAddedAt: uploadedAt }).where(eq(works.id, work.id));
 		// One Work, two platform builds: the primary Windows build and a secondary macOS one.
-		await db.insert(assets).values([
+		await db.insert(workAssets).values([
 			{
 				workId: work.id,
 				file: oldBuild,
@@ -529,7 +529,7 @@ describe("a Work's archived media versions", () => {
 			["windows", oldBuild],
 		]);
 
-		const rows = await db.select().from(assets).where(eq(assets.workId, work.id));
+		const rows = await db.select().from(workAssets).where(eq(workAssets.workId, work.id));
 		expect(rows).toHaveLength(1);
 		expect(rows[0].file).toBe(newBuild);
 		expect(rows[0].isPrimary).toBe(true);

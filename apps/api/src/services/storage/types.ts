@@ -70,7 +70,7 @@ export interface StorageService {
 	/**
 	 * The size of an object in bytes, without fetching it. Null when it doesn't exist.
 	 *
-	 * Storage is the authority on how big a stored object is — `assets.file_size` is a
+	 * Storage is the authority on how big a stored object is — `work_assets.file_size` is a
 	 * database column written at upload and can disagree with it, so anything that has to
 	 * be right about the bytes on disk (a `Content-Length`, a range bound) asks here.
 	 */

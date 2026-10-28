@@ -41,13 +41,13 @@ import {
 	projectItems,
 	projects,
 	stripeAccounts,
-	transcodingJobs,
 	users,
 	workCaptionTracks,
 	workPages,
 	workSections,
 	workSourceFiles,
 	works,
+	workTranscodingJobs,
 } from "@anthers/db/schema";
 import { type ProcessingKind, processingFor } from "@anthers/shared/content";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
@@ -584,12 +584,12 @@ Still a tone.
 async function alreadyPlayable(workId: number, reflow: boolean): Promise<boolean> {
 	const [job] = await db
 		.select({
-			status: transcodingJobs.status,
-			mediaType: transcodingJobs.mediaType,
-			hlsManifestUrl: transcodingJobs.hlsManifestUrl,
+			status: workTranscodingJobs.status,
+			mediaType: workTranscodingJobs.mediaType,
+			hlsManifestUrl: workTranscodingJobs.hlsManifestUrl,
 		})
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.workId, workId))
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.workId, workId))
 		.limit(1);
 	if (job?.status !== "completed") return false;
 	// A reflow book's playable state is its extracted sections; a seeded EPUB that
@@ -632,7 +632,7 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 		return;
 	}
 
-	await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, workId));
+	await db.delete(workTranscodingJobs).where(eq(workTranscodingJobs.workId, workId));
 
 	// The fixture's types are all processed ones, so this is never null.
 	const processing = processingFor(spec.media) as ProcessingKind;
@@ -686,9 +686,9 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 		}
 
 		const [job] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId, mediaType: processing, status: "pending", progress: 0 })
-			.returning({ id: transcodingJobs.id });
+			.returning({ id: workTranscodingJobs.id });
 
 		if (reflow) await ingestEbook({ jobId: job.id });
 		else if (processing === "video") {
@@ -721,8 +721,8 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 
 		const [done] = await db
 			.select()
-			.from(transcodingJobs)
-			.where(eq(transcodingJobs.id, job.id))
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.id, job.id))
 			.limit(1);
 		if (done?.status !== "completed") {
 			throw new Error(

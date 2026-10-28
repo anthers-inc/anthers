@@ -34,9 +34,9 @@ import {
 	attentionEvents,
 	badges,
 	shareLinks,
-	transcodingJobs,
 	userBadges,
 	users,
+	workTranscodingJobs,
 } from "@anthers/db/schema";
 import { SHARED_PUBLIC_ACCESS_SECONDS } from "@anthers/shared/public-access";
 import { and, eq, sql } from "drizzle-orm";
@@ -168,7 +168,7 @@ describe("Share links", () => {
 			...OPEN,
 		});
 		openId = open.id;
-		await db.insert(transcodingJobs).values({
+		await db.insert(workTranscodingJobs).values({
 			workId: openId,
 			mediaType: "video",
 			status: "completed",

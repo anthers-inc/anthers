@@ -20,15 +20,15 @@
  */
 
 import {
-	assets,
 	db,
-	transcodingJobs,
-	webBuilds,
+	workAssets,
+	workBuilds,
 	workCaptionTracks,
 	workMediaVersions,
 	workPreviewMedia,
 	workSourceFiles,
 	works,
+	workTranscodingJobs,
 } from "@anthers/db";
 import { isPaged } from "@anthers/shared/content";
 import { and, eq, inArray } from "drizzle-orm";
@@ -37,8 +37,8 @@ import { isKeyUnder, urlToKey } from "./storage/keys.js";
 import { keysInMedia } from "./work-versions.js";
 
 type WorkRow = typeof works.$inferSelect;
-type AssetRow = typeof assets.$inferSelect;
-type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
+type AssetRow = typeof workAssets.$inferSelect;
+type TranscodingJobRow = typeof workTranscodingJobs.$inferSelect;
 type SourceFileRow = typeof workSourceFiles.$inferSelect;
 type PreviewMediaRow = typeof workPreviewMedia.$inferSelect;
 type PreviewCaptionRow = typeof workCaptionTracks.$inferSelect;
@@ -97,14 +97,14 @@ export async function sweepOrphanedVideoHlsPrefixes(): Promise<number> {
 
 		// The live-write guard above, one query per creator who has anything to sweep.
 		const [live] = await db
-			.select({ id: transcodingJobs.id })
-			.from(transcodingJobs)
-			.innerJoin(works, eq(works.id, transcodingJobs.workId))
+			.select({ id: workTranscodingJobs.id })
+			.from(workTranscodingJobs)
+			.innerJoin(works, eq(works.id, workTranscodingJobs.workId))
 			.where(
 				and(
 					eq(works.creatorId, creatorId),
-					eq(transcodingJobs.mediaType, "video"),
-					inArray(transcodingJobs.status, ["pending", "processing"]),
+					eq(workTranscodingJobs.mediaType, "video"),
+					inArray(workTranscodingJobs.status, ["pending", "processing"]),
 				),
 			)
 			.limit(1);
@@ -114,10 +114,10 @@ export async function sweepOrphanedVideoHlsPrefixes(): Promise<number> {
 		// candidate form — trailing slash — so the comparison can never miss on the two
 		// spellings of the same directory.
 		const rows = await db
-			.select({ hlsManifestUrl: transcodingJobs.hlsManifestUrl })
-			.from(transcodingJobs)
-			.innerJoin(works, eq(works.id, transcodingJobs.workId))
-			.where(and(eq(works.creatorId, creatorId), eq(transcodingJobs.mediaType, "video")));
+			.select({ hlsManifestUrl: workTranscodingJobs.hlsManifestUrl })
+			.from(workTranscodingJobs)
+			.innerJoin(works, eq(works.id, workTranscodingJobs.workId))
+			.where(and(eq(works.creatorId, creatorId), eq(workTranscodingJobs.mediaType, "video")));
 		const referenced = new Set(
 			rows
 				.map((r) => urlToKey(r.hlsManifestUrl ?? ""))
@@ -199,10 +199,10 @@ function keysForWork(
  */
 async function webBuildPrefixesForWorks(workIds: number[]): Promise<string[]> {
 	const rows = await db
-		.select({ id: webBuilds.id, creatorId: works.creatorId })
-		.from(webBuilds)
-		.innerJoin(works, eq(webBuilds.workId, works.id))
-		.where(inArray(webBuilds.workId, workIds));
+		.select({ id: workBuilds.id, creatorId: works.creatorId })
+		.from(workBuilds)
+		.innerJoin(works, eq(workBuilds.workId, works.id))
+		.where(inArray(workBuilds.workId, workIds));
 	return rows.map((r) => `creators/${r.creatorId}/${webBuildPrefix(r.id)}`);
 }
 
@@ -339,8 +339,8 @@ export async function purgeWorkMedia(
  * Best-effort purge for a set of Works identified only by id — the account-deletion
  * shape, where the caller has ids rather than loaded rows.
  *
- * 🚨 **Load before you delete, sweep after you commit.** This reads `works`, `assets` and
- * `transcoding_jobs`, so it must run BEFORE the transaction that removes them or it finds
+ * 🚨 **Load before you delete, sweep after you commit.** This reads `works`, `work_assets` and
+ * `work_transcoding_jobs`, so it must run BEFORE the transaction that removes them or it finds
  * nothing and silently sweeps nothing. Its *storage* half should run after the commit, for
  * the same reason the withdrawal notice does: destroying media for an account whose
  * deletion then rolled back is unrecoverable, while a crash between commit and sweep
@@ -363,11 +363,11 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 	const [workRows, assetRows, jobRows, sourceFileRows, previewRows, versionRows] =
 		await Promise.all([
 			db.select().from(works).where(inArray(works.id, workIds)),
-			db.select().from(assets).where(inArray(assets.workId, workIds)),
+			db.select().from(workAssets).where(inArray(workAssets.workId, workIds)),
 			db
 				.select()
-				.from(transcodingJobs)
-				.where(and(inArray(transcodingJobs.workId, workIds))),
+				.from(workTranscodingJobs)
+				.where(and(inArray(workTranscodingJobs.workId, workIds))),
 			db.select().from(workSourceFiles).where(inArray(workSourceFiles.workId, workIds)),
 			db.select().from(workPreviewMedia).where(inArray(workPreviewMedia.workId, workIds)),
 			db
@@ -471,7 +471,7 @@ export async function removeSourceFileStorage(
  * {@link removeSourceFileStorage}: a prior key not under the creator's own prefix is
  * never touched.
  *
- * The caller owns the rows: the superseded `transcoding_jobs` rows are deleted by the
+ * The caller owns the rows: the superseded `work_transcoding_jobs` rows are deleted by the
  * route that retires them, and a paged set's rows and their objects belong to
  * `work-source-files.ts`.
  */

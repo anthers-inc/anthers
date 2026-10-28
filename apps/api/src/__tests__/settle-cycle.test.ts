@@ -18,7 +18,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	accountCycles,
 	badgeCharges,
 	badges,
 	billingAccounts,
@@ -31,6 +30,7 @@ import {
 	stickers,
 	timePoolFundLedger,
 	userBadges,
+	userCycles,
 } from "@anthers/db/schema";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit } from "@anthers/shared/fees";
@@ -68,7 +68,7 @@ let n = 0;
  * 🚨 The Fund's slice for a cycle is read across EVERY supporter of that cycle
  * (`services/time-pool-fund.ts`), so one test's fixtures leak into the next test's
  * denominators. Each test starts from the accounts and books nothing else wrote:
- * the previous test's users are purged (which cascades their `account_cycles` rows),
+ * the previous test's users are purged (which cascades their `user_cycles` rows),
  * their ledger markers go, and the Fund's rows for the suite's months are cleared —
  * a test publishes the Fund state its own fixtures mean.
  */
@@ -175,7 +175,7 @@ async function holdOrgRung(userId: number, threshold: string, cycle: string): Pr
  */
 async function publishFundRow(activeFreeAccounts: number, foundation = 100): Promise<void> {
 	const { userId } = await makeSupporter(0);
-	await db.insert(accountCycles).values({
+	await db.insert(userCycles).values({
 		userId,
 		billingCycle: MONTH,
 		foundation: foundation.toFixed(2),

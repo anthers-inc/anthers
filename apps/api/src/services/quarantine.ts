@@ -43,13 +43,13 @@ import { db } from "@anthers/db/client";
 import type { VendorMatch } from "@anthers/db/schema";
 import {
 	adminAccounts,
-	assets,
 	mediaQuarantine,
 	moderationActions,
 	moderationReports,
-	transcodingJobs,
 	users,
+	workAssets,
 	works,
+	workTranscodingJobs,
 } from "@anthers/db/schema";
 import type { ModerationActionType } from "@anthers/shared/moderation";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
@@ -223,14 +223,14 @@ async function objectsFor(workId: number): Promise<WorkObject[]> {
 	if (!work) return [];
 
 	const [assetRows, jobRows] = await Promise.all([
-		db.select({ file: assets.file }).from(assets).where(eq(assets.workId, workId)),
+		db.select({ file: workAssets.file }).from(workAssets).where(eq(workAssets.workId, workId)),
 		db
 			.select({
-				hlsManifestUrl: transcodingJobs.hlsManifestUrl,
-				outputFileUrl: transcodingJobs.outputFileUrl,
+				hlsManifestUrl: workTranscodingJobs.hlsManifestUrl,
+				outputFileUrl: workTranscodingJobs.outputFileUrl,
 			})
-			.from(transcodingJobs)
-			.where(eq(transcodingJobs.workId, workId)),
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.workId, workId)),
 	]);
 
 	const out: WorkObject[] = [];

@@ -1,27 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 import { relations } from "drizzle-orm";
-import { atprotoSessions, follows, sessions, userBlocks, users } from "./auth.js";
+import { atprotoSessions, follows, userBlocks, userSessions, users } from "./auth.js";
 import {
-	assets,
 	comments,
 	inlineImages,
 	posts,
 	projectItems,
 	projectPosts,
 	projects,
-	readingPositions,
 	reviews,
-	transcodingJobs,
-	webBuildFiles,
-	webBuilds,
+	userReadingPositions,
+	workAssets,
+	workBuildFiles,
+	workBuilds,
 	workCreditDecisions,
 	workMediaVersions,
 	workSaves,
 	works,
+	workTranscodingJobs,
 } from "./content.js";
 import { crfLedger, purchases, stripeAccounts } from "./payments.js";
 import {
-	accountCycles,
 	attentionEvents,
 	badgeArtProvenance,
 	badges,
@@ -30,13 +29,14 @@ import {
 	nounSpend,
 	poolDistributions,
 	userBadges,
+	userCycles,
 	userPreferences,
 } from "./subscriptions.js";
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 export const usersRelations = relations(users, ({ one, many }) => ({
-	sessions: many(sessions),
+	userSessions: many(userSessions),
 	atprotoSession: one(atprotoSessions),
 
 	// Follows (both directions)
@@ -64,7 +64,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	// Accounts & economics
 	billingAccount: one(billingAccounts),
 	userPreferences: one(userPreferences),
-	accountCycles: many(accountCycles),
+	userCycles: many(userCycles),
 	attentionEventsAsUser: many(attentionEvents, { relationName: "attentionUser" }),
 	attentionEventsAsCreator: many(attentionEvents, { relationName: "attentionCreator" }),
 	userBadges: many(userBadges, { relationName: "badgeHolder" }),
@@ -75,8 +75,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	// Integrations
 }));
 
-export const sessionsRelations = relations(sessions, ({ one }) => ({
-	user: one(users, { fields: [sessions.userId], references: [users.id] }),
+export const userSessionsRelations = relations(userSessions, ({ one }) => ({
+	user: one(users, { fields: [userSessions.userId], references: [users.id] }),
 }));
 
 export const atprotoSessionsRelations = relations(atprotoSessions, ({ one }) => ({
@@ -141,32 +141,32 @@ export const projectPostsRelations = relations(projectPosts, ({ one }) => ({
 // Works — the Catalog. Own their media, downloadable variants, transcodes and gates.
 export const worksRelations = relations(works, ({ one, many }) => ({
 	creator: one(users, { fields: [works.creatorId], references: [users.id] }),
-	assets: many(assets),
-	webBuilds: many(webBuilds),
+	workAssets: many(workAssets),
+	workBuilds: many(workBuilds),
 	mediaVersions: many(workMediaVersions),
 	saves: many(workSaves),
-	transcodingJobs: many(transcodingJobs),
+	workTranscodingJobs: many(workTranscodingJobs),
 	projectItems: many(projectItems), // Projects this Work belongs to
 	purchases: many(purchases),
 	reviews: many(reviews),
 	creditDecisions: many(workCreditDecisions),
 }));
 
-export const assetsRelations = relations(assets, ({ one }) => ({
-	work: one(works, { fields: [assets.workId], references: [works.id] }),
+export const workAssetsRelations = relations(workAssets, ({ one }) => ({
+	work: one(works, { fields: [workAssets.workId], references: [works.id] }),
 }));
 
-export const webBuildsRelations = relations(webBuilds, ({ one, many }) => ({
-	work: one(works, { fields: [webBuilds.workId], references: [works.id] }),
-	files: many(webBuildFiles),
+export const workBuildsRelations = relations(workBuilds, ({ one, many }) => ({
+	work: one(works, { fields: [workBuilds.workId], references: [works.id] }),
+	files: many(workBuildFiles),
 }));
 
 export const workMediaVersionsRelations = relations(workMediaVersions, ({ one }) => ({
 	work: one(works, { fields: [workMediaVersions.workId], references: [works.id] }),
 }));
 
-export const webBuildFilesRelations = relations(webBuildFiles, ({ one }) => ({
-	build: one(webBuilds, { fields: [webBuildFiles.buildId], references: [webBuilds.id] }),
+export const workBuildFilesRelations = relations(workBuildFiles, ({ one }) => ({
+	build: one(workBuilds, { fields: [workBuildFiles.buildId], references: [workBuilds.id] }),
 }));
 
 export const workSavesRelations = relations(workSaves, ({ one }) => ({
@@ -174,13 +174,13 @@ export const workSavesRelations = relations(workSaves, ({ one }) => ({
 	work: one(works, { fields: [workSaves.workId], references: [works.id] }),
 }));
 
-export const readingPositionsRelations = relations(readingPositions, ({ one }) => ({
-	user: one(users, { fields: [readingPositions.userId], references: [users.id] }),
-	work: one(works, { fields: [readingPositions.workId], references: [works.id] }),
+export const userReadingPositionsRelations = relations(userReadingPositions, ({ one }) => ({
+	user: one(users, { fields: [userReadingPositions.userId], references: [users.id] }),
+	work: one(works, { fields: [userReadingPositions.workId], references: [works.id] }),
 }));
 
-export const transcodingJobsRelations = relations(transcodingJobs, ({ one }) => ({
-	work: one(works, { fields: [transcodingJobs.workId], references: [works.id] }),
+export const workTranscodingJobsRelations = relations(workTranscodingJobs, ({ one }) => ({
+	work: one(works, { fields: [workTranscodingJobs.workId], references: [works.id] }),
 }));
 
 export const inlineImagesRelations = relations(inlineImages, ({ one }) => ({
@@ -224,8 +224,8 @@ export const userPreferencesRelations = relations(userPreferences, ({ one }) => 
 	user: one(users, { fields: [userPreferences.userId], references: [users.id] }),
 }));
 
-export const accountCyclesRelations = relations(accountCycles, ({ one }) => ({
-	user: one(users, { fields: [accountCycles.userId], references: [users.id] }),
+export const userCyclesRelations = relations(userCycles, ({ one }) => ({
+	user: one(users, { fields: [userCycles.userId], references: [users.id] }),
 }));
 
 export const attentionEventsRelations = relations(attentionEvents, ({ one }) => ({

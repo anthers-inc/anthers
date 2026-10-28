@@ -19,13 +19,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import {
-	accountCycles,
-	users,
-	workCaptionTracks,
-	workPreviewMedia,
-	works,
-} from "@anthers/db/schema";
+import { userCycles, users, workCaptionTracks, workPreviewMedia, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { QUEUES, queue } from "../jobs/queue";
@@ -590,8 +584,8 @@ describe("storage accounting and deletion", () => {
 		await runStorageUsageSweep();
 		const [row] = await db
 			.select()
-			.from(accountCycles)
-			.where(eq(accountCycles.userId, creator.userId))
+			.from(userCycles)
+			.where(eq(userCycles.userId, creator.userId))
 			.limit(1);
 		expect(row).toBeDefined();
 		expect(row.purposes.catalog ?? 0).toBeGreaterThan(0);

@@ -22,7 +22,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, works } from "@anthers/db/schema";
+import { workAssets, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { createManagingAppRoutes } from "../routes/managing-app.js";
 import type { RepoWriter } from "../services/atproto-repo.js";
@@ -176,7 +176,7 @@ staged("the creator draft and the gated manifest against a staging PDS", () => {
 		});
 		workId = work.id;
 		publicId = work.publicId;
-		await db.insert(assets).values({
+		await db.insert(workAssets).values({
 			workId,
 			file: `creators/${userId}/builds/nightjar-audio.zip`,
 			filename: "nightjar-audio.zip",

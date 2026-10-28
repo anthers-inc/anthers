@@ -31,11 +31,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test"
 import { db } from "@anthers/db/client";
 import {
 	accessReceipts,
-	assets,
 	creatorNettings,
 	crfLedger,
 	purchases,
 	users,
+	workAssets,
 } from "@anthers/db/schema";
 import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
@@ -225,7 +225,7 @@ async function makeWork(title: string): Promise<number> {
 		downloadEnabled: true,
 		access: FOR_SALE,
 	});
-	await db.insert(assets).values({
+	await db.insert(workAssets).values({
 		workId: work.id,
 		file: `creators/${creatorId}/builds/${uid()}.zip`,
 		filename: `${uid()}.zip`,

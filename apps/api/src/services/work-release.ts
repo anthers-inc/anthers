@@ -20,7 +20,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { transcodingJobs, type works } from "@anthers/db/schema";
+import { type works, workTranscodingJobs } from "@anthers/db/schema";
 import { isEmptyWriting, processingFor, workNeedsFile } from "@anthers/shared/content";
 import {
 	gridFor,
@@ -59,18 +59,18 @@ export async function unreadyWorks(
 	if (workIds.length === 0) return [];
 	const jobs = await db
 		.select({
-			workId: transcodingJobs.workId,
-			status: transcodingJobs.status,
-			// The moment a video's tree first played, per `transcoding_jobs.playable_at`.
+			workId: workTranscodingJobs.workId,
+			status: workTranscodingJobs.status,
+			// The moment a video's tree first played, per `work_transcoding_jobs.playable_at`.
 			// A video whose ladder is still filling in is no longer the release gate's
 			// problem — publish-early (2026-10-18): the tree plays, the tall rungs
 			// render behind it, and the job's completing write settles the row after.
-			playableAt: transcodingJobs.playableAt,
-			createdAt: transcodingJobs.createdAt,
+			playableAt: workTranscodingJobs.playableAt,
+			createdAt: workTranscodingJobs.createdAt,
 		})
-		.from(transcodingJobs)
-		.where(inArray(transcodingJobs.workId, workIds))
-		.orderBy(desc(transcodingJobs.createdAt));
+		.from(workTranscodingJobs)
+		.where(inArray(workTranscodingJobs.workId, workIds))
+		.orderBy(desc(workTranscodingJobs.createdAt));
 	const latest = new Map<number, { status: string; playableAt: Date | null; workId: number }>();
 	for (const j of jobs) if (!latest.has(j.workId)) latest.set(j.workId, j);
 	const unready: Array<{ workId: number; status: string }> = [];

@@ -10,7 +10,7 @@ import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
@@ -172,7 +172,7 @@ async function generateWaveformFallback(filePath: string, numPoints: number): Pr
 }
 
 async function updateJobProgress(jobId: number, progress: number) {
-	await db.update(transcodingJobs).set({ progress }).where(eq(transcodingJobs.id, jobId));
+	await db.update(workTranscodingJobs).set({ progress }).where(eq(workTranscodingJobs.id, jobId));
 }
 
 export async function processAudio(data: ProcessAudioData) {
@@ -187,8 +187,8 @@ export async function processAudio(data: ProcessAudioData) {
 
 	const [job] = await db
 		.select()
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, jobId))
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId))
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 	// Idempotency: a late pg-boss retry of a job already finished (e.g. by the
@@ -217,7 +217,7 @@ export async function processAudio(data: ProcessAudioData) {
 	// reaching the row has consumed the excuse, so whatever kills THIS run says for
 	// itself.
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({
 			status: "processing",
 			progress: 0,
@@ -225,7 +225,7 @@ export async function processAudio(data: ProcessAudioData) {
 			interruptedGracefully: false,
 			updatedAt: new Date(),
 		})
-		.where(eq(transcodingJobs.id, jobId));
+		.where(eq(workTranscodingJobs.id, jobId));
 
 	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
 	if (!item) throw new Error(`Content item ${job.workId} not found`);
@@ -287,13 +287,13 @@ export async function processAudio(data: ProcessAudioData) {
 					number | null
 				>`percentile_cont(0.5) within group (order by ((timings->>'waveformMs')::numeric / NULLIF((timings->>'durationSeconds')::numeric, 0)))`,
 			})
-			.from(transcodingJobs)
+			.from(workTranscodingJobs)
 			.where(
 				and(
-					eq(transcodingJobs.status, "completed"),
-					isNotNull(transcodingJobs.timings),
-					eq(transcodingJobs.mediaType, "audio"),
-					gt(transcodingJobs.createdAt, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+					eq(workTranscodingJobs.status, "completed"),
+					isNotNull(workTranscodingJobs.timings),
+					eq(workTranscodingJobs.mediaType, "audio"),
+					gt(workTranscodingJobs.createdAt, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
 				),
 			);
 		const medianWaveformRate = Number(historyRate?.rate ?? 0);
@@ -362,9 +362,9 @@ export async function processAudio(data: ProcessAudioData) {
 								lastWriteMs = now;
 								// Fire-and-forget so the progress stream isn't blocked on the DB write.
 								tickWrite = db
-									.update(transcodingJobs)
+									.update(workTranscodingJobs)
 									.set({ etaSeconds: estimate })
-									.where(eq(transcodingJobs.id, jobId))
+									.where(eq(workTranscodingJobs.id, jobId))
 									.execute()
 									.catch(() => {});
 							}
@@ -391,9 +391,9 @@ export async function processAudio(data: ProcessAudioData) {
 		const tailEta = clampEta(Math.round(waveformAllowance));
 		if (tailEta != null)
 			await db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set({ etaSeconds: tailEta })
-				.where(eq(transcodingJobs.id, jobId));
+				.where(eq(workTranscodingJobs.id, jobId));
 		await updateJobProgress(jobId, 60);
 
 		/**
@@ -409,9 +409,9 @@ export async function processAudio(data: ProcessAudioData) {
 		 * window takes effect at the next state change.
 		 */
 		const [nowRow] = await db
-			.select({ status: transcodingJobs.status })
-			.from(transcodingJobs)
-			.where(eq(transcodingJobs.id, jobId))
+			.select({ status: workTranscodingJobs.status })
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.id, jobId))
 			.limit(1);
 		if (nowRow?.status !== "processing") {
 			console.log(`[process-audio] job ${jobId} no longer processing; abandoning before upload`);
@@ -459,9 +459,9 @@ export async function processAudio(data: ProcessAudioData) {
 			const remaining =
 				frac >= 0.02 ? Math.round(((now - waveStartMs) * (1 - frac)) / (frac * 1000)) : null;
 			void db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set(remaining == null ? { progress } : { progress, etaSeconds: remaining })
-				.where(eq(transcodingJobs.id, jobId))
+				.where(eq(workTranscodingJobs.id, jobId))
 				.execute()
 				.catch(() => {});
 		});
@@ -485,7 +485,7 @@ export async function processAudio(data: ProcessAudioData) {
 
 		// 5. Complete
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({
 				status: "completed",
 				// When it finished, which is what "recently finished" on the Dashboard reads —
@@ -498,17 +498,17 @@ export async function processAudio(data: ProcessAudioData) {
 				waveformData: waveform,
 				timings,
 			})
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({
 				status: "failed",
 				updatedAt: new Date(),
 				errorMessage: message.slice(0, 1000),
 			})
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 		throw error;
 	} finally {
 		// Crash cleanup only: the source is read in place (nothing to clean), and the

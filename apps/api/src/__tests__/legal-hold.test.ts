@@ -22,7 +22,7 @@ import {
 	attentionEvents,
 	legalHolds,
 	moderationReports,
-	sessions,
+	userSessions,
 	users,
 } from "@anthers/db/schema";
 import { RECORD_REDACTION_YEARS } from "@anthers/shared/constants";
@@ -93,7 +93,7 @@ function longAgo(): Date {
 }
 
 async function seedExpiredSession(userId: number) {
-	await db.insert(sessions).values({
+	await db.insert(userSessions).values({
 		token: `hold-test-${crypto.randomUUID()}`,
 		userId,
 		ipAddress: "198.51.100.7",
@@ -111,8 +111,8 @@ async function seedExpiredSession(userId: number) {
 async function countSessions(userId: number): Promise<number> {
 	const [row] = await db
 		.select({ n: sql<number>`count(*)::int` })
-		.from(sessions)
-		.where(and(eq(sessions.userId, userId), eq(sessions.userAgent, "hold-test")));
+		.from(userSessions)
+		.where(and(eq(userSessions.userId, userId), eq(userSessions.userAgent, "hold-test")));
 	return row.n;
 }
 

@@ -13,7 +13,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { transcodingJobs, users, works } from "@anthers/db/schema";
+import { users, works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
 import { ingestEbook } from "../jobs/ingest-ebook";
@@ -42,7 +42,7 @@ let cookie = "";
 let creatorId = 0;
 const createdWorkIds: number[] = [];
 
-/** A Work plus a `transcoding_jobs` row, in whatever state the case asks for. */
+/** A Work plus a `work_transcoding_jobs` row, in whatever state the case asks for. */
 async function makeJob(
 	mediaType: string,
 	title: string,
@@ -52,17 +52,17 @@ async function makeJob(
 	const workId = (await insertWork({ creatorId, type: workType, title, visibility: "private" })).id;
 	createdWorkIds.push(workId);
 	const [job] = await db
-		.insert(transcodingJobs)
+		.insert(workTranscodingJobs)
 		.values({ workId, mediaType, status })
-		.returning({ id: transcodingJobs.id });
+		.returning({ id: workTranscodingJobs.id });
 	return { workId, jobId: job.id };
 }
 
 async function jobRow(jobId: number) {
 	const [row] = await db
-		.select({ status: transcodingJobs.status, resumeCount: transcodingJobs.resumeCount })
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, jobId));
+		.select({ status: workTranscodingJobs.status, resumeCount: workTranscodingJobs.resumeCount })
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId));
 	return row;
 }
 
@@ -76,7 +76,9 @@ describe("canceling processing", () => {
 
 	afterAll(async () => {
 		if (createdWorkIds.length > 0) {
-			await db.delete(transcodingJobs).where(inArray(transcodingJobs.workId, createdWorkIds));
+			await db
+				.delete(workTranscodingJobs)
+				.where(inArray(workTranscodingJobs.workId, createdWorkIds));
 			await db.delete(works).where(inArray(works.id, createdWorkIds));
 		}
 		await db.delete(users).where(eq(users.id, creatorId));

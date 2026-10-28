@@ -36,7 +36,7 @@ import {
 	outboundEmails,
 	posts,
 	reviews,
-	sessions,
+	userSessions,
 	users,
 	works,
 } from "@anthers/db/schema";
@@ -640,7 +640,7 @@ export async function suspendAccount(input: {
 			.set({ suspendedAt: new Date(), suspendedUntil: input.until ?? null })
 			.where(eq(users.id, input.userId));
 
-		await tx.delete(sessions).where(eq(sessions.userId, input.userId));
+		await tx.delete(userSessions).where(eq(userSessions.userId, input.userId));
 
 		await tx.insert(moderationActions).values({
 			subjectType: "user",

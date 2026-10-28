@@ -50,11 +50,11 @@ import { db } from "@anthers/db/client";
 import {
 	badges,
 	follows,
-	libraryItems,
 	posts,
 	purchases,
 	rightsRequests,
 	userBadges,
+	userLibraryItems,
 	userPreferences,
 	users,
 	works,
@@ -1093,11 +1093,11 @@ const accountRoutes = new Hono()
 			// exactly one subject; the union is the creator set, not the Library.
 			const savedPostRows = await db
 				.selectDistinct({ creatorId: posts.creatorId })
-				.from(libraryItems)
-				.innerJoin(posts, eq(posts.id, libraryItems.postId))
+				.from(userLibraryItems)
+				.innerJoin(posts, eq(posts.id, userLibraryItems.postId))
 				.where(
 					and(
-						eq(libraryItems.userId, sessionUser.id),
+						eq(userLibraryItems.userId, sessionUser.id),
 						notBlockedBy(sessionUser.id, posts.creatorId),
 						notSuspendedAccount(posts.creatorId),
 						notTestAccount(posts.creatorId),
@@ -1105,11 +1105,11 @@ const accountRoutes = new Hono()
 				);
 			const savedWorkRows = await db
 				.selectDistinct({ creatorId: works.creatorId })
-				.from(libraryItems)
-				.innerJoin(works, eq(works.id, libraryItems.workId))
+				.from(userLibraryItems)
+				.innerJoin(works, eq(works.id, userLibraryItems.workId))
 				.where(
 					and(
-						eq(libraryItems.userId, sessionUser.id),
+						eq(userLibraryItems.userId, sessionUser.id),
 						notBlockedBy(sessionUser.id, works.creatorId),
 						notSuspendedAccount(works.creatorId),
 						notTestAccount(works.creatorId),

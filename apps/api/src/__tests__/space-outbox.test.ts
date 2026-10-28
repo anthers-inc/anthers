@@ -21,7 +21,7 @@
 
 import { describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { libraryItems, spaceOutbox, userSpaces } from "@anthers/db/schema";
+import { spaceOutbox, userLibraryItems, userSpaces } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import {
 	drainSpaceOutbox,
@@ -58,8 +58,8 @@ describe("the user-space outbox", () => {
 		expect(record.value).toMatchObject({ subject: { kind: "work", id: ctx.workId } });
 		const [library] = await db
 			.select()
-			.from(libraryItems)
-			.where(and(eq(libraryItems.userId, ctx.userId), eq(libraryItems.workId, ctx.workId)));
+			.from(userLibraryItems)
+			.where(and(eq(userLibraryItems.userId, ctx.userId), eq(userLibraryItems.workId, ctx.workId)));
 		expect(library?.hidden).toBe(false);
 
 		// Nothing is owed, and the registry knows the address.
@@ -137,10 +137,10 @@ describe("the user-space outbox", () => {
 
 		// A stray local row the space knows nothing about, which the rebuild must retract.
 		const strayWork = await insertWork({ creatorId: ctx.userId, type: "text", title: "Stray" });
-		await db.insert(libraryItems).values({ userId: ctx.userId, workId: strayWork.id });
+		await db.insert(userLibraryItems).values({ userId: ctx.userId, workId: strayWork.id });
 
 		// Delete the whole projection, leaving only the space.
-		await db.delete(libraryItems).where(eq(libraryItems.userId, ctx.userId));
+		await db.delete(userLibraryItems).where(eq(userLibraryItems.userId, ctx.userId));
 
 		const rebuilt = await rebuildLibraryProjection(ctx.userId, {
 			resolveSession: ctx.resolveSession,
@@ -155,7 +155,7 @@ describe("the user-space outbox", () => {
 		expect(library[0].workId).toBe(ctx.workId);
 
 		// And a row the space does not carry is removed rather than kept.
-		await db.insert(libraryItems).values({ userId: ctx.userId, workId: strayWork.id });
+		await db.insert(userLibraryItems).values({ userId: ctx.userId, workId: strayWork.id });
 		const again = await rebuildLibraryProjection(ctx.userId, {
 			resolveSession: ctx.resolveSession,
 			fetchImpl: ctx.pds.fetch,
@@ -230,5 +230,5 @@ async function rowsFor(userId: number) {
 }
 
 async function libraryRows(userId: number) {
-	return db.select().from(libraryItems).where(eq(libraryItems.userId, userId));
+	return db.select().from(userLibraryItems).where(eq(userLibraryItems.userId, userId));
 }

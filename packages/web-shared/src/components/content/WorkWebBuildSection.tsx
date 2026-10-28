@@ -11,7 +11,7 @@
  *
  * ⚠️ **This uploads; the delivery route is what plays.** The files land in the private
  * bucket under the build's own prefix and `routes/build-delivery.ts` serves them on the
- * Work's delivery origin, every request resolved against `web_build_files`. The lane is
+ * Work's delivery origin, every request resolved against `work_build_files`. The lane is
  * built and proven on the dev base; its production ingress is not open yet, so nothing
  * here is described as live. What this section does today is put the bytes in the right
  * place with the right records.

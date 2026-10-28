@@ -17,7 +17,7 @@
  */
 import { afterAll, afterEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accountCycles, badges, timePoolFundLedger, userBadges } from "@anthers/db/schema";
+import { badges, timePoolFundLedger, userBadges, userCycles } from "@anthers/db/schema";
 import type { CycleKey } from "@anthers/shared/billing-cycle";
 import { currentCycleKey, cycleEnd, cycleStart, nextCycleKey } from "@anthers/shared/billing-cycle";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
@@ -49,7 +49,7 @@ afterEach(async () => {
 	// names its cycle, purges its users (the books cascade), and clears its rows.
 	for (const cycle of madeCycles) {
 		await db.delete(timePoolFundLedger).where(eq(timePoolFundLedger.billingCycle, cycle));
-		await db.delete(accountCycles).where(eq(accountCycles.billingCycle, cycle));
+		await db.delete(userCycles).where(eq(userCycles.billingCycle, cycle));
 	}
 	madeCycles.length = 0;
 	await purgeAccountIds(madeUserIds);
@@ -116,7 +116,7 @@ async function bookCycle(cycle: CycleKey, foundation: number): Promise<void> {
 	const host = await createAccount(`${tag}_b${n}`);
 	madeUserIds.push(host.userId);
 	const userId = host.userId;
-	await db.insert(accountCycles).values({
+	await db.insert(userCycles).values({
 		userId,
 		billingCycle: cycle,
 		foundation: foundation.toFixed(2),

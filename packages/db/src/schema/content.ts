@@ -101,7 +101,7 @@ export interface WorkCredit {
  *
  * A Work is a game, a video, a track, an image, an essay, a piece of software, a physical
  * good or a service. It owns everything about itself: its source media and derived
- * variants (`assets`, `transcoding_jobs`), its access gates, its delivery switches, its
+ * variants (`work_assets`, `work_transcoding_jobs`), its access gates, its delivery switches, its
  * dates, and the Time Pool minutes it earns. It has its own public URL and stands alone —
  * a Work can be released, gated, discussed and paid for with **no Post ever existing**.
  *
@@ -682,8 +682,8 @@ export const projectPosts = pgTable(
 
 // node — a Work's downloadable files, owned by the Work's creator. Cascades with the
 // Work.
-export const assets = pgTable(
-	"assets",
+export const workAssets = pgTable(
+	"work_assets",
 	{
 		id: serial("id").primaryKey(),
 		workId: integer("work_id")
@@ -699,7 +699,7 @@ export const assets = pgTable(
 		isPrimary: boolean("is_primary").default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_assets_work").on(table.workId)],
+	(table) => [index("idx_work_assets_work").on(table.workId)],
 );
 
 // node — the multi-file browser build of a game or software Work, owned by the Work's
@@ -707,8 +707,8 @@ export const assets = pgTable(
 // build itself; the delivery route that serves its files through the access-checked
 // route is the sibling task's remaining half, and nothing here exposes a public door —
 // every file lands in the private bucket, exactly like a Work's other game assets.
-export const webBuilds = pgTable(
-	"web_builds",
+export const workBuilds = pgTable(
+	"work_builds",
 	{
 		id: serial("id").primaryKey(),
 		workId: integer("work_id")
@@ -741,7 +741,7 @@ export const webBuilds = pgTable(
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		index("idx_web_builds_work").on(table.workId),
+		index("idx_work_builds_work").on(table.workId),
 		/**
 		 * At most one primary build per Work, enforced in the database: a partial
 		 * unique index over the rows that claim primary. `isPrimary: false` rows are
@@ -758,14 +758,14 @@ export const webBuilds = pgTable(
  * "every file resolves against the one prefix" enforceable: the delivery route
  * reads exactly these paths and nothing outside them escapes the access check.
  */
-// node — same reasoning as `webBuilds`, its parent: the creator's build content record.
-export const webBuildFiles = pgTable(
-	"web_build_files",
+// node — same reasoning as `workBuilds`, its parent: the creator's build content record.
+export const workBuildFiles = pgTable(
+	"work_build_files",
 	{
 		id: serial("id").primaryKey(),
 		buildId: integer("build_id")
 			.notNull()
-			.references(() => webBuilds.id, { onDelete: "cascade" }),
+			.references(() => workBuilds.id, { onDelete: "cascade" }),
 		/**
 		 * The file's path within the build, exactly as the build resolves it —
 		 * `index.js`, `engines/godot.wasm`, `AudioWorkletProcessor.js`. Relative, no
@@ -778,7 +778,7 @@ export const webBuildFiles = pgTable(
 		mimeType: text("mime_type").default(""),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [uniqueIndex("uq_web_build_files").on(table.buildId, table.path)],
+	(table) => [uniqueIndex("uq_work_build_files").on(table.buildId, table.path)],
 );
 
 /**
@@ -1164,8 +1164,8 @@ export const workSectionAssets = pgTable(
 // org runs it. Media originals, their renditions and transcoding belong to the creator, and this
 // is classified `both` because the *compute* is org while the *record* is node — the node
 // owns the result, the org owns the execution.
-export const transcodingJobs = pgTable(
-	"transcoding_jobs",
+export const workTranscodingJobs = pgTable(
+	"work_transcoding_jobs",
 	{
 		id: serial("id").primaryKey(),
 		workId: integer("work_id")
@@ -1272,7 +1272,7 @@ export const inlineImages = pgTable(
  * account destroys the save, as the player asked.
  */
 // org — the player's own record (no node of theirs holds it), about node content; the
-// same classification `library_items` takes.
+// same classification `user_library_items` takes.
 export const workSaves = pgTable(
 	"work_saves",
 	{
@@ -1335,8 +1335,8 @@ export const workSaves = pgTable(
 // org — the user's records (same reasoning as `libraryItems`: the user has no node in
 // the current topology). The row is about one Work, but it is not the creator's content
 // and is invisible to them — a pointer a person keeps, not a content record.
-export const readingPositions = pgTable(
-	"reading_positions",
+export const userReadingPositions = pgTable(
+	"user_reading_positions",
 	{
 		id: serial("id").primaryKey(),
 		userId: integer("user_id")
@@ -1360,9 +1360,9 @@ export const readingPositions = pgTable(
 	},
 	(table) => [
 		// A reading position per (account, Work) — the rail's whole interface in one index.
-		uniqueIndex("uq_reading_positions_user_work").on(table.userId, table.workId),
+		uniqueIndex("uq_user_reading_positions_user_work").on(table.userId, table.workId),
 		// Recency is the rail's order; the list reads the user's rows by it.
-		index("idx_reading_positions_user_updated").on(table.userId, table.updatedAt),
+		index("idx_user_reading_positions_user_updated").on(table.userId, table.updatedAt),
 	],
 );
 
@@ -1464,8 +1464,8 @@ export const comments = pgTable(
 // org accounts), so their saved items are org records. Content records belong to the
 // creator's node, but a library item is not a content record — it is a user's pointer
 // to one, and the user has no node.
-export const libraryItems = pgTable(
-	"library_items",
+export const userLibraryItems = pgTable(
+	"user_library_items",
 	{
 		id: serial("id").primaryKey(),
 		userId: integer("user_id")

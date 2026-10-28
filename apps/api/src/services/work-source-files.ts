@@ -41,7 +41,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { transcodingJobs, workSourceFiles, works } from "@anthers/db/schema";
+import { workSourceFiles, works, workTranscodingJobs } from "@anthers/db/schema";
 import { hasSourceSet, isPaged } from "@anthers/shared/content";
 import { and, asc, eq, max, sql } from "drizzle-orm";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
@@ -50,7 +50,7 @@ import { removeSourceFileStorage } from "./media-purge.js";
 import { archiveLegacySource, archiveSourceSet } from "./work-versions.js";
 
 export type WorkSourceFileRow = typeof workSourceFiles.$inferSelect;
-export type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
+export type TranscodingJobRow = typeof workTranscodingJobs.$inferSelect;
 export type WorkRow = typeof works.$inferSelect;
 
 /** The fields of a Work `listSourceFiles` reads — what a caller holding only ids and keys passes. */
@@ -530,7 +530,7 @@ export async function reorderSourceFiles(
 export async function askRerender(work: WorkRow): Promise<TranscodingJobRow | null> {
 	if (!isPaged(work.type)) return null;
 	const [job] = await db
-		.insert(transcodingJobs)
+		.insert(workTranscodingJobs)
 		.values({ workId: work.id, mediaType: "ebook", status: "pending" })
 		.returning();
 	try {
@@ -540,9 +540,9 @@ export async function askRerender(work: WorkRow): Promise<TranscodingJobRow | nu
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
-			.where(eq(transcodingJobs.id, job.id));
+			.where(eq(workTranscodingJobs.id, job.id));
 		return { ...job, status: "failed", errorMessage: message };
 	}
 	return job;

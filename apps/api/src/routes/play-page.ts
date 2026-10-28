@@ -26,7 +26,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { webBuilds } from "@anthers/db/schema";
+import { workBuilds } from "@anthers/db/schema";
 import { eventTypeFor, IDLE_TIMEOUT_MS } from "@anthers/shared/attention";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -122,12 +122,12 @@ export function createPlayPageRoutes(): Hono {
 
 		const [build] = await db
 			.select({
-				id: webBuilds.id,
-				entryPath: webBuilds.entryPath,
-				requiresIsolation: webBuilds.requiresIsolation,
+				id: workBuilds.id,
+				entryPath: workBuilds.entryPath,
+				requiresIsolation: workBuilds.requiresIsolation,
 			})
-			.from(webBuilds)
-			.where(and(eq(webBuilds.workId, work.id), eq(webBuilds.isPrimary, true)))
+			.from(workBuilds)
+			.where(and(eq(workBuilds.workId, work.id), eq(workBuilds.isPrimary, true)))
 			.limit(1);
 		if (!build) {
 			return refusal("No hosted build", "This Work has no hosted browser build to play.");

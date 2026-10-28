@@ -18,7 +18,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { badges, physicalListings, purchases, userBadges, works } from "@anthers/db/schema";
+import { badges, purchases, userBadges, workPhysicalListings, works } from "@anthers/db/schema";
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { eq } from "drizzle-orm";
 import app from "../index";
@@ -182,14 +182,14 @@ describe("the shelf", () => {
 		stockedWork = stocked.id;
 		workIds.push(stocked.id);
 
-		await db.insert(physicalListings).values({
+		await db.insert(workPhysicalListings).values({
 			workId: physicalWork,
 			shippingPrice: LISTING.shippingPrice,
 			handlingBusinessDays: LISTING.handlingBusinessDays,
 			taxCategory: LISTING.taxCategory,
 			options: LISTING.options,
 		});
-		await db.insert(physicalListings).values({
+		await db.insert(workPhysicalListings).values({
 			workId: stockedWork,
 			shippingPrice: "0.00",
 			handlingBusinessDays: 3,
@@ -227,8 +227,8 @@ describe("the shelf", () => {
 
 		const [row] = await db
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, stockedWork));
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, stockedWork));
 		expect(row.options[0].values[0].stock).toBe(0);
 
 		const second = await reserveStock([
@@ -241,8 +241,8 @@ describe("the shelf", () => {
 		]);
 		const [after] = await db
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, stockedWork));
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, stockedWork));
 		expect(after.options[0].values[0].stock).toBe(2);
 	});
 
@@ -255,8 +255,8 @@ describe("the shelf", () => {
 		// Nothing was taken by the refused transaction: the first line's count is intact.
 		const [row] = await db
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, stockedWork));
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, stockedWork));
 		expect(row.options[0].values[0].stock).toBe(2);
 	});
 
@@ -292,16 +292,16 @@ describe("the shelf", () => {
 
 		const [row] = await db
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, stockedWork));
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, stockedWork));
 		expect(row.options[0].values[0].stock).toBe(2);
 
 		// A second sweep is a no-op — the stamp is the latch.
 		const again = await releaseAbandonedStock();
 		const [after] = await db
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, stockedWork));
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, stockedWork));
 		expect(after.options[0].values[0].stock).toBe(2);
 		expect(again).toBe(0);
 
@@ -374,16 +374,16 @@ describe("the shelf", () => {
 	it("refuses checkout without charging when the processor is unconfigured", async () => {
 		const before = await db
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, physicalWork));
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, physicalWork));
 		const res = await call("POST", "/api/payments/basket/checkout", buyer.cookie, {});
 		// The processor guard runs before a session exists, so nothing is reserved and
 		// nothing is written — the refusal is the whole of the interaction.
 		expect(res.status).toBe(503);
 		const after = await db
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, physicalWork));
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, physicalWork));
 		expect(after[0].options).toEqual(before[0].options);
 	});
 
@@ -407,7 +407,7 @@ describe("the shelf", () => {
 			})
 			.returning();
 		workIds.push(tiered.id);
-		await db.insert(physicalListings).values({
+		await db.insert(workPhysicalListings).values({
 			workId: tiered.id,
 			shippingPrice: "0.00",
 			handlingBusinessDays: 3,

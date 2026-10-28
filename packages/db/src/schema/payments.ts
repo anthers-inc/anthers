@@ -415,10 +415,10 @@ export const disputes = pgTable(
  * one-holding-per-issuer rule's basket shape. Money columns live none here all the same:
  * a Badge line's price, its fee share and its settlement are `badge_charges`' business.
  *
- * Cascade on every side, like `library_items`: a basket is a preference, not a record —
+ * Cascade on every side, like `user_library_items`: a basket is a preference, not a record —
  * it dies with the account, the Work, and the Badge, and never outlives any of them.
  */
-// org — a buyer's basket is the buyer's record (same reasoning as `libraryItems`: the
+// org — a buyer's basket is the buyer's record (same reasoning as `userLibraryItems`: the
 // user has no node in the current topology, so their preferences are org-side rows).
 // It sits with the payments tables because only the payments routes read it, but note
 // it is NOT money: no column here is a figure, and nothing downstream books from it.

@@ -13,7 +13,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { notifications, stripeAccounts, transcodingJobs, works } from "@anthers/db/schema";
+import { notifications, stripeAccounts, works, workTranscodingJobs } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
@@ -187,7 +187,9 @@ describe("scheduling a release", () => {
 			type: "video",
 			sourceKey: `creators/${creator.id}/v`,
 		});
-		await db.insert(transcodingJobs).values({ workId, mediaType: "video", status: "processing" });
+		await db
+			.insert(workTranscodingJobs)
+			.values({ workId, mediaType: "video", status: "processing" });
 		const res = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
 			scheduledReleaseAt: inAnHour(),
 		});
@@ -274,7 +276,9 @@ describe("the release-scheduled sweep", () => {
 			type: "video",
 			sourceKey: `creators/${creator.id}/v2`,
 		});
-		await db.insert(transcodingJobs).values({ workId, mediaType: "video", status: "processing" });
+		await db
+			.insert(workTranscodingJobs)
+			.values({ workId, mediaType: "video", status: "processing" });
 		const at = await makeDue(workId);
 
 		await releaseScheduled();
@@ -283,9 +287,9 @@ describe("the release-scheduled sweep", () => {
 		expect(stored.scheduledReleaseAt?.getTime()).toBe(at.getTime());
 
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "completed" })
-			.where(eq(transcodingJobs.workId, workId));
+			.where(eq(workTranscodingJobs.workId, workId));
 		await releaseScheduled();
 		stored = await row(workId);
 		expect(stored.visibility).toBe("released");
@@ -354,7 +358,7 @@ describe("the release-scheduled sweep", () => {
 			type: "video",
 			sourceKey: `creators/${creator.id}/v3`,
 		});
-		await db.insert(transcodingJobs).values({ workId, mediaType: "video", status: "failed" });
+		await db.insert(workTranscodingJobs).values({ workId, mediaType: "video", status: "failed" });
 		await makeDue(workId);
 		await releaseScheduled();
 		const stored = await row(workId);

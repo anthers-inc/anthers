@@ -75,7 +75,7 @@ async function runDeliveryModeSuite(): Promise<void> {
 	const { afterAll, beforeAll } = await import("bun:test");
 	const { eq } = await import("drizzle-orm");
 	const { db } = await import("@anthers/db/client");
-	const { transcodingJobs, works } = await import("@anthers/db/schema");
+	const { workTranscodingJobs, works } = await import("@anthers/db/schema");
 	const { createAccount } = await import("./account-fixture");
 	const { purgeAccountsCreatedHere } = await import("./cleanup");
 	const { DB_SETUP_TIMEOUT } = await import("./setup-timeouts.js");
@@ -211,7 +211,7 @@ async function runDeliveryModeSuite(): Promise<void> {
 				})
 			).id;
 			confirmRendition(withRenditionId);
-			await db.insert(transcodingJobs).values({
+			await db.insert(workTranscodingJobs).values({
 				workId: withRenditionId,
 				mediaType: "video",
 				status: "completed",
@@ -227,7 +227,7 @@ async function runDeliveryModeSuite(): Promise<void> {
 					access: [{ threshold: 0, allow: true, price: "0" }],
 				})
 			).id;
-			await db.insert(transcodingJobs).values({
+			await db.insert(workTranscodingJobs).values({
 				workId: withoutRenditionId,
 				mediaType: "video",
 				status: "completed",
@@ -243,7 +243,7 @@ async function runDeliveryModeSuite(): Promise<void> {
 					access: [{ threshold: 0, allow: true, price: "0" }],
 				})
 			).id;
-			await db.insert(transcodingJobs).values({
+			await db.insert(workTranscodingJobs).values({
 				workId: audioId,
 				mediaType: "audio",
 				status: "completed",
@@ -258,7 +258,7 @@ async function runDeliveryModeSuite(): Promise<void> {
 			const { storage } = await import("../services/storage/index.js");
 			await storage.upload(frameSourceKey, await makeVideo(), "video/mp4", "private");
 			await db.update(works).set({ sourceKey: frameSourceKey }).where(eq(works.id, frameId));
-			await db.insert(transcodingJobs).values({
+			await db.insert(workTranscodingJobs).values({
 				workId: frameId,
 				mediaType: "video",
 				status: "completed",

@@ -17,7 +17,7 @@
  * call of 2026-10-15 (answered on the rail task): strictly past zero and strictly short
  * of the end — a finished Work is not something you continue, and a never-opened one has
  * nothing to continue to; the rail is what you continue, the shelf is everything you
- * kept. Positions there are the **user's**, one row per Work in `reading_positions`,
+ * kept. Positions there are the **user's**, one row per Work in `user_reading_positions`,
  * pushed behind every local write — so the rail is the same on every device, which is
  * the whole thing the spine markers alone could never be. Signed-out readers keep
  * whatever this device knows, which `lib/reading-positions.ts` answers for.

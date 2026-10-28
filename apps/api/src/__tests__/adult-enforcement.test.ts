@@ -26,10 +26,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	libraryItems,
 	projectItems,
 	projects,
 	shareLinks,
+	userLibraryItems,
 	userPreferences,
 	users,
 	works,
@@ -464,7 +464,7 @@ describe("what an Adult rating costs", () => {
 				{ token, workId: adultWork.id, sharerId: grownId },
 				{ token: controlToken, workId: matureWork.id, sharerId: grownId },
 			]);
-			await db.insert(libraryItems).values([
+			await db.insert(userLibraryItems).values([
 				{ userId: userId, workId: adultWork.id },
 				{ userId: grownId, workId: adultWork.id },
 			]);

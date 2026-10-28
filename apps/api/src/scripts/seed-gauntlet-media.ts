@@ -12,7 +12,7 @@
  * What this does, per post in `GAUNTLET_MEDIA_POSTS`:
  *   1. generate a short clip with ffmpeg's synthetic sources (no binaries in the repo),
  *   2. upload it as the content item's source, exactly as an upload would,
- *   3. insert the `content_items` + `post_contents` + `transcoding_jobs` rows, then
+ *   3. insert the `content_items` + `post_contents` + `work_transcoding_jobs` rows, then
  *   4. run the **actual job function** — `transcodeVideo` / `processAudio` — in-process.
  *
  * Step 4 is the point. Calling the job directly (rather than `queue.send`) sidesteps
@@ -55,7 +55,7 @@ import {
 	type GauntletPost,
 } from "@anthers/db/gauntlet";
 import { WALK_CREATOR_USERNAME, WALK_MEDIA_POSTS } from "@anthers/db/gauntlet-walk";
-import { transcodingJobs, users, works } from "@anthers/db/schema";
+import { users, works, workTranscodingJobs } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
@@ -197,7 +197,7 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 	}
 
 	// Drop any transcode from a previous run so re-running never serves stale output.
-	await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, work.id));
+	await db.delete(workTranscodingJobs).where(eq(workTranscodingJobs.workId, work.id));
 
 	const clipPath = await generateClip(post.media);
 	try {
@@ -218,9 +218,9 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 			.returning({ id: works.id });
 
 		const [job] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId: item.id, mediaType: post.media, status: "pending", progress: 0 })
-			.returning({ id: transcodingJobs.id });
+			.returning({ id: workTranscodingJobs.id });
 
 		// The real job, in-process. pg-boss isn't running; this is the code it would run.
 		if (post.media === "video") {
@@ -230,8 +230,8 @@ async function seedMediaFor(post: GauntletPost & { media: "video" | "audio" }, c
 
 		const [done] = await db
 			.select()
-			.from(transcodingJobs)
-			.where(eq(transcodingJobs.id, job.id))
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.id, job.id))
 			.limit(1);
 		if (done?.status !== "completed") {
 			throw new Error(

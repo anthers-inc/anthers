@@ -23,7 +23,6 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { db } from "@anthers/db/client";
 import {
 	accessReceipts,
-	assets,
 	badgeCharges,
 	badges,
 	basketItems,
@@ -34,6 +33,7 @@ import {
 	supportReductions,
 	userBadges,
 	users,
+	workAssets,
 } from "@anthers/db/schema";
 import { cycleKeyFor, cycleStart, nextCycleKey } from "@anthers/shared/billing-cycle";
 import { calculateFees, cardFee, reductionFor } from "@anthers/shared/fees";
@@ -464,7 +464,7 @@ async function makePaidPost(title: string): Promise<{ slug: string; id: number }
 		downloadEnabled: true,
 		access: FOR_SALE,
 	});
-	await db.insert(assets).values({
+	await db.insert(workAssets).values({
 		workId: work.id,
 		file: `creators/${creatorId}/builds/${uid()}.zip`,
 		filename: `${uid()}.zip`,

@@ -16,10 +16,10 @@ import { db } from "@anthers/db/client";
 import {
 	badges,
 	follows,
-	libraryItems,
 	posts,
 	purchases,
 	userBadges,
+	userLibraryItems,
 	users,
 } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
@@ -111,7 +111,7 @@ beforeAll(async () => {
 		publicId: testPublicId(),
 		isPublished: true,
 	});
-	await db.insert(libraryItems).values([
+	await db.insert(userLibraryItems).values([
 		{ userId: viewerId, workId: savedWork.id },
 		// `postId` needs the row id, so the post is read back after its insert.
 	]);
@@ -120,7 +120,7 @@ beforeAll(async () => {
 		.from(posts)
 		.where(eq(posts.creatorId, savedId))
 		.limit(1);
-	await db.insert(libraryItems).values({ userId: viewerId, postId: savedPost!.id });
+	await db.insert(userLibraryItems).values({ userId: viewerId, postId: savedPost!.id });
 
 	const purchasedWork = await insertWork({
 		creatorId: purchasedId,

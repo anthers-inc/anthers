@@ -14,11 +14,11 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	follows,
-	libraryItems,
 	posts,
 	projectItems,
 	projects,
 	userBlocks,
+	userLibraryItems,
 	works,
 } from "@anthers/db/schema";
 import { inArray } from "drizzle-orm";
@@ -123,7 +123,7 @@ beforeAll(async () => {
 		blockedWork.id,
 	);
 	savedWorkId = fieldNotes.id;
-	await db.insert(libraryItems).values({ userId: viewer.userId, workId: fieldNotes.id });
+	await db.insert(userLibraryItems).values({ userId: viewer.userId, workId: fieldNotes.id });
 
 	const [collection] = await db
 		.insert(projects)

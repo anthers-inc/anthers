@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { moderationActions, sessions, users } from "@anthers/db/schema";
+import { moderationActions, userSessions, users } from "@anthers/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { validateSession } from "../services/auth.js";
 import {
@@ -71,7 +71,10 @@ describe("suspendAccount", () => {
 		expect(state?.did).toBe(account.did);
 
 		// The session the account was holding no longer exists anywhere.
-		const live = await db.select().from(sessions).where(eq(sessions.userId, account.userId));
+		const live = await db
+			.select()
+			.from(userSessions)
+			.where(eq(userSessions.userId, account.userId));
 		expect(live).toHaveLength(0);
 		expect(await validateSession(account.token)).toBeNull();
 

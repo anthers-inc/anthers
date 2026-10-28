@@ -18,7 +18,7 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { transcodingJobs } from "@anthers/db/schema";
+import { workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio";
 import { renderPaged } from "../jobs/render-paged";
@@ -41,36 +41,36 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 /**
- * A Work plus a `transcoding_jobs` row this suite then drives past the bound. `type:
+ * A Work plus a `work_transcoding_jobs` row this suite then drives past the bound. `type:
  * "game"` creates it queues nothing of its own; no source file is attached, so the body
  * (when it runs) throws at the source check rather than reaching any ffmpeg/poppler.
  */
 async function makeJob(mediaType: string, title: string, status = "failed"): Promise<number> {
 	const workId = (await insertWork({ creatorId, type: "game", title })).id;
 	const [job] = await db
-		.insert(transcodingJobs)
+		.insert(workTranscodingJobs)
 		.values({ workId, mediaType, status })
-		.returning({ id: transcodingJobs.id });
+		.returning({ id: workTranscodingJobs.id });
 	return job.id;
 }
 
 async function jobRow(jobId: number) {
 	const [row] = await db
 		.select({
-			status: transcodingJobs.status,
-			resumeCount: transcodingJobs.resumeCount,
-			flag: transcodingJobs.interruptedGracefully,
+			status: workTranscodingJobs.status,
+			resumeCount: workTranscodingJobs.resumeCount,
+			flag: workTranscodingJobs.interruptedGracefully,
 		})
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, jobId));
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId));
 	return row;
 }
 
 function pastTheBound(jobId: number) {
 	return db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ resumeCount: MAX_TRANSCODE_RESUMES })
-		.where(eq(transcodingJobs.id, jobId));
+		.where(eq(workTranscodingJobs.id, jobId));
 }
 
 describe("the lighter handlers' failed-past-bound skip", () => {

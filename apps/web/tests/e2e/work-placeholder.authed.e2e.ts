@@ -17,7 +17,7 @@
  * replaced and is being re-made. A preview of `Signed in` shape is that viewer's read.
  */
 import { db } from "@anthers/db/client";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import {
 	API_URL,
@@ -63,7 +63,7 @@ test("a Work mid-processing holds its shape on both surfaces", async ({ page, co
 			access: [{ threshold: 0, allow: true, price: "0" }],
 		})
 		.where(eq(works.id, workId));
-	await db.insert(transcodingJobs).values({
+	await db.insert(workTranscodingJobs).values({
 		workId,
 		mediaType: "ebook",
 		status: "processing",

@@ -27,7 +27,7 @@
  * row so a second pass is a no-op.
  */
 import { db } from "@anthers/db/client";
-import { type PhysicalOption, physicalListings, purchases } from "@anthers/db/schema";
+import { type PhysicalOption, purchases, workPhysicalListings } from "@anthers/db/schema";
 import { MAX_GOODS_PER_ORDER } from "@anthers/shared/constants";
 import { and, eq, isNull, lt } from "drizzle-orm";
 
@@ -164,8 +164,8 @@ export async function reserveStock(
 			for (const line of lines) {
 				const [row] = await tx
 					.select()
-					.from(physicalListings)
-					.where(eq(physicalListings.workId, line.workId))
+					.from(workPhysicalListings)
+					.where(eq(workPhysicalListings.workId, line.workId))
 					.limit(1)
 					.for("update");
 				if (!row) {
@@ -204,9 +204,9 @@ export async function reserveStock(
 				if (problems.length > 0) throw new Refused(problems);
 
 				await tx
-					.update(physicalListings)
+					.update(workPhysicalListings)
 					.set({ options, updatedAt: now })
-					.where(eq(physicalListings.workId, line.workId));
+					.where(eq(workPhysicalListings.workId, line.workId));
 			}
 		});
 		return { ok: true };
@@ -225,8 +225,8 @@ async function releaseStockIn(
 	for (const line of lines) {
 		const [row] = await tx
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, line.workId))
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, line.workId))
 			.limit(1)
 			.for("update");
 		if (!row) continue;
@@ -245,9 +245,9 @@ async function releaseStockIn(
 		}
 		if (changed) {
 			await tx
-				.update(physicalListings)
+				.update(workPhysicalListings)
 				.set({ options, updatedAt: now })
-				.where(eq(physicalListings.workId, line.workId));
+				.where(eq(workPhysicalListings.workId, line.workId));
 		}
 	}
 }

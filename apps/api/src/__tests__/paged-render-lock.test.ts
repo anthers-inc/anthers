@@ -9,7 +9,7 @@
  * protections are tested here:
  *
  * - **The lock is keyed on the WORK**, because the colliding handlers held different
- *   `transcoding_jobs` rows. It is exercised against Postgres rather than mocked, because
+ *   `work_transcoding_jobs` rows. It is exercised against Postgres rather than mocked, because
  *   session scope is the property: hold `pg_advisory_lock` from a reserved session and
  *   assert the helper waits, then runs on release.
  * - **A job a newer sibling supersedes settles without rendering.** A `game` fixture with
@@ -21,7 +21,7 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { client, db } from "@anthers/db/client";
-import { transcodingJobs } from "@anthers/db/schema";
+import { workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { PAGED_RENDER_LOCK_KEY_BASE, renderPaged, withPagedRenderLock } from "../jobs/render-paged";
@@ -30,7 +30,7 @@ import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure; the
-// Works and their transcoding_jobs rows cascade with them.
+// Works and their work_transcoding_jobs rows cascade with them.
 purgeAccountsCreatedHere();
 
 const ORIGIN = "http://localhost:3000";
@@ -62,9 +62,9 @@ async function makeJobs(...statuses: string[]): Promise<{ workId: number; jobIds
 	const jobIds: number[] = [];
 	for (const status of statuses) {
 		const [row] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId, mediaType: "ebook", status, progress: 0 })
-			.returning({ id: transcodingJobs.id });
+			.returning({ id: workTranscodingJobs.id });
 		jobIds.push(row.id);
 	}
 	return { workId, jobIds };
@@ -134,16 +134,16 @@ describe("the supersession check", () => {
 			await renderPaged({ jobId: older });
 
 			const [row] = await db
-				.select({ status: transcodingJobs.status })
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.id, older));
+				.select({ status: workTranscodingJobs.status })
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.id, older));
 			expect(row.status).toBe("completed");
 
 			// The newer job is untouched and is the one that will render.
 			const [next] = await db
-				.select({ status: transcodingJobs.status })
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.id, newer));
+				.select({ status: workTranscodingJobs.status })
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.id, newer));
 			expect(next.status).toBe("pending");
 		},
 		DB_SETUP_TIMEOUT,
@@ -158,9 +158,9 @@ describe("the supersession check", () => {
 			await renderPaged({ jobId: older });
 
 			const [row] = await db
-				.select({ status: transcodingJobs.status })
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.id, older));
+				.select({ status: workTranscodingJobs.status })
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.id, older));
 			expect(row.status).toBe("canceled");
 		},
 		DB_SETUP_TIMEOUT,

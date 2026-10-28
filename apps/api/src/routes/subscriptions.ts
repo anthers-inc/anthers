@@ -14,7 +14,6 @@
 
 import { db } from "@anthers/db/client";
 import {
-	accountCycles,
 	attentionEvents,
 	badgeArtProvenance,
 	badges,
@@ -29,6 +28,7 @@ import {
 	reviews,
 	stickers,
 	userBadges,
+	userCycles,
 	userPreferences,
 	users,
 	works,
@@ -2396,19 +2396,19 @@ const subscriptionRoutes = new Hono()
 			.select({
 				handle: users.atprotoHandle,
 				displayName: users.displayName,
-				lifetime: sql<string>`COALESCE(SUM(${accountCycles.anthersSupport}), 0)`,
+				lifetime: sql<string>`COALESCE(SUM(${userCycles.anthersSupport}), 0)`,
 			})
-			.from(accountCycles)
-			.innerJoin(users, eq(users.id, accountCycles.userId))
+			.from(userCycles)
+			.innerJoin(users, eq(users.id, userCycles.userId))
 			// INNER, and the join is what makes "ever supported AND opted in" one condition:
 			// a user with cycles but no preferences row has answered nothing, and the column
 			// default (listed) is theirs — an INNER join would drop them. LEFT JOIN plus
 			// `COALESCE(listed, true)` reads the default for the row that is absent, which is
 			// exactly what the eager-creatable table's default means.
-			.leftJoin(userPreferences, eq(userPreferences.userId, accountCycles.userId))
+			.leftJoin(userPreferences, eq(userPreferences.userId, userCycles.userId))
 			.where(sql`COALESCE(${userPreferences.listedAsSupporter}, true)`)
 			.groupBy(users.id, users.atprotoHandle, users.displayName)
-			.having(sql`COALESCE(SUM(${accountCycles.anthersSupport}), 0) > 0`);
+			.having(sql`COALESCE(SUM(${userCycles.anthersSupport}), 0) > 0`);
 
 		// ⚠️ **A supporter with no name at all is left off rather than rendered blank** — an
 		// empty line on a thank-you page is worse than an absence, because it looks like the

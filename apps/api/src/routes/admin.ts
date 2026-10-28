@@ -517,7 +517,7 @@ const adminRoutes = new Hono<AdminEnv>()
 
 		// Our own media transcode table (video/audio processing).
 		const transcodeStateRes = await db.execute(sql`
-			SELECT status, count(*)::int AS n FROM transcoding_jobs GROUP BY status
+			SELECT status, count(*)::int AS n FROM work_transcoding_jobs GROUP BY status
 		`);
 		const transcodeCounts: Record<string, number> = {};
 		for (const r of rowsOf<{ status: string; n: number }>(transcodeStateRes)) {
@@ -526,7 +526,7 @@ const adminRoutes = new Hono<AdminEnv>()
 
 		const stuckRes = await db.execute(sql`
 			SELECT id, media_type, status, error_message, updated_at
-			FROM transcoding_jobs
+			FROM work_transcoding_jobs
 			WHERE status = 'failed'
 			   OR (status = 'processing' AND updated_at < now() - interval '30 minutes')
 			ORDER BY updated_at DESC

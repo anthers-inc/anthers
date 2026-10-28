@@ -376,8 +376,8 @@ export const userPreferences = pgTable("user_preferences", {
  */
 // org — a per-cycle economic snapshot, kept for org-side spend/consumption analytics.
 // Money record; org-only.
-export const accountCycles = pgTable(
-	"account_cycles",
+export const userCycles = pgTable(
+	"user_cycles",
 	{
 		id: serial("id").primaryKey(),
 		userId: integer("user_id")
@@ -426,8 +426,8 @@ export const accountCycles = pgTable(
 		 * allowance binds, and the one `estimateStorageCost` prices the at-cost overflow
 		 * from. The meter is a reading, never a charge.
 		 *
-		 * 🚨 **Bytes come from the database, not from listing the bucket.** `assets.file_size`,
-		 * `web_build_files.file_size`, `work_saves.byte_size` and the Works table's own media
+		 * 🚨 **Bytes come from the database, not from listing the bucket.** `work_assets.file_size`,
+		 * `work_build_files.file_size`, `work_saves.byte_size` and the Works table's own media
 		 * columns are the same authority the top-up line prices from, so a bucket walk would
 		 * sweep display chrome the ladder never prices and cost one paginated listing per
 		 * account per night to answer what one grouped query already holds.
@@ -447,7 +447,7 @@ export const accountCycles = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [uniqueIndex("uq_account_cycles_user_cycle").on(table.userId, table.billingCycle)],
+	(table) => [uniqueIndex("uq_user_cycles_user_cycle").on(table.userId, table.billingCycle)],
 );
 
 /**
@@ -1431,7 +1431,7 @@ export const nounBlocklist = pgTable(
  * stores it and decides nothing.
  */
 // org — a user-side setting, and users are org accounts in the current topology (there
-// is no user node). The same reasoning as `libraryItems`: this is one household's opinion
+// is no user node). The same reasoning as `userLibraryItems`: this is one household's opinion
 // about node content, never a fact about the content, so no creator node has any business
 // holding it — least of all the creator whose work a guardian has excluded.
 export const parentalControls = pgTable("parental_controls", {
@@ -1514,7 +1514,7 @@ export const stickers = pgTable(
 		/** Where it sits — the same `(subject_type, subject_id)` shape `votes` uses. */
 		subjectType: text("subject_type").notNull(), // work | post | comment
 		subjectId: integer("subject_id").notNull(),
-		/** `YYYY-MM-01`, matching `account_cycles.billing_cycle` — the cycle this is drawn from. */
+		/** `YYYY-MM-01`, matching `user_cycles.billing_cycle` — the cycle this is drawn from. */
 		billingCycle: text("billing_cycle").notNull(),
 		/** Dollars, and one of `STICKER_DENOMINATIONS`. Never a count of anything. */
 		amount: numeric("amount").notNull(),

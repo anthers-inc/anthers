@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Physical listings — the one writer of `physical_listings`, and the validation a creator's
+ * Physical listings — the one writer of `work_physical_listings`, and the validation a creator's
  * answer has to survive before a stranger's money depends on it.
  *
  * A listing is four answers: what shipping costs, how long the good takes to leave, what
@@ -19,7 +19,7 @@
  * unlimited. A vocabulary would be this module guessing at what people make.
  */
 import { db } from "@anthers/db/client";
-import { type PhysicalOption, physicalListings } from "@anthers/db/schema";
+import { type PhysicalOption, workPhysicalListings } from "@anthers/db/schema";
 import { isPhysicalTaxCategory, type PhysicalTaxCategory } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
@@ -186,8 +186,8 @@ export function validateListing(input: {
 export async function physicalListingFor(workId: number): Promise<PhysicalListing> {
 	const [row] = await db
 		.select()
-		.from(physicalListings)
-		.where(eq(physicalListings.workId, workId))
+		.from(workPhysicalListings)
+		.where(eq(workPhysicalListings.workId, workId))
 		.limit(1);
 	if (!row) return { ...DEFAULT_LISTING, options: [] };
 	return {
@@ -214,7 +214,7 @@ export async function savePhysicalListing(
 	if (!checked.ok) return checked;
 	const value = checked.value;
 	await db
-		.insert(physicalListings)
+		.insert(workPhysicalListings)
 		.values({
 			workId,
 			shippingPrice: value.shippingPrice,
@@ -224,7 +224,7 @@ export async function savePhysicalListing(
 			updatedAt: now,
 		})
 		.onConflictDoUpdate({
-			target: physicalListings.workId,
+			target: workPhysicalListings.workId,
 			set: {
 				shippingPrice: value.shippingPrice,
 				handlingBusinessDays: value.handlingBusinessDays,

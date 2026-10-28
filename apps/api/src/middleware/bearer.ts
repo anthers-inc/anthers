@@ -6,7 +6,7 @@
  * from `tauri://localhost`, which is cross-site to `.anthers.org`, so a `SameSite=Lax`
  * cookie is never sent. It presents the same session as an `Authorization: Bearer`
  * header instead. This introduces NO new auth primitive — a session is already an
- * opaque 64-hex row in `sessions` with an expiry, which is exactly what a bearer token
+ * opaque 64-hex row in `user_sessions` with an expiry, which is exactly what a bearer token
  * is, and `validateSession()` doesn't care how it arrived.
  *
  * Why the two middlewares must agree. `csrfProtection` is global and runs BEFORE any

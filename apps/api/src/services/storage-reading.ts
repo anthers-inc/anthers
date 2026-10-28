@@ -4,7 +4,7 @@
  *
  * The route surface composes its answer here and nowhere else, on the one-writer rule
  * every service module carries: the meter (`jobs/storage-usage.ts`) is the only writer of
- * `account_cycles` rows, and this is the only reader that turns a row into the account-facing
+ * `user_cycles` rows, and this is the only reader that turns a row into the account-facing
  * shape. Nothing here recomputes bytes from the upstream tables — the figure served is the
  * figure the meter stored, because a second derivation would be exactly the drift the
  * meter's DB-first rule exists to prevent.
@@ -22,7 +22,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { accountCycles } from "@anthers/db/schema";
+import { userCycles } from "@anthers/db/schema";
 import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import {
 	STORAGE_LADDER_GIB,
@@ -69,8 +69,8 @@ export async function storageReadingFor(userId: number, cycle?: string): Promise
 
 	const [row] = await db
 		.select()
-		.from(accountCycles)
-		.where(and(eq(accountCycles.userId, userId), eq(accountCycles.billingCycle, billingCycle)))
+		.from(userCycles)
+		.where(and(eq(userCycles.userId, userId), eq(userCycles.billingCycle, billingCycle)))
 		.limit(1);
 
 	const purposes = Object.fromEntries(STORAGE_USE_KINDS.map((k) => [k, 0])) as Record<

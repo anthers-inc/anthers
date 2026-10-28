@@ -18,7 +18,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { webBuilds, works } from "@anthers/db/schema";
+import { workBuilds, works } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
 import { queue } from "../jobs/queue";
@@ -138,9 +138,9 @@ describe("isolation posture", () => {
 		await createBuildWithFiles(plain.id, creator.cookie, ["index.html"], "index.html", false);
 
 		// The row carries it.
-		const [tRow] = await db.select().from(webBuilds).where(eq(webBuilds.workId, threaded.id));
+		const [tRow] = await db.select().from(workBuilds).where(eq(workBuilds.workId, threaded.id));
 		expect(tRow.requiresIsolation).toBe(true);
-		const [pRow] = await db.select().from(webBuilds).where(eq(webBuilds.workId, plain.id));
+		const [pRow] = await db.select().from(workBuilds).where(eq(workBuilds.workId, plain.id));
 		expect(pRow.requiresIsolation).toBe(false);
 
 		// The user shape carries the decision, resolved for a viewer.
@@ -249,7 +249,7 @@ describe("isolation posture", () => {
 			{ requiresIsolation: true },
 		);
 		expect(attempt.status).toBe(200); // completes, ignoring nothing — the field is unknown
-		const [row] = await db.select().from(webBuilds).where(eq(webBuilds.id, buildId));
+		const [row] = await db.select().from(workBuilds).where(eq(workBuilds.id, buildId));
 		expect(row.requiresIsolation).toBe(false);
 	});
 });

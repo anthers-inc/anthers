@@ -22,7 +22,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, notifications, works } from "@anthers/db/schema";
+import { notifications, workAssets, works } from "@anthers/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import app from "../index";
 import { saveWork } from "../services/library.js";
@@ -67,7 +67,7 @@ async function workWithBytes(opts: { title: string; visibility?: "private" | "re
 	const key = `creators/${creatorId}/assets/${work.id}/build.zip`;
 	await storage.upload(key, new Uint8Array(2048), "application/octet-stream", "private");
 	storedKeys.push(key);
-	await db.insert(assets).values({
+	await db.insert(workAssets).values({
 		workId: work.id,
 		file: key,
 		filename: "build.zip",
@@ -80,9 +80,9 @@ async function workWithBytes(opts: { title: string; visibility?: "private" | "re
 /** Whether the Work's stored asset still exists — the media's presence, from the object. */
 async function mediaExists(workId: number): Promise<boolean> {
 	const [asset] = await db
-		.select({ file: assets.file })
-		.from(assets)
-		.where(eq(assets.workId, workId));
+		.select({ file: workAssets.file })
+		.from(workAssets)
+		.where(eq(workAssets.workId, workId));
 	if (!asset) return false;
 	return await storage.exists(asset.file);
 }

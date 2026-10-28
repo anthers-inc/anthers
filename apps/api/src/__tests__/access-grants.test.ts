@@ -9,7 +9,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, purchases, users } from "@anthers/db/schema";
+import { purchases, users, workAssets } from "@anthers/db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import {
@@ -188,7 +188,7 @@ describe("the download route and its grant", () => {
 		});
 		workId = work.id;
 		const [asset] = await db
-			.insert(assets)
+			.insert(workAssets)
 			.values({
 				workId,
 				file: `creators/${creatorId}/assets/nightjar.zip`,

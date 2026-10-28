@@ -21,12 +21,12 @@
  */
 
 import {
-	assets,
 	db,
 	type WorkVersionFile,
 	type WorkVersionMedia,
-	webBuildFiles,
-	webBuilds,
+	workAssets,
+	workBuildFiles,
+	workBuilds,
 	workMediaVersions,
 	workSourceFiles,
 	type works,
@@ -38,9 +38,9 @@ import { isKeyUnder, urlToKey } from "./storage/keys.js";
 
 type WorkRow = typeof works.$inferSelect;
 type SourceFileRow = typeof workSourceFiles.$inferSelect;
-type AssetRow = typeof assets.$inferSelect;
-type WebBuildRow = typeof webBuilds.$inferSelect;
-type WebBuildFileRow = typeof webBuildFiles.$inferSelect;
+type AssetRow = typeof workAssets.$inferSelect;
+type WebBuildRow = typeof workBuilds.$inferSelect;
+type WebBuildFileRow = typeof workBuildFiles.$inferSelect;
 export type WorkMediaVersionRow = typeof workMediaVersions.$inferSelect;
 
 /** The subset of the database a transaction and the module-level client both satisfy. */
@@ -200,13 +200,13 @@ export async function archiveCurrentMedia(
 ): Promise<{ version: WorkMediaVersionRow; keeps: Set<string> } | null> {
 	const [sourceRows, assetRows, buildRows, buildFileRows] = await Promise.all([
 		exec.select().from(workSourceFiles).where(eq(workSourceFiles.workId, work.id)),
-		exec.select().from(assets).where(eq(assets.workId, work.id)),
-		exec.select().from(webBuilds).where(eq(webBuilds.workId, work.id)),
+		exec.select().from(workAssets).where(eq(workAssets.workId, work.id)),
+		exec.select().from(workBuilds).where(eq(workBuilds.workId, work.id)),
 		exec
-			.select({ file: webBuildFiles })
-			.from(webBuildFiles)
-			.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
-			.where(eq(webBuilds.workId, work.id)),
+			.select({ file: workBuildFiles })
+			.from(workBuildFiles)
+			.innerJoin(workBuilds, eq(workBuildFiles.buildId, workBuilds.id))
+			.where(eq(workBuilds.workId, work.id)),
 	]);
 	const excluded = options.excludeWebBuildId;
 	const media = await snapshotMedia(
@@ -409,12 +409,12 @@ export function versionFiles(version: WorkMediaVersionRow): WorkVersionStoredFil
 async function keysInUse(work: WorkRow, exceptVersionId: number): Promise<Set<string>> {
 	const [sourceRows, assetRows, buildFileRows, otherVersions] = await Promise.all([
 		db.select().from(workSourceFiles).where(eq(workSourceFiles.workId, work.id)),
-		db.select().from(assets).where(eq(assets.workId, work.id)),
+		db.select().from(workAssets).where(eq(workAssets.workId, work.id)),
 		db
-			.select({ file: webBuildFiles })
-			.from(webBuildFiles)
-			.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
-			.where(eq(webBuilds.workId, work.id)),
+			.select({ file: workBuildFiles })
+			.from(workBuildFiles)
+			.innerJoin(workBuilds, eq(workBuildFiles.buildId, workBuilds.id))
+			.where(eq(workBuilds.workId, work.id)),
 		db
 			.select({ media: workMediaVersions.media })
 			.from(workMediaVersions)

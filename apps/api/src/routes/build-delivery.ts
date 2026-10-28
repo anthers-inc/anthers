@@ -13,7 +13,7 @@
  * against the promise that no Anthers cookie crosses, which is why the check is a
  * token and nothing else.
  *
- * 🚨 **`web_build_files` is the delivery allowlist.** A requested path resolves against
+ * 🚨 **`work_build_files` is the delivery allowlist.** A requested path resolves against
  * the build's registered rows — the upload route registered each one under the same
  * path the build references it by — and nothing else. A file the creator did not
  * register is not served, whatever it is named on disk: one prefix, every file in the
@@ -33,7 +33,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { webBuildFiles, webBuilds, works } from "@anthers/db/schema";
+import { workBuildFiles, workBuilds, works } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { saveShimScript } from "../lib/save-shim-script.js";
@@ -100,16 +100,16 @@ export function createBuildDeliveryRoutes(): Hono {
 				// Find the build whose file list holds this path — the primary build is what a
 				// play session means; a non-primary variant is registered storage, not content.
 				const [build] = await db
-					.select({ id: webBuilds.id })
-					.from(webBuilds)
-					.where(and(eq(webBuilds.workId, workId), eq(webBuilds.isPrimary, true)))
+					.select({ id: workBuilds.id })
+					.from(workBuilds)
+					.where(and(eq(workBuilds.workId, workId), eq(workBuilds.isPrimary, true)))
 					.limit(1);
 				if (!build) return c.json({ error: "not found" }, 404);
 
 				const [file] = await db
-					.select({ storageKey: webBuildFiles.storageKey })
-					.from(webBuildFiles)
-					.where(and(eq(webBuildFiles.buildId, build.id), eq(webBuildFiles.path, requestedPath)))
+					.select({ storageKey: workBuildFiles.storageKey })
+					.from(workBuildFiles)
+					.where(and(eq(workBuildFiles.buildId, build.id), eq(workBuildFiles.path, requestedPath)))
 					.limit(1);
 				if (!file) return c.json({ error: "not found" }, 404);
 

@@ -14,7 +14,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
-import { mediaScans, transcodingJobs, works } from "@anthers/db/schema";
+import { mediaScans, works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { QUEUES, queue } from "../jobs/queue.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
@@ -70,7 +70,7 @@ describe("a video transcode", () => {
 			.insert(mediaScans)
 			.values({ storageKey: sourceKey, workId, determination: "clean", scannedAt: new Date() });
 		const [job] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId, mediaType: "video", status: "pending" })
 			.returning();
 		return { workId, jobId: job.id };
@@ -100,7 +100,10 @@ describe("a video transcode", () => {
 
 		await transcodeVideo({ jobId });
 
-		const [job] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
+		const [job] = await db
+			.select()
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.id, jobId));
 		expect(job.status).toBe("completed");
 		const [work] = await db.select().from(works).where(eq(works.id, workId));
 		expect(work.thumbnail).toBeNull();

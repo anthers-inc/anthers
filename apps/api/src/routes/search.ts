@@ -23,7 +23,7 @@
  * rather than in the panel so the API suite can prove it.
  */
 import { db } from "@anthers/db/client";
-import { follows, libraryItems, posts, projects, users, works } from "@anthers/db/schema";
+import { follows, posts, projects, userLibraryItems, users, works } from "@anthers/db/schema";
 import {
 	isSearchScope,
 	isSearchType,
@@ -63,15 +63,15 @@ const MAX_LIMIT = 20;
  * of the SQL, and a template cannot name a column the way it names a value.
  */
 function workSavedBy(viewerId: number): SQL<boolean> {
-	return sql<boolean>`EXISTS (SELECT 1 FROM ${libraryItems} li WHERE li.user_id = ${viewerId} AND li.work_id = ${works.id})`;
+	return sql<boolean>`EXISTS (SELECT 1 FROM ${userLibraryItems} li WHERE li.user_id = ${viewerId} AND li.work_id = ${works.id})`;
 }
 
 function projectSavedBy(viewerId: number): SQL<boolean> {
-	return sql<boolean>`EXISTS (SELECT 1 FROM ${libraryItems} li WHERE li.user_id = ${viewerId} AND li.project_id = ${projects.id})`;
+	return sql<boolean>`EXISTS (SELECT 1 FROM ${userLibraryItems} li WHERE li.user_id = ${viewerId} AND li.project_id = ${projects.id})`;
 }
 
 function postSavedBy(viewerId: number): SQL<boolean> {
-	return sql<boolean>`EXISTS (SELECT 1 FROM ${libraryItems} li WHERE li.user_id = ${viewerId} AND li.post_id = ${posts.id})`;
+	return sql<boolean>`EXISTS (SELECT 1 FROM ${userLibraryItems} li WHERE li.user_id = ${viewerId} AND li.post_id = ${posts.id})`;
 }
 
 /** Whether the viewer follows the creator a row belongs to. */
