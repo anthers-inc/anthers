@@ -534,7 +534,12 @@ export interface Work {
 	 * ⚠️ Present even when the Work is locked, for the same reason `pageCount` is.
 	 */
 	sectionCount?: number;
-	metadata: Record<string, unknown> | null;
+	/**
+	 * The fulfillment details a physical good or a service carries, in its creator's own
+	 * words. **Owner-facing only** — the public shape omits it, because it is fulfillment
+	 * material rather than a description a reader reads.
+	 */
+	note?: string;
 
 	// Visibility & dates. `createdAt` is the UPLOAD date and is creator-facing only;
 	// the public sees `originallyReleased` (when the work first came out, anywhere) and
@@ -719,7 +724,8 @@ export interface WorkInput {
 	lyrics?: string;
 	/** The alt text of the image an image Work is. Plain text — never HTML. */
 	imageAlt?: string;
-	metadata?: Record<string, unknown>;
+	/** The fulfillment details a physical good or a service carries. */
+	note?: string;
 	/** The current media version's name, empty to leave it unnamed. */
 	versionLabel?: string;
 	/**

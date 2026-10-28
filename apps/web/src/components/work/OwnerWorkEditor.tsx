@@ -982,10 +982,10 @@ export default function OwnerWorkEditor({
 	const detailsNoteField = (
 		<InlineField<string>
 			label="Details"
-			saved={typeof current.metadata?.note === "string" ? current.metadata.note : ""}
+			saved={current.note ?? ""}
 			renderRead={() =>
-				typeof current.metadata?.note === "string" && current.metadata.note ? (
-					<p className="whitespace-pre-wrap text-sm">{current.metadata.note}</p>
+				current.note ? (
+					<p className="whitespace-pre-wrap text-sm">{current.note}</p>
 				) : (
 					<p className="text-sm text-base-content/40">Nothing written yet.</p>
 				)
@@ -1007,7 +1007,7 @@ export default function OwnerWorkEditor({
 				</div>
 			)}
 			save={(draft) => {
-				return saveFields({ metadata: { note: draft.trim() } });
+				return saveFields({ note: draft.trim() });
 			}}
 		/>
 	);

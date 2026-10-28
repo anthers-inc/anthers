@@ -171,12 +171,11 @@ export const works = pgTable(
 		body: text("body").default(""),
 		bodyHtml: text("body_html").default(""),
 		estimatedReadMinutes: integer("estimated_read_minutes"),
-		// type = "music": the song's words. **A column, not `metadata`** — lyrics are
+		// type = "music": the song's words. **A column, not a jsonb grab-bag** — lyrics are
 		// creator-authored, user-visible content, the same class of thing as `description`
-		// and `body`, both of which are columns. `metadata` is for incidental shape
-		// (`clientVariants`, a physical item's note), and burying published text in the
-		// jsonb grab-bag makes it invisible to future search and to any migration that has
-		// to reason about what a creator actually wrote.
+		// and `body`, both of which are columns. Burying published text in a bag makes it
+		// invisible to future search and to any migration that has to reason about what a
+		// creator actually wrote.
 		//
 		// Deliberately **untimestamped**: no karaoke, no per-line sync, just the words
 		// attached to the Work. Plain text rendered `white-space: pre-wrap` rather than
@@ -204,10 +203,14 @@ export const works = pgTable(
 		// `serializeWorkForUser` blanks it alongside `sourceKey` — the blurb that survives a
 		// gate is `description`, as it is for lyrics.
 		imageAlt: text("image_alt").default(""),
-		// Browser-encode transport (metadata.clientVariants) + physical/service product
-		// details. Full variant/SKU modeling lands when merch/fulfillment is real; for now
-		// downloadable variants (game/software builds) live in `assets`.
-		metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+		/**
+		 * The free-text details a physical good or a service carries — fulfillment notes,
+		 * dimensions, turnaround, terms — in its creator's own words.
+		 *
+		 * 🚨 **Creator-only.** This is fulfillment material rather than a public description,
+		 * so the public serializer omits it; `description` is the blurb a reader sees.
+		 */
+		note: text("note").notNull().default(""),
 
 		// ── Visibility ──
 		// private = staging (uploaded, processing, being written — nobody else's business).

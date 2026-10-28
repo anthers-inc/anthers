@@ -21,10 +21,9 @@
  */
 
 import { acceptedVideoFormatsSentence } from "@anthers/shared/accepted-formats";
-import { embedUrlProblem, isPaged, workNeedsFile } from "@anthers/shared/content";
+import { isPaged, workNeedsFile } from "@anthers/shared/content";
 import { WEB_BUILD_FILE_MAX } from "@anthers/shared/web-build";
-import { type ReactNode, useState } from "react";
-import type { ContentType, UploadableWorkType, Work, WorkInput } from "../../lib/types";
+import type { ContentType, Work } from "../../lib/types";
 import {
 	isUploading,
 	useSourceUpload,
@@ -299,73 +298,6 @@ export function WorkTypeFacts({ type, platform }: { type: ContentType; platform?
 			{facts.note && <p className="mt-2 text-xs text-base-content/50">{facts.note}</p>}
 		</section>
 	);
-}
-
-/** The free-text detail a physical good or a service carries, out of `metadata.note`. */
-function metaNote(item: Work | null | undefined): string {
-	const note = item?.metadata?.note;
-	return typeof note === "string" ? note : "";
-}
-
-export interface WorkDetails {
-	/** This kind's own control, or null for a kind whose media is its file. */
-	slot: ReactNode;
-	/** The kind's fields, to merge into the page's save. Never a `sourceKey` — see the header. */
-	fields: () => Omit<Partial<WorkInput>, "type" | "sourceKey">;
-}
-
-/**
- * What a game, a piece of software, a physical good or a service carries in place of a file: an
- * embed address for the first two, a note for the other two.
- */
-export function useWorkDetails(type: UploadableWorkType, editing: Work): WorkDetails {
-	const [embedUrl, setEmbedUrl] = useState(editing.embedUrl ?? "");
-	const [detailsNote, setDetailsNote] = useState(metaNote(editing));
-
-	// The server refuses the same addresses; saying so here means a creator hears it beside the field.
-	const embedError = embedUrlProblem(embedUrl.trim());
-
-	if (type === "game" || type === "software") {
-		return {
-			slot: (
-				<FormField
-					label="Embed URL (optional)"
-					hint="For an HTML5 or WebGL build that runs in the browser, hosted on another site at an https:// address. Downloadable builds are added below."
-					error={embedError ?? undefined}
-				>
-					<input
-						type="url"
-						className="input input-bordered w-full"
-						value={embedUrl}
-						onChange={(e) => setEmbedUrl(e.target.value)}
-						placeholder="https://example.com/embed"
-					/>
-				</FormField>
-			),
-			fields: () => ({ embedUrl: embedUrl.trim() }),
-		};
-	}
-	if (type === "physical" || type === "service") {
-		return {
-			slot: (
-				<FormField label="Details">
-					<textarea
-						className="textarea textarea-bordered w-full"
-						value={detailsNote}
-						onChange={(e) => setDetailsNote(e.target.value)}
-						rows={3}
-						placeholder={
-							type === "physical"
-								? "Fulfillment notes, dimensions, shipping…"
-								: "What the service includes, turnaround, terms…"
-						}
-					/>
-				</FormField>
-			),
-			fields: () => ({ metadata: { note: detailsNote.trim() } }),
-		};
-	}
-	return { slot: null, fields: () => ({}) };
 }
 
 /** A progress bar for one upload, or an indeterminate one where the transport reports none. */

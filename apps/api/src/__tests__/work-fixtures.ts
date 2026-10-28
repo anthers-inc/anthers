@@ -127,7 +127,7 @@ export interface WorkFixture {
 	 */
 	credits?: WorkCredit[];
 	originallyReleased?: Date | null;
-	metadata?: Record<string, unknown>;
+	note?: string;
 	/** The alt text of the image an image Work is (`works.image_alt`). */
 	imageAlt?: string;
 	/** The Work's tags, stored as-is; the routes normalize, a fixture seeds a known list. */
@@ -175,7 +175,7 @@ export async function insertWork(fixture: WorkFixture) {
 			access: fixture.access ?? [],
 			credits: fixture.credits ?? CREATED_CREDIT,
 			originallyReleased: fixture.originallyReleased ?? null,
-			metadata: fixture.metadata ?? {},
+			note: fixture.note ?? "",
 			tags: fixture.tags ?? [],
 		})
 		.returning();
