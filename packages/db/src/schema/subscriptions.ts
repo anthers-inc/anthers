@@ -941,7 +941,6 @@ export const userBadges = pgTable(
 			.notNull()
 			.references(() => badges.id, { onDelete: "cascade" }),
 		billingCycle: text("billing_cycle").notNull(),
-		isLocked: boolean("is_locked").default(false),
 		atprotoUri: text("atproto_uri").unique(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

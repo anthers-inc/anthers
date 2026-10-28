@@ -75,7 +75,7 @@ async function soldWork(title: string, buyers: number[]) {
 		});
 		// The checkout path's own save: a purchase saves itself to the buyer's Library,
 		// which is what sets the preservation flag the delete route asks.
-		await saveOnPurchase({ buyerId: b, workId: work.id, type: "digital" });
+		await saveOnPurchase({ buyerId: b, workId: work.id });
 	}
 	return work;
 }

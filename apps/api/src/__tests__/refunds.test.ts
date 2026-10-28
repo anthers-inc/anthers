@@ -719,16 +719,6 @@ describe("The purchase row after a refund", () => {
 		expect(res.status).toBe(404);
 		expect(fake.callsTo("refunds.create")).toHaveLength(0);
 	});
-
-	it("refuses to refund a support top-up", async () => {
-		// Support is a monthly commitment, not a purchase: the Terms say a cycle in
-		// progress is not pro-rated, and unwinding one here would also strand the
-		// account credit `applyCreditForPurchase` has already spent.
-		const purchase = await completedPurchase({ type: "seeds", workId: null });
-		const res = await refundAs(buyerCookie, purchase.id);
-		expect(res.status).toBe(400);
-		expect(fake.callsTo("refunds.create")).toHaveLength(0);
-	});
 });
 
 describe("The cap on refunds after download", () => {

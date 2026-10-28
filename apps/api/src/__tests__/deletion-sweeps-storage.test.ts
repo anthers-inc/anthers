@@ -165,7 +165,7 @@ describe("account deletion sweeps object storage", () => {
 				status: "completed",
 				workTitle: "Bought",
 			});
-			await saveOnPurchase({ buyerId, workId: paid.id, type: "digital" });
+			await saveOnPurchase({ buyerId, workId: paid.id });
 
 			const deleted: string[] = [];
 			const delSpy = spyOn(storage, "delete").mockImplementation(async (key: string) => {

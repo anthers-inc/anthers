@@ -13,9 +13,6 @@
  * $0 with Allow checked is exactly what Public Access is, so the free cases are asserted
  * beside the refused ones in every block below — a suite that only checked the refusals would
  * pass against an implementation that had priced the entire commons.
- *
- * ⭐ **`POST /seeds` stays unfloored and has its own test.** It allocates an already-charged
- * balance, creates no Stripe charge, and a blanket sweep would have floored it wrongly.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";

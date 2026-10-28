@@ -92,7 +92,7 @@ describe("A purchase survives the Work being deleted", () => {
 		// The checkout path's own save, so the fixture stands where production does: a
 		// completed purchase saves itself to the buyer's Library, and that save is what
 		// puts the Work in the preservation program.
-		await saveOnPurchase({ buyerId, workId: work.id, type: "digital" });
+		await saveOnPurchase({ buyerId, workId: work.id });
 		return { work, purchase };
 	}
 
@@ -306,43 +306,6 @@ describe("A purchase survives the Work being deleted", () => {
 		// the fact that it left circulation.
 		expect(row.work.publicId).toBe(work.publicId);
 		expect(row.work.visibility).toBe("withdrawn");
-	});
-
-	it("lists a support top-up as a receipt that bought no Work, and says so in `type`", async () => {
-		// A support top-up is a real charge with a real receipt, so it belongs in Purchases — it
-		// only started appearing when `0016` stopped this endpoint dropping every row with
-		// no Work. But it unlocks nothing, so it does NOT belong in the Library, and the
-		// client needs something to tell the two apart. `workId` cannot: it is null here
-		// AND null for a Work that has been deleted. `type` is the discriminator.
-		const [seedBuy] = await db
-			.insert(purchases)
-			.values({
-				buyerId,
-				workId: null,
-				creatorId: null,
-				type: "seeds",
-				amount: "9.00",
-				processingFee: "0.56",
-				salesTax: "0.00",
-				creatorEarnings: "0.00",
-				stripePaymentIntentId: `pi_psd_${crypto.randomUUID().slice(0, 12)}`,
-				status: "completed",
-			})
-			.returning();
-
-		const res = await req("/api/payments/purchases", { headers: { Cookie: buyerCookie } });
-		const row = (await res.json()).purchases.find((p: { id: number }) => p.id === seedBuy.id) as {
-			type: string;
-			work: { title: null; publicId: null };
-			creator: { handle: null };
-		};
-
-		expect(row).toBeTruthy();
-		expect(row.type).toBe("seeds");
-		// Nothing to name, nothing to open, nobody to credit.
-		expect(row.work.title).toBeNull();
-		expect(row.work.publicId).toBeNull();
-		expect(row.creator.handle).toBeNull();
 	});
 
 	it("leaves a Work nobody bought deletable without a force flag", async () => {

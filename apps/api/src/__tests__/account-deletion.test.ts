@@ -149,7 +149,7 @@ beforeAll(async () => {
 	expect(purchase.status).toBe("completed");
 	// The checkout's own Library save, which is what sets the preservation flag. Doing it
 	// here keeps the fixture on the same path production takes rather than setting a flag.
-	await saveOnPurchase({ buyerId, workId: soldWorkId, type: "digital" });
+	await saveOnPurchase({ buyerId, workId: soldWorkId });
 
 	const postRes = await post("/api/content/posts", leaver, {
 		title: `Leaver post ${id}`,

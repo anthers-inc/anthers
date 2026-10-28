@@ -33,7 +33,7 @@ import {
 	purchases,
 	works,
 } from "@anthers/db/schema";
-import { and, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import {
 	type ComplainantNotice,
 	escapeHtml,
@@ -791,19 +791,11 @@ export async function finalizeNotice(input: {
 	if (!work) return null;
 	if (work.takedownStatus !== "taken_down") return { finalized: false, reason: "not_taken_down" };
 
-	// Every completed purchase of this Work. `type` is filtered because a support
-	// top-up carries no Work and is not refundable anyway (`refundPurchase` refuses
-	// it), and letting one through would count a refusal as a failure.
+	// Every completed purchase of this Work, so a takedown can release the buyers' money.
 	const rows = await db
 		.select()
 		.from(purchases)
-		.where(
-			and(
-				eq(purchases.workId, work.id),
-				eq(purchases.status, "completed"),
-				ne(purchases.type, "seeds"),
-			),
-		);
+		.where(and(eq(purchases.workId, work.id), eq(purchases.status, "completed")));
 
 	let refunded = 0;
 	let failures = 0;

@@ -396,7 +396,7 @@ describe("the Library", () => {
 		// Nothing wrote a "this was bought" flag — `purchases` is read back on every
 		// request, which is why a refund can release it with no sweep.
 		const { saveOnPurchase } = await import("../services/library.js");
-		await saveOnPurchase({ buyerId: userId, workId: boughtWorkId, type: "digital" });
+		await saveOnPurchase({ buyerId: userId, workId: boughtWorkId });
 
 		const entry = (await library()).find((i) => i.work?.id === boughtWorkId);
 		expect(entry, "a completed purchase should be in the Library").toBeTruthy();

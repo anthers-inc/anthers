@@ -83,7 +83,7 @@ async function soldWork(opts: { title: string; buyer: number; withdrawnDaysAgo: 
 	});
 	// The purchase's own library save is what the checkout calls; doing it here keeps the
 	// fixture on the same path production takes rather than setting the flag by hand.
-	await saveOnPurchase({ buyerId: opts.buyer, workId, type: "digital" });
+	await saveOnPurchase({ buyerId: opts.buyer, workId });
 	return workId;
 }
 
@@ -125,7 +125,7 @@ describe("coming into the program", () => {
 		workIds.push(work.id);
 		expect(await preserved(work.id)).toBe(false);
 
-		await saveOnPurchase({ buyerId, workId: work.id, type: "digital" });
+		await saveOnPurchase({ buyerId, workId: work.id });
 
 		expect(await preserved(work.id)).toBe(true);
 	});
