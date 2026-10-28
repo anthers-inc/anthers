@@ -358,9 +358,9 @@ export default function AboutPage() {
 					    measure; the shared <Lede> defaults to a wider column. */}
 					<div className="mx-auto max-w-3xl">
 						<Lede>
-							Anthers is a growing organization, and we have lots of amazing friends and family and
-							other folks helping us get off the ground. But for now, the Anthers team is just
-							Parker (that's me, writing this).
+							Anthers is a growing organization with lots of amazing friends, family, and other
+							folks helping us get off the ground. But for now, the Anthers team is just Parker
+							(that's me!).
 						</Lede>
 					</div>
 				</Reveal>
