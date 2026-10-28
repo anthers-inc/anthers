@@ -24,7 +24,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { abuseReports, moderationReports, notifications, outboundEmails } from "@anthers/db/schema";
+import { abuseReports, moderationReports, outboundEmails } from "@anthers/db/schema";
 import { eq, isNull, or, sql } from "drizzle-orm";
 
 /**
@@ -115,30 +115,23 @@ export async function recordDeliveryEvent(input: DeliveryEvent): Promise<{ match
 		)
 		.returning({ id: abuseReports.id });
 
-	// The user-facing halves, matched on their own message-id columns. The same ordering
-	// rule as the reports, in the form a single nullable column can hold: anything fills
-	// an unanswered event, and a non-terminal event never replaces a terminal one — a
-	// late `sent` must not erase a known bounce. (A terminal event has the same guard:
-	// a terminal over a terminal is not an upgrade, so it does not rewrite — the first
-	// terminal answer stands, which is what makes the column readable.)
-	const terminalGuard = sql`(${notifications.emailDeliveryEvent} IS NULL
-		OR ${notifications.emailDeliveryEvent} NOT IN ('delivered','bounced','complained','failed','canceled'))`;
-	const notificationUpdates = await db
-		.update(notifications)
-		.set({ emailDeliveryEvent: input.event, emailDeliveryEventAt: input.occurredAt })
-		.where(sql`${notifications.emailMessageId} = ${input.messageId} AND ${terminalGuard}`)
-		.returning({ id: notifications.id });
-
-	const receiptGuard = sql`(${outboundEmails.deliveryEvent} IS NULL
+	// The user-facing halves — notifications and receipts — are one ledger now, so one
+	// update covers both. The same ordering rule as the reports, in the form a single
+	// nullable column can hold: anything fills an unanswered event, and a non-terminal
+	// event never replaces a terminal one — a late `sent` must not erase a known bounce.
+	// (A terminal event has the same guard: a terminal over a terminal is not an upgrade,
+	// so it does not rewrite — the first terminal answer stands, which is what makes the
+	// column readable.)
+	const mailGuard = sql`(${outboundEmails.deliveryEvent} IS NULL
 		OR ${outboundEmails.deliveryEvent} NOT IN ('delivered','bounced','complained','failed','canceled'))`;
-	const receiptUpdates = await db
+	const mailUpdates = await db
 		.update(outboundEmails)
 		.set({ deliveryEvent: input.event, deliveryEventAt: input.occurredAt })
-		.where(sql`${outboundEmails.messageId} = ${input.messageId} AND ${receiptGuard}`)
+		.where(sql`${outboundEmails.messageId} = ${input.messageId} AND ${mailGuard}`)
 		.returning({ id: outboundEmails.id });
 
 	return {
-		matched: reports.length + abuse.length + notificationUpdates.length + receiptUpdates.length,
+		matched: reports.length + abuse.length + mailUpdates.length,
 	};
 }
 

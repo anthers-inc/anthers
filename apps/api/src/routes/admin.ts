@@ -18,11 +18,9 @@ import { db } from "@anthers/db/client";
 import {
 	adminAccounts,
 	type DmcaNoticeStatus,
-	notifications,
 	nounBlocklist,
 	outboundEmails,
 	rightsRequests,
-	users,
 } from "@anthers/db/schema";
 import { STORAGE_PER_GIB_MONTH } from "@anthers/shared/constants";
 import { RATING_NOTE_MAX } from "@anthers/shared/content-rating";
@@ -561,37 +559,42 @@ const adminRoutes = new Hono<AdminEnv>()
 	// operator rather than alerted, per the settled design (Parker, 2026-10-08): a send-
 	// time alert would train the ops channel to skim exactly the failures that matter.
 	//
-	//  🚨 **Two failure shapes, and why the notification scan needs an intent column:**
-	//  `notifications.emailSentAt` is null for BOTH "email was suppressed by the person's
-	//  delivery mode" and "the send failed" — keyed on the null alone the panel would
-	//  report every suppressed social notice as a failure, and the operator would learn
-	//  to ignore the page. `emailIntended` is the discriminator, recorded by `notify()`
-	//  before the send is attempted. The ledger records intent by existing at all: an
-	//  `outbound_emails` row is written before the send, so a null `sentAt` alone is the
-	//  failure state there. Bounced-after-acceptance arrives through the Resend webhook
-	//  (`services/delivery-events.ts`), which matches on the provider's message id; the
-	//  panel surfaces those beside the outright refusals.
+	//  🚨 **Two failure shapes:** a notification's ledger row exists only when the service
+	//  decided to mail it, so a null `sentAt` on one is unambiguously a failed send — the
+	//  suppressed-by-preference case never writes a row at all, which is the discriminator
+	//  an intent column used to carry. Receipts read the same way. Bounced-after-acceptance
+	//  arrives through the Resend webhook (`services/delivery-events.ts`), which matches on
+	//  the provider's message id; the panel surfaces those beside the outright refusals.
 	.get("/failed-mail", async (c) => {
-		// A failed notification: intended, never stamped sent. The delivery event (from the
-		// webhook) is carried when it has one — `bounced` means the provider ACCEPTED it and
-		// the recipient's server refused; a bare null means the provider refused outright
-		// or died (the send's own `sent` false), distinguishable from a bounce only here.
-		const failedNotes = await db
-			.select({
-				id: notifications.id,
-				kind: notifications.kind,
-				category: notifications.category,
-				title: notifications.title,
-				email: users.email,
-				createdAt: notifications.createdAt,
-				deliveryEvent: notifications.emailDeliveryEvent,
-				deliveryEventAt: notifications.emailDeliveryEventAt,
-			})
-			.from(notifications)
-			.leftJoin(users, eq(notifications.userId, users.id))
-			.where(and(eq(notifications.emailIntended, true), isNull(notifications.emailSentAt)))
-			.orderBy(desc(notifications.createdAt))
-			.limit(100);
+		// A failed notification: a ledger row with no send stamp. The delivery event (from
+		// the webhook) is carried when it has one — `bounced` means the provider ACCEPTED it
+		// and the recipient's server refused; a bare null means the provider refused
+		// outright or died, distinguishable from a bounce only here.
+		const failedNotes = (
+			await db
+				.select({
+					id: outboundEmails.id,
+					detail: outboundEmails.detail,
+					subject: outboundEmails.subject,
+					recipient: outboundEmails.recipient,
+					createdAt: outboundEmails.createdAt,
+					deliveryEvent: outboundEmails.deliveryEvent,
+					deliveryEventAt: outboundEmails.deliveryEventAt,
+				})
+				.from(outboundEmails)
+				.where(and(eq(outboundEmails.kind, "notification"), isNull(outboundEmails.sentAt)))
+				.orderBy(desc(outboundEmails.createdAt))
+				.limit(100)
+		).map((row) => ({
+			id: row.id,
+			kind: row.detail?.notificationKind ?? "notification",
+			category: row.detail?.category ?? "",
+			title: row.subject,
+			email: row.recipient,
+			createdAt: row.createdAt,
+			deliveryEvent: row.deliveryEvent,
+			deliveryEventAt: row.deliveryEventAt,
+		}));
 
 		// A receipt the provider refused, and a receipt later bounced or complained.
 		// Two queries rather than an OR scan: both are indexed shapes and each names its

@@ -4,11 +4,11 @@
  * and the bounce that arrives after acceptance.
  *
  * 🚨 **The three assertions the design turns on.** One: an email SUPPRESSED by the person's
- * delivery mode must never read as a failure — the panel keys on `emailIntended`, and this
- * suite proves the suppressed case carries `emailIntended = false`. Two: a send whose
- * provider ACCEPTED and whose recipient then bounced is recorded against the row by the
- * webhook matching on the provider's message id. Three: the admin route answers all three
- * lists and nothing else's rows.
+ * delivery mode must never read as a failure — the panel reads the ledger, and this suite
+ * proves the suppressed case writes no row there at all. Two: a send whose provider
+ * ACCEPTED and whose recipient then bounced is recorded against the row by the webhook
+ * matching on the provider's message id. Three: the admin route answers all three lists
+ * and nothing else's rows.
  *
  * The receipt half of the webhook matching rides the same `recordDeliveryEvent`; its
  * rows live in `outbound_emails` and its assertions are at the bottom of the file.
@@ -40,7 +40,7 @@ let suppressedUserId = 0;
 // A notification intended-but-unsent (the failure shape) — written directly so the test
 // does not need a provider that refuses on cue.
 const FAILED_MSG = `fm-notif-${crypto.randomUUID().slice(0, 8)}`;
-let failedNoteId = 0;
+let failedMailId = 0;
 
 // A receipt refused, and a receipt bounced-after-acceptance.
 const BOUNCED_MSG = `fm-receipt-${crypto.randomUUID().slice(0, 8)}`;
@@ -75,20 +75,28 @@ beforeAll(async () => {
 		dedupeKey: `fm-suppressed:${RUN}`,
 	});
 
-	// An intended-but-failed row, written directly: intended true, nothing sent.
-	const [failed] = await db
-		.insert(notifications)
+	// An intended-but-failed mail, written the way the service writes it: the in-app record,
+	// then the ledger row that exists because the send was decided on and did not land.
+	await db.insert(notifications).values({
+		userId: suppressedUserId,
+		category: "essential",
+		kind: "test_essential_fm",
+		title: `Intended but unsent ${RUN}`,
+		dedupeKey: `fm-failed:${RUN}`,
+	});
+	const [failedMail] = await db
+		.insert(outboundEmails)
 		.values({
+			dedupeKey: `notification:fm-failed:${RUN}`,
+			kind: "notification",
 			userId: suppressedUserId,
-			category: "essential",
-			kind: "test_essential_fm",
-			title: `Intended but unsent ${RUN}`,
-			dedupeKey: `fm-failed:${RUN}`,
-			emailIntended: true,
-			emailMessageId: FAILED_MSG,
+			recipient: `fm_failed_${RUN}@example.com`,
+			subject: `Intended but unsent ${RUN}`,
+			detail: { notificationKind: "test_essential_fm", category: "essential" },
+			messageId: FAILED_MSG,
 		})
-		.returning({ id: notifications.id });
-	failedNoteId = failed.id;
+		.returning({ id: outboundEmails.id });
+	failedMailId = failedMail.id;
 
 	// The refused receipt.
 	const [refused] = await db
@@ -134,32 +142,36 @@ afterAll(async () => {
 	const receiptIds = [refusedReceiptId, bouncedReceiptId].filter((n) => n > 0);
 	if (receiptIds.length > 0)
 		await db.delete(outboundEmails).where(inArray(outboundEmails.id, receiptIds));
+	// The notifications this suite wrote leave their ledger rows behind deliberately — a
+	// suppressed send has none — so the ones that exist are cleaned by their key prefix.
+	await db.delete(outboundEmails).where(like(outboundEmails.dedupeKey, "notification:fm-%"));
 	await db.delete(users).where(eq(users.id, suppressedUserId));
 });
 
 describe("the intent discriminator", () => {
-	it("a SUPPRESSED social send records emailIntended = false — not a failure", async () => {
+	it("a SUPPRESSED social send writes no ledger row — not a failure", async () => {
 		const [row] = await db
 			.select()
 			.from(notifications)
 			.where(eq(notifications.dedupeKey, `fm-suppressed:${RUN}`));
-		// The in-app record stands; the email was never wanted.
-		expect(row.emailIntended).toBe(false);
-		expect(row.emailSentAt).toBeNull();
+		// The in-app record stands; the email was never wanted, so nothing was recorded.
+		expect(row).toBeDefined();
+		const mails = await db
+			.select({ id: outboundEmails.id })
+			.from(outboundEmails)
+			.where(eq(outboundEmails.dedupeKey, `notification:fm-suppressed:${RUN}`));
+		expect(mails).toHaveLength(0);
 	});
 
-	it("an intended-but-failed row is the panel's failure state", async () => {
-		const [row] = await db
-			.select()
-			.from(notifications)
-			.where(eq(notifications.dedupeKey, `fm-failed:${RUN}`));
-		expect(row.emailIntended).toBe(true);
-		expect(row.emailSentAt).toBeNull();
+	it("an intended-but-failed mail is the panel's failure state", async () => {
+		const [row] = await db.select().from(outboundEmails).where(eq(outboundEmails.id, failedMailId));
+		expect(row.kind).toBe("notification");
+		expect(row.sentAt).toBeNull();
 	});
 });
 
 describe("the webhook matching", () => {
-	it("a bounce against a notification's message id lands on its row", async () => {
+	it("a bounce against a notification's message id lands on its ledger row", async () => {
 		const at = new Date();
 		const { matched } = await recordDeliveryEvent({
 			messageId: FAILED_MSG,
@@ -167,9 +179,9 @@ describe("the webhook matching", () => {
 			occurredAt: at,
 		});
 		expect(matched).toBeGreaterThanOrEqual(1);
-		const [row] = await db.select().from(notifications).where(eq(notifications.id, failedNoteId));
-		expect(row.emailDeliveryEvent).toBe("bounced");
-		expect(row.emailDeliveryEventAt?.toISOString()).toBe(at.toISOString());
+		const [row] = await db.select().from(outboundEmails).where(eq(outboundEmails.id, failedMailId));
+		expect(row.deliveryEvent).toBe("bounced");
+		expect(row.deliveryEventAt?.toISOString()).toBe(at.toISOString());
 	});
 
 	it("a non-terminal event does NOT overwrite the bounce", async () => {
@@ -178,8 +190,8 @@ describe("the webhook matching", () => {
 			event: "sent",
 			occurredAt: new Date(),
 		});
-		const [row] = await db.select().from(notifications).where(eq(notifications.id, failedNoteId));
-		expect(row.emailDeliveryEvent).toBe("bounced");
+		const [row] = await db.select().from(outboundEmails).where(eq(outboundEmails.id, failedMailId));
+		expect(row.deliveryEvent).toBe("bounced");
 	});
 
 	it("a bounce against a receipt's message id lands on its row", async () => {
@@ -208,20 +220,16 @@ describe("the admin surface", () => {
 		const res = await req("/api/admin/failed-mail", { headers: { Cookie: adminCookie } });
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {
-			failedNotes: { id: number }[];
+			failedNotes: { id: number; title: string }[];
 			refusedReceipts: { id: number }[];
 			bouncedOrWorse: { id: number; deliveryEvent: string }[];
 		};
-		expect(body.failedNotes.some((n) => n.id === failedNoteId)).toBe(true);
+		expect(body.failedNotes.some((n) => n.title === `Intended but unsent ${RUN}`)).toBe(true);
 		expect(body.refusedReceipts.some((r) => r.id === refusedReceiptId)).toBe(true);
 		const bounce = body.bouncedOrWorse.find((r) => r.id === bouncedReceiptId);
 		expect(bounce?.deliveryEvent).toBe("bounced");
-		// The suppressed row — in-app email suppressed by the delivery map — is in NEITHER
-		// list, which is the whole reason the intent column exists.
-		const rows = await db
-			.select({ id: notifications.id })
-			.from(notifications)
-			.where(eq(notifications.dedupeKey, `fm-suppressed:${RUN}`));
-		expect(body.failedNotes.some((n) => n.id === rows[0]?.id)).toBe(false);
+		// The suppressed notice — in-app mail suppressed by the delivery map — is in NEITHER
+		// list, because no ledger row was ever written for it.
+		expect(body.failedNotes.some((n) => n.title === `Suppressed ${RUN}`)).toBe(false);
 	});
 });
