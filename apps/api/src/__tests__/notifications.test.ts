@@ -108,7 +108,7 @@ beforeAll(async () => {
 	// The checkout path's own save, which is what puts the Work in the preservation
 	// program. Without it the creator's erasure destroys the Work instead of withdrawing
 	// it, and there is no withdrawal to tell the buyer about.
-	await saveOnPurchase({ buyerId, workId: soldWorkId, type: "digital" });
+	await saveOnPurchase({ buyerId, workId: soldWorkId });
 }, DB_SETUP_TIMEOUT);
 
 describe("one fact, one notification", () => {

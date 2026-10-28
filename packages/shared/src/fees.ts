@@ -336,8 +336,7 @@ export type PurchaseType = "digital" | "physical" | "service";
  */
 export function calculateFees(amount: Decimal, opts: { type?: PurchaseType } = {}) {
 	// `type` no longer changes the arithmetic — it did while digital sales carried
-	// the first download's bandwidth. Kept because callers pass it and `purchases.type`
-	// is a real discriminator elsewhere (`type: "seeds"` bought no Work, so it is not owned content).
+	// the first download's bandwidth. Callers still pass it; nothing here reads it.
 	void opts.type;
 
 	// The list price IS the advertised price: card processing comes out of it, not

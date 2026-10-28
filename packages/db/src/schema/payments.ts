@@ -60,8 +60,8 @@ export const purchases = pgTable(
 		// the standard remedy rather than a loophole. Privacy Policy says so in the user's words.
 		buyerId: integer("buyer_id").references(() => users.id, { onDelete: "set null" }),
 		// What was bought. A purchase unlocks a **Work**, not a Post — access moved onto the
-		// Work in `0010`, and a permanent unlock has to name the thing it unlocks. Null for
-		// one-time charges that aren't a Work purchase (e.g. a support top-up, `type: "seeds"`).
+		// Work in `0010`, and a permanent unlock has to name the thing it unlocks. Null only
+		// once the Work is gone: the FK is `SET NULL`, so a receipt outlives what it names.
 		//
 		// SET NULL, not cascade (`0016`). It was cascade, which meant a creator deleting a
 		// Work destroyed every row here that named it — the buyer's entitlement, the
@@ -81,7 +81,7 @@ export const purchases = pgTable(
 		workTitle: text("work_title"),
 		workType: text("work_type"),
 		workPublicId: bigint("work_public_id", { mode: "number" }),
-		type: text("type").notNull().default("digital"), // digital | physical | service | seeds
+		type: text("type").notNull().default("digital"), // digital | physical | service
 		amount: numeric("amount").notNull(),
 		processingFee: numeric("processing_fee").notNull(),
 		// Sales tax is the ONE thing added on top of the list price, so it is money we

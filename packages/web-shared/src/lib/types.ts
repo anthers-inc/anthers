@@ -1200,13 +1200,13 @@ export interface Purchase {
 	id: number;
 	buyerId: number;
 	/**
-	 * The Work this purchase permanently unlocks. Null for a support top-up, which unlocks
-	 * nothing — and ALSO null once the Work is genuinely gone, since the FK is
-	 * `ON DELETE SET NULL` (`0016`). It therefore cannot tell those two apart; `type` can.
+	 * The Work this purchase permanently unlocks. Null once the Work is genuinely gone,
+	 * since the FK is `ON DELETE SET NULL` (`0016`); the receipt's own snapshot columns are
+	 * what still name what was bought.
 	 */
 	workId: number | null;
-	/** What kind of charge this was. `seeds` bought no Work and belongs in no Library. */
-	type: "digital" | "physical" | "service" | "seeds";
+	/** What kind of charge this was. */
+	type: "digital" | "physical" | "service";
 	amount: string;
 	processingFee: string;
 	creatorEarnings: string;

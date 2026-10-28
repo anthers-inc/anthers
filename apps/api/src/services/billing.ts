@@ -776,15 +776,6 @@ export async function clearSavedBillingAddress(
 	}
 }
 
-// 🚨 **A one-off support top-up used to live here** (`createOneTimeCharge`, behind
-// `POST /subscriptions/seeds/buy`), and it is named here only because `purchases.type` still
-// has `"seeds"` in it and rows of that type can still be read. Nothing creates one: the
-// charge paid the fixed $0.30 by itself — the exact cost the monthly subscription exists to
-// amortize — and the credit it wrote to `creator_support_total` was overwritten by the next
-// subscription update, because that column is SET from the subscription rather than
-// accumulated. `services/refunds.ts` and `services/dmca.ts` still branch on the type, which
-// is about data that exists rather than a path that runs.
-
 /**
  * Reconcile the billing row to a subscription's current state — called from the
  * webhook on customer.subscription.created/updated/deleted. A canceled or expired

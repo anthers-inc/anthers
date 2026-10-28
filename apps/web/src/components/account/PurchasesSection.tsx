@@ -11,7 +11,6 @@
  * standing monthly amount, and these are the one-time buys.
  */
 
-import { amountLabel } from "@anthers/shared/constants";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
@@ -90,8 +89,7 @@ function MonthSelector({ month, onChange }: { month: string; onChange: (m: strin
 /**
  * One receipt.
  *
- * Not every purchase names something openable, and this list has to hold all of them:
- * a **support top-up** bought no Work at all, and a Work that has since been removed leaves a
+ * Not every purchase names something openable: a Work that has since been removed leaves a
  * receipt with no page behind it. `work.publicId` comes from the live row (null once the
  * Work is gone), so it — not the title, which is a snapshot and always reads — is what
  * decides whether a link is offered.
@@ -100,10 +98,7 @@ function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
 	const to =
 		p.work?.publicId != null ? workUrl({ slug: p.work.slug, publicId: p.work.publicId }) : null;
 
-	// 🚨 Support has no title of its own, so it is named by its **amount**, never by a
-	// count of anything. Any amount is payable, so there is no unit a count could be in.
-	const label =
-		p.type === "seeds" ? `${amountLabel(p.amount)} of support` : (p.work?.title ?? "Untitled");
+	const label = p.work?.title ?? "Untitled";
 
 	return (
 		<div className="card bg-base-200">
@@ -132,18 +127,14 @@ function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
 								<span className="font-medium block truncate">{label}</span>
 							)}
 
-							{/* Creator → profile link. A support top-up has no creator side. */}
-							{p.creator?.handle ? (
+							{/* Creator → profile link. */}
+							{p.creator?.handle && (
 								<Link
 									to={profileUrl(p.creator.handle)}
 									className="text-sm text-base-content/50 link link-hover"
 								>
 									@{p.creator.handle}
 								</Link>
-							) : (
-								p.type === "seeds" && (
-									<span className="text-sm text-base-content/50">Yours to give to creators</span>
-								)
 							)}
 						</div>
 					</div>

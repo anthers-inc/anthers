@@ -2782,12 +2782,7 @@ const paymentRoutes = new Hono()
 				// ⚠️ The ledger row this block used to write (the retired purchase fee,
 				// always $0, read off `purchases.crf_fee`) is gone with the column — the
 				// accounts-split pass dropped it, and a ledger row whose amount is always
-				// zero is noise in the books rather than a record. A `type === "seeds"`
-				// branch also sat here and credited the one-off support top-up; nothing
-				// creates a row of that type since the top-up retired on 2026-09-15, so
-				// a completed purchase is always a Work purchase now. Rows of the old
-				// type can still be read — `services/refunds.ts` and `services/dmca.ts`
-				// still know the value; nothing can still be written.
+				// zero is noise in the books rather than a record.
 			}
 
 			// The receipt, after the books have moved: buyer's itemized receipt for the
