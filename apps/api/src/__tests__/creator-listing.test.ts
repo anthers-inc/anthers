@@ -19,7 +19,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { badgePerks, badges, follows, posts, projects, users, works } from "@anthers/db/schema";
+import { badges, follows, posts, projects, users, works } from "@anthers/db/schema";
 import { and, eq, like } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -148,10 +148,15 @@ beforeAll(async () => {
 			{ creatorId: makerId, threshold: "9.50", label: `cl-high-${id}`, sortOrder: 1 },
 		])
 		.returning({ id: badges.id });
-	await db.insert(badgePerks).values([
-		{ badgeId: ladder[0].id, kind: "recognition", label: "The maker's thanks", sortOrder: 0 },
-		{ badgeId: ladder[0].id, kind: "recognition", label: "Early drafts", sortOrder: 1 },
-	]);
+	await db
+		.update(badges)
+		.set({
+			perks: [
+				{ kind: "recognition", label: "The maker's thanks" },
+				{ kind: "recognition", label: "Early drafts" },
+			],
+		})
+		.where(eq(badges.id, ladder[0].id));
 }, DB_SETUP_TIMEOUT);
 
 // Projects and Works go with the account; posts do not, because a departed creator's posts are

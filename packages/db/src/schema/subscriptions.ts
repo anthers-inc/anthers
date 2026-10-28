@@ -1107,6 +1107,17 @@ export const timePoolFundLedger = pgTable(
 );
 
 /**
+ * One perk a Badge rung carries: a fixed kind the machinery reads, and the creator's own
+ * words for what the supporter gets.
+ */
+export interface BadgePerk {
+	/** A `BadgePerkKind` id — validated against `@anthers/shared/badge-art`'s list. */
+	kind: string;
+	/** What the supporter gets, in the creator's own words. */
+	label: string;
+}
+
+/**
  * The Badge ladder — the named Badges a subscription can purchase.
  *
  * **A Badge is what a user purchases when they subscribe** (Parker, 2026-10-02). A
@@ -1138,6 +1149,14 @@ export const badges = pgTable(
 		threshold: numeric("threshold").notNull(), // monthly $ — the Badge's price
 		label: text("label").notNull(),
 		description: text("description").default(""),
+		/**
+		 * The perks this rung carries, in the creator's order.
+		 *
+		 * ⭐ **A column rather than a table**: a handful read with the rung, never addressed
+		 * by their own id, and replaced whole on save. The kind is what the tax code orders
+		 * and the label is what the ladder's chips read.
+		 */
+		perks: jsonb("perks").$type<BadgePerk[]>().notNull().default([]),
 		/**
 		 * The creator's own art for this rung, as a storage key. Null means the rung shows
 		 * a default and is the ordinary state.
@@ -1349,43 +1368,6 @@ export const nounBlocklist = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [uniqueIndex("uq_noun_blocklist_kind_value").on(table.kind, table.value)],
-);
-
-/**
- * A perk one creator Badge carries, as its creator tagged it in the Badge Maker.
- *
- * 🚨 **Sales tax follows what a supporter receives, so the tag is the billing fact** —
- * `taxCodeForBadge` reads a rung's kinds through the most-taxable ordering in
- * `@anthers/shared/badge-art` (`mostTaxablePerkKind`). Access to gated Works is
- * deliberately NOT a row here: it is read from the gates themselves, which the creator
- * cannot misstate. A rung must name a kind or open a Work before the editor saves it, so
- * a missing row means the rung is unfinished rather than that it sells nothing; Support
- * is a kind a creator chooses, and only a row that predates that rule falls back to it.
- *
- * ⚠️ **`label` is the creator's own description of what the perk includes**, which is
- * what the public ladder's chips read; the kind column is what the machinery reads. There
- * is no second text column: Patreon's benefit is a title plus a category, and a
- * description beside a label duplicated the category's own explanation and was read by
- * nothing.
- */
-// node — the perks of a creator's own Badge rung are their pricing promises, node-owned
-// content like the rung itself.
-export const badgePerks = pgTable(
-	"badge_perks",
-	{
-		id: serial("id").primaryKey(),
-		badgeId: integer("badge_id")
-			.notNull()
-			.references(() => badges.id, { onDelete: "cascade" }),
-		/** A `BadgePerkKind` id — validated against `@anthers/shared/badge-art`'s list. */
-		kind: text("kind").notNull(),
-		/** What the supporter gets, in the creator's own words. */
-		label: text("label").notNull(),
-		sortOrder: integer("sort_order").notNull().default(0),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [index("idx_badge_perks_badge").on(table.badgeId, table.sortOrder)],
 );
 
 /**

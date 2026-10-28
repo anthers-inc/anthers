@@ -24,7 +24,6 @@
 import { db } from "@anthers/db/client";
 import {
 	accountCycles,
-	badgePerks,
 	badges,
 	billingAccounts,
 	invoices,
@@ -350,16 +349,17 @@ export async function creatorProductTaxCode(creatorId: number): Promise<string> 
  */
 export async function taxCodeForBadge(badgeId: number): Promise<string> {
 	const [badge] = await db
-		.select({ id: badges.id, creatorId: badges.creatorId, threshold: badges.threshold })
+		.select({
+			id: badges.id,
+			creatorId: badges.creatorId,
+			threshold: badges.threshold,
+			perks: badges.perks,
+		})
 		.from(badges)
 		.where(eq(badges.id, badgeId))
 		.limit(1);
 	if (!badge) return SUPPORT_TAX_CODE;
-	const perkRows = await db
-		.select({ kind: badgePerks.kind })
-		.from(badgePerks)
-		.where(eq(badgePerks.badgeId, badgeId));
-	const tagged = mostTaxablePerkKind(perkRows.map((r) => r.kind));
+	const tagged = mostTaxablePerkKind(badge.perks.map((perk) => perk.kind));
 	// No tagged perk: does this rung's dollar amount open any gate on the creator's own
 	// Works? A gate row with `allow: true` whose threshold the rung meets is a gate it
 	// opens — the comparison `resolveAccessSync` itself makes, read in TypeScript rather

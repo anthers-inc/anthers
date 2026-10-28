@@ -8,9 +8,9 @@
  * which no unit suite makes.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { badgePerks, works } from "@anthers/db/schema";
+import { badges, works } from "@anthers/db/schema";
 import { BADGE_PERK_KINDS, mostTaxablePerkKind } from "@anthers/shared/badge-art";
 import { STREAMED_SUBSCRIPTION_TAX_CODE, SUPPORT_TAX_CODE } from "@anthers/shared/tax-codes";
 import { eq } from "drizzle-orm";
@@ -56,12 +56,6 @@ describe("badge perks", () => {
 		badgeId = badge.badge?.id ?? 0;
 	}, DB_SETUP_TIMEOUT);
 
-	afterAll(async () => {
-		// Works this suite inserted (with their access rows) and the perk rows cascade
-		// with the account; the explicit deletes name what does NOT cascade.
-		await db.delete(badgePerks).where(eq(badgePerks.badgeId, badgeId));
-	});
-
 	it("carries the fixed category list with short examples for each", () => {
 		expect(BADGE_PERK_KINDS.length).toBe(7);
 		for (const k of BADGE_PERK_KINDS) {
@@ -100,8 +94,11 @@ describe("badge perks", () => {
 		]);
 		const body = (await second.json()) as { perks: { kind: string; label: string }[] };
 		expect(body.perks.map((p) => p.kind)).toEqual(["physical_good", "recognition"]);
-		const rows = await db.select().from(badgePerks).where(eq(badgePerks.badgeId, badgeId));
-		expect(rows.length).toBe(2); // the first put's row was replaced, not kept
+		const rows = await db
+			.select({ perks: badges.perks })
+			.from(badges)
+			.where(eq(badges.id, badgeId));
+		expect(rows[0].perks.length).toBe(2); // the first put's row was replaced, not kept
 	});
 
 	it("reads the stored list back in ladder order — the editor's own load", async () => {
@@ -127,8 +124,11 @@ describe("badge perks", () => {
 	it("replaces with an empty list, which is a rung carrying no perk", async () => {
 		const res = await putPerks([]);
 		expect(res.status).toBe(200);
-		const rows = await db.select().from(badgePerks).where(eq(badgePerks.badgeId, badgeId));
-		expect(rows.length).toBe(0);
+		const rows = await db
+			.select({ perks: badges.perks })
+			.from(badges)
+			.where(eq(badges.id, badgeId));
+		expect(rows[0].perks.length).toBe(0);
 	});
 
 	it("🚨 codes a perk-carrying rung at its most-taxable kind", async () => {

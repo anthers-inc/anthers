@@ -26,7 +26,6 @@ import {
 	accountCycles,
 	attentionEvents,
 	badgeArtProvenance,
-	badgePerks,
 	badges,
 	billingAccounts,
 	nounBlocklist,
@@ -287,8 +286,4 @@ export const nounSpendRelations = relations(nounSpend, ({ one }) => ({
 
 export const nounBlocklistRelations = relations(nounBlocklist, ({ one }) => ({
 	addedByAdmin: one(users, { fields: [nounBlocklist.addedBy], references: [users.id] }),
-}));
-
-export const badgePerksRelations = relations(badgePerks, ({ one }) => ({
-	badge: one(badges, { fields: [badgePerks.badgeId], references: [badges.id] }),
 }));

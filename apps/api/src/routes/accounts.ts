@@ -48,7 +48,6 @@
 
 import { db } from "@anthers/db/client";
 import {
-	badgePerks,
 	badges,
 	follows,
 	libraryItems,
@@ -1583,6 +1582,7 @@ const accountRoutes = new Hono()
 							threshold: badges.threshold,
 							label: badges.label,
 							description: badges.description,
+							perks: badges.perks,
 							hasArt: sql<boolean>`${badges.artKey} IS NOT NULL`.as("has_art"),
 							artShape: badges.artShape,
 							artColor: badges.artColor,
@@ -1590,24 +1590,6 @@ const accountRoutes = new Hono()
 						.from(badges)
 						.where(inArray(badges.creatorId, creatorIds))
 						.orderBy(badges.sortOrder, badges.threshold);
-		const perksByBadge = new Map<number, string[]>();
-		const ladderIds = ladderRows.map((r) => r.id);
-		if (ladderIds.length > 0) {
-			const perkRows = await db
-				.select({
-					badgeId: badgePerks.badgeId,
-					label: badgePerks.label,
-					sortOrder: badgePerks.sortOrder,
-				})
-				.from(badgePerks)
-				.where(inArray(badgePerks.badgeId, ladderIds))
-				.orderBy(badgePerks.sortOrder);
-			for (const perk of perkRows) {
-				const labels = perksByBadge.get(perk.badgeId) ?? [];
-				labels.push(perk.label);
-				perksByBadge.set(perk.badgeId, labels);
-			}
-		}
 		const laddersByCreator = new Map<number, LadderBadgeOption[]>();
 		for (const row of ladderRows) {
 			const rungs = laddersByCreator.get(row.creatorId) ?? [];
@@ -1618,7 +1600,7 @@ const accountRoutes = new Hono()
 				hasArt: Boolean(row.hasArt),
 				artShape: row.artShape,
 				artColor: row.artColor,
-				perks: perksByBadge.get(row.id) ?? [],
+				perks: row.perks.map((perk) => perk.label),
 				description: row.description,
 			});
 			laddersByCreator.set(row.creatorId, rungs);

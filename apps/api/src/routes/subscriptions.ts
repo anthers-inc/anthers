@@ -17,7 +17,6 @@ import {
 	accountCycles,
 	attentionEvents,
 	badgeArtProvenance,
-	badgePerks,
 	badges,
 	billingAccounts,
 	creatorCredits,
@@ -2284,7 +2283,7 @@ const subscriptionRoutes = new Hono()
 		const badgeId = Number(c.req.param("id"));
 
 		const [badge] = await db
-			.select({ id: badges.id })
+			.select({ id: badges.id, perks: badges.perks })
 			.from(badges)
 			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
 			.limit(1);
@@ -2292,18 +2291,7 @@ const subscriptionRoutes = new Hono()
 		// badge, because confirming somebody else's badge exists is itself a disclosure.
 		if (!badge) return c.json({ error: "Badge not found" }, 404);
 
-		const rows = await db
-			.select()
-			.from(badgePerks)
-			.where(eq(badgePerks.badgeId, badgeId))
-			.orderBy(badgePerks.sortOrder);
-		return c.json({
-			perks: rows.map((p) => ({
-				id: p.id,
-				kind: p.kind,
-				label: p.label,
-			})),
-		});
+		return c.json({ perks: badge.perks });
 	})
 
 	.put(
@@ -2328,25 +2316,19 @@ const subscriptionRoutes = new Hono()
 			const { perks } = c.req.valid("json");
 
 			const [badge] = await db
-				.select({ id: badges.id })
+				.select({ id: badges.id, perks: badges.perks })
 				.from(badges)
 				.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
 				.limit(1);
 			if (!badge) return c.json({ error: "Badge not found" }, 404);
 
-			await db.transaction(async (tx) => {
-				await tx.delete(badgePerks).where(eq(badgePerks.badgeId, badgeId));
-				if (perks.length > 0) {
-					await tx.insert(badgePerks).values(
-						perks.map((p, i) => ({
-							badgeId,
-							kind: p.kind,
-							label: p.label.trim(),
-							sortOrder: i,
-						})),
-					);
-				}
-			});
+			await db
+				.update(badges)
+				.set({
+					perks: perks.map((p) => ({ kind: p.kind, label: p.label.trim() })),
+					updatedAt: new Date(),
+				})
+				.where(eq(badges.id, badgeId));
 
 			// The kinds may have changed what this rung is taxed as — re-stamp now, the same
 			// best-effort follow `ensureCreatorProduct` gives its own restamp.
@@ -2362,18 +2344,7 @@ const subscriptionRoutes = new Hono()
 				}
 			}
 
-			const rows = await db
-				.select()
-				.from(badgePerks)
-				.where(eq(badgePerks.badgeId, badgeId))
-				.orderBy(badgePerks.sortOrder);
-			return c.json({
-				perks: rows.map((p) => ({
-					id: p.id,
-					kind: p.kind,
-					label: p.label,
-				})),
-			});
+			return c.json({ perks: row?.perks ?? [] });
 		},
 	)
 
