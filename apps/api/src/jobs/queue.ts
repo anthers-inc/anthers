@@ -109,6 +109,18 @@ export function toBossSendOptions(options?: SendOptions): Record<string, unknown
 export const FINISHED_JOB_RETENTION = { deleteAfterSeconds: 24 * 60 * 60 } as const;
 
 /**
+ * The queues pg-boss owns itself and still takes jobs through.
+ *
+ * 🚨 **`__pgboss__send-it` carries nearly half the job table and is not in `QUEUES`, because no
+ * Anthers code sends to it.** pg-boss uses it for delayed sends — a `startAfter` job is handed
+ * to this queue, which releases it onto its own queue at the appointed time — so its completed
+ * rows are as finished as any other queue's. Named here rather than left out because the
+ * retention loop only reaches what it is given: the first promote that set the policy left this
+ * queue on the seven-day default, holding 38,428 of the 77,420 rows the audit was about.
+ */
+const PG_BOSS_INTERNAL_QUEUES = ["__pgboss__send-it"] as const;
+
+/**
  * Create every queue this code uses, and move each one onto the retention above.
  *
  * Two calls rather than one because they answer different questions: `createQueue` makes a
@@ -119,7 +131,7 @@ export const FINISHED_JOB_RETENTION = { deleteAfterSeconds: 24 * 60 * 60 } as co
 export async function ensureQueues(
 	boss: Pick<PgBoss, "createQueue" | "updateQueue">,
 ): Promise<void> {
-	for (const name of Object.values(QUEUES)) {
+	for (const name of [...Object.values(QUEUES), ...PG_BOSS_INTERNAL_QUEUES]) {
 		await boss.createQueue(name, FINISHED_JOB_RETENTION);
 		await boss.updateQueue(name, FINISHED_JOB_RETENTION);
 	}

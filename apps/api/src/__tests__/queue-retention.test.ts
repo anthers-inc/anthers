@@ -13,6 +13,12 @@
 import { describe, expect, it } from "bun:test";
 import { ensureQueues, FINISHED_JOB_RETENTION, QUEUES } from "../jobs/queue";
 
+/**
+ * The queues the loop is expected to cover: every one this code uses, plus the internal one
+ * pg-boss sends delayed jobs through. The latter is why the count is not simply `QUEUES`.
+ */
+const COVERED = [...Object.values(QUEUES), "__pgboss__send-it"];
+
 type Call = { method: string; name: string; options?: object };
 
 function recorder() {
@@ -35,7 +41,7 @@ describe("queue retention", () => {
 		const { calls, boss } = recorder();
 		await ensureQueues(boss);
 
-		for (const name of Object.values(QUEUES)) {
+		for (const name of COVERED) {
 			expect(
 				calls.some((c) => c.method === "createQueue" && c.name === name),
 				`${name} is created`,
@@ -45,7 +51,7 @@ describe("queue retention", () => {
 				`${name} is moved onto the retention policy`,
 			).toBe(true);
 		}
-		expect(calls).toHaveLength(Object.values(QUEUES).length * 2);
+		expect(calls).toHaveLength(COVERED.length * 2);
 	});
 
 	it("passes the same retention to both calls", async () => {
