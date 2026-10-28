@@ -13,7 +13,6 @@ import {
 	projects,
 	readingPositions,
 	reviews,
-	storageUsage,
 	transcodingJobs,
 	webBuildFiles,
 	webBuilds,
@@ -229,10 +228,6 @@ export const userPreferencesRelations = relations(userPreferences, ({ one }) => 
 
 export const accountCyclesRelations = relations(accountCycles, ({ one }) => ({
 	user: one(users, { fields: [accountCycles.userId], references: [users.id] }),
-}));
-
-export const storageUsageRelations = relations(storageUsage, ({ one }) => ({
-	user: one(users, { fields: [storageUsage.userId], references: [users.id] }),
 }));
 
 export const attentionEventsRelations = relations(attentionEvents, ({ one }) => ({

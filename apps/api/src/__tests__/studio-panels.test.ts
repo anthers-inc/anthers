@@ -16,7 +16,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { studioPreferences, users } from "@anthers/db/schema";
+import { userPreferences, users } from "@anthers/db/schema";
 import { DEFAULT_STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { eq } from "drizzle-orm";
 import app from "../index";
@@ -53,7 +53,7 @@ afterAll(async () => {
 	// The preferences row cascades with the account, which `purgeAccountsCreatedHere` takes —
 	// but delete it explicitly rather than trusting the cascade, since "ask what does NOT
 	// cascade" is the rule and a wrong answer here would litter a shared database.
-	await db.delete(studioPreferences).where(eq(studioPreferences.userId, userId));
+	await db.delete(userPreferences).where(eq(userPreferences.userId, userId));
 });
 
 const read = () =>
@@ -94,9 +94,9 @@ describe("PATCH /me/studio-panels", () => {
 		expect((await (await read()).json()).panels).toEqual([]);
 
 		const [row] = await db
-			.select({ panels: studioPreferences.panels })
-			.from(studioPreferences)
-			.where(eq(studioPreferences.userId, userId));
+			.select({ panels: userPreferences.studioPanels })
+			.from(userPreferences)
+			.where(eq(userPreferences.userId, userId));
 		expect(row.panels).toEqual([]);
 	});
 

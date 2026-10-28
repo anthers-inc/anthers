@@ -2,7 +2,7 @@
 /**
  * The storage ladder's meter — snapshot what each account holds against its allowance.
  *
- * One row per (account, cycle) in `storage_usage`, recomputed daily and idempotent per
+ * One row per (account, cycle) in `account_cycles`, recomputed daily and idempotent per
  * cycle: the upsert is keyed on (userId, billingCycle), so a repeated run rewrites the
  * in-flight month's row in place and never duplicates. The cycle's last snapshot is the
  * figure billing reads — a running estimate that solidifies at settlement, the same
@@ -10,7 +10,7 @@
  * number).
  *
  * 🚨 **Bytes are counted from the database rows, never from walking the bucket's
- * `creators/{id}/` prefix.** The schema doc on `storage_usage` carries the full
+ * `creators/{id}/` prefix.** The schema doc on `account_cycles` carries the full
  * reasoning: the DB is the authority billing reads, a bucket walk would
  * sweep avatars and display chrome the ladder never prices, and a paginated
  * `ListObjectsV2` per account per night is an API bill paid to measure figures grouped
@@ -54,9 +54,9 @@
 
 import { db } from "@anthers/db/client";
 import {
+	accountCycles,
 	assets,
 	inlineImages,
-	storageUsage,
 	transcodingJobs,
 	webBuildFiles,
 	webBuilds,
@@ -374,19 +374,19 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		const total = STORAGE_USE_KINDS.reduce((sum, k) => sum + entry.purposes[k], 0);
 		if (total === 0) continue;
 		await db
-			.insert(storageUsage)
+			.insert(accountCycles)
 			.values({
 				userId,
 				billingCycle: cycle,
 				bytes: total,
 				purposes: { ...entry.purposes },
-				// The upsert carries this run's stamp: one row per (user, cycle, no) —
-				// sampled_at names when the current figure was taken, and the cycle's
-				// history is what billing needs rather than what a second table keeps.
+				// The upsert carries this run's stamp: one row per (user, cycle), and
+				// sampled_at names when the current figure was taken. A row the settlement
+				// side wrote keeps its money columns untouched.
 				sampledAt: new Date(),
 			})
 			.onConflictDoUpdate({
-				target: [storageUsage.userId, storageUsage.billingCycle],
+				target: [accountCycles.userId, accountCycles.billingCycle],
 				set: {
 					bytes: sql`excluded.bytes`,
 					purposes: sql`excluded.purposes`,
