@@ -13,7 +13,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
-import { transcodingJobs, users, workPages, workPanels, works } from "@anthers/db/schema";
+import { transcodingJobs, users, workPages, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq } from "drizzle-orm";
 import app from "../index";
@@ -214,15 +214,14 @@ describe("/works/:id/panels", () => {
 		const res = await call("PATCH", `/api/content/works/${workId}/panels`, body, cookie);
 		expect(res.status).toBe(200);
 
-		const stored = await db
-			.select()
-			.from(workPanels)
-			.leftJoin(workPages, eq(workPanels.pageId, workPages.id))
+		const pages = await db
+			.select({ pageNumber: workPages.pageNumber, panels: workPages.panels })
+			.from(workPages)
 			.where(eq(workPages.workId, workId))
-			.orderBy(workPages.pageNumber, workPanels.panelNumber);
-		const pageOne = stored.filter((r) => r.work_pages?.pageNumber === 1);
+			.orderBy(workPages.pageNumber);
+		const pageOne = pages.find((p) => p.pageNumber === 1)?.panels ?? [];
 		expect(pageOne.length).toBe(2);
-		expect(pageOne[0].work_panels.auto).toBe(false);
+		expect(pageOne[0].auto).toBe(false);
 	});
 
 	it("gives a reader no geometry while every page is off, however many proposals exist", async () => {

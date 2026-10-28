@@ -44,7 +44,6 @@ import {
 	webBuilds,
 	workCaptionTracks,
 	workPages,
-	workPanels,
 	workPreviewCaptionTracks,
 	workSaves,
 	workSectionAssets,
@@ -5131,10 +5130,11 @@ const contentRoutes = new Hono()
 	//
 	// ⭐ **Guided view is off until the creator turns it on for that page, and detection
 	// proposes to the creator and to nobody else.** A page's `guided_view` flag is the
-	// opt-in; `work_panels` rows are only proposals until a creator confirms them. So the
-	// Work's owner reads both, and every other caller gets geometry only for pages that are
-	// enabled *and* confirmed. Everything else comes back as a page with no panels, which
-	// the reader treats as a whole page — a comic publishes with no panel work at all.
+	// opt-in; its `panels` are only proposals until a creator confirms them. So the
+	// Work's owner reads both, and every other caller gets geometry only for pages that
+	// are enabled *and* confirmed. Everything else comes back as a page with no panels,
+	// which the reader treats as a whole page — a comic publishes with no panel work at
+	// all.
 	.get("/works/:id/panels", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
@@ -5154,66 +5154,24 @@ const contentRoutes = new Hono()
 				width: workPages.width,
 				height: workPages.height,
 				guidedView: workPages.guidedView,
-				panelNumber: workPanels.panelNumber,
-				x: workPanels.x,
-				y: workPanels.y,
-				panelWidth: workPanels.width,
-				panelHeight: workPanels.height,
-				auto: workPanels.auto,
+				panels: workPages.panels,
 			})
 			.from(workPages)
-			// The filter belongs in the JOIN, not the WHERE: a page whose every row is an
-			// unconfirmed proposal still has to come back, as a page with no panels. In the
-			// WHERE it would drop the page instead, and the reader would lose it entirely.
-			.leftJoin(
-				workPanels,
-				and(
-					eq(workPanels.pageId, workPages.id),
-					correcting ? undefined : and(eq(workPages.guidedView, true), eq(workPanels.auto, false)),
-				),
-			)
 			.where(eq(workPages.workId, work.id))
-			.orderBy(workPages.pageNumber, workPanels.panelNumber);
+			.orderBy(workPages.pageNumber);
 
-		const grouped = new Map<
-			number,
-			{
-				pageNumber: number;
-				width: number | null;
-				height: number | null;
-				guidedView: boolean;
-				panels: Array<{
-					panelNumber: number;
-					x: number;
-					y: number;
-					width: number;
-					height: number;
-					auto: boolean;
-				}>;
-			}
-		>();
-		for (const row of pages) {
-			const page = grouped.get(row.pageNumber) ?? {
-				pageNumber: row.pageNumber,
-				width: row.width,
-				height: row.height,
-				guidedView: row.guidedView,
-				panels: [],
-			};
-			if (row.panelNumber != null) {
-				page.panels.push({
-					panelNumber: row.panelNumber,
-					x: row.x ?? 0,
-					y: row.y ?? 0,
-					width: row.panelWidth ?? 1,
-					height: row.panelHeight ?? 1,
-					auto: row.auto ?? true,
-				});
-			}
-			grouped.set(row.pageNumber, page);
-		}
-
-		return c.json({ pages: Array.from(grouped.values()) });
+		return c.json({
+			pages: pages.map((page) => ({
+				...page,
+				// The owner sees every region, proposals included. Every other caller gets
+				// the confirmed regions of an enabled page, and nothing for the rest.
+				panels: correcting
+					? page.panels
+					: page.guidedView
+						? page.panels.filter((panel) => !panel.auto)
+						: [],
+			})),
+		});
 	})
 
 	/**
@@ -5221,8 +5179,8 @@ const contentRoutes = new Hono()
 	 *
 	 * 🚩 **`enabled` and `panels` are separate acts, and turning guided view on is the
 	 * opt-in.** `enabled: true` alone keeps the detector's proposals as proposals, which
-	 * the Studio shows for confirming; sending `panels` is what defines them (every row a
-	 * save writes is `auto: false`). `enabled: false` leaves the proposals in place so
+	 * the Studio shows for confirming; sending `panels` is what defines them (every region
+	 * a save writes is `auto: false`). `enabled: false` leaves the proposals in place so
 	 * turning the page back on does not lose them, and the reader ignores them either way.
 	 * A request carrying neither is refused rather than read as an accidental no-op.
 	 */
@@ -5273,8 +5231,6 @@ const contentRoutes = new Hono()
 			const [page] = await db
 				.select({
 					id: workPages.id,
-					width: workPages.width,
-					height: workPages.height,
 					guidedView: workPages.guidedView,
 				})
 				.from(workPages)
@@ -5282,34 +5238,27 @@ const contentRoutes = new Hono()
 				.limit(1);
 			if (!page) return c.json({ error: "Page not found" }, 404);
 
-			await db.transaction(async (tx) => {
-				if (enabled !== undefined) {
-					await tx.update(workPages).set({ guidedView: enabled }).where(eq(workPages.id, page.id));
-				}
-				if (panels !== undefined) {
-					await tx.delete(workPanels).where(eq(workPanels.pageId, page.id));
-					if (panels.length > 0) {
-						await tx.insert(workPanels).values(
-							panels
-								.sort((a, b) => {
-									const rowA = Math.round(a.y * 100);
-									const rowB = Math.round(b.y * 100);
-									if (rowA !== rowB) return rowA - rowB;
-									return Math.round(a.x * 100) - Math.round(b.x * 100);
-								})
-								.map((p, i) => ({
-									pageId: page.id,
-									panelNumber: i + 1,
-									x: p.x,
-									y: p.y,
-									width: p.width,
-									height: p.height,
-									auto: false,
-								})),
-						);
-					}
-				}
-			});
+			const update: Record<string, unknown> = {};
+			if (enabled !== undefined) update.guidedView = enabled;
+			if (panels !== undefined) {
+				update.panels = panels
+					.sort((a, b) => {
+						const rowA = Math.round(a.y * 100);
+						const rowB = Math.round(b.y * 100);
+						if (rowA !== rowB) return rowA - rowB;
+						return Math.round(a.x * 100) - Math.round(b.x * 100);
+					})
+					.map((p, i) => ({
+						panelNumber: i + 1,
+						x: p.x,
+						y: p.y,
+						width: p.width,
+						height: p.height,
+						auto: false,
+					}));
+			}
+
+			await db.update(workPages).set(update).where(eq(workPages.id, page.id));
 
 			return c.json({ ok: true, guidedView: enabled ?? page.guidedView });
 		},

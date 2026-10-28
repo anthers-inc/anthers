@@ -268,7 +268,7 @@ function collectRawKeysForWork(
 		if (job.outputFileUrl) keys.add(urlToKey(job.outputFileUrl));
 	}
 	// 🚨 **A paged Work's derived storage lives under one deterministic prefix** — its
-	// rendered pages (and panels beside them, and a reflow ebook's ladder sections), all
+	// rendered pages (and a reflow ebook's ladder sections), all
 	// `creators/{id}/ebook/{workId}/`, one per-run sub-prefix per render or ingest. The
 	// prefix IS the enumeration here rather than the rows: rows are deleted and rewritten
 	// mid-replace, and a prefix sweep takes everything every run wrote. Found during the

@@ -10,8 +10,8 @@
 
 import { db } from "@anthers/db/client";
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
-import { workPages, workPanels, works } from "@anthers/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { workPages, works } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 import { expect, resetReadingPosition, test } from "./fixtures";
 
 const COMIC = mediaFixtureWork("comic");
@@ -41,15 +41,18 @@ async function setGuidedView(enabled: boolean) {
 		.limit(1);
 	if (!work) throw new Error(`No fixture Work with slug ${COMIC.slug}`);
 	await db.update(workPages).set({ guidedView: enabled }).where(eq(workPages.workId, work.id));
-	await db
-		.update(workPanels)
-		.set({ auto: !enabled })
-		.where(
-			inArray(
-				workPanels.pageId,
-				db.select({ id: workPages.id }).from(workPages).where(eq(workPages.workId, work.id)),
-			),
-		);
+	// Flip the detector's proposals: `auto` is what a reader filters them by.
+	const pages = await db
+		.select({ id: workPages.id, panels: workPages.panels })
+		.from(workPages)
+		.where(eq(workPages.workId, work.id));
+	for (const page of pages) {
+		if (page.panels.length === 0) continue;
+		await db
+			.update(workPages)
+			.set({ panels: page.panels.map((panel) => ({ ...panel, auto: !enabled })) })
+			.where(eq(workPages.id, page.id));
+	}
 }
 
 test("panel mode enters and shows the first panel", async ({ page }) => {
