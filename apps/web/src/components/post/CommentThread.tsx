@@ -237,14 +237,12 @@ export default function CommentThread({ subject }: CommentThreadProps) {
 				</ThreadContext.Provider>
 			)}
 
-			{reporting !== null && (
-				<ReportDialog
-					subjectType="comment"
-					subjectId={reporting.id}
-					label={reporting.label}
-					onClose={() => setReporting(null)}
-				/>
-			)}
+			<ReportDialog
+				subject={
+					reporting !== null ? { type: "comment", id: reporting.id, label: reporting.label } : null
+				}
+				onClose={() => setReporting(null)}
+			/>
 		</div>
 	);
 }
