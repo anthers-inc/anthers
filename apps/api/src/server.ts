@@ -35,12 +35,19 @@
 import app from "./index.js";
 import { ensureQueueReady } from "./jobs/queue.js";
 import { assertPortFree } from "./lib/dev-port.js";
+import { startMemoryWatch } from "./services/memory.js";
 
 // Start the job queue. This used to be guarded by `import.meta.main` in index.ts so that
 // importing the app from a test never started a queue; now that index.ts is only ever
 // imported and this file is only ever an entry point, the guard is unnecessary — being
 // here IS the condition it was testing for.
 ensureQueueReady().catch((err) => console.error("Job queue failed to start:", err));
+
+// The API's memory headroom, sampled every five minutes against the container's own cgroup
+// ceiling — the reading `/health` publishes fresh on every poll. The 2026-10-19 burst left
+// this process at ~77% of its 1 GB and said nothing; the watch is what tells an operator
+// before the kernel's OOM restart does. It never restarts anything.
+startMemoryWatch();
 
 assertPortFree(Number(process.env.PORT ?? 8000));
 

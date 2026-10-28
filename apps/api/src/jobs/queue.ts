@@ -430,6 +430,10 @@ export const QUEUES = {
 	// behind its Past Incidents. See status-sample.ts and services/status-history.ts,
 	// the tables' only writer.
 	STATUS_SAMPLE: "status-sample",
+	// Read pgboss's own failed and retry counts per queue and page an operator while a burst
+	// is happening, rather than leaving the first trace on the status page the next morning.
+	// Records to the error tracker and never re-runs a job. See queue-health.ts.
+	QUEUE_FAILURES: "queue-failures",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -833,6 +837,12 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// outage is the droplet heartbeat's (a different failure domain with its own cron),
 	// so sampling at the heartbeat's cadence would buy nothing the page can show.
 	[QUEUES.STATUS_SAMPLE, "*/5 * * * *"],
+	// Every five minutes, the same cadence as the status sampler and for the same reason: a
+	// burst is measured in minutes (the 10-19 incident's eleven render-paged jobs exhausted
+	// their retries inside one upload), and a page that arrives the next morning is an
+	// obituary rather than an alarm. The read is one grouped query and the tracker's own
+	// dedupe bounds what repetition costs. See queue-health.ts.
+	[QUEUES.QUEUE_FAILURES, "*/5 * * * *"],
 	// Every fifteen minutes because the two incidents this watches for were minutes long:
 	// the 10-10 stall lasted about five, and a census that runs hourly can sit out a whole
 	// failure. The read is one cheap query pair, and the alarm's day budget already bounds

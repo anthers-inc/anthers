@@ -206,7 +206,7 @@ export const errorEvents = pgTable(
 		 * API error and a browser error describing the same defect stay separate rows.
 		 */
 		fingerprint: text("fingerprint").notNull().unique(),
-		/** Where the error was caught: `api` (server onError) or `browser` (client beacon). */
+		/** Where the error was caught: `api` (server onError), `browser` (client beacon), or `worker` (a job sweep reporting its own condition). */
 		source: text("source").notNull(),
 		/** The normalized message, capped. Normalization strips per-request variation. */
 		message: text("message").notNull(),
