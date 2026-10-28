@@ -83,17 +83,7 @@
 // fact as courage. People can count. What the section is actually for is the
 // thing every organization owes a user: here is who we are.
 //
-// 🚨 **The reference for the first-person passages is Parker's own about page,
-// and its source is on this machine at `~/Daisy/apps/web/src/pages/about.tsx`** —
-// read it rather than writing a founder's-note register from scratch, which is
-// what an earlier draft did and got wrong. What that page does: it **opens
-// declaratively** ("I'm a director, developer, writer, and composer from
-// Colorado"), never with a greeting; it builds **long multi-clause sentences**
-// rather than punchy short ones; its humor is **dry and rare** ("wore more hats
-// than I can count" is as far as an entire page goes); and it **lands a thought
-// on a stated principle** ("It matters how we do things, even more than what we
-// aim to do"), set in bold, not on a quip. Its **What I Do / How I Do It** pair
-// is where this page's two mission cards come from, down to the lock and key.
+// 🚨 **Do not edit the first-person passage of Parker's bio; that will always be hand-written.**
 //
 // The hero is the standing introduction, verbatim (the wiki's *How Anthers Talks About
 // Itself* § The Standing Introduction), split across the
@@ -391,11 +381,11 @@ export default function AboutPage() {
 								</p>
 								<p>
 									My earliest creative work was in music production, which turned into freelance
-									filmmaking, which turned into a decade in game development where I led teams,
-									shipped titles, and wore more hats than I can count.
+									filmmaking, which turned into a years-long tenure in game development where I led
+									teams, shipped titles, and wore more hats than I can count.
 								</p>
 								<p>
-									Every medium I have worked in and every creative I have worked alongside has
+									Every medium I've worked in and every creative person I've worked alongside has
 									deepened my sense of what it takes to do this work well, and of how much of it
 									turns on things that have nothing to do with the work itself: whether you can
 									afford to keep going, whether the people who would love what you make ever get to
@@ -420,16 +410,18 @@ export default function AboutPage() {
 									could be more impactful than that.
 								</p>
 								<p>
-									If there's one guiding principle that's underpinned everything in my adult life,
-									it's that
-									<strong>it matters how we do things, even more than what we aim to do.</strong>{" "}
+									If there's one guiding principle that's underpinned everything I've done in my
+									adult life, it's that{" "}
+									<strong>
+										it matters how we do things, often even more than what we aim to do.
+									</strong>{" "}
 									That is the philosophy I have built every collaboration of mine on, it is why I
 									can never be convinced that you have to be an asshole to be impactful, and
-									(selfishly), it is why Anthers is what it is: a place where I can be helpful.
+									(selfishly) it is why Anthers is what it is: a place where I can be helpful.
 								</p>
 								<p className="text-sm italic text-base-content/50">
-									"Nearly everything that matters is a challenge, and everything matters." — Rainer
-									Maria Rilke, Letters to a Young Poet
+									"Nearly everything that matters is a challenge, and everything matters."
+									<br />- Rainer Maria Rilke, Letters to a Young Poet
 								</p>
 							</div>
 						</div>
