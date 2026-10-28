@@ -19,15 +19,15 @@ import {
 	works,
 	workTranscodingJobs,
 } from "./content.js";
-import { crfLedger, purchases, stripeAccounts } from "./payments.js";
+import { charitableLedger, purchases, stripeConnectAccounts } from "./payments.js";
 import {
 	attentionEvents,
 	badgeArtProvenance,
 	badges,
-	billingAccounts,
 	nounBlocklist,
 	nounSpend,
 	poolDistributions,
+	stripeCustomers,
 	userBadges,
 	userCycles,
 	userPreferences,
@@ -58,11 +58,11 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	reviews: many(reviews),
 
 	// Payments
-	stripeAccount: one(stripeAccounts),
+	stripeAccount: one(stripeConnectAccounts),
 	purchases: many(purchases),
 
 	// Accounts & economics
-	billingAccount: one(billingAccounts),
+	billingAccount: one(stripeCustomers),
 	userPreferences: one(userPreferences),
 	userCycles: many(userCycles),
 	attentionEventsAsUser: many(attentionEvents, { relationName: "attentionUser" }),
@@ -200,24 +200,24 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
 
 // ─── Payments ────────────────────────────────────────────────────────────────
 
-export const stripeAccountsRelations = relations(stripeAccounts, ({ one }) => ({
-	user: one(users, { fields: [stripeAccounts.userId], references: [users.id] }),
+export const stripeConnectAccountsRelations = relations(stripeConnectAccounts, ({ one }) => ({
+	user: one(users, { fields: [stripeConnectAccounts.userId], references: [users.id] }),
 }));
 
 export const purchasesRelations = relations(purchases, ({ one, many }) => ({
 	buyer: one(users, { fields: [purchases.buyerId], references: [users.id] }),
 	work: one(works, { fields: [purchases.workId], references: [works.id] }),
-	crfLedgerEntries: many(crfLedger),
+	crfLedgerEntries: many(charitableLedger),
 }));
 
-export const crfLedgerRelations = relations(crfLedger, ({ one }) => ({
-	purchase: one(purchases, { fields: [crfLedger.purchaseId], references: [purchases.id] }),
+export const charitableLedgerRelations = relations(charitableLedger, ({ one }) => ({
+	purchase: one(purchases, { fields: [charitableLedger.purchaseId], references: [purchases.id] }),
 }));
 
 // ─── Subscriptions ───────────────────────────────────────────────────────────
 
-export const billingAccountsRelations = relations(billingAccounts, ({ one }) => ({
-	user: one(users, { fields: [billingAccounts.userId], references: [users.id] }),
+export const stripeCustomersRelations = relations(stripeCustomers, ({ one }) => ({
+	user: one(users, { fields: [stripeCustomers.userId], references: [users.id] }),
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({

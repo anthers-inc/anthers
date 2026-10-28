@@ -25,11 +25,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	billingAccounts,
+	charitableLedger,
 	creatorCredits,
-	crfLedger,
 	invoiceLines,
 	invoices,
+	stripeCustomers,
 	users,
 } from "@anthers/db/schema";
 import { timePoolFor } from "@anthers/shared/constants";
@@ -142,10 +142,10 @@ describe.skipIf(!REQUESTED)("support against test-mode Stripe, from signup to se
 			invoice_settings: { default_payment_method: card.id },
 		});
 		await db
-			.insert(billingAccounts)
+			.insert(stripeCustomers)
 			.values({ userId: supporter.userId, stripeCustomerId: customer.id })
 			.onConflictDoUpdate({
-				target: billingAccounts.userId,
+				target: stripeCustomers.userId,
 				set: { stripeCustomerId: customer.id },
 			});
 
@@ -167,8 +167,8 @@ describe.skipIf(!REQUESTED)("support against test-mode Stripe, from signup to se
 		expect(res.status).toBe(200);
 		const [acct] = await db
 			.select()
-			.from(billingAccounts)
-			.where(eq(billingAccounts.userId, supporter.userId));
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, supporter.userId));
 		const subId = acct.stripeSubscriptionId as string;
 		let sub = await stripe.subscriptions.retrieve(subId);
 		const firstId =
@@ -238,10 +238,13 @@ describe.skipIf(!REQUESTED)("support against test-mode Stripe, from signup to se
 			);
 
 			const [booked] = await db
-				.select({ amount: crfLedger.amount })
-				.from(crfLedger)
+				.select({ amount: charitableLedger.amount })
+				.from(charitableLedger)
 				.where(
-					like(crfLedger.description, `[settle u${supporter.userId} ${month.row.billingCycle}]%`),
+					like(
+						charitableLedger.description,
+						`[settle u${supporter.userId} ${month.row.billingCycle}]%`,
+					),
 				);
 			const expected = month.anthers
 				.minus(timePoolFor(month.anthers.toNumber()))
@@ -249,6 +252,8 @@ describe.skipIf(!REQUESTED)("support against test-mode Stripe, from signup to se
 			expect(new Decimal(booked?.amount ?? 0).toFixed(2)).toBe(expected.toFixed(2));
 		}
 
-		await db.delete(crfLedger).where(like(crfLedger.description, `[settle u${supporter.userId} %`));
+		await db
+			.delete(charitableLedger)
+			.where(like(charitableLedger.description, `[settle u${supporter.userId} %`));
 	}, 900_000);
 });

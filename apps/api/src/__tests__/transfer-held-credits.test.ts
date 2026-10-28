@@ -22,7 +22,7 @@ import {
 	creatorCredits,
 	creatorTransferCredits,
 	creatorTransfers,
-	stripeAccounts,
+	stripeConnectAccounts,
 	users,
 } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
@@ -271,7 +271,7 @@ describe("a creator who cannot be paid yet", () => {
 		expect(fake.calls).toHaveLength(0);
 
 		// A connected account that Stripe has not finished with.
-		await db.insert(stripeAccounts).values({
+		await db.insert(stripeConnectAccounts).values({
 			userId: bareId,
 			stripeAccountId: `acct_test_${bareId}_halfway`,
 			onboardingComplete: true,
@@ -284,9 +284,9 @@ describe("a creator who cannot be paid yet", () => {
 
 		// Ready — the money that accumulated is the money that moves, all of it.
 		await db
-			.update(stripeAccounts)
+			.update(stripeConnectAccounts)
 			.set({ payoutsEnabled: true })
-			.where(eq(stripeAccounts.userId, bareId));
+			.where(eq(stripeConnectAccounts.userId, bareId));
 		const third = await transferHeldCredits({ creatorId: bareId, now: AT_15_DAYS });
 		expect(third.creators).toBe(1);
 		const [row] = await transfersFor(bareId);

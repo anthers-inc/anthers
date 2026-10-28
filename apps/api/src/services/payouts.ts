@@ -41,7 +41,12 @@
  */
 
 import { db } from "@anthers/db/client";
-import { creatorCredits, moderationActions, stripeAccounts, users } from "@anthers/db/schema";
+import {
+	creatorCredits,
+	moderationActions,
+	stripeConnectAccounts,
+	users,
+} from "@anthers/db/schema";
 import { PAYOUT_REVIEW_WINDOW_DAYS } from "@anthers/shared/constants";
 import { MODERATION_NOTE_MAX, type ModerationActionType } from "@anthers/shared/moderation";
 import Decimal from "decimal.js";
@@ -73,11 +78,11 @@ export const NO_PAYOUT_ACCOUNT: PayoutStanding = { ready: false, connected: fals
 export async function payoutStanding(userId: number): Promise<PayoutStanding> {
 	const [row] = await db
 		.select({
-			payoutsEnabled: stripeAccounts.payoutsEnabled,
-			onboardingComplete: stripeAccounts.onboardingComplete,
+			payoutsEnabled: stripeConnectAccounts.payoutsEnabled,
+			onboardingComplete: stripeConnectAccounts.onboardingComplete,
 		})
-		.from(stripeAccounts)
-		.where(eq(stripeAccounts.userId, userId))
+		.from(stripeConnectAccounts)
+		.where(eq(stripeConnectAccounts.userId, userId))
 		.limit(1);
 
 	if (!row) return NO_PAYOUT_ACCOUNT;
@@ -92,10 +97,10 @@ export async function canBePaid(userId: number): Promise<boolean> {
 	return (await payoutStanding(userId)).ready;
 }
 
-// ── The stripe_accounts flag derivation ──────────────────────────────────────
+// ── The stripe_connect_accounts flag derivation ──────────────────────────────────────
 
 /**
- * The three `stripe_accounts` flags, derived from a Stripe Account object the way the
+ * The three `stripe_connect_accounts` flags, derived from a Stripe Account object the way the
  * `account.updated` webhook has always written them — one derivation, used by both
  * writers.
  *

@@ -30,7 +30,7 @@ import {
 	invoices,
 	outboundEmails,
 	purchases,
-	stripeAccounts,
+	stripeConnectAccounts,
 	userPreferences,
 	works,
 } from "@anthers/db/schema";
@@ -210,7 +210,7 @@ describe("Receipts: purchases", () => {
 	it("the creator's sale preference off silences the creator copy and only that", async () => {
 		const intentId = `pi_rcp_${run}_pref`;
 		await db
-			.insert(stripeAccounts)
+			.insert(stripeConnectAccounts)
 			.values({ userId: creatorId, stripeAccountId: `acct_rcp_${run}` })
 			.onConflictDoNothing();
 		await db

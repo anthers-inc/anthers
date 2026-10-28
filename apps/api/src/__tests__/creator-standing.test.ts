@@ -18,7 +18,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { posts, stripeAccounts, users } from "@anthers/db/schema";
+import { posts, stripeConnectAccounts, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { isCreator, isCreatorWhere } from "../services/creator-standing";
 import { createAccount, type FixtureAccount } from "./account-fixture";
@@ -65,7 +65,7 @@ beforeAll(async () => {
 	// Onboarding finished, but Stripe is holding the account: it cannot be sent money, so it
 	// is not a creator — the same reason `canBePaid` requires both flags.
 	heldPayouts = await createAccount(`cs_held_${run}`, { fields: { creatorMode: true } });
-	await db.insert(stripeAccounts).values({
+	await db.insert(stripeConnectAccounts).values({
 		userId: heldPayouts.userId,
 		stripeAccountId: `acct_test_${heldPayouts.userId}_${run}`,
 		onboardingComplete: true,

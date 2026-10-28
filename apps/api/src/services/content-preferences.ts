@@ -56,7 +56,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { billingAccounts, userPreferences, works } from "@anthers/db/schema";
+import { stripeCustomers, userPreferences, works } from "@anthers/db/schema";
 import {
 	type ContentNote,
 	DEFAULT_MATURITY_DISPLAY,
@@ -504,9 +504,9 @@ export async function enableAdultAccess(
 		.where(eq(userPreferences.userId, userId))
 		.limit(1);
 	const [billingRow] = await db
-		.select({ customerId: billingAccounts.stripeCustomerId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
+		.select({ customerId: stripeCustomers.stripeCustomerId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	const customerId = billingRow?.customerId ?? null;
 	// No verification anywhere and no customer to verify a card on: the honest answer for

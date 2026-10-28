@@ -55,7 +55,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { crfLedger, purchases } from "@anthers/db/schema";
+import { charitableLedger, purchases } from "@anthers/db/schema";
 import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
 import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
@@ -411,7 +411,7 @@ export async function settleRefundedPurchase(
 	// name any more.
 	const shortfall = refundShortfall(updated);
 	if (shortfall.greaterThan(0)) {
-		await db.insert(crfLedger).values({
+		await db.insert(charitableLedger).values({
 			amount: shortfall.negated().toFixed(2),
 			purchaseId: updated.id,
 			description: `Refund shortfall (${opts.initiator}-initiated) — sunk card processing on purchase #${updated.id}`,

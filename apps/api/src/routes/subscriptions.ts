@@ -17,7 +17,6 @@ import {
 	attentionEvents,
 	badgeArtProvenance,
 	badges,
-	billingAccounts,
 	creatorCredits,
 	creatorNettingApplications,
 	creatorNettings,
@@ -27,6 +26,7 @@ import {
 	posts,
 	reviews,
 	stickers,
+	stripeCustomers,
 	userBadges,
 	userCycles,
 	userPreferences,
@@ -206,9 +206,9 @@ async function stickerCycleFor(
 	// billing row. A user with no billing row has no period to key from and no holdings
 	// to draw against — null, as the callers already treat it.
 	const [acct] = await db
-		.select({ periodStart: billingAccounts.currentPeriodStart })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
+		.select({ periodStart: stripeCustomers.currentPeriodStart })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	if (!acct) return null;
 	const start = acct.periodStart ?? new Date();
@@ -438,8 +438,8 @@ function currentPeriod() {
 async function getAccount(userId: number) {
 	const [acct] = await db
 		.select()
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	return acct ?? null;
 }
@@ -450,7 +450,7 @@ async function ensureAccount(userId: number) {
 	if (existing) return existing;
 	const { start, end } = currentPeriod();
 	const [created] = await db
-		.insert(billingAccounts)
+		.insert(stripeCustomers)
 		.values({ userId, currentPeriodStart: start, currentPeriodEnd: end })
 		.returning();
 	return created;
@@ -867,9 +867,9 @@ const subscriptionRoutes = new Hono()
 						cancel_at_period_end: true,
 					});
 					await db
-						.update(billingAccounts)
+						.update(stripeCustomers)
 						.set({ canceledAt: new Date(), updatedAt: new Date() })
-						.where(eq(billingAccounts.id, acct.id));
+						.where(eq(stripeCustomers.id, acct.id));
 				}
 				return c.json({ pending: false, account: await getAccount(user.id) });
 			}
@@ -1063,9 +1063,9 @@ const subscriptionRoutes = new Hono()
 			});
 			if (!sub) return c.json({ error: "Payments are not configured." }, 503);
 			await db
-				.update(billingAccounts)
+				.update(stripeCustomers)
 				.set({ stripeSubscriptionId: sub.id, updatedAt: new Date() })
-				.where(eq(billingAccounts.id, acct.id));
+				.where(eq(stripeCustomers.id, acct.id));
 
 			// Every line on a new subscription started today, so every one of them is owed the
 			// days of the month before it. Recorded now rather than on activation: the charge
@@ -1091,7 +1091,7 @@ const subscriptionRoutes = new Hono()
 	/**
 	 * 🚨 **Closed with a 503, deliberately, until an origin can back the claim.**
 	 *
-	 * This set `billing_accounts.is_self_hosting` to whatever an authenticated caller asked
+	 * This set `stripe_customers.is_self_hosting` to whatever an authenticated caller asked
 	 * for, asserting nothing about whether they host anything — a creator-facing money input
 	 * whose precondition was *claimed rather than observed*. What makes closing it the
 	 * right move rather than a deferral is that the flag currently prices **nothing**: no
@@ -1149,9 +1149,9 @@ const subscriptionRoutes = new Hono()
 			await updateSubscription(acct.stripeSubscriptionId, { cancel_at_period_end: true });
 		}
 		await db
-			.update(billingAccounts)
+			.update(stripeCustomers)
 			.set({ canceledAt: new Date() })
-			.where(eq(billingAccounts.id, acct.id));
+			.where(eq(stripeCustomers.id, acct.id));
 		const updated = await getAccount(user.id);
 		return c.json({ account: updated });
 	})
@@ -1170,9 +1170,9 @@ const subscriptionRoutes = new Hono()
 			await updateSubscription(acct.stripeSubscriptionId, { cancel_at_period_end: false });
 		}
 		await db
-			.update(billingAccounts)
+			.update(stripeCustomers)
 			.set({ canceledAt: null })
-			.where(eq(billingAccounts.id, acct.id));
+			.where(eq(stripeCustomers.id, acct.id));
 		const updated = await getAccount(user.id);
 		return c.json({ account: updated });
 	})

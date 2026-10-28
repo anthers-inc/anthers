@@ -19,10 +19,10 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	badges,
-	billingAccounts,
-	monthSettlements,
 	poolDistributions,
+	settlementMonths,
 	stickers,
+	stripeCustomers,
 	userBadges,
 } from "@anthers/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -42,7 +42,7 @@ const SETTLED_CYCLE = "2032-05-01";
 
 // The month marker references nothing, so no account purge reaches it.
 afterAll(async () => {
-	await db.delete(monthSettlements).where(inArray(monthSettlements.billingCycle, [SETTLED_CYCLE]));
+	await db.delete(settlementMonths).where(inArray(settlementMonths.billingCycle, [SETTLED_CYCLE]));
 });
 
 async function signUp(username: string) {
@@ -97,7 +97,7 @@ describe("reverting a Sticker when Anthers removes what it sits on", () => {
 		giverId = await signUp(`vd_giver_${RUN}`);
 		creatorId = await signUp(`vd_creator_${RUN}`);
 		await db
-			.insert(billingAccounts)
+			.insert(stripeCustomers)
 			.values({ userId: giverId, isActive: true })
 			.onConflictDoNothing();
 		// The giver at $12: the Anthers rung held this void cycle — the Badge shape the
@@ -148,7 +148,7 @@ describe("reverting a Sticker when Anthers removes what it sits on", () => {
 	it("🚨 leaves a SETTLED month alone — a takedown does not reach into a month already credited", async () => {
 		const work = await insertWork({ creatorId, type: "text", title: `V3 ${RUN}` });
 		await giveOne(work.id, SETTLED_CYCLE);
-		await db.insert(monthSettlements).values({ billingCycle: SETTLED_CYCLE });
+		await db.insert(settlementMonths).values({ billingCycle: SETTLED_CYCLE });
 
 		expect(await voidStickersOnSubject("work", work.id)).toEqual({ voided: 0, dollars: 0 });
 		const [row] = await db

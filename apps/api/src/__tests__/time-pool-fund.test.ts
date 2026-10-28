@@ -17,7 +17,7 @@
  */
 import { afterAll, afterEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { badges, timePoolFundLedger, userBadges, userCycles } from "@anthers/db/schema";
+import { badges, poolFundLedger, userBadges, userCycles } from "@anthers/db/schema";
 import type { CycleKey } from "@anthers/shared/billing-cycle";
 import { currentCycleKey, cycleEnd, cycleStart, nextCycleKey } from "@anthers/shared/billing-cycle";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
@@ -48,7 +48,7 @@ afterEach(async () => {
 	// fixtures behind without leaking them into the next test's denominators. A test
 	// names its cycle, purges its users (the books cascade), and clears its rows.
 	for (const cycle of madeCycles) {
-		await db.delete(timePoolFundLedger).where(eq(timePoolFundLedger.billingCycle, cycle));
+		await db.delete(poolFundLedger).where(eq(poolFundLedger.billingCycle, cycle));
 		await db.delete(userCycles).where(eq(userCycles.billingCycle, cycle));
 	}
 	madeCycles.length = 0;
@@ -125,11 +125,7 @@ async function bookCycle(cycle: CycleKey, foundation: number): Promise<void> {
 
 const rowFor = async (cycle: CycleKey) =>
 	(
-		await db
-			.select()
-			.from(timePoolFundLedger)
-			.where(eq(timePoolFundLedger.billingCycle, cycle))
-			.limit(1)
+		await db.select().from(poolFundLedger).where(eq(poolFundLedger.billingCycle, cycle)).limit(1)
 	)[0];
 
 const expected = (revenue: string | number, active: number) =>

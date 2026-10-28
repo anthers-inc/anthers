@@ -272,7 +272,7 @@ export const QUEUES = {
 	// plus the retention sweep beside it. See services/space-backup.ts.
 	SPACE_BACKUP: "space-backup",
 	// Write the signed receipt a settled purchase or refund owes the reader's own space.
-	// The `access_receipts` row is the worklist — a webhook inserts it and this drains it —
+	// The `purchase_receipts` row is the worklist — a webhook inserts it and this drains it —
 	// so a PDS that is briefly down costs a minute of latency, not the record. See
 	// services/access-receipts.ts and jobs/access-receipts.ts.
 	ACCESS_RECEIPTS: "access-receipts",

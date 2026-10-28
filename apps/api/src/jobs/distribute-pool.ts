@@ -48,9 +48,9 @@ import { db } from "@anthers/db";
 import {
 	attentionEvents,
 	badges,
-	billingAccounts,
 	poolDistributions,
 	stickers,
+	stripeCustomers,
 	userBadges,
 } from "@anthers/db/schema";
 import { currentCycleKey, cycleEnd, cycleKeyFor, cycleStart } from "@anthers/shared/billing-cycle";
@@ -535,9 +535,9 @@ export async function distributePool(data: DistributePoolData) {
 	const accts = data.accountId
 		? await db
 				.select()
-				.from(billingAccounts)
-				.where(and(eq(billingAccounts.id, data.accountId), eq(billingAccounts.isActive, true)))
-		: await db.select().from(billingAccounts).where(eq(billingAccounts.isActive, true));
+				.from(stripeCustomers)
+				.where(and(eq(stripeCustomers.id, data.accountId), eq(stripeCustomers.isActive, true)))
+		: await db.select().from(stripeCustomers).where(eq(stripeCustomers.isActive, true));
 
 	// The Fund's slice for the cycle, read once per run — what every zero-Anthers
 	// account's `computeMonth` draws. The same read that restates the current cycle's

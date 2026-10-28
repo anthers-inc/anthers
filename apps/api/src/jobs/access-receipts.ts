@@ -2,7 +2,7 @@
 /**
  * Drain the receipts Anthers owes readers' spaces.
  *
- * ⭐ **The `access_receipts` row is the worklist, and the sweep is the guarantee.** A payment
+ * ⭐ **The `purchase_receipts` row is the worklist, and the sweep is the guarantee.** A payment
  * webhook inserts a `pending` row when it stamps a purchase; this job writes the signed
  * record into the reader's space and marks the row. That is the same split the space outbox
  * uses: the database says what is owed, the sweep is what moves it, and a missed enqueue
@@ -19,7 +19,7 @@
  * write waits on.
  */
 import { db } from "@anthers/db";
-import { accessReceipts } from "@anthers/db/schema";
+import { purchaseReceipts } from "@anthers/db/schema";
 import { and, asc, eq, inArray, lt } from "drizzle-orm";
 import { type ReceiptKind, writeAccessReceipt } from "../services/access-receipts.js";
 import type { ResolveSpaceSession } from "../services/space-writer.js";
@@ -49,19 +49,19 @@ export async function accessReceiptsJob(
 ): Promise<void> {
 	const limit = data.limit ?? 50;
 	const scope = data.purchaseIds?.length
-		? inArray(accessReceipts.purchaseId, data.purchaseIds)
+		? inArray(purchaseReceipts.purchaseId, data.purchaseIds)
 		: undefined;
 	const owed = await db
 		.select()
-		.from(accessReceipts)
+		.from(purchaseReceipts)
 		.where(
 			and(
-				eq(accessReceipts.state, "pending"),
-				lt(accessReceipts.attempts, RECEIPT_MAX_ATTEMPTS),
+				eq(purchaseReceipts.state, "pending"),
+				lt(purchaseReceipts.attempts, RECEIPT_MAX_ATTEMPTS),
 				scope,
 			),
 		)
-		.orderBy(asc(accessReceipts.createdAt))
+		.orderBy(asc(purchaseReceipts.createdAt))
 		.limit(limit);
 	if (owed.length === 0) return;
 
@@ -79,7 +79,7 @@ export async function accessReceiptsJob(
 			});
 			if (result.outcome === "written" || result.outcome === "already_written") {
 				await db
-					.update(accessReceipts)
+					.update(purchaseReceipts)
 					.set({
 						state: "written",
 						attempts,
@@ -88,41 +88,41 @@ export async function accessReceiptsJob(
 						writtenAt: now,
 						updatedAt: now,
 					})
-					.where(eq(accessReceipts.id, row.id));
+					.where(eq(purchaseReceipts.id, row.id));
 				written++;
 				continue;
 			}
 			if (result.reason === "no_reader" || result.reason === "not_hosted") {
 				await db
-					.update(accessReceipts)
+					.update(purchaseReceipts)
 					.set({ state: "skipped", attempts, lastError: result.reason, updatedAt: now })
-					.where(eq(accessReceipts.id, row.id));
+					.where(eq(purchaseReceipts.id, row.id));
 				skipped++;
 				continue;
 			}
 			// `not_settled` and `not_refunded` are races with the row that owes the receipt;
 			// they retry like any other unfinished write.
 			await db
-				.update(accessReceipts)
+				.update(purchaseReceipts)
 				.set({
 					attempts,
 					lastError: result.reason,
 					state: attempts >= RECEIPT_MAX_ATTEMPTS ? "failed" : "pending",
 					updatedAt: now,
 				})
-				.where(eq(accessReceipts.id, row.id));
+				.where(eq(purchaseReceipts.id, row.id));
 			if (attempts >= RECEIPT_MAX_ATTEMPTS) failed++;
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			await db
-				.update(accessReceipts)
+				.update(purchaseReceipts)
 				.set({
 					attempts,
 					lastError: message,
 					state: attempts >= RECEIPT_MAX_ATTEMPTS ? "failed" : "pending",
 					updatedAt: now,
 				})
-				.where(eq(accessReceipts.id, row.id));
+				.where(eq(purchaseReceipts.id, row.id));
 			if (attempts >= RECEIPT_MAX_ATTEMPTS) failed++;
 			console.error(`[access-receipts] purchase ${row.purchaseId} ${row.kind}: ${message}`);
 		}

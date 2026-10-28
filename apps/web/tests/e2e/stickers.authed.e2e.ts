@@ -30,11 +30,11 @@ import {
 import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
 import {
 	badges,
-	billingAccounts,
 	comments,
 	posts,
 	stickers,
-	stripeAccounts,
+	stripeConnectAccounts,
+	stripeCustomers,
 	userBadges,
 	users,
 	works,
@@ -150,12 +150,12 @@ test.beforeAll(async () => {
 	// refuses ("never build this key by hand").
 	cycle = currentCycleKey();
 	const [existing] = await db
-		.select({ id: billingAccounts.id })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, walkerId))
+		.select({ id: stripeCustomers.id })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, walkerId))
 		.limit(1);
 	if (!existing) {
-		await db.insert(billingAccounts).values({
+		await db.insert(stripeCustomers).values({
 			userId: walkerId,
 			currentPeriodStart: new Date(`${cycle}T00:00:00Z`),
 			currentPeriodEnd: new Date(`${cycle}T00:00:00Z`),
@@ -199,7 +199,7 @@ test.beforeAll(async () => {
 		expect(creator, `${label} exists`).toBeTruthy();
 		await db.update(users).set({ creatorMode: true }).where(eq(users.id, creator!.id));
 		await db
-			.insert(stripeAccounts)
+			.insert(stripeConnectAccounts)
 			.values({
 				userId: creator!.id,
 				// Marked as a fixture, so it can never collide with a real `acct_` id.
@@ -209,7 +209,7 @@ test.beforeAll(async () => {
 				chargesEnabled: true,
 			})
 			.onConflictDoUpdate({
-				target: stripeAccounts.userId,
+				target: stripeConnectAccounts.userId,
 				set: { onboardingComplete: true, payoutsEnabled: true, chargesEnabled: true },
 			});
 	}
@@ -238,7 +238,7 @@ test.afterAll(async () => {
 				.where(and(eq(userBadges.userId, walkerId), eq(userBadges.billingCycle, cycle)));
 		}
 		if (billingRowMine) {
-			await db.delete(billingAccounts).where(eq(billingAccounts.userId, walkerId));
+			await db.delete(stripeCustomers).where(eq(stripeCustomers.userId, walkerId));
 		}
 	}
 });

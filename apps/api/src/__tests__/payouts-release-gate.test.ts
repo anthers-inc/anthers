@@ -28,7 +28,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { posts, projects, stripeAccounts, users, works } from "@anthers/db/schema";
+import { posts, projects, stripeConnectAccounts, users, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
@@ -91,7 +91,7 @@ describe("publishing requires a fully set-up creator", () => {
 		// document, a restricted country. The state that proves the gate reads BOTH flags:
 		// an implementation checking only `onboardingComplete` passes every other test here
 		// and lets this creator through.
-		await db.insert(stripeAccounts).values({
+		await db.insert(stripeConnectAccounts).values({
 			userId: held.userId,
 			stripeAccountId: `acct_test_held_${id}`,
 			onboardingComplete: true,
@@ -203,9 +203,9 @@ describe("publishing requires a fully set-up creator", () => {
 		expect((await patch(workId, { visibility: "released" }, ready.cookie)).status).toBe(200);
 
 		await db
-			.update(stripeAccounts)
+			.update(stripeConnectAccounts)
 			.set({ payoutsEnabled: false })
-			.where(eq(stripeAccounts.userId, ready.userId));
+			.where(eq(stripeConnectAccounts.userId, ready.userId));
 		try {
 			const res = await patch(workId, { title: `Edited ${id}` }, ready.cookie);
 			expect(res.status).toBe(200);
@@ -278,9 +278,9 @@ describe("publishing requires a fully set-up creator", () => {
 			});
 			const { post } = await res.json();
 			await db
-				.update(stripeAccounts)
+				.update(stripeConnectAccounts)
 				.set({ payoutsEnabled: false })
-				.where(eq(stripeAccounts.userId, ready.userId));
+				.where(eq(stripeConnectAccounts.userId, ready.userId));
 			try {
 				const edit = await send("PATCH", `/api/content/posts/${post.slug}`, ready.cookie, {
 					title: `Lapsed post ${id}`,
@@ -301,9 +301,9 @@ describe("publishing requires a fully set-up creator", () => {
 			expect(res.status).toBe(201);
 			const { post } = await res.json();
 			await db
-				.update(stripeAccounts)
+				.update(stripeConnectAccounts)
 				.set({ payoutsEnabled: false })
-				.where(eq(stripeAccounts.userId, ready.userId));
+				.where(eq(stripeConnectAccounts.userId, ready.userId));
 			try {
 				// Due by moving the date rather than the clock, so nothing else in the shared
 				// database that is not already due is published.

@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accessReceipts, purchases, works } from "@anthers/db/schema";
+import { purchaseReceipts, purchases, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { accessReceiptsJob } from "../jobs/access-receipts";
 import {
@@ -253,8 +253,8 @@ describe("the access receipt", () => {
 
 		const [row] = await db
 			.select()
-			.from(accessReceipts)
-			.where(eq(accessReceipts.purchaseId, f.purchaseId))
+			.from(purchaseReceipts)
+			.where(eq(purchaseReceipts.purchaseId, f.purchaseId))
 			.limit(1);
 		expect(row?.state).toBe("written");
 		expect(row?.writtenAt).not.toBeNull();
@@ -282,8 +282,8 @@ describe("the access receipt", () => {
 		);
 		const [row] = await db
 			.select()
-			.from(accessReceipts)
-			.where(eq(accessReceipts.purchaseId, f.purchaseId))
+			.from(purchaseReceipts)
+			.where(eq(purchaseReceipts.purchaseId, f.purchaseId))
 			.limit(1);
 		expect(row?.state).toBe("skipped");
 		expect(row?.lastError).toBe("not_hosted");

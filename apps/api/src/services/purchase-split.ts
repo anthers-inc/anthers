@@ -39,7 +39,7 @@ import {
 	creatorCredits,
 	creatorTransferCredits,
 	purchases,
-	stripeAccounts,
+	stripeConnectAccounts,
 } from "@anthers/db/schema";
 import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import Decimal from "decimal.js";
@@ -78,8 +78,8 @@ async function transferCreatorShare(
 
 	const [account] = await db
 		.select()
-		.from(stripeAccounts)
-		.where(eq(stripeAccounts.userId, creatorId))
+		.from(stripeConnectAccounts)
+		.where(eq(stripeConnectAccounts.userId, creatorId))
 		.limit(1);
 	// The checkout's precondition verified this account minutes ago; a state change in
 	// the window is exactly the kind of failure the retry job exists to outlast, so it is

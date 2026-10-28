@@ -30,9 +30,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	accessReceipts,
+	charitableLedger,
 	creatorNettings,
-	crfLedger,
+	purchaseReceipts,
 	purchases,
 	users,
 	workAssets,
@@ -294,7 +294,7 @@ function refundAs(cookie: string, purchaseId: number, reason?: string) {
 }
 
 async function ledgerFor(purchaseId: number) {
-	return db.select().from(crfLedger).where(eq(crfLedger.purchaseId, purchaseId));
+	return db.select().from(charitableLedger).where(eq(charitableLedger.purchaseId, purchaseId));
 }
 
 async function reload(id: number) {
@@ -322,16 +322,16 @@ beforeEach(async () => {
 	fake.reset();
 	// The cap is counted across a buyer's whole history, so a test that leaves
 	// refunded rows behind silently changes the arithmetic of every later one.
-	// The ledger rows that name those purchases go first — `crf_ledger.purchase_id`
+	// The ledger rows that name those purchases go first — `charitable_ledger.purchase_id`
 	// is `set null`, so dropping the purchase orphans the entry rather than taking it.
 	const prior = await db
 		.select({ id: purchases.id })
 		.from(purchases)
 		.where(or(eq(purchases.buyerId, buyerId), eq(purchases.buyerId, otherId)));
 	if (prior.length > 0) {
-		await db.delete(crfLedger).where(
+		await db.delete(charitableLedger).where(
 			inArray(
-				crfLedger.purchaseId,
+				charitableLedger.purchaseId,
 				prior.map((p) => p.id),
 			),
 		);
@@ -703,8 +703,8 @@ describe("The purchase row after a refund", () => {
 		// after the money moved — not a second record.
 		const owed = await db
 			.select()
-			.from(accessReceipts)
-			.where(eq(accessReceipts.purchaseId, purchase.id));
+			.from(purchaseReceipts)
+			.where(eq(purchaseReceipts.purchaseId, purchase.id));
 		expect(owed).toHaveLength(1);
 		expect(owed[0]).toMatchObject({
 			kind: "refund",

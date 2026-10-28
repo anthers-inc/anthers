@@ -12,7 +12,7 @@
 
 import { db } from "@anthers/db/client";
 import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
-import { stripeAccounts, users } from "@anthers/db/schema";
+import { stripeConnectAccounts, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import {
 	API_URL,
@@ -78,7 +78,7 @@ test.beforeAll(async () => {
 	expect(creator, "the media fixture account exists").toBeTruthy();
 	await db.update(users).set({ creatorMode: true }).where(eq(users.id, creator!.id));
 	await db
-		.insert(stripeAccounts)
+		.insert(stripeConnectAccounts)
 		.values({
 			userId: creator!.id,
 			stripeAccountId: `acct_test_${creator!.id}_${crypto.randomUUID().slice(0, 8)}`,
@@ -87,7 +87,7 @@ test.beforeAll(async () => {
 			chargesEnabled: true,
 		})
 		.onConflictDoUpdate({
-			target: stripeAccounts.userId,
+			target: stripeConnectAccounts.userId,
 			set: { onboardingComplete: true, payoutsEnabled: true, chargesEnabled: true },
 		});
 });

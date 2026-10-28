@@ -18,10 +18,10 @@
  * when the raise happens: a coupon on the subscription is consumed by whichever invoice comes
  * next, and for a mid-month raise that is the immediate invoice — so it would discount the
  * very charge it exists to compensate for. The reduction has to wait somewhere Stripe cannot
- * spend it, which is `support_reductions`.
+ * spend it, which is `billing_reductions`.
  */
 import { db } from "@anthers/db/client";
-import { billingAccounts, supportReductions, users } from "@anthers/db/schema";
+import { billingReductions, stripeCustomers, users } from "@anthers/db/schema";
 import { cycleKeyFor, nextCycleKey } from "@anthers/shared/billing-cycle";
 import { STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
 import { reductionFor } from "@anthers/shared/fees";
@@ -93,7 +93,7 @@ export async function recordReductions(
 		.map((row) => ({ ...row, amount: row.amount.toFixed(2) }));
 
 	if (rows.length === 0) return;
-	await db.insert(supportReductions).values(rows);
+	await db.insert(billingReductions).values(rows);
 }
 
 /** An unapplied reduction, as the apply pass reads it. */
@@ -133,9 +133,9 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 	if (!customerId) return 0;
 
 	const [acct] = await db
-		.select({ userId: billingAccounts.userId })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.stripeCustomerId, customerId))
+		.select({ userId: stripeCustomers.userId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.stripeCustomerId, customerId))
 		.limit(1);
 	if (!acct) return 0;
 
@@ -156,13 +156,13 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 		const now = new Date();
 		const cycle = cycleInvoicePaysFor(invoice);
 		await db
-			.update(supportReductions)
+			.update(billingReductions)
 			.set({ appliedAt: now, appliedInvoiceId: invoice.id, updatedAt: now })
 			.where(
 				and(
-					eq(supportReductions.userId, acct.userId),
-					eq(supportReductions.billingCycle, cycle),
-					isNull(supportReductions.appliedAt),
+					eq(billingReductions.userId, acct.userId),
+					eq(billingReductions.billingCycle, cycle),
+					isNull(billingReductions.appliedAt),
 				),
 			);
 		return 0;
@@ -175,15 +175,15 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 
 	const owed = await db
 		.select()
-		.from(supportReductions)
+		.from(billingReductions)
 		.where(
 			and(
-				eq(supportReductions.userId, acct.userId),
-				eq(supportReductions.billingCycle, cycle),
-				isNull(supportReductions.appliedAt),
+				eq(billingReductions.userId, acct.userId),
+				eq(billingReductions.billingCycle, cycle),
+				isNull(billingReductions.appliedAt),
 			),
 		)
-		.orderBy(asc(supportReductions.id));
+		.orderBy(asc(billingReductions.id));
 	if (owed.length === 0) return 0;
 
 	const sub = await retrieveSubscription(subscriptionId);
@@ -242,13 +242,13 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 		// against this cycle — the carry rows it created are keyed to the next one. Without
 		// it a retry would mint a second coupon and discount the invoice twice.
 		await db
-			.update(supportReductions)
+			.update(billingReductions)
 			.set({ appliedAt: now, appliedInvoiceId: invoice.id, updatedAt: now })
-			.where(eq(supportReductions.id, row.id));
+			.where(eq(billingReductions.id, row.id));
 
 		const unspent = new Decimal(row.amount).minus(spent);
 		if (unspent.greaterThan(0)) {
-			await db.insert(supportReductions).values({
+			await db.insert(billingReductions).values({
 				userId: acct.userId,
 				billingCycle: nextCycleKey(cycle),
 				destination: row.destination,

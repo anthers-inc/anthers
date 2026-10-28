@@ -2,7 +2,7 @@
 /**
  * Reissue a signed access receipt into the reader's own space.
  *
- * The automatic path is the payment webhook's `access_receipts` row and the sweep that drains
+ * The automatic path is the payment webhook's `purchase_receipts` row and the sweep that drains
  * it; this is the operator's door for the two cases the sweep cannot fix on its own: a PDS
  * that lost the record after the row said `written`, and a reader whose identity has since
  * become one Anthers can write for.

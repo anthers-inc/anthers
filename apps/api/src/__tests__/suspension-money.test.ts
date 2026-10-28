@@ -20,13 +20,13 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	billingAccounts,
+	billingReductions,
+	charitableLedger,
 	creatorCredits,
-	crfLedger,
 	invoiceLines,
 	invoices,
-	monthSettlements,
-	supportReductions,
+	settlementMonths,
+	stripeCustomers,
 	users,
 } from "@anthers/db/schema";
 import { PAYOUT_REVIEW_WINDOW_DAYS, timePoolFor } from "@anthers/shared/constants";
@@ -63,9 +63,11 @@ afterAll(async () => {
 	// month marker references nothing. Both go before the accounts do — and the paused
 	// invoices ride the account purge, which deletes invoices by `user_id`.
 	for (const userId of madeUserIds) {
-		await db.delete(crfLedger).where(like(crfLedger.description, `[settle u${userId} %`));
+		await db
+			.delete(charitableLedger)
+			.where(like(charitableLedger.description, `[settle u${userId} %`));
 	}
-	await db.delete(monthSettlements).where(eq(monthSettlements.billingCycle, MONTH));
+	await db.delete(settlementMonths).where(eq(settlementMonths.billingCycle, MONTH));
 });
 
 async function makeUser(kind: string): Promise<number> {
@@ -142,7 +144,7 @@ describe("a suspended supporter's renewal", () => {
 		// configured in the suite, so `paymentOf`/`processingFeeFor` return their zero
 		// fallbacks — which is fine, because what is under test is the row's status and
 		// cycle, not the fee.
-		await db.insert(billingAccounts).values({
+		await db.insert(stripeCustomers).values({
 			userId: supporterId,
 			stripeCustomerId: `cus_${tag}_paused`,
 			isActive: true,
@@ -187,12 +189,12 @@ describe("a suspended supporter's renewal", () => {
 
 	it("reductions owed against a paused renewal are settled without minting a coupon", async () => {
 		const supporterId = await makeUser("supporter");
-		await db.insert(billingAccounts).values({
+		await db.insert(stripeCustomers).values({
 			userId: supporterId,
 			stripeCustomerId: `cus_${tag}_reduction`,
 			isActive: true,
 		});
-		await db.insert(supportReductions).values({
+		await db.insert(billingReductions).values({
 			userId: supporterId,
 			billingCycle: MONTH,
 			destination: "anthers",
@@ -219,9 +221,9 @@ describe("a suspended supporter's renewal", () => {
 		expect(applied).toBe(0);
 		const owed = await db
 			.select()
-			.from(supportReductions)
+			.from(billingReductions)
 			.where(
-				and(eq(supportReductions.userId, supporterId), eq(supportReductions.billingCycle, MONTH)),
+				and(eq(billingReductions.userId, supporterId), eq(billingReductions.billingCycle, MONTH)),
 			);
 		expect(owed[0]?.appliedAt).not.toBeNull();
 		expect(owed[0]?.appliedInvoiceId).toBe(invoice.id);
