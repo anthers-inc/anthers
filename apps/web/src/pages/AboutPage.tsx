@@ -94,7 +94,9 @@
 // frame takes its height from that row (`md:h-full`), which is what keeps the
 // image and the text beside it the same height at every width; a fixed aspect
 // ratio puts a short landscape photo next to a tall block of prose and leaves the
-// gap underneath. The Rilke line closes the section rather than dividing it: it
+// gap underneath. The portrait is `apps/web/public/images/parker.jpg`, downscaled
+// to 1600px on the long edge: at 3:2 on a phone, and cropped toward square by the
+// frame on desktop. The Rilke line closes the section rather than dividing it: it
 // is the last thing in the passage, and it reads as the bio's landing, so moving
 // it up to make a hard split would reorder Parker's own ending.
 //
@@ -352,37 +354,26 @@ export default function AboutPage() {
 				<Reveal>
 					<Eyebrow>Who we are</Eyebrow>
 					<H2>Our Team</H2>
-					<Lede>
-						Anthers is a growing organization, and we have lots of amazing friends and family and
-						other folks helping us get off the ground. But for now, the Anthers team is just Parker
-						(that's me, writing this).
-					</Lede>
+					{/* ⚠️ Held to the bio's 48rem so the lede and the passage under it share one
+					    measure; the shared <Lede> defaults to a wider column. */}
+					<div className="mx-auto max-w-3xl">
+						<Lede>
+							Anthers is a growing organization, and we have lots of amazing friends and family and
+							other folks helping us get off the ground. But for now, the Anthers team is just
+							Parker (that's me, writing this).
+						</Lede>
+					</div>
 				</Reveal>
 
 				<Reveal delay={120} className="mx-auto mt-12 block max-w-3xl text-left">
 					<div className="grid gap-8 md:grid-cols-12 md:items-stretch md:gap-10">
 						<figure className="md:col-span-5">
-							{/* 📷 PORTRAIT SLOT — drop the file at `apps/web/public/images/parker.jpg`
-							    (served from the site root as `/images/parker.jpg`, since build.ts copies
-							    public/ into dist/) and replace the placeholder div below with:
-
-							      <img
-							          src="/images/parker.jpg"
-							          alt="Parker H. Davis"
-							          className="h-full w-full object-cover"
-							      />
-
-							    A landscape crop, roughly 3:2, ~1600px on the long edge, framed so
-							    his face survives a little off-center cropping. On desktop the frame
-							    is as tall as the two paragraphs beside it, which trims roughly a
-							    fifth off the sides of a 3:2 source; on a phone it runs full-width
-							    above them at 3:2 and nothing is cropped. The placeholder keeps the
-							    layout honest until the file lands — a missing <img> would 404 in the
-							    screenshot harness and read as a bug. */}
-							<div className="flex aspect-3/2 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 md:aspect-auto md:h-full">
-								<span style={serif} className="text-6xl font-light text-primary/70">
-									P
-								</span>
+							<div className="aspect-3/2 overflow-hidden rounded-2xl bg-primary/10 md:aspect-auto md:h-full">
+								<img
+									src="/images/parker.jpg"
+									alt="Parker H. Davis"
+									className="h-full w-full object-cover"
+								/>
 							</div>
 						</figure>
 						<div className="space-y-5 leading-relaxed text-base-content/70 md:col-span-7">
