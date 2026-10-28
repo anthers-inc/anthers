@@ -45,14 +45,13 @@ import {
 	users,
 	workCaptionTracks,
 	workPages,
-	workPanels,
 	workSections,
 	workSourceFiles,
 	works,
 } from "@anthers/db/schema";
 import { type ProcessingKind, processingFor } from "@anthers/shared/content";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { strToU8, type Zippable, zipSync } from "fflate";
 import { ingestEbook } from "../jobs/ingest-ebook.js";
 import { processAudio } from "../jobs/process-audio.js";
@@ -611,16 +610,15 @@ async function alreadyPlayable(workId: number, reflow: boolean): Promise<boolean
 		return await storage.exists(`${prefix}/audio.m3u8`);
 	}
 	// A comic/ebook whose rasterize ran before the panel detector shipped has pages but
-	// no `work_panels` rows, which is exactly the case the reader spec exercises — and
+	// no panel regions, which is exactly the case the reader spec exercises — and
 	// reads as a broken Work rather than as an old fixture. Re-rasterize it.
 	if (job.mediaType === "ebook") {
-		const [panelRow] = await db
-			.select({ id: workPanels.id })
-			.from(workPanels)
-			.innerJoin(workPages, eq(workPanels.pageId, workPages.id))
+		const [firstPage] = await db
+			.select({ panels: workPages.panels })
+			.from(workPages)
 			.where(eq(workPages.workId, workId))
 			.limit(1);
-		return panelRow != null;
+		return (firstPage?.panels.length ?? 0) > 0;
 	}
 	return true;
 }
@@ -705,15 +703,19 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 				// regions. Leaving it off would make the fixture read as a Work nobody has
 				// looked at, which is a different state.
 				await db.update(workPages).set({ guidedView: true }).where(eq(workPages.workId, workId));
-				await db
-					.update(workPanels)
-					.set({ auto: false, updatedAt: new Date() })
-					.where(
-						inArray(
-							workPanels.pageId,
-							db.select({ id: workPages.id }).from(workPages).where(eq(workPages.workId, workId)),
-						),
-					);
+				// Confirm the detector's proposals: a creator save clears `auto` on every
+				// region, which is what makes them geometry a reader may use.
+				const pages = await db
+					.select({ id: workPages.id, panels: workPages.panels })
+					.from(workPages)
+					.where(eq(workPages.workId, workId));
+				for (const page of pages) {
+					if (page.panels.length === 0) continue;
+					await db
+						.update(workPages)
+						.set({ panels: page.panels.map((panel) => ({ ...panel, auto: false })) })
+						.where(eq(workPages.id, page.id));
+				}
 			}
 		} else await processAudio({ jobId: job.id });
 

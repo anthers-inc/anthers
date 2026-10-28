@@ -781,6 +781,21 @@ export const webBuildFiles = pgTable(
 );
 
 /**
+ * One panel region on a page. Coordinates are normalized 0..1 fractions of the page's
+ * width and height, so a re-rasterize at a different DPI does not move every region.
+ * `panelNumber` is 1-based within the page, top-left-first in reading order.
+ */
+export interface WorkPanelRegion {
+	panelNumber: number;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	/** True until a creator touch clears it: a detected proposal, not a decision. */
+	auto: boolean;
+}
+
+/**
  * The pages of a **comic** or an **ebook** Work — a comic, a graphic novel, a prose book — one row per
  * rendered page, in order.
  *
@@ -796,10 +811,8 @@ export const webBuildFiles = pgTable(
  * It also makes the client *simpler* rather than heavier — the user shows images, so no
  * PDF parser ships to the browser at all.
  *
- * **Ordering and identity are deliberate**, not incidental: panel-to-panel navigation is
- * deferred rather than dropped, and when it returns, panel regions hang off a page. A page
- * therefore needs a stable id and a stable number now, so that later work is an addition
- * rather than a migration.
+ * **Ordering and identity are deliberate**, not incidental: panel regions hang off a page
+ * by number, so panel-level work is an addition to the page rather than a migration of it.
  */
 // node — an ebook Work's rendered pages. Node media, cascades with the Work.
 export const workPages = pgTable(
@@ -818,68 +831,28 @@ export const workPages = pgTable(
 		/**
 		 * Whether this page is read panel by panel — **off until the creator turns it on**.
 		 *
-		 * Detection writes proposal rows onto every page, so the presence of `work_panels`
-		 * cannot be the signal: a proposal is a guess, not an opt-in. This flag is the
-		 * creator's deliberate choice for this page, and it is what decides whether the
-		 * reader may use geometry here at all. A page that is off needs no confirmation and
-		 * publishes as a whole page; turning it on is what makes defining its panels a
-		 * requirement.
+		 * Detection writes proposals onto every page, so the presence of `panels` cannot
+		 * be the signal: a proposal is a guess, not an opt-in. This flag is the creator's
+		 * deliberate choice for this page, and it is what decides whether the reader may
+		 * use geometry here at all. A page that is off needs no confirmation and publishes
+		 * as a whole page; turning it on is what makes defining its panels a requirement.
 		 */
 		guidedView: boolean("guided_view").notNull().default(false),
+		/**
+		 * The page's panel regions, in reading order — a proposal until the creator
+		 * confirms them.
+		 *
+		 * ⭐ **A column rather than a table**: the set is a handful of rectangles read
+		 * whole with the page, addressed by nothing else, carrying no storage key, and
+		 * replaced in one write. `auto` is true on a detected region and cleared by the
+		 * creator's own save; `guidedView` above decides whether a reader may use any.
+		 */
+		panels: jsonb("panels").$type<WorkPanelRegion[]>().notNull().default([]),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
 		uniqueIndex("uq_work_pages").on(table.workId, table.pageNumber),
 		index("idx_work_pages_work").on(table.workId, table.pageNumber),
-	],
-);
-
-/**
- * The panels of a comic page — the reading order a user moves through, panel by panel.
- *
- * Detection is hybrid: the rasterizer proposes, the Studio corrects. A row detected
- * automatically carries `auto: true` until a creator touch clears it, so the user can
- * mark a guessed panel boundary rather than silently trust it. Coordinates are normalized
- * 0..1 fractions of the page width/height so a re-rasterize at a different DPI does not
- * silently move every region. Reading direction is LTR; no Work field for reading direction
- * exists today, and adding one is a future task's job rather than something this table
- * pretends to handle.
- *
- * ⭐ **A row here is a proposal, not a decision.** The decision belongs to
- * `work_pages.guided_view`: a page reads whole until its creator turns guided view on, and
- * only then do its rows mean anything to a reader. Detection proposing on every page is
- * why that flag exists rather than treating "has rows" as the opt-in.
- */
-// node — a comic page's panels. Node media, cascades with the page and its Work.
-export const workPanels = pgTable(
-	"work_panels",
-	{
-		id: serial("id").primaryKey(),
-		pageId: integer("page_id")
-			.notNull()
-			.references(() => workPages.id, { onDelete: "cascade" }),
-		/** 1-based within the page, top-left-first after sorting; the user walks this. */
-		panelNumber: integer("panel_number").notNull(),
-		/**
-		 * Normalized 0..1 page coordinates — fractions of width/height, not pixels, so
-		 * a re-rasterize at a different DPI does not silently move every region.
-		 */
-		x: real("x").notNull(),
-		y: real("y").notNull(),
-		width: real("width").notNull(),
-		height: real("height").notNull(),
-		/**
-		 * True until a creator touch clears it. The user visually distinguishes a
-		 * guessed panel from a confirmed one; the Studio uses it to badge pages that
-		 * still need a creator pass.
-		 */
-		auto: boolean("auto").notNull().default(true),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [
-		uniqueIndex("uq_work_panels").on(table.pageId, table.panelNumber),
-		index("idx_work_panels_page").on(table.pageId, table.panelNumber),
 	],
 );
 

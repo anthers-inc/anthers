@@ -30,7 +30,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { transcodingJobs, workPages, workPanels, works } from "@anthers/db/schema";
+import { transcodingJobs, workPages, works } from "@anthers/db/schema";
 import { and, desc, eq, gt } from "drizzle-orm";
 import sharp from "sharp";
 import { isEpubSource } from "../lib/paged-ingest.js";
@@ -435,17 +435,19 @@ async function runPagedRender(jobId: number) {
 				const inkColor = await sampleInkColor(bytes);
 				const panels = await detectPanels(bytes, { inkColor });
 				if (panels.length > 0 && page) {
-					await db.insert(workPanels).values(
-						panels.map((p, panelNumber) => ({
-							pageId: page.id,
-							panelNumber: panelNumber + 1,
-							x: p.x,
-							y: p.y,
-							width: p.width,
-							height: p.height,
-							auto: true,
-						})),
-					);
+					await db
+						.update(workPages)
+						.set({
+							panels: panels.map((p, panelNumber) => ({
+								panelNumber: panelNumber + 1,
+								x: p.x,
+								y: p.y,
+								width: p.width,
+								height: p.height,
+								auto: true,
+							})),
+						})
+						.where(eq(workPages.id, page.id));
 				}
 			} catch (detectionError) {
 				const message =

@@ -20,7 +20,6 @@ import {
 	users,
 	webBuilds,
 	workPages,
-	workPanels,
 	workSourceFiles,
 	works,
 } from "@anthers/db/schema";
@@ -87,17 +86,6 @@ describe("remove an unpublished Work's media", () => {
 
 	afterAll(async () => {
 		if (createdWorkIds.length > 0) {
-			await db.delete(workPanels).where(
-				inArray(
-					workPanels.pageId,
-					(
-						await db
-							.select({ id: workPages.id })
-							.from(workPages)
-							.where(inArray(workPages.workId, createdWorkIds))
-					).map((r) => r.id),
-				),
-			);
 			await db.delete(workPages).where(inArray(workPages.workId, createdWorkIds));
 			await db.delete(workSourceFiles).where(inArray(workSourceFiles.workId, createdWorkIds));
 			await db.delete(transcodingJobs).where(inArray(transcodingJobs.workId, createdWorkIds));
@@ -185,15 +173,12 @@ describe("remove an unpublished Work's media", () => {
 					height: 1200,
 				})
 				.returning({ id: workPages.id });
-			await db.insert(workPanels).values({
-				pageId: page.id,
-				panelNumber: 1,
-				x: 0,
-				y: 0,
-				width: 100,
-				height: 100,
-				auto: true,
-			});
+			await db
+				.update(workPages)
+				.set({
+					panels: [{ panelNumber: 1, x: 0, y: 0, width: 100, height: 100, auto: true }],
+				})
+				.where(eq(workPages.id, page.id));
 
 			captureStorage();
 			try {

@@ -15,7 +15,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { mediaScans, transcodingJobs, workPages, workPanels, works } from "@anthers/db/schema";
+import { mediaScans, transcodingJobs, workPages, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
@@ -239,26 +239,15 @@ describe("a comic's pages do not wait on panel work", () => {
 		// Exactly what `render-paged` writes: proposals marked `auto`, with the page's
 		// opt-in left off.
 		expect(page?.guidedView).toBe(false);
-		await db.insert(workPanels).values([
-			{
-				pageId: page?.id as number,
-				panelNumber: 1,
-				x: 0,
-				y: 0,
-				width: 1,
-				height: 0.5,
-				auto: true,
-			},
-			{
-				pageId: page?.id as number,
-				panelNumber: 2,
-				x: 0,
-				y: 0.5,
-				width: 1,
-				height: 0.5,
-				auto: true,
-			},
-		]);
+		await db
+			.update(workPages)
+			.set({
+				panels: [
+					{ panelNumber: 1, x: 0, y: 0, width: 1, height: 0.5, auto: true },
+					{ panelNumber: 2, x: 0, y: 0.5, width: 1, height: 0.5, auto: true },
+				],
+			})
+			.where(eq(workPages.id, page?.id as number));
 
 		const res = await release(workId);
 		expect(res.status).toBe(200);
