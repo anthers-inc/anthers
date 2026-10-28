@@ -44,7 +44,6 @@ import {
 	webBuilds,
 	workCaptionTracks,
 	workPages,
-	workPreviewCaptionTracks,
 	workSaves,
 	workSectionAssets,
 	workSections,
@@ -2018,13 +2017,13 @@ const localDelivery: DeliveryCtx = {
  * The owner shape keeps the counts (the Studio's editor shows them); the read shape is
  * what a `<track>` element wants and nothing more (the serializers).
  */
-function serializeCaptionRow(row: CaptionTrackRow, ctx: DeliveryCtx) {
+function serializeCaptionRow(row: CaptionTrackRow, workId: number, ctx: DeliveryCtx) {
 	return {
 		id: row.id,
 		language: row.language,
 		label: row.label || row.language,
 		kind: row.kind,
-		url: buildCaptionUrl(ctx, row.workId, row.id),
+		url: buildCaptionUrl(ctx, workId, row.id),
 		byteSize: row.byteSize,
 		cueCount: row.cueCount,
 	};
@@ -2053,13 +2052,18 @@ function buildPreviewCaptionUrl(
 }
 
 /** One trailer caption track — the same shape the Work's own editor reads. */
-function serializePreviewCaptionRow(row: PreviewCaptionTrackRow, workId: number, ctx: DeliveryCtx) {
+function serializePreviewCaptionRow(
+	row: PreviewCaptionTrackRow,
+	workId: number,
+	previewId: number,
+	ctx: DeliveryCtx,
+) {
 	return {
 		id: row.id,
 		language: row.language,
 		label: row.label || row.language,
 		kind: row.kind,
-		url: buildPreviewCaptionUrl(ctx, workId, row.previewId, row.id),
+		url: buildPreviewCaptionUrl(ctx, workId, previewId, row.id),
 		byteSize: row.byteSize,
 		cueCount: row.cueCount,
 	};
@@ -2078,7 +2082,7 @@ function serializePreviewMedia(
 		alt: preview.alt,
 		url: buildPreviewUrl(ctx, workId, preview.id),
 		...(preview.kind === "video"
-			? { captions: captions.map((t) => serializePreviewCaptionRow(t, workId, ctx)) }
+			? { captions: captions.map((t) => serializePreviewCaptionRow(t, workId, preview.id, ctx)) }
 			: {}),
 	};
 }
@@ -2877,6 +2881,7 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 		if (!jobByWork.has(j.workId)) jobByWork.set(j.workId, j);
 	}
 	for (const t of captionRows) {
+		if (t.workId == null) continue;
 		const list = captionsByWork.get(t.workId) ?? [];
 		list.push(t);
 		captionsByWork.set(t.workId, list);
@@ -8774,7 +8779,10 @@ const contentRoutes = new Hono()
 				label: data.label || null,
 				kind: data.kind,
 			});
-			return c.json({ caption: serializeCaptionRow(row, deliveryCtx() ?? localDelivery) }, 201);
+			return c.json(
+				{ caption: serializeCaptionRow(row, item.id, deliveryCtx() ?? localDelivery) },
+				201,
+			);
 		} catch (err) {
 			if (err instanceof VttRefusal) {
 				return c.json({ error: err.message, code: "captions_refused" }, 400);
@@ -8798,7 +8806,9 @@ const contentRoutes = new Hono()
 		await deleteCaptionTrack(track, item.creatorId);
 		const remaining = await listCaptionTracks(item.id);
 		return c.json({
-			captions: remaining.map((t) => serializeCaptionRow(t, deliveryCtx() ?? localDelivery)),
+			captions: remaining.map((t) =>
+				serializeCaptionRow(t, item.id, deliveryCtx() ?? localDelivery),
+			),
 		});
 	})
 
@@ -8955,7 +8965,14 @@ const contentRoutes = new Hono()
 					kind: data.kind,
 				});
 				return c.json(
-					{ caption: serializePreviewCaptionRow(row, work.id, deliveryCtx() ?? localDelivery) },
+					{
+						caption: serializePreviewCaptionRow(
+							row,
+							work.id,
+							preview.id,
+							deliveryCtx() ?? localDelivery,
+						),
+					},
 					201,
 				);
 			} catch (err) {
@@ -8983,19 +9000,14 @@ const contentRoutes = new Hono()
 		}
 		const [track] = await db
 			.select()
-			.from(workPreviewCaptionTracks)
-			.where(
-				and(
-					eq(workPreviewCaptionTracks.previewId, previewId),
-					eq(workPreviewCaptionTracks.id, trackId),
-				),
-			);
+			.from(workCaptionTracks)
+			.where(and(eq(workCaptionTracks.previewId, previewId), eq(workCaptionTracks.id, trackId)));
 		if (!track) return c.json({ error: "Not found" }, 404);
 		await deletePreviewCaptionTrack(track, work.creatorId ?? -1);
 		const remaining = await listPreviewCaptionTracks(previewId);
 		const ctx = deliveryCtx() ?? localDelivery;
 		return c.json({
-			captions: remaining.map((t) => serializePreviewCaptionRow(t, work.id, ctx)),
+			captions: remaining.map((t) => serializePreviewCaptionRow(t, work.id, previewId, ctx)),
 		});
 	})
 
@@ -9042,13 +9054,8 @@ const contentRoutes = new Hono()
 		}
 		const [track] = await db
 			.select()
-			.from(workPreviewCaptionTracks)
-			.where(
-				and(
-					eq(workPreviewCaptionTracks.previewId, previewId),
-					eq(workPreviewCaptionTracks.id, trackId),
-				),
-			);
+			.from(workCaptionTracks)
+			.where(and(eq(workCaptionTracks.previewId, previewId), eq(workCaptionTracks.id, trackId)));
 		if (!track) return c.json({ error: "Not found" }, 404);
 		const bytes = await storage.read(track.storageKey);
 		if (!bytes) return c.json({ error: "Not found" }, 404);

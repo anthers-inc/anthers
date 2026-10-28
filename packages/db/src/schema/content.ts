@@ -13,6 +13,7 @@ import { sql } from "drizzle-orm";
 import {
 	bigint,
 	boolean,
+	check,
 	index,
 	integer,
 	jsonb,
@@ -1005,19 +1006,28 @@ export const workMediaVersions = pgTable(
  * book's own navigation carried (EPUB 3 nav or EPUB 2 NCX), so the table of contents is
  * the book's, not ours to invent.
  */
-// node — caption tracks a creator authored for their own video Work: WebVTT files stored
-// private and served gated with the payload like the video itself (the captions task,
-// 2026-10-12). The org serves them but does not own them, and the rows cascade with the
-// Work. Subtitles in other languages ride the same rows through `kind` — the
-// localization design is deliberately still open — and nothing here is published to the
-// network record.
+// node — caption tracks a creator authored for their own video Work or its trailer:
+// WebVTT files stored private and served gated with the payload like the video itself
+// (2026-10-12). The org serves them but does not own them, and the rows cascade with
+// whichever parent they hang off. Subtitles in other languages ride the same rows through
+// `kind` — the localization design is deliberately still open — and nothing here is
+// published to the network record.
+//
+// ⭐ **One table for both parents.** A track is the same authored file whether it
+// captions the Work or one of its trailers; the only difference is which parent it hangs
+// off, and exactly one of `workId` and `previewId` is set. The two partial unique indexes
+// keep one language meaning one track per parent, which is what the trailer's separate
+// table used to spell with a second index.
 export const workCaptionTracks = pgTable(
 	"work_caption_tracks",
 	{
 		id: serial("id").primaryKey(),
-		workId: integer("work_id")
-			.notNull()
-			.references(() => works.id, { onDelete: "cascade" }),
+		/** The Work captioned, for a track on the Work itself. Null on a trailer's track. */
+		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
+		/** The trailer captioned. Null on a track on the Work itself. */
+		previewId: integer("preview_id").references(() => workPreviewMedia.id, {
+			onDelete: "cascade",
+		}),
 		/** BCP-47 language tag as the creator entered it — the `<track srcLang>` and the player menu's key. */
 		language: text("language").notNull(),
 		/** The human label a player menu shows. Empty falls back to the language. */
@@ -1033,8 +1043,19 @@ export const workCaptionTracks = pgTable(
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		uniqueIndex("uq_work_captions_work_language_kind").on(table.workId, table.language, table.kind),
+		// Exactly one parent. A track belongs to the Work or to one of its trailers.
+		check(
+			"work_caption_tracks_one_parent",
+			sql`(${table.workId} IS NOT NULL) <> (${table.previewId} IS NOT NULL)`,
+		),
+		uniqueIndex("uq_work_captions_work_language_kind")
+			.on(table.workId, table.language, table.kind)
+			.where(sql`${table.workId} IS NOT NULL`),
+		uniqueIndex("uq_work_captions_preview_language_kind")
+			.on(table.previewId, table.language, table.kind)
+			.where(sql`${table.previewId} IS NOT NULL`),
 		index("idx_work_captions_work").on(table.workId),
+		index("idx_work_captions_preview").on(table.previewId),
 	],
 );
 
@@ -1068,48 +1089,6 @@ export const workPreviewMedia = pgTable(
 	(table) => [
 		uniqueIndex("uq_work_preview_media").on(table.workId, table.position),
 		index("idx_work_preview_media_work").on(table.workId, table.position),
-	],
-);
-
-/**
- * A trailer's caption tracks — its own table rather than a nullable preview column on
- * `work_caption_tracks`, because that table's unique `(work_id, language, kind)` index is
- * what keeps one language meaning one track on the Work itself, while each preview needs
- * the same language to be free to carry its own.
- *
- * `services/captions.ts` remains the one writer of both caption tables, and the parse, size
- * cap and replace-by-language rule are the Work's own, unchanged: a trailer is a video and
- * its captions are the same authored WebVTT.
- */
-// node — caption tracks a creator authored for their own trailer. Cascades with the preview.
-export const workPreviewCaptionTracks = pgTable(
-	"work_preview_caption_tracks",
-	{
-		id: serial("id").primaryKey(),
-		previewId: integer("preview_id")
-			.notNull()
-			.references(() => workPreviewMedia.id, { onDelete: "cascade" }),
-		/** BCP-47 language tag as the creator entered it — the `<track srcLang>` and menu key. */
-		language: text("language").notNull(),
-		/** The human label a player menu shows. Empty falls back to the language. */
-		label: text("label").default(""),
-		/** captions | subtitles — the `<track kind>` this row renders as. */
-		kind: text("kind").notNull().default("captions"),
-		/** Private storage key of the .vtt. Never served directly — the caption route is. */
-		storageKey: text("storage_key").notNull(),
-		byteSize: integer("byte_size").notNull(),
-		/** What the upload validation counted — the one honest size signal a creator sees. */
-		cueCount: integer("cue_count").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [
-		uniqueIndex("uq_work_preview_captions_preview_language_kind").on(
-			table.previewId,
-			table.language,
-			table.kind,
-		),
-		index("idx_work_preview_captions_preview").on(table.previewId),
 	],
 );
 

@@ -28,7 +28,7 @@
 
 import { db } from "@anthers/db/client";
 import type { works } from "@anthers/db/schema";
-import { workCaptionTracks, workPreviewCaptionTracks, workPreviewMedia } from "@anthers/db/schema";
+import { workCaptionTracks, workPreviewMedia } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { storage } from "./storage/index.js";
 import { isKeyUnder, urlToKey } from "./storage/keys.js";
@@ -243,7 +243,7 @@ async function validateVttUpload(input: {
 	};
 }
 
-export type PreviewCaptionTrackRow = typeof workPreviewCaptionTracks.$inferSelect;
+export type PreviewCaptionTrackRow = typeof workCaptionTracks.$inferSelect;
 
 /**
  * Attach one caption track to a trailer, replacing any existing track of the same language
@@ -270,18 +270,18 @@ export async function attachPreviewCaptionTrack(input: {
 
 	const [previous] = await db
 		.select()
-		.from(workPreviewCaptionTracks)
+		.from(workCaptionTracks)
 		.where(
 			and(
-				eq(workPreviewCaptionTracks.previewId, preview.id),
-				eq(workPreviewCaptionTracks.language, validated.language),
-				eq(workPreviewCaptionTracks.kind, validated.kind),
+				eq(workCaptionTracks.previewId, preview.id),
+				eq(workCaptionTracks.language, validated.language),
+				eq(workCaptionTracks.kind, validated.kind),
 			),
 		);
 	if (previous) await deletePreviewCaptionTrack(previous, work.creatorId);
 
 	const [row] = await db
-		.insert(workPreviewCaptionTracks)
+		.insert(workCaptionTracks)
 		.values({
 			previewId: preview.id,
 			language: validated.language,
@@ -324,9 +324,9 @@ export async function listPreviewCaptionTracks(
 ): Promise<PreviewCaptionTrackRow[]> {
 	return db
 		.select()
-		.from(workPreviewCaptionTracks)
-		.where(eq(workPreviewCaptionTracks.previewId, previewId))
-		.orderBy(workPreviewCaptionTracks.createdAt, workPreviewCaptionTracks.id);
+		.from(workCaptionTracks)
+		.where(eq(workCaptionTracks.previewId, previewId))
+		.orderBy(workCaptionTracks.createdAt, workCaptionTracks.id);
 }
 
 /**
@@ -337,11 +337,11 @@ export async function listPreviewCaptionTracksForWork(
 	workId: number,
 ): Promise<Map<number, PreviewCaptionTrackRow[]>> {
 	const rows = await db
-		.select({ track: workPreviewCaptionTracks, previewId: workPreviewMedia.id })
-		.from(workPreviewCaptionTracks)
-		.innerJoin(workPreviewMedia, eq(workPreviewCaptionTracks.previewId, workPreviewMedia.id))
+		.select({ track: workCaptionTracks, previewId: workPreviewMedia.id })
+		.from(workCaptionTracks)
+		.innerJoin(workPreviewMedia, eq(workCaptionTracks.previewId, workPreviewMedia.id))
 		.where(eq(workPreviewMedia.workId, workId))
-		.orderBy(workPreviewCaptionTracks.createdAt, workPreviewCaptionTracks.id);
+		.orderBy(workCaptionTracks.createdAt, workCaptionTracks.id);
 	const byPreview = new Map<number, PreviewCaptionTrackRow[]>();
 	for (const { track, previewId } of rows) {
 		const list = byPreview.get(previewId) ?? [];
@@ -356,7 +356,7 @@ export async function deletePreviewCaptionTrack(
 	track: PreviewCaptionTrackRow,
 	creatorId: number,
 ): Promise<void> {
-	await db.delete(workPreviewCaptionTracks).where(eq(workPreviewCaptionTracks.id, track.id));
+	await db.delete(workCaptionTracks).where(eq(workCaptionTracks.id, track.id));
 	if (isKeyUnder(track.storageKey, creatorId)) {
 		await storage.delete(track.storageKey);
 	}
@@ -369,9 +369,7 @@ export async function deletePreviewCaptionTracksForPreview(
 ): Promise<void> {
 	const tracks = await listPreviewCaptionTracks(previewId);
 	if (tracks.length === 0) return;
-	await db
-		.delete(workPreviewCaptionTracks)
-		.where(eq(workPreviewCaptionTracks.previewId, previewId));
+	await db.delete(workCaptionTracks).where(eq(workCaptionTracks.previewId, previewId));
 	for (const track of tracks) {
 		if (isKeyUnder(track.storageKey, creatorId)) await storage.delete(track.storageKey);
 	}

@@ -24,8 +24,8 @@ import {
 	db,
 	transcodingJobs,
 	webBuilds,
+	workCaptionTracks,
 	workMediaVersions,
-	workPreviewCaptionTracks,
 	workPreviewMedia,
 	workSourceFiles,
 	works,
@@ -41,7 +41,7 @@ type AssetRow = typeof assets.$inferSelect;
 type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
 type SourceFileRow = typeof workSourceFiles.$inferSelect;
 type PreviewMediaRow = typeof workPreviewMedia.$inferSelect;
-type PreviewCaptionRow = typeof workPreviewCaptionTracks.$inferSelect;
+type PreviewCaptionRow = typeof workCaptionTracks.$inferSelect;
 
 /** Delete a set of prefixes and keys, logging and swallowing every failure. */
 async function sweep(keys: Set<string>, prefixes: Set<string>, label: string): Promise<void> {
@@ -304,10 +304,10 @@ export async function purgeWorkMedia(
 			? []
 			: await db
 					.select()
-					.from(workPreviewCaptionTracks)
+					.from(workCaptionTracks)
 					.where(
 						inArray(
-							workPreviewCaptionTracks.previewId,
+							workCaptionTracks.previewId,
 							previewRows.map((p) => p.id),
 						),
 					);
@@ -380,10 +380,10 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 			? []
 			: await db
 					.select()
-					.from(workPreviewCaptionTracks)
+					.from(workCaptionTracks)
 					.where(
 						inArray(
-							workPreviewCaptionTracks.previewId,
+							workCaptionTracks.previewId,
 							previewRows.map((p) => p.id),
 						),
 					);
@@ -397,7 +397,9 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 			jobRows.filter((j) => j.workId === w.id),
 			sourceFileRows.filter((s) => s.workId === w.id),
 			previewRows.filter((p) => p.workId === w.id),
-			previewCaptionRows.filter((c) => previewWorkId.get(c.previewId) === w.id),
+			previewCaptionRows.filter(
+				(c) => c.previewId != null && previewWorkId.get(c.previewId) === w.id,
+			),
 		);
 		for (const k of forThis.keys) keys.add(k);
 		for (const p of forThis.prefixes) prefixes.add(p);
