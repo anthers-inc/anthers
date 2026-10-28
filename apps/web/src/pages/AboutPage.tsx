@@ -38,7 +38,9 @@
 //                          indictment of commercial platforms is gone; the case
 //                          against the incumbents is the section's lede, and it
 //                          gets a whole section on /for-creators.
-//   3. Who we are ........ Parker, first person, portrait beside the prose.
+//   3. Who we are ........ Parker, first person: a landscape portrait beside the
+//                          opening prose, the rest of the bio below it in one
+//                          column, and the Rilke line closing the section.
 //
 // The program pillars, the founding-board invitation and the "what comes next"
 // list are all on the wiki's roadmap already. **This page says what is true; the
@@ -83,17 +85,20 @@
 // fact as courage. People can count. What the section is actually for is the
 // thing every organization owes a user: here is who we are.
 //
-// 🚨 **The reference for the first-person passages is Parker's own about page,
-// and its source is on this machine at `~/Daisy/apps/web/src/pages/about.tsx`** —
-// read it rather than writing a founder's-note register from scratch, which is
-// what an earlier draft did and got wrong. What that page does: it **opens
-// declaratively** ("I'm a director, developer, writer, and composer from
-// Colorado"), never with a greeting; it builds **long multi-clause sentences**
-// rather than punchy short ones; its humor is **dry and rare** ("wore more hats
-// than I can count" is as far as an entire page goes); and it **lands a thought
-// on a stated principle** ("It matters how we do things, even more than what we
-// aim to do"), set in bold, not on a quip. Its **What I Do / How I Do It** pair
-// is where this page's two mission cards come from, down to the lock and key.
+// 🚨 **Do not edit the first-person passage of Parker's bio; that will always be hand-written.**
+//
+// ⚠️ **The bio is a single 48rem column, and the portrait is framed by the row
+// it sits in.** Five of twelve grid columns hold the photo beside the first two
+// paragraphs; the rest of the prose runs the full measure below, so the section
+// reads as one rectangle rather than a wide block sitting over a narrow one. The
+// frame takes its height from that row (`md:h-full`), which is what keeps the
+// image and the text beside it the same height at every width; a fixed aspect
+// ratio puts a short landscape photo next to a tall block of prose and leaves the
+// gap underneath. The portrait is `apps/web/public/images/parker.jpg`, downscaled
+// to 1600px on the long edge: at 3:2 on a phone, and cropped toward square by the
+// frame on desktop. The Rilke line closes the section rather than dividing it: it
+// is the last thing in the passage, and it reads as the bio's landing, so moving
+// it up to make a hard split would reorder Parker's own ending.
 //
 // The hero is the standing introduction, verbatim (the wiki's *How Anthers Talks About
 // Itself* § The Standing Introduction), split across the
@@ -348,92 +353,91 @@ export default function AboutPage() {
 			<Section>
 				<Reveal>
 					<Eyebrow>Who we are</Eyebrow>
-					<H2>Meet Parker</H2>
-					<Lede>
-						Anthers is a growing organization, and we have lots of amazing friends and family and
-						other folks helping us get off the ground. But for now, the Anthers team is just Parker
-						(that's me, writing this).
-					</Lede>
+					<H2>Our Team</H2>
+					{/* ⚠️ Held to the bio's 48rem so the lede and the passage under it share one
+					    measure; the shared <Lede> defaults to a wider column. */}
+					<div className="mx-auto max-w-3xl">
+						<Lede>
+							Anthers is a growing organization with lots of amazing friends, family, and other
+							folks helping us get off the ground. But for now, the Anthers team is just Parker
+							(that's me!).
+						</Lede>
+					</div>
 				</Reveal>
 
-				<Reveal delay={120} className="mx-auto mt-12 block max-w-5xl">
-					<Card className="text-left">
-						<div className="flex flex-col gap-8 md:flex-row md:items-start">
-							{/* 📷 PORTRAIT SLOT — drop the file at `apps/web/public/images/parker.jpg`
-							    (served from the site root as `/images/parker.jpg`, since build.ts copies
-							    public/ into dist/) and replace this block with:
-
-							      <img
-							          src="/images/parker.jpg"
-							          alt="Parker H. Davis"
-							          className="w-full shrink-0 rounded-2xl object-cover md:w-64"
-							      />
-
-							    Portrait-ish crop, roughly 4:5, ~800px on the short edge is plenty. It sits
-							    at 16rem wide beside the prose on desktop and full-width above it on a
-							    phone. The placeholder below keeps the layout honest until the file lands —
-							    a missing <img> would 404 in the screenshot harness and read as a bug. */}
-							<div className="flex aspect-4/5 w-full shrink-0 items-center justify-center rounded-2xl bg-primary/10 md:w-64">
-								<span style={serif} className="text-6xl font-light text-primary/70">
-									P
-								</span>
+				<Reveal delay={120} className="mx-auto mt-12 block max-w-3xl text-left">
+					<div className="grid gap-8 md:grid-cols-12 md:items-stretch md:gap-10">
+						<figure className="md:col-span-5">
+							<div className="aspect-3/2 overflow-hidden rounded-2xl bg-primary/10 md:aspect-auto md:h-full">
+								<img
+									src="/images/parker.jpg"
+									alt="Parker H. Davis"
+									className="h-full w-full object-cover"
+								/>
 							</div>
-							<div className="space-y-5 leading-relaxed text-base-content/70">
-								<div>
-									<h3 style={serif} className="text-xl font-medium text-base-content">
-										Parker H. Davis
-									</h3>
-									<p className="text-sm text-base-content/50">Founder</p>
-								</div>
-								<p>
-									I'm Parker, and I'm a multimedia director, developer, writer, and composer from
-									Colorado.
-								</p>
-								<p>
-									My earliest creative work was in music production, which turned into freelance
-									filmmaking, which turned into a decade in game development where I led teams,
-									shipped titles, and wore more hats than I can count.
-								</p>
-								<p>
-									Every medium I have worked in and every creative I have worked alongside has
-									deepened my sense of what it takes to do this work well, and of how much of it
-									turns on things that have nothing to do with the work itself: whether you can
-									afford to keep going, whether the people who would love what you make ever get to
-									see it, and whether the terms you agreed to last year still mean what they meant
-									when you agreed to them.
-								</p>
-								<p>
-									I've worked in a lot of media across a lot of companies, and while I've made some
-									things I'm truly proud of, nothing prepared me for the pride of leading a game dev
-									team. I saw such a spectrum of creative talent, personal perspective, and
-									professional ingenuity; I knew right away that nothing I could ever build alone
-									would be anywhere near as worthwhile as my ability to help other people feel
-									encouraged and equipped to create and share what means the most to them.
-								</p>
-								<p>
-									Anthers, at the most fundamental level, is that same impulse built out into a
-									real, material tool for other people. I want a creator's relationship with their
-									audience to be the kind of beautiful, honest thing that it's so obvious it can be
-									when you take all the manipulative, extractive corporate stuff out of the way. I
-									want what a fan enjoys and experiences to truly be theirs; I want what a creator
-									shares and earns to truly be theirs. No artistic work I could ever make alone
-									could be more impactful than that.
-								</p>
-								<p>
-									If there's one guiding principle that's underpinned everything in my adult life,
-									it's that
-									<strong>it matters how we do things, even more than what we aim to do.</strong>{" "}
-									That is the philosophy I have built every collaboration of mine on, it is why I
-									can never be convinced that you have to be an asshole to be impactful, and
-									(selfishly), it is why Anthers is what it is: a place where I can be helpful.
-								</p>
-								<p className="text-sm italic text-base-content/50">
-									"Nearly everything that matters is a challenge, and everything matters." — Rainer
-									Maria Rilke, Letters to a Young Poet
-								</p>
+						</figure>
+						<div className="space-y-5 leading-relaxed text-base-content/70 md:col-span-7">
+							<div>
+								<h3 style={serif} className="text-xl font-medium text-base-content">
+									Parker H. Davis
+								</h3>
+								<p className="text-sm text-base-content/50">Founder</p>
 							</div>
+							<p>
+								I'm Parker, and I'm a multimedia director, developer, writer, and composer from
+								Colorado.
+							</p>
+							<p>
+								My earliest creative work was in music production, which turned into freelance
+								filmmaking, which turned into a years-long tenure in game development where I led
+								teams, shipped titles, and wore more hats than I can count.
+							</p>
 						</div>
-					</Card>
+					</div>
+
+					<div className="mt-10 space-y-5 leading-relaxed text-base-content/70 md:mt-12">
+						<p>
+							Every medium I've worked in and every creative person I've worked alongside has
+							deepened my sense of what it takes to do this work well, and of how much of it turns
+							on things that have nothing to do with the work itself: whether you can afford to keep
+							going, whether the people who would love what you make ever get to see it, and whether
+							the terms you agreed to last year still mean what they meant when you agreed to them.
+						</p>
+						<p>
+							I've worked in a lot of media across a lot of companies, and while I've made some
+							things I'm truly proud of, nothing prepared me for the pride of leading a game dev
+							team. I saw such a spectrum of creative talent, personal perspective, and professional
+							ingenuity; I knew right away that nothing I could ever build alone would be anywhere
+							near as worthwhile as my ability to help other people feel encouraged and equipped to
+							create and share what means the most to them.
+						</p>
+						<p>
+							Anthers, at the most fundamental level, is that same impulse built out into a real,
+							material tool for other people. I want a creator's relationship with their audience to
+							be the kind of beautiful, honest thing that it's so obvious it can be when you take
+							all the manipulative, extractive corporate stuff out of the way. I want what a fan
+							enjoys and experiences to truly be theirs; I want what a creator shares and earns to
+							truly be theirs. No artistic work I could ever make alone could be more impactful than
+							that.
+						</p>
+						<p>
+							If there's one guiding principle that's underpinned everything I've done in my adult
+							life, it's that{" "}
+							<strong>it matters how we do things, often even more than what we aim to do.</strong>{" "}
+							That is the philosophy I have built every collaboration of mine on, it is why I can
+							never be convinced that you have to be an asshole to be impactful, and (selfishly) it
+							is why Anthers is what it is: a place where I can be helpful.
+						</p>
+					</div>
+
+					<figure className="mt-12 border-t border-base-content/10 pt-8 text-center">
+						<blockquote className="text-balance text-xl italic leading-relaxed text-base-content/60">
+							"Nearly everything that matters is a challenge, and everything matters."
+						</blockquote>
+						<figcaption className="mt-3 text-sm text-base-content/50">
+							- Rainer Maria Rilke, Letters to a Young Poet
+						</figcaption>
+					</figure>
 				</Reveal>
 			</Section>
 
