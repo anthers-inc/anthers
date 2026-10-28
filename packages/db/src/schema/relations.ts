@@ -4,8 +4,6 @@ import { atprotoSessions, follows, sessions, userBlocks, users } from "./auth.js
 import {
 	assets,
 	comments,
-	creditAcceptances,
-	creditRejections,
 	inlineImages,
 	posts,
 	projectItems,
@@ -16,6 +14,7 @@ import {
 	transcodingJobs,
 	webBuildFiles,
 	webBuilds,
+	workCreditDecisions,
 	workMediaVersions,
 	workSaves,
 	works,
@@ -150,8 +149,7 @@ export const worksRelations = relations(works, ({ one, many }) => ({
 	projectItems: many(projectItems), // Projects this Work belongs to
 	purchases: many(purchases),
 	reviews: many(reviews),
-	creditAcceptances: many(creditAcceptances),
-	creditRejections: many(creditRejections),
+	creditDecisions: many(workCreditDecisions),
 }));
 
 export const assetsRelations = relations(assets, ({ one }) => ({

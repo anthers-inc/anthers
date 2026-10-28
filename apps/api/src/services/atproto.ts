@@ -12,7 +12,6 @@
 import { db } from "@anthers/db";
 import {
 	comments,
-	creditAcceptances,
 	follows,
 	handleHistory,
 	posts,
@@ -20,6 +19,7 @@ import {
 	reviews,
 	users,
 	votes,
+	workCreditDecisions,
 	works,
 } from "@anthers/db/schema";
 import { extractPdsUrl } from "@atproto/oauth-client";
@@ -514,11 +514,12 @@ async function publishedRecordCounts(
 			? count(
 					db
 						.select({ count: published })
-						.from(creditAcceptances)
+						.from(workCreditDecisions)
 						.where(
 							and(
-								eq(creditAcceptances.contributorDid, did),
-								isNotNull(creditAcceptances.atprotoUri),
+								eq(workCreditDecisions.contributorDid, did),
+								eq(workCreditDecisions.decision, "accepted"),
+								isNotNull(workCreditDecisions.atprotoUri),
 							),
 						),
 				)

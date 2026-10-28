@@ -17,7 +17,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { creditAcceptances } from "@anthers/db/schema";
+import { workCreditDecisions } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index.js";
 import { queue } from "../jobs/queue.js";
@@ -110,9 +110,12 @@ describe("GET /api/content/credits/:handle", () => {
 		});
 		fixtureWorkIds.push(work.id);
 
-		await db
-			.insert(creditAcceptances)
-			.values({ workId: work.id, contributorDid: contributor.did, role: "Illustration" });
+		await db.insert(workCreditDecisions).values({
+			workId: work.id,
+			contributorDid: contributor.did,
+			role: "Illustration",
+			decision: "accepted",
+		});
 
 		const answer = await creditsFor(contributor.handle, contributor.token);
 		expect(forWork(answer.accepted, work.id)).toEqual([
@@ -140,9 +143,9 @@ describe("GET /api/content/credits/:handle", () => {
 		fixtureWorkIds.push(work.id);
 
 		const [acceptance] = await db
-			.select({ role: creditAcceptances.role })
-			.from(creditAcceptances)
-			.where(eq(creditAcceptances.workId, work.id));
+			.select({ role: workCreditDecisions.role })
+			.from(workCreditDecisions)
+			.where(eq(workCreditDecisions.workId, work.id));
 		expect(acceptance?.role).toBe("Everything");
 	});
 
@@ -188,9 +191,12 @@ describe("GET /api/content/credits/:handle", () => {
 			credits: [{ role: "Written by", contributor: contributor.did, types: ["created"] }],
 		});
 		fixtureWorkIds.push(work.id);
-		await db
-			.insert(creditAcceptances)
-			.values({ workId: work.id, contributorDid: contributor.did, role: "Written by" });
+		await db.insert(workCreditDecisions).values({
+			workId: work.id,
+			contributorDid: contributor.did,
+			role: "Written by",
+			decision: "accepted",
+		});
 
 		const answer = await creditsFor(contributor.handle);
 		expect(forWork(answer.accepted, work.id)).toEqual([]);
@@ -205,9 +211,12 @@ describe("GET /api/content/credits/:handle", () => {
 			credits: [{ role: "Written by", contributor: contributor.did, types: ["created"] }],
 		});
 		fixtureWorkIds.push(work.id);
-		await db
-			.insert(creditAcceptances)
-			.values({ workId: work.id, contributorDid: contributor.did, role: "Written by" });
+		await db.insert(workCreditDecisions).values({
+			workId: work.id,
+			contributorDid: contributor.did,
+			role: "Written by",
+			decision: "accepted",
+		});
 
 		const answer = await creditsFor(contributor.handle, contributor.token);
 		expect(forWork(answer.accepted, work.id)).toEqual([]);

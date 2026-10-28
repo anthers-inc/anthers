@@ -1726,14 +1726,23 @@ export const votes = pgTable(
 );
 
 /**
- * A contributor's acceptance of a credit on a work. The row is the local signal that a
- * `did`-naming credit may be published, and the acceptance record lives in the contributor's
- * own repository once the collection is published.
+ * A contributor's decision about a credit that names their DID — accept or reject.
+ *
+ * A `did`-naming credit is a public claim about a third party, so it stays out of the
+ * published Work record until that person accepts. Acceptance writes an
+ * `org.anthers.creditAcceptance` record in the contributor's own repository and stores its
+ * address here; rejection is private, removes the credit from the Work and blocks the same
+ * claim from being re-added.
+ *
+ * \u2b50 **One row per credit, not one table per answer.** The two states share a subject,
+ * a unique key and a write path, and accepting has to ask what the reject side said before
+ * it writes — which was a second query against a second table.
  */
-// org — the contributor is acting on a claim a creator made about them, and the record is
-// written in the contributor's repository. The row is Anthers' index of that fact.
-export const creditAcceptances = pgTable(
-	"credit_acceptances",
+// org — the contributor is acting on a claim a creator made about them. An acceptance is
+// also indexed here so the Work's published listing can include it; a rejection is kept so
+// the same claim cannot be re-added.
+export const workCreditDecisions = pgTable(
+	"work_credit_decisions",
 	{
 		id: serial("id").primaryKey(),
 		workId: integer("work_id")
@@ -1741,47 +1750,23 @@ export const creditAcceptances = pgTable(
 			.references(() => works.id, { onDelete: "cascade" }),
 		contributorDid: text("contributor_did").notNull(),
 		role: text("role").notNull(),
-		acceptedAt: timestamp("accepted_at", { withTimezone: true }).defaultNow().notNull(),
-		// The address of the acceptance record in the contributor's repository. Null while the
-		// collection is unpublished and no record has been written yet.
+		/** `accepted` | `rejected`. */
+		decision: text("decision").notNull(),
+		/**
+		 * The address of the acceptance record in the contributor's repository. Null while
+		 * the collection is unpublished, and null on a rejection, which writes no record.
+		 */
 		atprotoUri: text("atproto_uri").unique(),
+		/** When the contributor answered. Preserved across a repair of a missing address. */
+		decidedAt: timestamp("decided_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		// One acceptance per credit a work names.
-		uniqueIndex("uq_credit_acceptances_work_contributor_role").on(
+		uniqueIndex("uq_work_credit_decisions_work_contributor_role").on(
 			table.workId,
 			table.contributorDid,
 			table.role,
 		),
-		index("idx_credit_acceptances_work").on(table.workId),
-	],
-);
-
-/**
- * A contributor's rejection of a credit on a work. Rejection is private: no record is written,
- * and the credit is removed from the work and blocked from being re-added.
- */
-// org — the decision not to be credited is itself a fact Anthers keeps, so a creator cannot
-// re-publish the same claim by re-adding the credit.
-export const creditRejections = pgTable(
-	"credit_rejections",
-	{
-		id: serial("id").primaryKey(),
-		workId: integer("work_id")
-			.notNull()
-			.references(() => works.id, { onDelete: "cascade" }),
-		contributorDid: text("contributor_did").notNull(),
-		role: text("role").notNull(),
-		rejectedAt: timestamp("rejected_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [
-		// One rejection per credit a work names.
-		uniqueIndex("uq_credit_rejections_work_contributor_role").on(
-			table.workId,
-			table.contributorDid,
-			table.role,
-		),
-		index("idx_credit_rejections_work").on(table.workId),
+		index("idx_work_credit_decisions_work").on(table.workId),
 	],
 );
 

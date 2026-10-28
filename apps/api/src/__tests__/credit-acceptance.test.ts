@@ -8,7 +8,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { creditAcceptances, creditRejections, works } from "@anthers/db/schema";
+import { workCreditDecisions, works } from "@anthers/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import app from "../index.js";
 import { QUEUES, queue } from "../jobs/queue.js";
@@ -29,11 +29,12 @@ let sendSpy: ReturnType<typeof spyOn>;
 
 afterAll(async () => {
 	sendSpy.mockRestore();
-	// Acceptances and rejections are tied to Works that cascade them, but tests that leave
-	// behind a Work whose creator was deleted need explicit cleanup.
+	// Credit decisions are tied to Works that cascade them, but tests that leave behind a
+	// Work whose creator was deleted need explicit cleanup.
 	if (insertedWorkIds.length > 0) {
-		await db.delete(creditAcceptances).where(inArray(creditAcceptances.workId, insertedWorkIds));
-		await db.delete(creditRejections).where(inArray(creditRejections.workId, insertedWorkIds));
+		await db
+			.delete(workCreditDecisions)
+			.where(inArray(workCreditDecisions.workId, insertedWorkIds));
 	}
 	await purgeWorkIds(insertedWorkIds);
 });
@@ -108,12 +109,12 @@ describe("acceptCredit", () => {
 
 		const [row] = await db
 			.select()
-			.from(creditAcceptances)
+			.from(workCreditDecisions)
 			.where(
 				and(
-					eq(creditAcceptances.workId, workWithDidCredit.id),
-					eq(creditAcceptances.contributorDid, contributor.did),
-					eq(creditAcceptances.role, "Written by"),
+					eq(workCreditDecisions.workId, workWithDidCredit.id),
+					eq(workCreditDecisions.contributorDid, contributor.did),
+					eq(workCreditDecisions.role, "Written by"),
 				),
 			)
 			.limit(1);
@@ -183,12 +184,12 @@ describe("acceptCredit", () => {
 		expect(result).toEqual({ ok: false, code: "not_granted" });
 
 		const rows = await db
-			.select({ id: creditAcceptances.id })
-			.from(creditAcceptances)
+			.select({ id: workCreditDecisions.id })
+			.from(workCreditDecisions)
 			.where(
 				and(
-					eq(creditAcceptances.workId, work.id),
-					eq(creditAcceptances.contributorDid, brought.did),
+					eq(workCreditDecisions.workId, work.id),
+					eq(workCreditDecisions.contributorDid, brought.did),
 				),
 			);
 		expect(rows).toHaveLength(0);
@@ -205,11 +206,12 @@ describe("acceptCredit", () => {
 		});
 		insertedWorkIds.push(work.id);
 		const saidYes = new Date("2026-10-01T12:00:00.000Z");
-		await db.insert(creditAcceptances).values({
+		await db.insert(workCreditDecisions).values({
 			workId: work.id,
 			contributorDid: contributor.did,
 			role: "Written by",
-			acceptedAt: saidYes,
+			decision: "accepted",
+			decidedAt: saidYes,
 		});
 
 		const result = await acceptCredit({
@@ -225,16 +227,16 @@ describe("acceptCredit", () => {
 
 		const [row] = await db
 			.select()
-			.from(creditAcceptances)
+			.from(workCreditDecisions)
 			.where(
 				and(
-					eq(creditAcceptances.workId, work.id),
-					eq(creditAcceptances.contributorDid, contributor.did),
+					eq(workCreditDecisions.workId, work.id),
+					eq(workCreditDecisions.contributorDid, contributor.did),
 				),
 			)
 			.limit(1);
 		expect(row.atprotoUri).toBe(result.atprotoUri);
-		expect(row.acceptedAt.toISOString()).toBe(saidYes.toISOString());
+		expect(row.decidedAt.toISOString()).toBe(saidYes.toISOString());
 
 		// And a second accept now has nothing left to do.
 		const again = await acceptCredit({
@@ -313,12 +315,13 @@ describe("rejectCredit", () => {
 
 		const [rejection] = await db
 			.select()
-			.from(creditRejections)
+			.from(workCreditDecisions)
 			.where(
 				and(
-					eq(creditRejections.workId, work.id),
-					eq(creditRejections.contributorDid, contributor.did),
-					eq(creditRejections.role, "Written by"),
+					eq(workCreditDecisions.workId, work.id),
+					eq(workCreditDecisions.contributorDid, contributor.did),
+					eq(workCreditDecisions.role, "Written by"),
+					eq(workCreditDecisions.decision, "rejected"),
 				),
 			)
 			.limit(1);
