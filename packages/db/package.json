@@ -13,6 +13,7 @@
 		"./gauntlet-walk": "./src/gauntlet-walk.ts",
 		"./media-fixture": "./src/media-fixture.ts",
 		"./schema": "./src/schema/index.ts",
+		"./schema-head": "./src/schema-head.ts",
 		"./local-fixtures": "./src/local-fixtures.ts"
 	},
 	"scripts": {

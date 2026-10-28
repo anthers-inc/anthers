@@ -84,6 +84,30 @@ export function toBossSendOptions(options?: SendOptions): Record<string, unknown
 	return out;
 }
 
+/**
+ * The send options a cron registration carries, taken from `JOB_OPTIONS`.
+ *
+ * 🚨 **`boss.schedule` takes its own options and never saw `JOB_OPTIONS`.** Until 2026-10-28
+ * the wrapper passed nothing, so every cron job ran on pg-boss's defaults: `retryLimit` 2 with
+ * `retryDelay` 0. The three sweeps that failed inside the `2026.10.36` rollout each burned all
+ * their attempts inside 66 milliseconds against a fault that cleared itself ninety seconds
+ * later, and the 120-second delay `access-receipts` already declares would have carried that
+ * one over it. A sweep is usually its own retry clock, but the table is where a queue says
+ * otherwise, and a cron job that ignores it is not obeying the table.
+ *
+ * **Only the retry fields travel.** A sweep's expiry stays pg-boss's 15-minute default, so a
+ * wedged run is re-delivered rather than holding its queue for the 12 hours a long media job
+ * declares. A queue that declares no options keeps the defaults it always had.
+ */
+export function cronSendOptions(queue: string): { retryLimit?: number; retryDelay?: number } {
+	const declared = JOB_OPTIONS[queue];
+	if (!declared) return {};
+	const out: { retryLimit?: number; retryDelay?: number } = {};
+	if (declared.retryLimit !== undefined) out.retryLimit = declared.retryLimit;
+	if (declared.retryDelay !== undefined) out.retryDelay = declared.retryDelay;
+	return out;
+}
+
 // ── Retention ────────────────────────────────────────────────────────────────
 
 /**
@@ -197,7 +221,7 @@ class JobQueue {
 	}
 
 	async schedule(queue: string, cronExpr: string, data: object = {}): Promise<void> {
-		await this.boss.schedule(queue, cronExpr, data);
+		await this.boss.schedule(queue, cronExpr, data, cronSendOptions(queue));
 	}
 
 	/**
@@ -217,6 +241,10 @@ class JobQueue {
 	}
 
 	async stop(opts?: { graceful?: boolean; timeout?: number }): Promise<void> {
+		// Idempotent: the schema stand-down stops the queue, and the platform's SIGTERM a minute
+		// later reaches this same method from `shutdown`. A second `boss.stop` is not a second
+		// stop, and letting it throw would turn an ordinary replacement into a failed exit.
+		if (!this.started) return;
 		await this.boss.stop({ graceful: opts?.graceful ?? true, timeout: opts?.timeout });
 		this.started = false;
 	}

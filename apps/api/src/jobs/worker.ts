@@ -68,6 +68,7 @@ import { type RenderPagedData, renderPaged } from "./render-paged.js";
 import { rescanOwed } from "./rescan-owed.js";
 import { markBenignInterrupted, resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
+import { schemaStandingNow, watchSchema } from "./schema-guard.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
 import { runShipmentClock } from "./shipment-clock.js";
 import { type SpaceBackupJobData, spaceBackupJob } from "./space-backup.js";
@@ -83,6 +84,24 @@ import { runWithdrawnSweep } from "./withdrawn-sweep.js";
 
 async function start() {
 	console.log("Starting job worker...");
+
+	// 🚨 **The first thing a worker does is find out whether it is the outgoing build.** The
+	// migrate job runs before the new components start and the old deployment keeps serving
+	// until they are healthy, so a rename or a drop lands under code still asking for the old
+	// names. Three sweeps paid for that on 2026-10-28. A build that is behind starts no queue at
+	// all: the jobs wait, untouched, for the replacement, and nothing here can fail against a
+	// schema it does not know.
+	const standing = await schemaStandingNow();
+	if (standing === "build-behind") {
+		console.warn(
+			"[worker] standing down before starting: the database has applied a migration this " +
+				"build does not ship. No queue is started and no handler runs; the work waits for " +
+				"the incoming deployment.",
+		);
+		await holdForReplacement();
+		return;
+	}
+
 	await ensureQueueReady();
 	console.log("Queue started. Registering handlers...");
 
@@ -642,6 +661,15 @@ async function start() {
 		console.error("Failed to resume orphaned transcodes (non-fatal):", err);
 	}
 
+	// The same question, for a worker that was already serving when the migration ran. It stops
+	// the queue rather than exiting: the replacement arrives in a minute or two, and an exit
+	// would be answered by a restart loop.
+	watchSchema({
+		onBehind: async () => {
+			await queue.stop({ graceful: true, timeout: 120_000 });
+		},
+	});
+
 	console.log("Worker ready. Listening for jobs...");
 	console.log(
 		// ⚠️ **Derived from CRON_SCHEDULES rather than typed.** This line named five crons
@@ -655,6 +683,19 @@ async function start() {
 }
 
 // ── Graceful shutdown ──────────────────────────────────────────────────
+
+/**
+ * Hold a stood-down worker open until the platform replaces it.
+ *
+ * An unresolved promise alone lets the event loop drain, so the process would exit and be
+ * restarted into the same stand-down: a restart loop the `RESTART_COUNT` alert exists to
+ * catch, and one that answers nothing. A long timer is what keeps it alive while it does no
+ * work at all.
+ */
+async function holdForReplacement(): Promise<never> {
+	setInterval(() => {}, 60 * 60 * 1000);
+	return new Promise<never>(() => {});
+}
 
 async function shutdown() {
 	console.log("Shutting down worker...");
