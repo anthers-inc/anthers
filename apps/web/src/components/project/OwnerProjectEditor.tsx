@@ -38,6 +38,7 @@ import { studioUrl } from "@anthers/web-shared/studio";
 import type { Project } from "@anthers/web-shared/types";
 import ImageEditMenu from "@anthers/web-shared/ui/ImageEditMenu";
 import ImageFrameModal from "@anthers/web-shared/ui/ImageFrameModal";
+import Modal from "@anthers/web-shared/ui/Modal";
 import { PhotoIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
@@ -446,15 +447,14 @@ export default function OwnerProjectEditor({
 				onSave={(crop) => void saveFramedThumbnail(crop)}
 			/>
 
-			{thumbnailPickerOpen && (
-				<ThumbnailWorkPicker
-					works={project.works ?? []}
-					selectedId={thumbnailWorkId}
-					busy={thumbnailBusy}
-					onChoose={(workId) => void chooseThumbnailWork(workId)}
-					onClose={() => setThumbnailPickerOpen(false)}
-				/>
-			)}
+			<ThumbnailWorkPicker
+				open={thumbnailPickerOpen}
+				works={project.works ?? []}
+				selectedId={thumbnailWorkId}
+				busy={thumbnailBusy}
+				onChoose={(workId) => void chooseThumbnailWork(workId)}
+				onClose={() => setThumbnailPickerOpen(false)}
+			/>
 		</div>
 	);
 }
@@ -468,12 +468,15 @@ export default function OwnerProjectEditor({
  * says so rather than standing in as a blank choice.
  */
 function ThumbnailWorkPicker({
+	open,
 	works,
 	selectedId,
 	busy,
 	onChoose,
 	onClose,
 }: {
+	/** Kept mounted while this is false so the shared wrapper can play the exit. */
+	open: boolean;
 	works: Project["works"];
 	selectedId: number | null;
 	busy: boolean;
@@ -481,15 +484,16 @@ function ThumbnailWorkPicker({
 	onClose: () => void;
 }) {
 	useEffect(() => {
+		if (!open) return;
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === "Escape") onClose();
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [onClose]);
+	}, [open, onClose]);
 
 	return (
-		<div className="modal modal-open" role="dialog" aria-label="Thumbnail from a Work">
+		<Modal open={open} label="Thumbnail from a Work">
 			<div className="modal-box max-w-2xl">
 				<button
 					type="button"
@@ -548,6 +552,6 @@ function ThumbnailWorkPicker({
 				)}
 				{busy && <p className="mt-4 text-xs text-base-content/60">Saving the thumbnail…</p>}
 			</div>
-		</div>
+		</Modal>
 	);
 }
