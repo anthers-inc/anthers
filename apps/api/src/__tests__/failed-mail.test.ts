@@ -11,11 +11,11 @@
  * lists and nothing else's rows.
  *
  * The receipt half of the webhook matching rides the same `recordDeliveryEvent`; its
- * rows live in `receipt_sends` and its assertions are at the bottom of the file.
+ * rows live in `outbound_emails` and its assertions are at the bottom of the file.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { notifications, receiptSends, users } from "@anthers/db/schema";
+import { notifications, outboundEmails, users } from "@anthers/db/schema";
 import { eq, inArray, like, sql } from "drizzle-orm";
 import app from "../index";
 import { recordDeliveryEvent } from "../services/delivery-events.js";
@@ -92,31 +92,30 @@ beforeAll(async () => {
 
 	// The refused receipt.
 	const [refused] = await db
-		.insert(receiptSends)
+		.insert(outboundEmails)
 		.values({
 			dedupeKey: `fm-refused-receipt:${RUN}`,
-			kind: "purchase",
+			kind: "receipt",
 			userId: suppressedUserId,
-			role: "buyer",
-			email: `fm_refused_${RUN}@example.com`,
-			sent: false,
+			recipient: `fm_refused_${RUN}@example.com`,
+			detail: { receiptKind: "purchase", role: "buyer" },
 		})
-		.returning({ id: receiptSends.id });
+		.returning({ id: outboundEmails.id });
 	refusedReceiptId = refused.id;
 
 	// The accepted receipt, which the webhook's bounce will land against.
 	const [bounced] = await db
-		.insert(receiptSends)
+		.insert(outboundEmails)
 		.values({
 			dedupeKey: `fm-bounced-receipt:${RUN}`,
-			kind: "purchase",
+			kind: "receipt",
 			userId: suppressedUserId,
-			role: "buyer",
-			email: `fm_bounced_${RUN}@example.com`,
-			sent: true,
+			recipient: `fm_bounced_${RUN}@example.com`,
+			detail: { receiptKind: "purchase", role: "buyer" },
+			sentAt: new Date(),
 			messageId: BOUNCED_MSG,
 		})
-		.returning({ id: receiptSends.id });
+		.returning({ id: outboundEmails.id });
 	bouncedReceiptId = bounced.id;
 }, DB_SETUP_TIMEOUT);
 
@@ -134,7 +133,7 @@ afterAll(async () => {
 		);
 	const receiptIds = [refusedReceiptId, bouncedReceiptId].filter((n) => n > 0);
 	if (receiptIds.length > 0)
-		await db.delete(receiptSends).where(inArray(receiptSends.id, receiptIds));
+		await db.delete(outboundEmails).where(inArray(outboundEmails.id, receiptIds));
 	await db.delete(users).where(eq(users.id, suppressedUserId));
 });
 
@@ -186,7 +185,10 @@ describe("the webhook matching", () => {
 	it("a bounce against a receipt's message id lands on its row", async () => {
 		const at = new Date();
 		await recordDeliveryEvent({ messageId: BOUNCED_MSG, event: "bounced", occurredAt: at });
-		const [row] = await db.select().from(receiptSends).where(eq(receiptSends.id, bouncedReceiptId));
+		const [row] = await db
+			.select()
+			.from(outboundEmails)
+			.where(eq(outboundEmails.id, bouncedReceiptId));
 		expect(row.deliveryEvent).toBe("bounced");
 	});
 

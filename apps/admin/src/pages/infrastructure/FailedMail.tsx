@@ -16,7 +16,8 @@
  *   key was missing, or the process died mid-send. These are the ones an operator may
  *   want to re-run by hand; the in-app copy still exists, so the person was told here if
  *   not in their inbox.
- * - **Refused receipts** — `receipt_sends.sent = false`. A money record nobody got.
+ * - **Refused receipts** — an `outbound_emails` receipt row with no `sentAt`. A money
+ *   record nobody got.
  *   There is no in-app copy for money (the settled decision), so a refused receipt is a
  *   person genuinely not told.
  * - **Bounced or complained** — the provider ACCEPTED the send and the receiving side
@@ -26,7 +27,7 @@
  *   essential notice to it fails the same way.
  *
  * Read-only by design: nothing here re-sends, because a re-send that bypasses the
- * dedupe latch is the double-mail failure `receipt_sends` exists to stop. The action an
+ * dedupe latch is the double-mail failure `outbound_emails` exists to stop. The action an
  * operator takes is off-platform (reply to the address, check the provider's dashboard)
  * and the page says so rather than pretending a button would be safe.
  */

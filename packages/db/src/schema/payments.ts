@@ -305,60 +305,6 @@ export const accessReceipts = pgTable(
 	],
 );
 
-// org — the record of every receipt email Anthers has sent, and the idempotency latch
-// that stops it sending twice. Money cannot federate.
-export const receiptSends = pgTable(
-	"receipt_sends",
-	{
-		id: serial("id").primaryKey(),
-		/**
-		 * The natural key naming one receipt, one recipient, once. Built from the
-		 * transaction's own Stripe identity rather than hashed copy, the same rule
-		 * `notify()`'s dedupeKey states: `purchase:<intentId>:buyer:<userId>`,
-		 * `refund:<refundId>:<role>:<userId>`, `invoice:<stripeInvoiceId>:buyer:<userId>`,
-		 * with `creator` replacing the role for the creator's copy. A key that already
-		 * exists means the receipt was sent; the `.onConflictDoNothing` insert is the
-		 * whole guard, so a redelivered webhook finds the row and changes nothing.
-		 */
-		dedupeKey: text("dedupe_key").notNull().unique(),
-		/** `purchase` | `refund` | `invoice` — which kind of transaction the receipt is for. */
-		kind: text("kind").notNull(),
-		/**
-		 * Who the receipt went to, and their address at send time. Both are kept because
-		 * the FKs are `set null`: a receipt is evidence we told somebody, which has to
-		 * outlive the account like every other money record here, and an address alone
-		 * says who the evidence was about without claiming the account still exists.
-		 */
-		userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
-		/** `buyer` | `creator` — which side of the transaction the recipient was on. */
-		role: text("role").notNull(),
-		email: text("email").notNull(),
-		/** Whether the provider accepted the message. Delivery is Resend's to report. */
-		sent: boolean("sent").notNull().default(false),
-		messageId: text("message_id"),
-		/**
-		 * What the provider later told us became of the message — a Resend delivery event
-		 * matched on {@link messageId}, recorded by the same webhook that reports
-		 * escalation alerts. Null until an event arrives; `delivered` when the receiving
-		 * server accepted it; `bounced`/`failed`/`complained` when it did not.
-		 *
-		 * ⚠️ **Accepted is not delivered** — that distinction is the whole reason the
-		 * webhook exists (`services/delivery-events.ts`), and a receipt whose send was
-		 * accepted but which then bounced is a person who was not told about their money.
-		 * The failed-mail panel reads this column beside `sent`.
-		 */
-		deliveryEvent: text("delivery_event"),
-		deliveryEventAt: timestamp("delivery_event_at", { withTimezone: true }),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [
-		index("idx_receipt_sends_user").on(table.userId),
-		// The delivery webhook matches on the provider's id; without this every event is a
-		// scan of the table the receipt rows live in.
-		index("idx_receipt_sends_message").on(table.messageId),
-	],
-);
-
 // org — the record of money the processor clawed back. Money cannot federate.
 export const disputes = pgTable(
 	"disputes",

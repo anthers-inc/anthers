@@ -24,7 +24,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { abuseReports, moderationReports, notifications, receiptSends } from "@anthers/db/schema";
+import { abuseReports, moderationReports, notifications, outboundEmails } from "@anthers/db/schema";
 import { eq, isNull, or, sql } from "drizzle-orm";
 
 /**
@@ -57,7 +57,7 @@ export interface DeliveryEvent {
  * their money, and the failed-mail panel is where an operator meets it. These writes are
  * deliberately narrower than the reports': the event name and its time are all that is
  * stored (`notifications` carries `emailIntended`/`emailSentAt` for the send decision;
- * `receipt_sends.sent` already says whether the provider accepted), and a
+ * `outbound_emails.sentAt` already says whether the provider accepted), and a
  * `delivered` event overwrites nothing terminal — the same ordering rule the reports
  * honor, in the weaker one-direction form a single nullable column can hold: anything
  * writes an empty event, and a terminal-er event name is written over any non-terminal
@@ -129,13 +129,13 @@ export async function recordDeliveryEvent(input: DeliveryEvent): Promise<{ match
 		.where(sql`${notifications.emailMessageId} = ${input.messageId} AND ${terminalGuard}`)
 		.returning({ id: notifications.id });
 
-	const receiptGuard = sql`(${receiptSends.deliveryEvent} IS NULL
-		OR ${receiptSends.deliveryEvent} NOT IN ('delivered','bounced','complained','failed','canceled'))`;
+	const receiptGuard = sql`(${outboundEmails.deliveryEvent} IS NULL
+		OR ${outboundEmails.deliveryEvent} NOT IN ('delivered','bounced','complained','failed','canceled'))`;
 	const receiptUpdates = await db
-		.update(receiptSends)
+		.update(outboundEmails)
 		.set({ deliveryEvent: input.event, deliveryEventAt: input.occurredAt })
-		.where(sql`${receiptSends.messageId} = ${input.messageId} AND ${receiptGuard}`)
-		.returning({ id: receiptSends.id });
+		.where(sql`${outboundEmails.messageId} = ${input.messageId} AND ${receiptGuard}`)
+		.returning({ id: outboundEmails.id });
 
 	return {
 		matched: reports.length + abuse.length + notificationUpdates.length + receiptUpdates.length,

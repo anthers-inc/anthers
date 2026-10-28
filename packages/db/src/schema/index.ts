@@ -5,6 +5,7 @@ export * from "./auth.js";
 export * from "./content.js";
 export * from "./dmca.js";
 export * from "./financial-plan.js";
+export * from "./mail.js";
 export * from "./moderation.js";
 export * from "./operations.js";
 export * from "./payments.js";

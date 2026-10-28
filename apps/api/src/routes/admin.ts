@@ -20,7 +20,7 @@ import {
 	type DmcaNoticeStatus,
 	notifications,
 	nounBlocklist,
-	receiptSends,
+	outboundEmails,
 	rightsRequests,
 	users,
 } from "@anthers/db/schema";
@@ -561,16 +561,16 @@ const adminRoutes = new Hono<AdminEnv>()
 	// operator rather than alerted, per the settled design (Parker, 2026-10-08): a send-
 	// time alert would train the ops channel to skim exactly the failures that matter.
 	//
-	//  🚨 **The two tables and their two failure shapes, and why the null-scan needs an
-	//  intent column:** `notifications.emailSentAt` is null for BOTH "email was suppressed
-	//  by the person's delivery mode" and "the send failed" — keyed on the null alone the
-	//  panel would report every suppressed social notice as a failure, and the operator
-	//  would learn to ignore the page. `emailIntended` is the discriminator, recorded by
-	//  `notify()` before the send is attempted. Receipts record intent by existing at all:
-	//  `receipt_sends` rows are only written when the send happens, so `sent = false`
-	//  alone is the failure state there. Bounced-after-acceptance arrives through the
-	//  Resend webhook (`services/delivery-events.ts`), which matches on the provider's
-	//  message id; the panel surfaces those beside the outright refusals.
+	//  🚨 **Two failure shapes, and why the notification scan needs an intent column:**
+	//  `notifications.emailSentAt` is null for BOTH "email was suppressed by the person's
+	//  delivery mode" and "the send failed" — keyed on the null alone the panel would
+	//  report every suppressed social notice as a failure, and the operator would learn
+	//  to ignore the page. `emailIntended` is the discriminator, recorded by `notify()`
+	//  before the send is attempted. The ledger records intent by existing at all: an
+	//  `outbound_emails` row is written before the send, so a null `sentAt` alone is the
+	//  failure state there. Bounced-after-acceptance arrives through the Resend webhook
+	//  (`services/delivery-events.ts`), which matches on the provider's message id; the
+	//  panel surfaces those beside the outright refusals.
 	.get("/failed-mail", async (c) => {
 		// A failed notification: intended, never stamped sent. The delivery event (from the
 		// webhook) is carried when it has one — `bounced` means the provider ACCEPTED it and
@@ -595,47 +595,66 @@ const adminRoutes = new Hono<AdminEnv>()
 
 		// A receipt the provider refused, and a receipt later bounced or complained.
 		// Two queries rather than an OR scan: both are indexed shapes and each names its
-		// own failure mode in the response.
-		const refusedReceipts = await db
-			.select({
-				id: receiptSends.id,
-				kind: receiptSends.kind,
-				role: receiptSends.role,
-				email: receiptSends.email,
-				createdAt: receiptSends.createdAt,
-			})
-			.from(receiptSends)
-			.where(eq(receiptSends.sent, false))
-			.orderBy(desc(receiptSends.createdAt))
-			.limit(100);
+		// own failure mode in the response. The ledger keeps the receipt's own kind and
+		// role in `detail`, so the panel's shape survives the table's consolidation.
+		const refusedReceipts = (
+			await db
+				.select({
+					id: outboundEmails.id,
+					detail: outboundEmails.detail,
+					recipient: outboundEmails.recipient,
+					createdAt: outboundEmails.createdAt,
+				})
+				.from(outboundEmails)
+				.where(and(eq(outboundEmails.kind, "receipt"), isNull(outboundEmails.sentAt)))
+				.orderBy(desc(outboundEmails.createdAt))
+				.limit(100)
+		).map((row) => ({
+			id: row.id,
+			kind: row.detail?.receiptKind ?? "receipt",
+			role: row.detail?.role ?? "",
+			email: row.recipient,
+			createdAt: row.createdAt,
+		}));
 
-		const bouncedOrWorse = await db
-			.select({
-				id: receiptSends.id,
-				kind: receiptSends.kind,
-				role: receiptSends.role,
-				email: receiptSends.email,
-				sent: receiptSends.sent,
-				createdAt: receiptSends.createdAt,
-				deliveryEvent: receiptSends.deliveryEvent,
-				deliveryEventAt: receiptSends.deliveryEventAt,
-			})
-			.from(receiptSends)
-			.where(
-				and(
-					isNotNull(receiptSends.deliveryEvent),
-					// Delivered is the success state; the panel is not where it is read.
-					notInArray(receiptSends.deliveryEvent, [
-						"delivered",
-						"opened",
-						"clicked",
-						"sent",
-						"queued",
-					]),
-				),
-			)
-			.orderBy(desc(receiptSends.deliveryEventAt))
-			.limit(100);
+		const bouncedOrWorse = (
+			await db
+				.select({
+					id: outboundEmails.id,
+					detail: outboundEmails.detail,
+					recipient: outboundEmails.recipient,
+					sentAt: outboundEmails.sentAt,
+					createdAt: outboundEmails.createdAt,
+					deliveryEvent: outboundEmails.deliveryEvent,
+					deliveryEventAt: outboundEmails.deliveryEventAt,
+				})
+				.from(outboundEmails)
+				.where(
+					and(
+						eq(outboundEmails.kind, "receipt"),
+						isNotNull(outboundEmails.deliveryEvent),
+						// Delivered is the success state; the panel is not where it is read.
+						notInArray(outboundEmails.deliveryEvent, [
+							"delivered",
+							"opened",
+							"clicked",
+							"sent",
+							"queued",
+						]),
+					),
+				)
+				.orderBy(desc(outboundEmails.deliveryEventAt))
+				.limit(100)
+		).map((row) => ({
+			id: row.id,
+			kind: row.detail?.receiptKind ?? "receipt",
+			role: row.detail?.role ?? "",
+			email: row.recipient,
+			sent: row.sentAt != null,
+			createdAt: row.createdAt,
+			deliveryEvent: row.deliveryEvent,
+			deliveryEventAt: row.deliveryEventAt,
+		}));
 
 		return c.json({ failedNotes, refusedReceipts, bouncedOrWorse });
 	})

@@ -33,7 +33,7 @@
  */
 import { parseArgs } from "node:util";
 import { db } from "@anthers/db/client";
-import { purchases, receiptSends, users } from "@anthers/db/schema";
+import { outboundEmails, purchases, users } from "@anthers/db/schema";
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
 import {
@@ -133,13 +133,19 @@ const reference = what === "refund" ? refundRef! : intentId;
 // recipient; the replay sends the buyer's copy only, so the buyer key is the one.)
 const dedupeKey = `${what}:${reference}:buyer:${buyerId}`;
 const [latch] = await db
-	.insert(receiptSends)
-	.values({ dedupeKey, kind: what, userId: buyerId, role: "buyer", email: buyerEmail })
-	.onConflictDoNothing({ target: receiptSends.dedupeKey })
-	.returning({ id: receiptSends.id });
+	.insert(outboundEmails)
+	.values({
+		dedupeKey,
+		kind: "receipt",
+		recipient: buyerEmail,
+		userId: buyerId,
+		detail: { receiptKind: what, role: "buyer" },
+	})
+	.onConflictDoNothing({ target: outboundEmails.dedupeKey })
+	.returning({ id: outboundEmails.id });
 if (!latch) {
 	console.log(
-		`${TAG} a receipt for this transaction was already sent (its receipt_sends row exists) — nothing to do.`,
+		`${TAG} a receipt for this transaction was already sent (its outbound_emails row exists) — nothing to do.`,
 	);
 	process.exit(0);
 }
@@ -166,10 +172,14 @@ const result =
 
 if (!result.sent) {
 	console.error(
-		`${TAG} the send did not go (receipt_sends row ${latch.id} records it as unsent) — read the [email] log lines above.`,
+		`${TAG} the send did not go (outbound_emails row ${latch.id} records it as unsent) — read the [email] log lines above.`,
 	);
 	process.exit(1);
 }
+await db
+	.update(outboundEmails)
+	.set({ sentAt: new Date(), messageId: result.messageId })
+	.where(eq(outboundEmails.id, latch.id));
 console.log(
 	`${TAG} receipt sent to ${buyerEmail} (${what}, $${total.toFixed(2)}) — provider id ${result.messageId ?? "none"}`,
 );

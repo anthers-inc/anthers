@@ -20,7 +20,7 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it, mock, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { deadlineReminders, legalHolds, rightsRequests } from "@anthers/db/schema";
+import { legalHolds, outboundEmails, rightsRequests } from "@anthers/db/schema";
 import { and, eq, like } from "drizzle-orm";
 import {
 	ARRIVAL_HORIZON_DAYS,
@@ -71,9 +71,9 @@ afterEach(() => mock.restore());
  */
 async function reminderRowsFor(prefix: string) {
 	return db
-		.select({ key: deadlineReminders.dedupeKey, sentAt: deadlineReminders.sentAt })
-		.from(deadlineReminders)
-		.where(like(deadlineReminders.dedupeKey, `${prefix}:%`));
+		.select({ key: outboundEmails.dedupeKey, sentAt: outboundEmails.sentAt })
+		.from(outboundEmails)
+		.where(like(outboundEmails.dedupeKey, `${prefix}:%`));
 }
 
 describe("remindersDue — the decisions, pure", () => {
@@ -151,7 +151,7 @@ describe("runDeadlineReminderSweep — the sends and the dedupe", () => {
 		// keys this run claimed — and the fixture rows by their own handles, since neither
 		// cascades from anything. A calendar reminder row is keyed on the obligation's
 		// instance date, so the prefix (everything before the kind) is what holds still.
-		const rows = await db.delete(deadlineReminders).returning({ key: deadlineReminders.dedupeKey });
+		const rows = await db.delete(outboundEmails).returning({ key: outboundEmails.dedupeKey });
 		const ours = rows.filter((r) => r.key.startsWith("deadline:"));
 		void ours;
 		await db.delete(rightsRequests).where(eq(rightsRequests.email, `sweep-${id}@example.com`));
@@ -216,7 +216,7 @@ describe("runDeadlineReminderSweep — the sends and the dedupe", () => {
 
 	it("does nothing and crashes nothing when OPERATOR_EMAIL is unset", async () => {
 		delete process.env.OPERATOR_EMAIL;
-		const before = await db.select({ key: deadlineReminders.dedupeKey }).from(deadlineReminders);
+		const before = await db.select({ key: outboundEmails.dedupeKey }).from(outboundEmails);
 		const send = spyOnSends(true);
 
 		const result = await runDeadlineReminderSweep();
@@ -224,9 +224,7 @@ describe("runDeadlineReminderSweep — the sends and the dedupe", () => {
 		expect(result.sent).toBe(0);
 		expect(send.mock.calls.length).toBe(0);
 		// No rows either — the sweep decides nothing when there is nobody to tell.
-		expect(await db.select({ key: deadlineReminders.dedupeKey }).from(deadlineReminders)).toEqual(
-			before,
-		);
+		expect(await db.select({ key: outboundEmails.dedupeKey }).from(outboundEmails)).toEqual(before);
 
 		process.env.OPERATOR_EMAIL = `operator-${id}@example.com`;
 	});

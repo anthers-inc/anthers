@@ -20,8 +20,8 @@
  *     their Stripe account row (`creatorWantsReceiptEmails`), the same latch the sale
  *     receipt reads.
  *
- * `sendEmail` refuses under the test runner by design, so a send records `sent: false`
- * and no message goes anywhere — the honest surface is the `receipt_sends` row. The
+ * `sendEmail` refuses under the test runner by design, so a send records no `sentAt`
+ * and no message goes anywhere — the honest surface is the `outbound_emails` row. The
  * copy is pinned where the copy lives, in the senders' module.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
@@ -30,7 +30,7 @@ import {
 	creatorCredits,
 	creatorTransferCredits,
 	creatorTransfers,
-	receiptSends,
+	outboundEmails,
 	userPreferences,
 } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
@@ -59,7 +59,7 @@ afterAll(async () => {
 	// go by their own dedupe keys rather than a table wipe, because this suite shares its
 	// database with every other suite in the run.
 	if (madeReceiptDedupeKeys.length > 0) {
-		await db.delete(receiptSends).where(inArray(receiptSends.dedupeKey, madeReceiptDedupeKeys));
+		await db.delete(outboundEmails).where(inArray(outboundEmails.dedupeKey, madeReceiptDedupeKeys));
 	}
 	if (madeTransferIds.length > 0) {
 		await db
@@ -121,7 +121,7 @@ async function transfersFor(creatorId: number) {
 
 /** The receipt rows a run wrote, claimed for teardown. */
 async function receiptRows(creatorId: number) {
-	const rows = await db.select().from(receiptSends).where(eq(receiptSends.userId, creatorId));
+	const rows = await db.select().from(outboundEmails).where(eq(outboundEmails.userId, creatorId));
 	for (const row of rows) madeReceiptDedupeKeys.push(row.dedupeKey);
 	return rows;
 }
@@ -182,10 +182,11 @@ describe("the payout receipt", () => {
 		// The key latches on the transfer's own Stripe id, the identifier the Studio
 		// Payments page shows, so email and page name the same movement.
 		expect(receipts[0].dedupeKey).toBe(`payout:${transfer.stripeTransferId}:creator:${creatorId}`);
-		expect(receipts[0].kind).toBe("payout");
-		expect(receipts[0].role).toBe("creator");
+		expect(receipts[0].kind).toBe("receipt");
+		expect(receipts[0].detail?.receiptKind).toBe("payout");
+		expect(receipts[0].detail?.role).toBe("creator");
 		// `sendEmail` refuses under the test runner; the row records it honestly.
-		expect(receipts[0].sent).toBe(false);
+		expect(receipts[0].sentAt).toBeNull();
 	});
 
 	it("a re-run of the same coverage set sends no second receipt", async () => {
