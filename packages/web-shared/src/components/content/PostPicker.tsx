@@ -19,8 +19,11 @@ import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
 import type { PostListItem } from "../../lib/types";
 import LoadingSpinner from "../ui/LoadingSpinner";
+import Modal from "../ui/Modal";
 
 interface PostPickerProps {
+	/** Kept mounted while this is false so the shared wrapper can play the exit. */
+	open: boolean;
 	/** Ids already in the Project, so they are offered nowhere: a repeat add errors today. */
 	excludeIds: number[];
 	/** Everything selected, in the order it was ticked — the order the adds are sent in. */
@@ -28,15 +31,21 @@ interface PostPickerProps {
 	onClose: () => void;
 }
 
-export default function PostPicker({ excludeIds, onSelect, onClose }: PostPickerProps) {
+export default function PostPicker({ open, excludeIds, onSelect, onClose }: PostPickerProps) {
 	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [query, setQuery] = useState("");
 	/** The selection, as a list for the confirm's order and a set for the row's state. */
 	const [picked, setPicked] = useState<number[]>([]);
 
+	// Each open starts a fresh pick: the list is fetched again (a post written since the
+	// last open belongs here) and nothing is still ticked from the previous pass.
 	useEffect(() => {
+		if (!open) return;
 		let live = true;
+		setLoading(true);
+		setQuery("");
+		setPicked([]);
 		void (async () => {
 			try {
 				const res = await client.api.content.posts.$get({ query: { mine: "true" } });
@@ -50,7 +59,7 @@ export default function PostPicker({ excludeIds, onSelect, onClose }: PostPicker
 		return () => {
 			live = false;
 		};
-	}, []);
+	}, [open]);
 
 	const term = query.trim().toLowerCase();
 	const available = posts.filter((p) => !excludeIds.includes(p.id));
@@ -79,7 +88,7 @@ export default function PostPicker({ excludeIds, onSelect, onClose }: PostPicker
 		);
 
 	return (
-		<div className="modal modal-open" role="dialog">
+		<Modal open={open} label="Add posts">
 			<div className="modal-box flex max-h-[90vh] max-w-3xl flex-col gap-4">
 				<div className="flex items-center justify-between">
 					<h2 className="text-lg font-bold">Add posts</h2>
@@ -209,6 +218,6 @@ export default function PostPicker({ excludeIds, onSelect, onClose }: PostPicker
 			<button type="button" className="modal-backdrop" onClick={onClose} aria-label="Close">
 				close
 			</button>
-		</div>
+		</Modal>
 	);
 }

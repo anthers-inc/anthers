@@ -2141,6 +2141,8 @@ export default function SignupPage() {
 		badgeName: string;
 		preview: SubscriptionPreview;
 	} | null>(null);
+	/** Whether the confirmation dialog is showing. Its payload outlives it so the exit can play. */
+	const [pendingOpen, setPendingOpen] = useState(false);
 
 	// Restore anything chosen on an earlier visit. Guarded because a browser with storage
 	// disabled must not take the page down with it.
@@ -2327,6 +2329,7 @@ export default function SignupPage() {
 				return;
 			}
 			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
+			setPendingOpen(true);
 			setPending({
 				anthersSupport: anthersAmount,
 				// This page carries no creator picks since 2026-10-19; the field stays for
@@ -2725,12 +2728,13 @@ export default function SignupPage() {
 			    agreed to. */}
 			{pending && (
 				<SubscriptionPaymentModal
+					open={pendingOpen}
 					anthersSupport={pending.anthersSupport}
 					directed={pending.directed}
 					badgeName={pending.badgeName}
 					preview={pending.preview}
 					onComplete={() => {
-						setPending(null);
+						setPendingOpen(false);
 						// `next` rides along so somebody who came from a gated Work is handed back
 						// to it; otherwise, to where the webhook's work becomes visible.
 						void leave(next ?? "/settings?tab=purchases");
@@ -2738,7 +2742,7 @@ export default function SignupPage() {
 					onClose={() => {
 						// The card was declined or dismissed. The account was already signed in
 						// when this opened, so there is nothing to unwind and nowhere to send them.
-						setPending(null);
+						setPendingOpen(false);
 					}}
 				/>
 			)}

@@ -383,13 +383,12 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 				Changes here save immediately, separately from the rest of this form.
 			</p>
 
-			{picking && (
-				<WorkPicker
-					excludeIds={works.map((w) => w.id)}
-					onSelect={add}
-					onClose={() => setPicking(false)}
-				/>
-			)}
+			<WorkPicker
+				open={picking}
+				excludeIds={works.map((w) => w.id)}
+				onSelect={add}
+				onClose={() => setPicking(false)}
+			/>
 		</div>
 	);
 }

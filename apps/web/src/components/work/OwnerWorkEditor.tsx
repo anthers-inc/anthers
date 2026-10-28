@@ -112,6 +112,7 @@ import FileUpload from "@anthers/web-shared/ui/FileUpload";
 import ImageEditMenu from "@anthers/web-shared/ui/ImageEditMenu";
 import ImageFrameModal from "@anthers/web-shared/ui/ImageFrameModal";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
+import Modal from "@anthers/web-shared/ui/Modal";
 import { uploadMediaFile } from "@anthers/web-shared/upload";
 import { useWebBuildUploads } from "@anthers/web-shared/web-build-uploads";
 import {
@@ -1848,21 +1849,20 @@ export default function OwnerWorkEditor({
 			{/* The frame picker and the framing dialog. Each is an overlay, so opening one
 			    changes nothing about the page's height — the scroll-keeper's concern is the
 			    section's buttons and the tabs, not these. */}
-			{thumbPicker === "frame" && frameChoosable && (
-				<ThumbFramePicker
-					// Local mode hands the stored key as the original's address; `keyToPreview`
-					// passes a real URL through and resolves a key onto the API's content
-					// route, so a key does not resolve against the page URL (the silent
-					// HTML-not-video fetch a bare key becomes).
-					src={keyToPreview(current.originalUrl as string)}
-					captions={current.captions}
-					busy={frameBusy}
-					inFlight={thumbnailInFlight.current > 0}
-					error={frameError}
-					onTake={takeCurrentFrame}
-					onClose={() => setThumbPicker("none")}
-				/>
-			)}
+			<ThumbFramePicker
+				open={thumbPicker === "frame" && frameChoosable}
+				// Local mode hands the stored key as the original's address; `keyToPreview`
+				// passes a real URL through and resolves a key onto the API's content
+				// route, so a key does not resolve against the page URL (the silent
+				// HTML-not-video fetch a bare key becomes).
+				src={keyToPreview(current.originalUrl as string)}
+				captions={current.captions}
+				busy={frameBusy}
+				inFlight={thumbnailInFlight.current > 0}
+				error={frameError}
+				onTake={takeCurrentFrame}
+				onClose={() => setThumbPicker("none")}
+			/>
 			<ImageFrameModal
 				open={thumbFrame !== null}
 				src={thumbFrame?.preview ?? null}
@@ -1886,6 +1886,7 @@ export default function OwnerWorkEditor({
  * save, and the picker's close rides the act's own success.
  */
 function ThumbFramePicker({
+	open,
 	src,
 	captions,
 	busy,
@@ -1894,6 +1895,8 @@ function ThumbFramePicker({
 	onTake,
 	onClose,
 }: {
+	/** Kept mounted while this is false so the shared wrapper can play the exit. */
+	open: boolean;
 	src: string;
 	/** The Work's caption tracks, played as they are over the Work wherever it goes. */
 	captions?: { id: number; language: string; label: string; kind: string; url: string }[];
@@ -1908,15 +1911,16 @@ function ThumbFramePicker({
 	// Escape closes, for the keyboard half of the door (the pattern ReportDialog set);
 	// the pointer half is the ✕.
 	useEffect(() => {
+		if (!open) return;
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === "Escape") onClose();
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [onClose]);
+	}, [open, onClose]);
 
 	return (
-		<div className="modal modal-open" role="dialog" aria-label="Thumbnail from this Work">
+		<Modal open={open} label="Thumbnail from this Work">
 			<div className="modal-box max-w-2xl">
 				<button
 					type="button"
@@ -1963,7 +1967,7 @@ function ThumbFramePicker({
 				</div>
 				{error && <p className="mt-2 text-xs text-warning">{error}</p>}
 			</div>
-		</div>
+		</Modal>
 	);
 }
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { client } from "@anthers/web-shared/rpc";
+import Modal from "@anthers/web-shared/ui/Modal";
 import {
 	AddressElement,
 	CardElement,
@@ -8,7 +9,7 @@ import {
 	useStripe,
 } from "@stripe/react-stripe-js";
 import type { StripeAddressElementChangeEvent, StripeCardElement } from "@stripe/stripe-js";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getStripe } from "../../lib/stripe";
 import { cardElementStyle } from "../../lib/stripeCard";
 
@@ -22,6 +23,8 @@ export interface SubscriptionPreview {
 }
 
 interface Props {
+	/** Kept mounted while this is false so the shared wrapper can play the exit. */
+	open: boolean;
 	/**
 	 * ⚠️ **Dollars a month, not a count.** It is `number` either way, so a caller passing a
 	 * count typechecks and bills the wrong amount — a defect this guard exists for because
@@ -73,7 +76,15 @@ export function quoteDisagrees(
 	return Math.round(quoted * 100) !== Math.round(billed * 100);
 }
 
-function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete, onClose }: Props) {
+function PaymentForm({
+	open,
+	anthersSupport,
+	directed,
+	badgeName,
+	preview,
+	onComplete,
+	onClose,
+}: Props) {
 	const stripe = useStripe();
 	const elements = useElements();
 	const [processing, setProcessing] = useState(false);
@@ -95,6 +106,15 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 
 	const nextDate = formatDate(preview.nextBillingUnix);
 	const { savedCard, isChange } = preview;
+
+	// A kept-mounted dialog keeps its last attempt, so a second open starts clean.
+	useEffect(() => {
+		if (!open) return;
+		setProcessing(false);
+		setError(null);
+		setUseNewCard(!preview.savedCard);
+		setBillingAddress(null);
+	}, [open, preview.savedCard]);
 
 	/**
 	 * 🚨 **The quote and the charge must be the same number**, checked at the last point
@@ -190,7 +210,7 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 	};
 
 	return (
-		<div className="modal modal-open">
+		<Modal open={open}>
 			<div className="modal-box max-w-md">
 				<h3 className="font-bold text-lg mb-1">
 					{isChange ? `Switch to ${badgeName}` : `Give ${badgeName}`}
@@ -296,7 +316,7 @@ function PaymentForm({ anthersSupport, directed, badgeName, preview, onComplete,
 				aria-label="Close"
 				disabled={processing}
 			/>
-		</div>
+		</Modal>
 	);
 }
 
