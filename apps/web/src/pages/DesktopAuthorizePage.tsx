@@ -7,6 +7,13 @@
  * click mints a separate, independently revocable desktop token. The token itself is
  * never shown here or put in the URL: the page hands back a one-time `code`, which the
  * app redeems with the PKCE verifier only it holds. See `apps/api/src/middleware/bearer.ts`.
+ *
+ * ⚠️ **`?redirect=mobile` is which app is listening, not where to go.** The desktop answers
+ * on its own `anthers://` scheme, and a phone cannot: any app on Android may claim a custom
+ * scheme, so the mobile shell registers verified `https://anthers.org` links instead and the
+ * code comes back through one. The value is an enum rather than a URL on purpose — a
+ * caller-supplied address here would be an open redirect on a page that just minted a
+ * credential.
  */
 import { useAuth } from "@anthers/web-shared/auth";
 import { apiFetch } from "@anthers/web-shared/rpc";
@@ -21,6 +28,7 @@ export default function DesktopAuthorizePage() {
 	const location = useLocation();
 	const [params] = useSearchParams();
 	const challenge = params.get("challenge") ?? "";
+	const mobile = params.get("redirect") === "mobile";
 
 	const [phase, setPhase] = useState<Phase>("loading");
 	const [label, setLabel] = useState<string | null>(null);
@@ -66,9 +74,12 @@ export default function DesktopAuthorizePage() {
 			}
 			const { code } = (await res.json()) as { code: string };
 			setPhase("done");
-			// Hand the code back over the app's registered scheme. Only the code travels
-			// here — it is useless without the verifier the app kept to itself.
-			window.location.href = `anthers://auth/callback?code=${encodeURIComponent(code)}`;
+			// Hand the code back to whichever app asked. Only the code travels here — it is
+			// useless without the verifier the app kept to itself.
+			const callback = mobile
+				? `https://anthers.org/auth/callback?code=${encodeURIComponent(code)}`
+				: `anthers://auth/callback?code=${encodeURIComponent(code)}`;
+			window.location.href = callback;
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Could not complete sign-in.");
 			setPhase("error");
