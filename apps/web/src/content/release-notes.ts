@@ -71,6 +71,15 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.38",
+		date: "2026-10-28",
+		lede: "A physical good's variants and image are edited beside the store panel they configure, and each answer on the listing saves on its own.",
+		entries: [
+			"A physical good's variants and its thumbnail are edited in a Goods Management view opened from the store panel itself, rather than at the bottom of the Manage tab. Shipping, handling, and tax stay in Manage, because they describe the parcel rather than what a buyer picks.",
+			"Each answer on a good's listing saves on its own: a save reads the row as it stands and writes only the part it changed, so an edit to variants no longer undoes a shipping price set in the same sitting.",
+		],
+	},
+	{
 		version: "2026.10.37",
 		date: "2026-10-28",
 		lede: "A video's quality rungs carry less data at the same quality or better, and a dialog closes the way it opened.",
