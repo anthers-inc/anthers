@@ -32,6 +32,7 @@ import {
 	charitableLedger,
 	comments,
 	creatorCredits,
+	creatorNettings,
 	dmcaNotices,
 	hostedAccounts,
 	hostedIdentities,
@@ -40,11 +41,14 @@ import {
 	mediaQuarantine,
 	moderationActions,
 	moderationReports,
+	outboundEmails,
 	poolDistributions,
 	posts,
 	purchases,
 	reviews,
 	rightsRequests,
+	shipmentComplaints,
+	shipments,
 	stickers,
 	users,
 	votes,
@@ -52,6 +56,23 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { and, eq, inArray, or } from "drizzle-orm";
+
+/**
+ * Everything a purchase leaves behind that a `set null` would strand.
+ *
+ * The books, the creator's netting and the shipment a purchase may have bought all outlive
+ * the purchase in production, deliberately: a refund does not erase what was paid, and an
+ * order that shipped is still an order. In a fixture they are the suite's own litter, and
+ * deleting the purchase first strands them where no sweep can name them — measured
+ * 2026-10-29, one full run left 19 nettings, 9 shipments and 2 complaints that way.
+ */
+async function purgePurchaseDependents(purchaseIds: number[]): Promise<void> {
+	if (purchaseIds.length === 0) return;
+	await db.delete(charitableLedger).where(inArray(charitableLedger.purchaseId, purchaseIds));
+	await db.delete(creatorNettings).where(inArray(creatorNettings.purchaseId, purchaseIds));
+	await db.delete(shipments).where(inArray(shipments.purchaseId, purchaseIds));
+	await db.delete(shipmentComplaints).where(inArray(shipmentComplaints.purchaseId, purchaseIds));
+}
 
 /**
  * Remove fixture accounts and everything of theirs that would otherwise survive them.
@@ -143,6 +164,10 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 		// file exists to stop.
 		await db.delete(votes).where(inArray(votes.userId, ids));
 		await db.delete(rightsRequests).where(inArray(rightsRequests.userId, ids));
+		// The email log is the record of what Anthers sent, and it outlives the account in
+		// production for exactly that reason — `user_id` is `set null`. In a fixture the rows
+		// are litter, and a full run left sixteen (measured 2026-10-29).
+		await db.delete(outboundEmails).where(inArray(outboundEmails.userId, ids));
 		await db
 			.delete(workRatingAppeals)
 			.where(
@@ -150,18 +175,16 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 			);
 
 		// Money. A purchase outlives the Work, the creator and the buyer by design, so it is
-		// reachable from none of them once they are gone. The charitable ledger's only FK is
-		// `purchase_id → purchases ON DELETE SET NULL`, so dropping a purchase without first
-		// taking the ledger rows that point at it does not clean them up — it *orphans* them
-		// here, which is how this purge's own pass was the largest single source of residue.
+		// reachable from none of them once they are gone. The ledger, the netting and the
+		// shipment all reach the purchase through `set null`, so dropping the purchase without
+		// first taking them does not clean them up — it *orphans* them here, which is how this
+		// purge's own pass was the largest single source of residue twice over.
 		const ownedPurchases = await db
 			.select({ id: purchases.id })
 			.from(purchases)
 			.where(or(inArray(purchases.buyerId, ids), inArray(purchases.creatorId, ids)));
 		const purchaseIds = ownedPurchases.map((p) => p.id);
-		if (purchaseIds.length > 0) {
-			await db.delete(charitableLedger).where(inArray(charitableLedger.purchaseId, purchaseIds));
-		}
+		await purgePurchaseDependents(purchaseIds);
 		await db
 			.delete(purchases)
 			.where(or(inArray(purchases.buyerId, ids), inArray(purchases.creatorId, ids)));
@@ -193,11 +216,7 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 					.from(purchases)
 					.where(inArray(purchases.workId, workIds))
 			).map((p) => p.id);
-			if (workPurchaseIds.length > 0) {
-				await db
-					.delete(charitableLedger)
-					.where(inArray(charitableLedger.purchaseId, workPurchaseIds));
-			}
+			await purgePurchaseDependents(workPurchaseIds);
 			await db.delete(purchases).where(inArray(purchases.workId, workIds));
 			await db.delete(mediaQuarantine).where(inArray(mediaQuarantine.workId, workIds));
 			await db.delete(dmcaNotices).where(inArray(dmcaNotices.workId, workIds));
@@ -279,16 +298,22 @@ export async function purgeWorkIds(workIds: number[]): Promise<void> {
 		.select({ id: purchases.id })
 		.from(purchases)
 		.where(inArray(purchases.workId, workIds));
-	const purchaseIds = purchasesHere.map((r) => r.id);
-	if (purchaseIds.length > 0) {
-		await db.delete(charitableLedger).where(inArray(charitableLedger.purchaseId, purchaseIds));
-	}
+	await purgePurchaseDependents(purchasesHere.map((r) => r.id));
 	await db.delete(purchases).where(inArray(purchases.workId, workIds));
 	await db.delete(mediaQuarantine).where(inArray(mediaQuarantine.workId, workIds));
 	await db
 		.delete(moderationReports)
 		.where(
 			and(eq(moderationReports.subjectType, "work"), inArray(moderationReports.subjectId, workIds)),
+		);
+	// The log of what was done to the Work, which is polymorphic and cascades from nothing.
+	// The suite that took a Work down wrote an action whose subject is the Work, and the
+	// action outlived it: measured 2026-10-29, 62 of these were the largest single table
+	// left after the account and identity sweeps were fixed.
+	await db
+		.delete(moderationActions)
+		.where(
+			and(eq(moderationActions.subjectType, "work"), inArray(moderationActions.subjectId, workIds)),
 		);
 	await db.delete(works).where(inArray(works.id, workIds));
 }
