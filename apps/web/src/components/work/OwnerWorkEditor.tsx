@@ -72,7 +72,13 @@ import {
 	WorkFileSection,
 	WorkTypeFacts,
 } from "@anthers/web-shared/content/work-media";
-import { isBuildType, LIBRARY_TYPE_OPTIONS, typeLabel } from "@anthers/web-shared/content/works";
+import {
+	isBuildType,
+	LIBRARY_TYPE_OPTIONS,
+	TypeIcon,
+	typeLabel,
+	WORK_TYPE_DESCRIPTIONS,
+} from "@anthers/web-shared/content/works";
 import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import {
 	isoToLocalInput,
@@ -102,8 +108,8 @@ import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
 import {
 	accessRowsOf,
+	type ContentType,
 	type CreatorBadge,
-	type UploadableWorkType,
 	type Work,
 	type WorkCredit,
 	type WorkInput,
@@ -136,6 +142,7 @@ import WorkCaptionsEditor from "../../studio/WorkCaptionsEditor";
 import SaveButton from "../library/SaveButton";
 import ProjectPricing from "../project/ProjectPricing";
 import WorkReviews from "../project/WorkReviews";
+import { contentTypeMeta } from "../ui/ContentTypeBadge";
 import { InlineField } from "./Editing";
 import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
@@ -1278,6 +1285,37 @@ export default function OwnerWorkEditor({
 		/>
 	);
 
+	// The changing-kind save — the row's kind is page-resolved in the batch editor; here
+	// the kind chip saves at once and the row answers (the server rules govern; it may
+	// refuse). A carried change unrates the row (the server's own act), so the matrix
+	// the next open reads is the new kind's empty one — the batch editor's setRows({}).
+	// A refusal is thrown back to the chip's dialog, which says it where the choice was
+	// made, and the page is re-read so the chip never reads a kind the row does not hold.
+	const saveKind = async (next: ContentType) => {
+		if (next === current.type) return;
+		try {
+			await saveFields({ type: next });
+			setRows({});
+		} catch (err) {
+			await onRefetch?.();
+			throw err instanceof Error ? err : new Error("The kind change didn't save.");
+		}
+	};
+
+	/**
+	 * The kind, edited from the chip in the byline strip (Parker, 2026-10-29): the chip a
+	 * reader reads is the door a draft's kind is changed through, the same shape as the
+	 * access chip beside it, and the Manage tab carries no Kind control of its own.
+	 */
+	const kindField = (
+		<OwnerKindChipEditor
+			type={current.type}
+			onSave={async (next) => {
+				await saveKind(next);
+			}}
+		/>
+	);
+
 	/**
 	 * The access, edited from the chip in the byline strip (Parker's fourth pass,
 	 * 2026-10-13): the Details tab loses its Access section — the chip below the video
@@ -1423,11 +1461,10 @@ export default function OwnerWorkEditor({
 	const detailsSection = (
 		// Named parts (Parker's third pass, 2026-10-13): the Details tab is the Work's
 		// composition — what it says, when it came out, who may open it — each under its
-		// own heading rather than a flat run of controls. The Kind row moved to the
-		// Manage tab (Parker, 2026-10-17): the kind is the machinery's first fact, and
-		// the machinery is the Manage tab's, not the composition's. The description
-		// leads the tab (Parker, 2026-10-19): what the Work is comes before when it
-		// came out.
+		// own heading rather than a flat run of controls. The description leads the tab
+		// (Parker, 2026-10-19): what the Work is comes before when it came out. The kind
+		// is neither here nor on the Manage tab (Parker, 2026-10-29): its chip in the
+		// byline strip is the control, so no composition field names it.
 		<div className="flex flex-col gap-6">
 			<section className="flex flex-col gap-2">
 				<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
@@ -1454,22 +1491,6 @@ export default function OwnerWorkEditor({
 		{ key: "rating", label: "Rating", content: ratingField },
 		{ key: "accessibility", label: "Accessibility", content: accessibilityField },
 	];
-
-	// The changing-kind save — the row's kind is page-resolved in the batch editor; here
-	// the select saves at once and the row answers (the server rules govern; it may
-	// refuse). A carried change unrates the row (the server's own act), so the matrix
-	// the next open reads is the new kind's empty one — the batch editor's setRows({}).
-	const saveKind = async (next: UploadableWorkType) => {
-		if (next === current.type) return;
-		try {
-			await saveFields({ type: next });
-			setRows({});
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "The kind change didn't save.");
-			// A refused change stands where it was — the next save re-syncs the select.
-			await onRefetch?.();
-		}
-	};
 
 	// ── The media area's two modes ──
 	// The intake is the empty card's content for a kind whose media is uploaded; the
@@ -1612,38 +1633,14 @@ export default function OwnerWorkEditor({
 			label: "Manage",
 			content: (
 				<div className="flex flex-col gap-6">
-					{kindChangeable && (
-						// The kind leads the Manage tab (Parker, 2026-10-17): the kind decides
-						// what this tab's machinery even is — every section below is the
-						// chosen kind's — so it is the tab's first fact, and it moved here
-						// from the Details tab for exactly that reason.
-						<div className="flex items-center gap-2">
-							<span className="text-sm font-medium">Kind</span>
-							{/* The select reads the ROW (current), not the page-load prop: its save
-							    adopts the response, and a refused change stands where it was — the
-							    value is the page's truth here, as every other field's read is. */}
-							<select
-								aria-label="Work kind"
-								className="select select-sm select-bordered"
-								value={current.type}
-								onChange={(e) => void saveKind(e.target.value as UploadableWorkType)}
-							>
-								{LIBRARY_TYPE_OPTIONS.map((opt) => (
-									<option key={opt.value} value={opt.value}>
-										{opt.label}
-									</option>
-								))}
-							</select>
-							<span className="text-xs text-base-content/60">
-								Changing the kind unrates the draft — answer the matrix again before release.
-							</span>
-						</div>
-					)}
-					{/* The View As row, under the Kind row when a draft can still change its
-					    kind (Parker, 2026-10-16 for the row's place on this tab): the
-					    creator's four ways to look at the page — and since Manage opens by
-					    default, at the top of the page itself, standing where the editing
-					    banner stood. */}
+					{/* The View As row leads the tab, and no Kind control stands beside it
+					    (Parker, 2026-10-29): a draft's kind is changed through the kind chip
+					    in the byline strip below the deliverable, the same shape as the access
+					    chip beside it, so the tab's machinery still follows the kind while the
+					    control that changes it stands where the page already names it. The
+					    row's place on this tab is Parker's, 2026-10-16: the creator's four
+					    ways to look at the page — and since Manage opens by default, at the
+					    top of the page itself, standing where the editing banner stood. */}
 					<WorkViewAsSection />
 					{supportsPreviewMedia(current.type) && (
 						// The storefront set sits after the kind's own machinery (media, file
@@ -1840,6 +1837,9 @@ export default function OwnerWorkEditor({
 						}}
 					/>
 				}
+				// The kind chip is the same chip a reader sees, with its own pencil: only a
+				// draft that could still be another kind gets the door (Parker, 2026-10-29).
+				kindChip={kindChangeable ? kindField : undefined}
 				chips={accessField}
 			/>
 
@@ -2118,6 +2118,136 @@ export function AccessSummary({
 	}
 	return (
 		<p className="text-sm text-base-content/60">Nobody can open this yet — allow someone in.</p>
+	);
+}
+
+/**
+ * The creator's kind chip (Parker, 2026-10-29): the Work's kind as the byline strip's
+ * chip, and for a draft that could still be another kind the chip is the door — it
+ * opens the kinds in a dialog, asked for deliberately. The Manage tab lost its Kind
+ * select to this: the chip a reader reads is the control a creator changes it with,
+ * the same shape as the access chip beside it.
+ */
+function OwnerKindChipEditor({
+	type,
+	onSave,
+}: {
+	type: ContentType;
+	onSave: (next: ContentType) => Promise<void>;
+}) {
+	const [open, setOpen] = useState(false);
+	const [busy, setBusy] = useState<ContentType | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const dialog = useRef<HTMLDialogElement>(null);
+	// The chip's look comes from the same catalog the user page's badge does, so the
+	// creator's chip and the reader's cannot drift apart.
+	const { label, Icon, color } = contentTypeMeta(type);
+
+	useEffect(() => {
+		if (open) dialog.current?.showModal();
+	}, [open]);
+
+	const choose = async (next: ContentType) => {
+		if (next === type) {
+			dialog.current?.close();
+			setOpen(false);
+			return;
+		}
+		setBusy(next);
+		setError(null);
+		try {
+			await onSave(next);
+			dialog.current?.close();
+			setOpen(false);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "The kind change didn't save.");
+		} finally {
+			setBusy(null);
+		}
+	};
+
+	return (
+		<>
+			<button
+				type="button"
+				aria-label={`Change the kind, currently ${label}`}
+				title="Change the kind of this Work"
+				className={`badge badge-sm cursor-pointer gap-1 py-1.5 pr-2 ${color}`}
+				onClick={() => {
+					setError(null);
+					setOpen(true);
+				}}
+			>
+				<Icon className="w-3 h-3" />
+				{label}
+				<PencilSquareIcon className="size-3 opacity-60" />
+			</button>
+			{open && (
+				<dialog
+					ref={dialog}
+					className="modal"
+					aria-label="Change the kind of this Work"
+					onClose={() => setOpen(false)}
+				>
+					<div className="modal-box max-w-2xl">
+						<h3 className="text-lg font-semibold">Change the Kind</h3>
+						<p className="mt-1 text-xs text-base-content/60">
+							The kind decides the Work's page, its player or reader, and what its media area
+							carries. Changing it unrates the draft — answer the matrix again before release.
+						</p>
+						<div className="mt-4 grid gap-2 sm:grid-cols-2">
+							{LIBRARY_TYPE_OPTIONS.map((option) => {
+								const chosen = option.value === type;
+								return (
+									<button
+										key={option.value}
+										type="button"
+										aria-current={chosen ? "true" : undefined}
+										className={`flex items-start gap-2 rounded-box border p-3 text-left transition disabled:opacity-60 ${
+											chosen
+												? "border-primary bg-primary/10 ring-2 ring-primary/20"
+												: "border-base-300 bg-base-200 hover:border-primary/50"
+										}`}
+										disabled={busy !== null}
+										onClick={() => void choose(option.value)}
+									>
+										<TypeIcon type={option.value} className="size-5 shrink-0 text-primary" />
+										<span className="min-w-0">
+											<span className="block text-sm font-semibold">{option.label}</span>
+											<span className="block text-xs text-base-content/60">
+												{WORK_TYPE_DESCRIPTIONS[option.value]}
+											</span>
+										</span>
+									</button>
+								);
+							})}
+						</div>
+						{busy && (
+							<p
+								className="mt-3 flex items-center gap-2 text-xs text-base-content/60"
+								role="status"
+							>
+								<span className="loading loading-spinner loading-xs" />
+								Changing the kind…
+							</p>
+						)}
+						{error && <p className="mt-3 text-sm text-error">{error}</p>}
+						<div className="modal-action">
+							<button
+								type="button"
+								className="btn btn-ghost btn-sm"
+								onClick={() => dialog.current?.close()}
+							>
+								Cancel
+							</button>
+						</div>
+					</div>
+					<form method="dialog" className="modal-backdrop">
+						<button type="button" aria-label="Close the kind dialog" />
+					</form>
+				</dialog>
+			)}
+		</>
 	);
 }
 

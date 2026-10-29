@@ -520,6 +520,13 @@ export interface WorkBylineProps {
 	/** After the creator, the kind and any chip the page's mode knows first-hand. */
 	chips?: ReactNode;
 	/**
+	 * The kind as a chip — the strip's own `ContentTypeBadge` unless the page has a reason
+	 * to render something else there. The owner's page sends the chip that is also its own
+	 * editor (Parker, 2026-10-29), so the kind a reader reads is the control a creator
+	 * changes it with; a viewer's page sends nothing and gets the plain badge.
+	 */
+	kindChip?: ReactNode;
+	/**
 	 * Versions added after release, oldest first. The newest rides the date line; the
 	 * Details tab lists every one. Empty or absent means the Work has not changed since
 	 * it went public.
@@ -549,7 +556,14 @@ export interface WorkBylineProps {
  * maintained, and it exists because a single date reads as the only upload the Work ever
  * had. Every such version is listed in the Details tab; this line is the summary.
  */
-export function WorkByline({ work, title, actions, chips, versions = [] }: WorkBylineProps) {
+export function WorkByline({
+	work,
+	title,
+	actions,
+	chips,
+	kindChip,
+	versions = [],
+}: WorkBylineProps) {
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
 	const releasedDate = work.releasedAt
 		? new Date(work.releasedAt).toLocaleDateString("en-US", {
@@ -605,7 +619,7 @@ export function WorkByline({ work, title, actions, chips, versions = [] }: WorkB
 			</div>
 			<div className="grid grid-cols-1 items-center gap-y-2 sm:grid-cols-[1fr_auto_1fr]">
 				<div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end sm:pr-2.5">
-					<ContentTypeBadge contentType={work.type} />
+					{kindChip ?? <ContentTypeBadge contentType={work.type} />}
 					{chips}
 					<span aria-hidden className="h-4 w-px bg-base-300 max-sm:hidden" />
 				</div>
