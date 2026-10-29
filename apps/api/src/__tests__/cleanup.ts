@@ -32,7 +32,7 @@
  * 390 real alerts once reached a real inbox.
  */
 
-import { afterAll, beforeAll } from "bun:test";
+import { afterAll } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
 	adminAccounts,
@@ -81,13 +81,13 @@ export {
  * sit below every suite's high-water mark and are never candidates.
  */
 export function purgeAccountsCreatedHere(): void {
-	let highWater = 0;
-	let worksWater = 0;
-	let postsWater = 0;
-	let commentsWater = 0;
-	let reviewsWater = 0;
-
-	beforeAll(async () => {
+	// 🚨 **The marks are taken as this is called, not in a `beforeAll`.** Both happen during
+	// collection, but the call happens at its source position while a `beforeAll` callback
+	// runs later — and the gap is where a suite slipped through: `queue-position.test.ts`
+	// creates its account in a file-level `beforeAll` and calls this after it, so the water
+	// was read above the account and nothing was ever swept. One account, four Works, a
+	// session and an identity survived every run that way (measured 2026-10-29).
+	const marks = (async () => {
 		const [row, w, p, cmt, rv] = await Promise.all([
 			db.select({ id: users.id }).from(users).orderBy(desc(users.id)).limit(1),
 			db.select({ id: works.id }).from(works).orderBy(desc(works.id)).limit(1),
@@ -95,12 +95,14 @@ export function purgeAccountsCreatedHere(): void {
 			db.select({ id: comments.id }).from(comments).orderBy(desc(comments.id)).limit(1),
 			db.select({ id: reviews.id }).from(reviews).orderBy(desc(reviews.id)).limit(1),
 		]);
-		highWater = row[0]?.id ?? 0;
-		worksWater = w[0]?.id ?? 0;
-		postsWater = p[0]?.id ?? 0;
-		commentsWater = cmt[0]?.id ?? 0;
-		reviewsWater = rv[0]?.id ?? 0;
-	});
+		return {
+			users: row[0]?.id ?? 0,
+			works: w[0]?.id ?? 0,
+			posts: p[0]?.id ?? 0,
+			comments: cmt[0]?.id ?? 0,
+			reviews: rv[0]?.id ?? 0,
+		};
+	})();
 
 	// In `afterAll` rather than a closing `it`, so a suite that bails early still cleans up.
 	//
@@ -112,12 +114,13 @@ export function purgeAccountsCreatedHere(): void {
 	// insert through the POST /api/content/works route or the shared fixture, and the
 	// content sits above the works water mark while its creator row is already gone.
 	afterAll(async () => {
+		const water = await marks;
 		const [created, madeWorks, madePosts, madeComments, madeReviews] = await Promise.all([
-			db.select({ id: users.id }).from(users).where(gt(users.id, highWater)),
-			db.select({ id: works.id }).from(works).where(gt(works.id, worksWater)),
-			db.select({ id: posts.id }).from(posts).where(gt(posts.id, postsWater)),
-			db.select({ id: comments.id }).from(comments).where(gt(comments.id, commentsWater)),
-			db.select({ id: reviews.id }).from(reviews).where(gt(reviews.id, reviewsWater)),
+			db.select({ id: users.id }).from(users).where(gt(users.id, water.users)),
+			db.select({ id: works.id }).from(works).where(gt(works.id, water.works)),
+			db.select({ id: posts.id }).from(posts).where(gt(posts.id, water.posts)),
+			db.select({ id: comments.id }).from(comments).where(gt(comments.id, water.comments)),
+			db.select({ id: reviews.id }).from(reviews).where(gt(reviews.id, water.reviews)),
 		]);
 		await purgeContentByIds(
 			madeWorks.map((r) => r.id),
@@ -181,6 +184,16 @@ async function purgeContentByIds(
 					inArray(moderationReports.subjectId, postIds),
 				),
 			);
+		// The log of what was done to the post, polymorphic and cascading from nothing —
+		// the same gap the Work subject had.
+		await db
+			.delete(moderationActions)
+			.where(
+				and(
+					eq(moderationActions.subjectType, "post"),
+					inArray(moderationActions.subjectId, postIds),
+				),
+			);
 		await db.delete(posts).where(inArray(posts.id, postIds));
 	}
 }
@@ -194,18 +207,20 @@ async function purgeContentByIds(
  * are for; the account's own sessions and the record of changes to it go with it.
  */
 export function purgeAdminAccountsCreatedHere(): void {
-	let highWater = 0;
-
-	beforeAll(async () => {
+	// Taken at the call, not in a `beforeAll`, for the reason the account sweep's comment
+	// gives: a callback registered here runs after a file-level one that may already have
+	// created the fixture.
+	const marks = (async () => {
 		const [row] = await db
 			.select({ id: adminAccounts.id })
 			.from(adminAccounts)
 			.orderBy(desc(adminAccounts.id))
 			.limit(1);
-		highWater = row?.id ?? 0;
-	});
+		return row?.id ?? 0;
+	})();
 
 	afterAll(async () => {
+		const highWater = await marks;
 		const created = await db
 			.select({ id: adminAccounts.id })
 			.from(adminAccounts)

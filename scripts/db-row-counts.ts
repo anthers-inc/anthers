@@ -16,7 +16,14 @@
  * appearing or growing, and a table vanishing from the snapshot is a suite that started
  * cleaning up after itself.
  *
- * Usage: `bun run scripts/db-row-counts.ts` (inside a session, so `DATABASE_URL` is set).
+ * ⭐ **`--owners` answers the next question**, which a count cannot: *whose* rows are these?
+ * It reports, per table, the distinct values of every integer `*_id` column, so a survivor
+ * can be attributed to a seeded fixture, a suite's own account, or nothing at all. Rows that
+ * outlive the run usually point at a user the seeders created, and no sweep may take those
+ * without taking a fixture later suites depend on.
+ *
+ * Usage: `bun run scripts/db-row-counts.ts [--owners]` (inside a session, so
+ * `DATABASE_URL` is set).
  */
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
@@ -36,6 +43,8 @@ if (!process.env.DATABASE_URL) {
 	console.error("db-row-counts: DATABASE_URL is unset — run this inside a session");
 	process.exit(1);
 }
+
+const owners = process.argv.includes("--owners");
 
 const tables = rowsOf(
 	await db.execute(sql`
@@ -57,6 +66,46 @@ for (const table of tables) {
 
 const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
 console.log(JSON.stringify(Object.fromEntries(sorted), null, "\t"));
+
+if (owners) {
+	const attribution: Record<string, Record<string, [unknown, number][]>> = {};
+	for (const [table] of sorted) {
+		const columns = rowsOf(
+			await db.execute(sql`
+				select column_name
+				from information_schema.columns
+				where table_schema = 'public'
+					and table_name = ${table}
+					and data_type in ('integer', 'bigint')
+					and column_name like '%/_id' escape '/'
+				order by column_name
+			`),
+		).map((row) => String(row.column_name));
+		if (columns.length === 0) continue;
+		attribution[table] = {};
+		for (const column of columns) {
+			const groups = rowsOf(
+				await db.execute(sql`
+					select ${sql.identifier(column)} as owner, count(*)::int as count
+					from ${sql.identifier(table)}
+					group by 1
+					order by 2 desc
+					limit 10
+				`),
+			);
+			attribution[table][column] = groups.map((row) => [row.owner, Number(row.count)]);
+		}
+	}
+	console.log("--- owners ---");
+	console.log(JSON.stringify(attribution, null, "\t"));
+
+	const users = rowsOf(
+		await db.execute(sql`select id, email, atproto_handle as handle from users order by id`),
+	);
+	console.log("--- users ---");
+	console.log(JSON.stringify(users, null, "\t"));
+}
+
 // The client keeps the event loop alive, and a session wrapper waits for the command to
 // exit — so this has to be explicit or the run hangs until its outer timeout.
 process.exit(0);
