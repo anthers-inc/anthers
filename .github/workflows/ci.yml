@@ -34,6 +34,23 @@ on:
     branches: [main, release]
   pull_request:
 
+# Every image this file pulls comes from Docker Hub **authenticated**, and that is a
+# correctness rule rather than a nicety. GitHub-hosted runners share their egress
+# addresses, so anonymous pulls contend for Docker Hub's per-IP allowance; when it runs
+# out, every job that needs a container dies at *Initialize containers* with `429 Too Many
+# Requests` in under thirty seconds, which red-gates every open pull request for hours on
+# someone else's schedule. It happened on 2026-10-09 (four reruns of one PR's jobs, spread
+# over an hour). Authenticated pulls are counted per account rather than per IP, at a rate
+# this tree is nowhere near.
+#
+# 🚨 **Service containers are pulled before any step runs**, so a `docker/login-action`
+# step cannot reach them — their credentials are named on the service itself
+# (`jobs.<id>.services.<service>.credentials`). The login step exists only for the jobs
+# that build an image, where a step runs before the build's `FROM` pull.
+#
+# The account is Anthers' own free one; the two values are the `DOCKERHUB_USERNAME` and
+# `DOCKERHUB_TOKEN` repository secrets.
+
 jobs:
   # Has this code already been tested?
   #
@@ -117,6 +134,9 @@ jobs:
     services:
       postgres:
         image: postgres:16
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_USER: anthers
           POSTGRES_PASSWORD: anthers
@@ -261,6 +281,18 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      # Before the build, because the Dockerfile's `FROM oven/bun` is itself a Docker Hub
+      # pull and an anonymous one is what this is here to stop. Guarded on the secret's
+      # presence so a pull request from a fork — which is handed no secrets — still builds.
+      - name: Log in to Docker Hub
+        if: ${{ env.DOCKERHUB_TOKEN != '' }}
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build ${{ matrix.name }} image
         uses: docker/build-push-action@v6
         with:
@@ -309,6 +341,9 @@ jobs:
     services:
       postgres:
         image: postgres:16
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_USER: anthers
           POSTGRES_PASSWORD: anthers
@@ -323,6 +358,9 @@ jobs:
       # The session's mail catcher, so the browser suite can read back the codes the API emails.
       mailpit:
         image: axllent/mailpit:v1.27
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         ports:
           - 8025:8025
 
@@ -477,6 +515,9 @@ jobs:
     services:
       postgres:
         image: postgres:16
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_USER: anthers
           POSTGRES_PASSWORD: anthers
@@ -489,6 +530,9 @@ jobs:
       # The session's mail catcher, so the browser suite can read back the codes the API emails.
       mailpit:
         image: axllent/mailpit:v1.27
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
     env:
       # 🚨 `postgres`, NOT `localhost` — the one thing that genuinely changes when a job

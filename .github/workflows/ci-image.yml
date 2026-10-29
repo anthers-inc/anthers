@@ -57,6 +57,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Before the build: the Dockerfile's base is `ubuntu:24.04`, a Docker Hub pull, and an
+      # anonymous one is what `ci.yml`'s header explains at length. Guarded on the secret's
+      # presence so a fork pull request, which is handed no secrets, still builds.
+      - name: Log in to Docker Hub
+        if: ${{ env.DOCKERHUB_TOKEN != '' }}
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build and publish
         uses: docker/build-push-action@v6
         with:
