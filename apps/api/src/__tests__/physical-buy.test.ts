@@ -214,6 +214,29 @@ describe("the shelf", () => {
 		expect(body.listing.options.map((o) => o.name)).toEqual(["Size", "Glaze"]);
 	});
 
+	it("lets the creator read a draft's storefront, and keeps it hidden from a stranger", async () => {
+		const draft = await insertWork({
+			creatorId: creator.userId,
+			type: "physical",
+			title: "An unfinished mug",
+			visibility: "private",
+			access: [{ threshold: 0, allow: true, price: "18.00" }],
+		});
+		workIds.push(draft.id);
+		await db.insert(workPhysicalListings).values({
+			workId: draft.id,
+			shippingPrice: "0.00",
+			handlingBusinessDays: 3,
+			taxCategory: "general",
+			options: [],
+		});
+
+		const owner = await call("GET", `/api/payments/physical/${draft.slug}`, creator.cookie);
+		expect(owner.status).toBe(200);
+		const stranger = await call("GET", `/api/payments/physical/${draft.slug}`, buyer.cookie);
+		expect(stranger.status).toBe(404);
+	});
+
 	it("answers a non-good with the same 404 a missing Work gets", async () => {
 		const res = await call("GET", "/api/payments/physical/no-such-work");
 		expect(res.status).toBe(404);

@@ -57,6 +57,7 @@ interface ListingJson {
 		handlingBusinessDays: number;
 		taxCategory: string;
 		options: Array<{ name: string; values: Array<{ label: string; stock: number | null }> }>;
+		images?: Array<{ key: string; alt: string }>;
 	};
 	error?: string;
 	code?: string;
@@ -109,6 +110,7 @@ describe("a physical Work's listing", () => {
 			handlingBusinessDays: 3,
 			taxCategory: "general",
 			options: [],
+			images: [],
 		});
 	});
 

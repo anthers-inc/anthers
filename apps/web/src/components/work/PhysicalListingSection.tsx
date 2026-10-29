@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// biome-ignore-all lint/suspicious/noArrayIndexKey: a variant and its values are positional rows with no ids; every control addresses the position.
 /**
  * The Manage tab's Selling section for a physical good — shipping, handling and tax, the
  * answers a good needs that a digital Work never does (Parker's physical-goods model,
@@ -23,99 +24,22 @@
  * against a vocabulary: a creator may offer Scent as readily as Size, and the platform has
  * no business deciding which names are the real ones.
  *
- * ⭐ **One listing row, two editing surfaces.** `useListing` re-reads the row immediately
+ * ⭐ **One listing row, several editing surfaces.** `useListing` re-reads the row immediately
  * before every save and writes only the slice its caller changed, because the route
- * replaces the whole listing: a component holding a copy from before the other surface
- * saved would silently undo that save.
+ * replaces the whole listing: a component holding a copy from before another surface saved
+ * would silently undo that save.
  */
 
 import { PHYSICAL_TAX_CATEGORIES, type PhysicalTaxCategory } from "@anthers/shared/tax-codes";
-import { client } from "@anthers/web-shared/rpc";
-import { useEffect, useState } from "react";
 import { InlineField } from "./Editing";
+import { type ListingOption, type ListingValue, useListing } from "./physical-listing";
 import { WORK_DETAILS_HEADING_CLASS } from "./WorkLayout";
-
-/** One choice a buyer makes: its name and the values under it. */
-interface ListingValue {
-	label: string;
-	/** How many are left, or null for as many as the creator can make. */
-	stock: number | null;
-}
-interface ListingOption {
-	name: string;
-	values: ListingValue[];
-}
-
-interface Listing {
-	shippingPrice: string;
-	handlingBusinessDays: number;
-	taxCategory: PhysicalTaxCategory;
-	options: ListingOption[];
-}
 
 /** The range the server clamps into; the picker offers the same numbers. */
 const HANDLING_CHOICES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 /** How many variants a good may offer — the service's own ceiling. */
 const MAX_OPTIONS = 3;
-
-/** Reads the good's one listing row, and writes a slice of it over the row as it stands. */
-function useListing(workId: number) {
-	const [listing, setListing] = useState<Listing | null>(null);
-	const [loadError, setLoadError] = useState<string | null>(null);
-
-	useEffect(() => {
-		let stale = false;
-		void (async () => {
-			const res = await client.api.content.works[":id"].physical.$get({
-				param: { id: String(workId) },
-			});
-			if (stale) return;
-			if (!res.ok) {
-				setLoadError("Couldn't read this good's selling details.");
-				return;
-			}
-			const body = (await res.json()) as { listing: Listing };
-			setListing(body.listing);
-		})();
-		return () => {
-			stale = true;
-		};
-	}, [workId]);
-
-	/**
-	 * Save the caller's slice over a fresh read of the row.
-	 *
-	 * The server validates; a refusal's message reads in the field, in its own words
-	 * rather than a generic one.
-	 */
-	const save = async (patch: Partial<Listing>): Promise<void> => {
-		const read = await client.api.content.works[":id"].physical.$get({
-			param: { id: String(workId) },
-		});
-		if (!read.ok) throw new Error("Couldn't read this good's selling details.");
-		const { listing: current } = (await read.json()) as { listing: Listing };
-
-		const next = { ...current, ...patch };
-		const res = await client.api.content.works[":id"].physical.$put({
-			param: { id: String(workId) },
-			json: {
-				shippingPrice: next.shippingPrice,
-				handlingBusinessDays: next.handlingBusinessDays,
-				taxCategory: next.taxCategory,
-				options: next.options,
-			},
-		});
-		if (!res.ok) {
-			const body = (await res.json().catch(() => null)) as { error?: string } | null;
-			throw new Error(body?.error ?? "That listing didn't save.");
-		}
-		const body = (await res.json()) as { listing: Listing };
-		setListing(body.listing);
-	};
-
-	return { listing, loadError, save };
-}
 
 /**
  * The variant builder: names down the side, each with its values and a stock count.
@@ -140,34 +64,49 @@ function VariantEditor({
 		});
 
 	return (
-		<div className="flex flex-col gap-3">
+		<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
 			{options.map((option, index) => (
-				// biome-ignore lint/suspicious/noArrayIndexKey: a variant has no id — the row is positional, and the position is what every control on it addresses.
-				<div key={index} className="rounded-box border border-base-300 p-3">
-					<div className="flex items-center gap-2">
-						<input
-							aria-label={`Variant ${index + 1} name`}
-							className="input input-bordered input-sm w-full max-w-48"
-							placeholder="Size, color, scent…"
-							value={option.name}
-							onChange={(e) => patch(index, { ...option, name: e.target.value })}
-						/>
+				<div key={index} className="rounded-box border border-base-300 p-4">
+					<div className="flex flex-wrap items-end gap-2">
+						<div className="flex min-w-48 flex-1 flex-col gap-1">
+							<label
+								className="text-xs text-base-content/60"
+								htmlFor={`physical-variant-${index}-name`}
+							>
+								Variant
+							</label>
+							<input
+								id={`physical-variant-${index}-name`}
+								aria-label={`Variant ${index + 1} name`}
+								className="input input-bordered input-sm w-full max-w-sm"
+								placeholder="Size, color, scent…"
+								value={option.name}
+								onChange={(e) => patch(index, { ...option, name: e.target.value })}
+							/>
+						</div>
 						<button
 							type="button"
-							className="btn btn-ghost btn-sm"
+							className="btn btn-ghost btn-sm text-error"
 							aria-label={`Remove variant ${index + 1}`}
 							onClick={() => onChange(options.filter((_, i) => i !== index))}
 						>
 							Remove
 						</button>
 					</div>
-					<div className="mt-2 flex flex-col gap-1">
+					<div className="mt-3 flex flex-col gap-1">
+						<div className="hidden gap-2 px-1 text-xs text-base-content/60 sm:grid sm:grid-cols-[minmax(0,1fr)_7rem_2rem]">
+							<span>Value</span>
+							<span>In stock</span>
+							<span />
+						</div>
 						{option.values.map((value, valueIndex) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: a value has no id either — a label may be edited or repeated under another variant, so only the position is stable.
-							<div key={valueIndex} className="flex items-center gap-2">
+							<div
+								key={`${index}-${valueIndex}`}
+								className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_7rem_2rem]"
+							>
 								<input
 									aria-label={`${option.name || "Variant"} value ${valueIndex + 1}`}
-									className="input input-bordered input-sm w-full max-w-40"
+									className="input input-bordered input-sm w-full"
 									placeholder="Small"
 									value={value.label}
 									onChange={(e) =>
@@ -179,7 +118,7 @@ function VariantEditor({
 									type="number"
 									min="0"
 									step="1"
-									className="input input-bordered input-sm w-full max-w-28"
+									className="input input-bordered input-sm w-full"
 									placeholder="Unlimited"
 									value={value.stock ?? ""}
 									onChange={(e) =>

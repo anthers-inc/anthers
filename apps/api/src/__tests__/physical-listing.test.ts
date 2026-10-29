@@ -15,6 +15,7 @@ const base = {
 	handlingBusinessDays: 3,
 	taxCategory: "general",
 	options: [],
+	images: [],
 };
 
 describe("shipping price", () => {
@@ -129,5 +130,39 @@ describe("options", () => {
 	it("refuses an unnamed choice or value", () => {
 		expect(withOptions([{ name: "  ", values: [{ label: "M" }] }]).ok).toBe(false);
 		expect(withOptions([{ name: "Size", values: [{ label: "" }] }]).ok).toBe(false);
+	});
+});
+
+describe("pictures", () => {
+	const withImages = (images: unknown) => validateListing({ ...base, images });
+
+	it("keeps an ordered gallery with its descriptions", () => {
+		const r = withImages([
+			{ key: "creators/1/photo-a.jpg", alt: "The mug from the front" },
+			{ key: "creators/1/photo-b.jpg", alt: "" },
+		]);
+		expect(r.ok).toBe(true);
+		if (r.ok) {
+			expect(r.value.images).toEqual([
+				{ key: "creators/1/photo-a.jpg", alt: "The mug from the front" },
+				{ key: "creators/1/photo-b.jpg", alt: "" },
+			]);
+		}
+	});
+
+	it("refuses a blank key and a picture twice", () => {
+		expect(withImages([{ key: "", alt: "A mug" }]).ok).toBe(false);
+		expect(
+			withImages([
+				{ key: "creators/1/photo.jpg", alt: "A mug" },
+				{ key: "creators/1/photo.jpg", alt: "The same mug" },
+			]).ok,
+		).toBe(false);
+	});
+
+	it("bounds the gallery and each description", () => {
+		const nine = Array.from({ length: 9 }, (_, i) => ({ key: `creators/1/${i}.jpg`, alt: "" }));
+		expect(withImages(nine).ok).toBe(false);
+		expect(withImages([{ key: "creators/1/a.jpg", alt: "x".repeat(301) }]).ok).toBe(false);
 	});
 });

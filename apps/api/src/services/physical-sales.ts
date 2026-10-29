@@ -34,6 +34,7 @@ import { purchasePriceFor } from "./access.js";
 import type { SavedBillingAddress } from "./billing.js";
 import { type PhysicalPick, validatePhysicalPick } from "./physical-stock.js";
 import { clampHandlingDays } from "./shipments.js";
+import { resolveThumbnailUrl } from "./thumbnails.js";
 
 /** The listing as a buyer sees it: what is offered, what shipping costs, how long it takes. */
 export interface BuyerListing {
@@ -41,6 +42,8 @@ export interface BuyerListing {
 	handlingBusinessDays: number;
 	taxCategory: PhysicalTaxCategory;
 	options: Array<{ name: string; values: Array<{ label: string; stock: number | null }> }>;
+	/** The storefront's pictures, resolved to display URLs in the creator's order. */
+	images: Array<{ url: string; alt: string }>;
 }
 
 /** The defaults a good carries before its creator has answered anything. */
@@ -49,6 +52,7 @@ const DEFAULT_LISTING: BuyerListing = {
 	handlingBusinessDays: 3,
 	taxCategory: "general",
 	options: [],
+	images: [],
 };
 
 /** The listing a buyer reads. Public by design — it is the panel they are choosing from. */
@@ -58,8 +62,16 @@ export async function buyerListingFor(workId: number): Promise<BuyerListing> {
 		.from(workPhysicalListings)
 		.where(eq(workPhysicalListings.workId, workId))
 		.limit(1);
-	if (!row) return { ...DEFAULT_LISTING, options: [] };
+	if (!row) return { ...DEFAULT_LISTING, options: [], images: [] };
 	const options: PhysicalOption[] = row.options ?? [];
+	const images = (
+		await Promise.all(
+			(row.images ?? []).map(async (image) => {
+				const url = await resolveThumbnailUrl(image.key);
+				return url ? { url, alt: image.alt } : null;
+			}),
+		)
+	).filter((image): image is { url: string; alt: string } => image !== null);
 	return {
 		shippingPrice: row.shippingPrice,
 		handlingBusinessDays: row.handlingBusinessDays,
@@ -68,6 +80,7 @@ export async function buyerListingFor(workId: number): Promise<BuyerListing> {
 			name: option.name,
 			values: option.values.map((value) => ({ label: value.label, stock: value.stock })),
 		})),
+		images,
 	};
 }
 
@@ -224,6 +237,11 @@ function taxCodeFor(category: PhysicalTaxCategory): string {
  *
  * Signed-out visitors get this too — the goods rule is that the page and its store panel
  * read without an account, and creating one is required only to buy.
+ *
+ * ⭐ **The creator's own draft reads here too** (Parker, 2026-10-29): the media area is where
+ * a good is set up, and a draft that answered "Work not found" in its own store panel was
+ * hiding the surface the creator was editing. Ownership is the same test the quote route
+ * already uses; a stranger still gets the 404.
  */
 export async function physicalStorefront(
 	slug: string,
@@ -235,23 +253,29 @@ export async function physicalStorefront(
 			ok: true;
 			work: { id: number; title: string | null; slug: string | null; creatorHandle: string | null };
 			unitPrice: Decimal;
+			/** Whether the Work carries a sellable price; a creator's own unpriced draft still reads. */
+			priced: boolean;
 			listing: BuyerListing;
 	  }
 > {
 	const [row] = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
-	if (row?.type !== "physical" || row.visibility !== "released")
+	if (row?.type !== "physical" || (row.visibility !== "released" && row.creatorId !== userId))
 		return { ok: false, status: 404, error: "Work not found" };
 	// The same resolver every Work uses, at the viewer's own standing: a signed-out visitor
 	// qualifies for the Everyone row and a supporter for whichever rung they hold, so the
 	// headline and the quote cannot disagree about what this person pays.
 	const priced = await purchasePriceFor(row, userId);
 	const unitPrice = priced ? new Decimal(priced) : null;
-	if (!unitPrice || unitPrice.lte(0))
+	const owner = row.creatorId === userId;
+	// The creator's own unpriced draft still renders: the storefront is the surface they
+	// are setting up, and a 400 there hid the pictures and variants behind the price.
+	if ((!unitPrice || unitPrice.lte(0)) && !owner)
 		return { ok: false, status: 400, error: "This good isn't priced for sale yet." };
 	return {
 		ok: true,
 		work: { id: row.id, title: row.title, slug: row.slug, creatorHandle: null },
-		unitPrice,
+		unitPrice: unitPrice ?? new Decimal(0),
+		priced: Boolean(unitPrice?.gt(0)),
 		listing: await buyerListingFor(row.id),
 	};
 }

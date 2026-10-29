@@ -23,6 +23,18 @@ import {
 
 const STEM = "Selling walk";
 
+/** A real 1×1 PNG — small but honest: the gallery's preview is the picture it holds. */
+function stubImage(name: string): { name: string; mimeType: string; buffer: Buffer } {
+	return {
+		name,
+		mimeType: "image/png",
+		buffer: Buffer.from(
+			"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+			"base64",
+		),
+	};
+}
+
 let session = "";
 
 function headers(): Record<string, string> {
@@ -86,10 +98,10 @@ test("a physical good's variants and thumbnail live in the media area", async ({
 	// A variant, with one value counted and one left unlimited.
 	await page.getByRole("button", { name: "Manage This Good" }).click();
 	await expect(page.getByRole("heading", { name: "Goods Management" })).toBeVisible();
-	// The good's image is buyer-facing too, so it rides the same panel and is reachable
-	// for the first time — the Manage tab never rendered a physical Work's thumbnail.
+	// The good's pictures are buyer-facing too, so they ride the same panel: the old
+	// 16:9 thumbnail tab is the square gallery now.
 	await expect(page.getByRole("tab", { name: "Variants" })).toBeVisible();
-	await expect(page.getByRole("tab", { name: "Thumbnail" })).toBeVisible();
+	await expect(page.getByRole("tab", { name: "Photos" })).toBeVisible();
 	await expect(page.getByText(/no variants/i)).toBeVisible();
 	await page.getByRole("button", { name: "Edit Variants" }).click();
 	// An unset listing opens on an empty builder, so the first variant is added before it
@@ -103,14 +115,36 @@ test("a physical good's variants and thumbnail live in the media area", async ({
 	await page.getByRole("button", { name: "Save Variants" }).click();
 	await expect(page.getByText(/Size:/)).toBeVisible({ timeout: 15_000 });
 
-	// Done returns the media area's pencil. The store panel itself is the buyer's store,
-	// and a draft is not one yet — the variants are read back through this manager.
+	// The gallery: two square pictures, a description on the first, and the first wears
+	// the cover.
+	await page.getByRole("tab", { name: "Photos" }).click();
+	await expect(page.getByText(/no photos yet/i)).toBeVisible();
+	await page
+		.locator('input[type="file"][multiple]')
+		.setInputFiles([stubImage("front.png"), stubImage("back.png")]);
+	await expect(page.getByRole("img", { name: "Photo 1" })).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByRole("img", { name: "Photo 2" })).toBeVisible();
+	await expect(page.getByText("Cover", { exact: true })).toBeVisible();
+	await page.getByLabel("Describe photo 1").fill("Mug front");
+	await page.getByLabel("Describe photo 1").blur();
+	await expect(page.getByRole("img", { name: "Mug front" })).toBeVisible({ timeout: 15_000 });
+	await page.getByLabel("Describe photo 2").fill("Mug back");
+	await page.getByLabel("Describe photo 2").blur();
+	await expect(page.getByRole("img", { name: "Mug back" })).toBeVisible({ timeout: 15_000 });
+
+	// Done returns the media area's pencil, and the draft now renders its own storefront
+	// rather than the 404 it used to show the creator.
 	await page.getByRole("button", { name: "Done" }).click();
 	await expect(page.getByRole("button", { name: "Manage This Good" })).toBeVisible();
+	await expect(page.getByRole("img", { name: "Mug front" })).toBeVisible({ timeout: 15_000 });
+	await page.getByRole("button", { name: "Next photo" }).click();
+	await expect(page.getByRole("img", { name: "Mug back" })).toBeVisible();
 
 	await page.reload();
 	await page.getByRole("button", { name: "Manage This Good" }).click();
 	await expect(page.getByText("Mug, Big mug")).toBeVisible({ timeout: 15_000 });
+	await page.getByRole("tab", { name: "Photos" }).click();
+	await expect(page.getByRole("img", { name: "Mug front" })).toBeVisible({ timeout: 15_000 });
 });
 
 test("a kind that ships nothing carries no Selling section", async ({ page, context }) => {

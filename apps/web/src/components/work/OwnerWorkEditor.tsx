@@ -139,6 +139,7 @@ import WorkReviews from "../project/WorkReviews";
 import { InlineField } from "./Editing";
 import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
+import PhysicalImagesSection from "./PhysicalImagesSection";
 import PhysicalListingSection, { PhysicalVariantsSection } from "./PhysicalListingSection";
 import PreviewMediaSection from "./PreviewMediaSection";
 import ShareLinkButton from "./ShareLinkButton";
@@ -1563,7 +1564,11 @@ export default function OwnerWorkEditor({
 			content: <PhysicalVariantsSection workId={current.id} />,
 		});
 		if (thumbnailTab) {
-			mediaManagerTabs.push({ key: "thumbnail", label: "Thumbnail", content: thumbnailTab });
+			mediaManagerTabs.push({
+				key: "photos",
+				label: "Photos",
+				content: <PhysicalImagesSection workId={current.id} />,
+			});
 		}
 	} else if (!writing && !isGoods(current.type)) {
 		mediaManagerTabs.push({
@@ -1740,6 +1745,7 @@ export default function OwnerWorkEditor({
 								slug={current.slug ?? ""}
 								title={current.title ?? "Untitled"}
 								creatorHandle={asRead.creator?.handle ?? ""}
+								thumbnail={current.thumbnail}
 								workType={current.type}
 							/>
 						</div>

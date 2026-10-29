@@ -338,7 +338,7 @@ export const sourceOrderSchema = z.object({ order: z.array(z.number().int()) });
  * Loose on purpose at this layer: the shape is validated once in
  * `services/physical-listings.ts`, which is the module a quote, a checkout and an order
  * all read, and a second stricter copy here would be the copy that drifts. What this
- * guarantees is only that the body carries the four fields and not something else.
+ * guarantees is only that the body carries the listing's fields and not something else.
  */
 export const physicalListingSchema = z.object({
 	shippingPrice: z.union([z.string(), z.number()]).optional(),
@@ -354,6 +354,14 @@ export const physicalListingSchema = z.object({
 						stock: z.union([z.number(), z.string(), z.null()]).optional(),
 					}),
 				),
+			}),
+		)
+		.optional(),
+	images: z
+		.array(
+			z.object({
+				key: z.string().min(1).max(500),
+				alt: z.string().max(300).default(""),
 			}),
 		)
 		.optional(),
