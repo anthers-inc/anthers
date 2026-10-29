@@ -33,6 +33,14 @@ export interface PhysicalImage {
 	alt: string;
 	/** Exactly one picture is the cover; the storefront shows it first. */
 	cover: boolean;
+	/**
+	 * The address storage mints for this picture, from the listing read.
+	 *
+	 * Never rebuilt from the key here: a key alone only names a file inside whichever storage
+	 * backend the deployment runs, and a browser that guessed `/content/<key>` would get the
+	 * web app's own shell back on a deployed host rather than the picture.
+	 */
+	url: string | null;
 }
 
 export interface Listing {
@@ -94,7 +102,8 @@ export function useListing(workId: number, enabled = true) {
 				maxQuantity: next.maxQuantity,
 				taxCategory: next.taxCategory,
 				options: next.options,
-				images: next.images,
+				// The address is the read's, not the row's; a save names only what it stores.
+				images: next.images.map(({ key, alt, cover }) => ({ key, alt, cover })),
 			},
 		});
 		if (!res.ok) {

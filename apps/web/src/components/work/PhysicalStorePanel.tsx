@@ -276,7 +276,7 @@ export default function PhysicalStorePanel({
 				images: [...editorListing.images]
 					.sort((a, b) => Number(b.cover) - Number(a.cover))
 					.map((image) => ({
-						url: keyToPreview(image.key),
+						url: image.url ?? "",
 						alt: image.alt,
 					})),
 			};
