@@ -27,20 +27,15 @@ export const MAX_OPTIONS = 3;
  * The variant builder: a name with its values and stock counts.
  *
  * A blank count means unlimited, which is the ordinary case for a creator making things
- * to order — so blank is where the field starts rather than a count nobody meant.
+ * to order. The caller edits one variant at a time; adding and removing variants belongs to
+ * the storefront's header and row controls, not to this table.
  */
 export function PhysicalVariantEditor({
 	options,
 	onChange,
-	showAddVariant = true,
-	showRemove = true,
 }: {
 	options: ListingOption[];
 	onChange: (next: ListingOption[]) => void;
-	/** The inline row editor edits one option and never adds another. */
-	showAddVariant?: boolean;
-	/** Removal belongs to the row's own trash button, outside this editor. */
-	showRemove?: boolean;
 }) {
 	const patch = (index: number, next: ListingOption) =>
 		onChange(options.map((option, i) => (i === index ? next : option)));
@@ -72,16 +67,6 @@ export function PhysicalVariantEditor({
 								onChange={(e) => patch(index, { ...option, name: e.target.value })}
 							/>
 						</div>
-						{showRemove && (
-							<button
-								type="button"
-								className="btn btn-ghost btn-sm text-error"
-								aria-label={`Remove variant ${index + 1}`}
-								onClick={() => onChange(options.filter((_, i) => i !== index))}
-							>
-								Remove
-							</button>
-						)}
 					</div>
 					<div className="mt-3 flex flex-col gap-1">
 						<div className="hidden gap-2 px-1 text-xs text-base-content/60 sm:grid sm:grid-cols-[minmax(0,1fr)_7rem_2rem]">
@@ -148,19 +133,6 @@ export function PhysicalVariantEditor({
 					</div>
 				</div>
 			))}
-			{showAddVariant && options.length < MAX_OPTIONS && (
-				<button
-					type="button"
-					className="btn btn-sm self-start"
-					onClick={() => onChange([...options, { name: "", values: [{ label: "", stock: null }] }])}
-				>
-					Add a variant
-				</button>
-			)}
-			<p className="text-xs text-base-content/50">
-				Leave stock blank for as many as you can make. A count holds the value back once it runs
-				out.
-			</p>
 		</div>
 	);
 }

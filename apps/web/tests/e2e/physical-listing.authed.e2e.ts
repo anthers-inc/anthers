@@ -85,13 +85,6 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 	await page.getByRole("button", { name: "Save Shipping" }).click();
 	await expect(page.getByText(/\$6\.50 to ship/i)).toBeVisible({ timeout: 15_000 });
 
-	// Quantity bounds: the row's pencil sets the smallest and largest order.
-	await page.getByRole("button", { name: "Edit quantity" }).click();
-	await page.getByLabel("Smallest order").fill("2");
-	await page.getByLabel("Largest order").fill("5");
-	await page.getByRole("button", { name: "Save quantity" }).click();
-	await expect(page.getByLabel("How many")).toHaveValue("2", { timeout: 15_000 });
-
 	// A variant, built in the storefront and read back as a row with its own pencil.
 	await expect(page.getByText(/nothing to choose/i)).toBeVisible();
 	await page.getByRole("button", { name: "Add a variant" }).click();
@@ -105,6 +98,15 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 		timeout: 15_000,
 	});
 	await expect(page.getByRole("button", { name: "Mug", exact: true })).toBeVisible();
+
+	// A row's editor takes the whole right side: the price box, the policy block, the other
+	// variants and the buy door step out of its way until it closes.
+	await page.getByRole("button", { name: "Edit Size variant" }).click();
+	await expect(page.getByTestId("physical-quote-box")).toHaveCount(0);
+	await expect(page.getByRole("heading", { name: "Shipping & Policies" })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Buy Now" })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Edit Size variant" })).toHaveCount(0);
+	await page.getByRole("button", { name: "Cancel" }).click();
 
 	// Photos: the carousel's own pencil, then two square pictures with descriptions.
 	await page.getByRole("button", { name: "Edit photos" }).click();
@@ -131,7 +133,6 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 	// The row, not the page, is the truth: a reload reads every edit back.
 	await page.reload();
 	await expect(page.getByText(/\$6\.50 to ship/i)).toBeVisible({ timeout: 15_000 });
-	await expect(page.getByLabel("How many")).toHaveValue("2");
 	await expect(page.getByRole("button", { name: "Edit Size variant" })).toBeVisible();
 	await expect(page.getByRole("img", { name: "Mug front" })).toBeVisible();
 });
