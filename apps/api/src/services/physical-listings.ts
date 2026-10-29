@@ -3,10 +3,11 @@
  * Physical listings — the one writer of `work_physical_listings`, and the validation a creator's
  * answer has to survive before a stranger's money depends on it.
  *
- * A listing is four answers: what shipping costs, how long the good takes to leave, what
- * it is for tax, and what choices the buyer makes. Each is checked here rather than at the
- * surface, because the same table is read by the quote, the checkout and the order, and a
- * value that only one of them validates is a value the other two will trust.
+ * A listing is four answers and its pictures: what shipping costs, how long the good takes
+ * to leave, what it is for tax, what choices the buyer makes, and the gallery the storefront
+ * shows. Each is checked here rather than at the surface, because the same table is read by
+ * the quote, the checkout and the order, and a value that only one of them validates is a
+ * value the other two will trust.
  *
  * 🚨 **Shipping is per order and free is a real answer.** A creator who builds shipping
  * into the price sets `0.00`, and that must read as a stated fact rather than as missing
@@ -19,7 +20,8 @@
  * unlimited. A vocabulary would be this module guessing at what people make.
  */
 import { db } from "@anthers/db/client";
-import { type PhysicalOption, workPhysicalListings } from "@anthers/db/schema";
+import { type PhysicalImage, type PhysicalOption, workPhysicalListings } from "@anthers/db/schema";
+import { MAX_GOODS_PER_ORDER } from "@anthers/shared/constants";
 import { isPhysicalTaxCategory, type PhysicalTaxCategory } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
@@ -32,13 +34,22 @@ export const LISTING_LIMITS = {
 	maxLabelChars: 40,
 	maxStock: 1_000_000,
 	maxShippingDollars: "1000.00",
+	/** A storefront carousel is a shop window, not a portfolio. */
+	maxImages: 8,
+	maxImageKeyChars: 500,
+	maxAltChars: 300,
+	/** The platform's single-order ceiling; a listing can narrow it but not exceed it. */
+	maxQuantity: MAX_GOODS_PER_ORDER,
 } as const;
 
 export interface PhysicalListing {
 	shippingPrice: string;
 	handlingBusinessDays: number;
+	minQuantity: number;
+	maxQuantity: number;
 	taxCategory: PhysicalTaxCategory;
 	options: PhysicalOption[];
+	images: PhysicalImage[];
 }
 
 export type ListingProblem = { field: string; message: string };
@@ -51,14 +62,33 @@ export type ListingValidation =
 export const DEFAULT_LISTING: PhysicalListing = {
 	shippingPrice: "0.00",
 	handlingBusinessDays: 3,
+	minQuantity: 1,
+	maxQuantity: MAX_GOODS_PER_ORDER,
 	taxCategory: "general",
 	options: [],
+	images: [],
 };
 
 const SHIPPING_SHAPE = /^\d{1,4}(\.\d{1,2})?$/;
 
 function clean(value: unknown): string {
 	return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * Exactly one picture is the cover.
+ *
+ * A gallery always needs a cover, and a client that sends none (or two) is normalized
+ * rather than refused: the first picture wins when nobody named one, and the first claimed
+ * cover wins when more than one did.
+ */
+function withOneCover(images: PhysicalImage[]): PhysicalImage[] {
+	if (images.length === 0) return [];
+	const coverIndex = images.findIndex((image) => image.cover);
+	return images.map((image, index) => ({
+		...image,
+		cover: coverIndex === -1 ? index === 0 : index === coverIndex,
+	}));
 }
 
 /**
@@ -70,8 +100,11 @@ function clean(value: unknown): string {
 export function validateListing(input: {
 	shippingPrice?: unknown;
 	handlingBusinessDays?: unknown;
+	minQuantity?: unknown;
+	maxQuantity?: unknown;
 	taxCategory?: unknown;
 	options?: unknown;
+	images?: unknown;
 }): ListingValidation {
 	const problems: ListingProblem[] = [];
 
@@ -99,6 +132,33 @@ export function validateListing(input: {
 		});
 	}
 	const handlingBusinessDays = clampHandlingDays(handling);
+
+	const rawMin = input.minQuantity == null ? 1 : Number(input.minQuantity);
+	const rawMax = input.maxQuantity == null ? MAX_GOODS_PER_ORDER : Number(input.maxQuantity);
+	let minQuantity = 1;
+	let maxQuantity = MAX_GOODS_PER_ORDER;
+	if (!Number.isInteger(rawMin) || rawMin < 1 || rawMin > MAX_GOODS_PER_ORDER) {
+		problems.push({
+			field: "minQuantity",
+			message: `The smallest order is a whole number from 1 to ${MAX_GOODS_PER_ORDER}.`,
+		});
+	} else {
+		minQuantity = rawMin;
+	}
+	if (!Number.isInteger(rawMax) || rawMax < 1 || rawMax > MAX_GOODS_PER_ORDER) {
+		problems.push({
+			field: "maxQuantity",
+			message: `The largest order is a whole number from 1 to ${MAX_GOODS_PER_ORDER}.`,
+		});
+	} else {
+		maxQuantity = rawMax;
+	}
+	if (minQuantity > maxQuantity) {
+		problems.push({
+			field: "maxQuantity",
+			message: "The largest order can't be smaller than the smallest.",
+		});
+	}
 
 	const category = clean(input.taxCategory) || "general";
 	if (!isPhysicalTaxCategory(category)) {
@@ -170,14 +230,49 @@ export function validateListing(input: {
 		options.push({ name, values });
 	}
 
+	const images: PhysicalImage[] = [];
+	const rawImages = Array.isArray(input.images) ? input.images : [];
+	if (rawImages.length > LISTING_LIMITS.maxImages) {
+		problems.push({
+			field: "images",
+			message: `A good can show up to ${LISTING_LIMITS.maxImages} pictures.`,
+		});
+	}
+	const seenKeys = new Set<string>();
+	for (const raw of rawImages.slice(0, LISTING_LIMITS.maxImages)) {
+		const source = (raw ?? {}) as { key?: unknown; alt?: unknown; cover?: unknown };
+		const key = clean(source.key);
+		const alt = clean(source.alt);
+		if (!key || key.length > LISTING_LIMITS.maxImageKeyChars) {
+			problems.push({ field: "images", message: "One of the pictures didn't upload." });
+			continue;
+		}
+		if (seenKeys.has(key)) {
+			problems.push({ field: "images", message: "The same picture is in the gallery twice." });
+			continue;
+		}
+		if (alt.length > LISTING_LIMITS.maxAltChars) {
+			problems.push({
+				field: "images",
+				message: `A picture's description is too long (${LISTING_LIMITS.maxAltChars} characters at most).`,
+			});
+			continue;
+		}
+		seenKeys.add(key);
+		images.push({ key, alt, cover: Boolean(source.cover) });
+	}
+
 	if (problems.length > 0) return { ok: false, problems };
 	return {
 		ok: true,
 		value: {
 			shippingPrice,
 			handlingBusinessDays,
+			minQuantity,
+			maxQuantity,
 			taxCategory: category as PhysicalTaxCategory,
 			options,
+			images: withOneCover(images),
 		},
 	};
 }
@@ -189,12 +284,15 @@ export async function physicalListingFor(workId: number): Promise<PhysicalListin
 		.from(workPhysicalListings)
 		.where(eq(workPhysicalListings.workId, workId))
 		.limit(1);
-	if (!row) return { ...DEFAULT_LISTING, options: [] };
+	if (!row) return { ...DEFAULT_LISTING, options: [], images: [] };
 	return {
 		shippingPrice: row.shippingPrice,
 		handlingBusinessDays: row.handlingBusinessDays,
+		minQuantity: row.minQuantity,
+		maxQuantity: row.maxQuantity,
 		taxCategory: row.taxCategory as PhysicalTaxCategory,
 		options: row.options ?? [],
+		images: withOneCover(row.images ?? []),
 	};
 }
 
@@ -219,8 +317,11 @@ export async function savePhysicalListing(
 			workId,
 			shippingPrice: value.shippingPrice,
 			handlingBusinessDays: value.handlingBusinessDays,
+			minQuantity: value.minQuantity,
+			maxQuantity: value.maxQuantity,
 			taxCategory: value.taxCategory,
 			options: value.options,
+			images: value.images,
 			updatedAt: now,
 		})
 		.onConflictDoUpdate({
@@ -228,8 +329,11 @@ export async function savePhysicalListing(
 			set: {
 				shippingPrice: value.shippingPrice,
 				handlingBusinessDays: value.handlingBusinessDays,
+				minQuantity: value.minQuantity,
+				maxQuantity: value.maxQuantity,
 				taxCategory: value.taxCategory,
 				options: value.options,
+				images: value.images,
 				updatedAt: now,
 			},
 		});

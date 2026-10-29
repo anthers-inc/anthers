@@ -108,6 +108,20 @@ describe("a pick against its listing", () => {
 		expect(r.ok).toBe(false);
 	});
 
+	it("honors a listing's own quantity bounds", () => {
+		const pick = {
+			quantity: 2,
+			options: [
+				{ name: "Size", label: "Small" },
+				{ name: "Glaze", label: "Blue" },
+			],
+		};
+		const bounded = { ...LISTING, minQuantity: 2, maxQuantity: 3 };
+		expect(validatePhysicalPick(bounded, pick).ok).toBe(true);
+		expect(validatePhysicalPick({ ...bounded, minQuantity: 3 }, pick).ok).toBe(false);
+		expect(validatePhysicalPick({ ...bounded, maxQuantity: 1 }, pick).ok).toBe(false);
+	});
+
 	it("refuses a sold-out value and a count past the shelf", () => {
 		const soldOut = validatePhysicalPick(LISTING, {
 			quantity: 1,
@@ -212,6 +226,29 @@ describe("the shelf", () => {
 		expect(body.unitPrice).toBe("18.00");
 		expect(body.listing.shippingPrice).toBe("6.50");
 		expect(body.listing.options.map((o) => o.name)).toEqual(["Size", "Glaze"]);
+	});
+
+	it("lets the creator read a draft's storefront, and keeps it hidden from a stranger", async () => {
+		const draft = await insertWork({
+			creatorId: creator.userId,
+			type: "physical",
+			title: "An unfinished mug",
+			visibility: "private",
+			access: [{ threshold: 0, allow: true, price: "18.00" }],
+		});
+		workIds.push(draft.id);
+		await db.insert(workPhysicalListings).values({
+			workId: draft.id,
+			shippingPrice: "0.00",
+			handlingBusinessDays: 3,
+			taxCategory: "general",
+			options: [],
+		});
+
+		const owner = await call("GET", `/api/payments/physical/${draft.slug}`, creator.cookie);
+		expect(owner.status).toBe(200);
+		const stranger = await call("GET", `/api/payments/physical/${draft.slug}`, buyer.cookie);
+		expect(stranger.status).toBe(404);
 	});
 
 	it("answers a non-good with the same 404 a missing Work gets", async () => {

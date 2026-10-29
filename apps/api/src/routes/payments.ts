@@ -1681,6 +1681,7 @@ const paymentRoutes = new Hono()
 			work: found.work,
 			listing: found.listing,
 			unitPrice: found.unitPrice.toFixed(2),
+			priced: found.priced,
 		});
 	})
 

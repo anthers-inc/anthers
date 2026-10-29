@@ -1,0 +1,2 @@
+ALTER TABLE "work_physical_listings" ADD COLUMN "min_quantity" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
+ALTER TABLE "work_physical_listings" ADD COLUMN "max_quantity" integer DEFAULT 10 NOT NULL;

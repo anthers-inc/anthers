@@ -35,6 +35,21 @@ export interface PhysicalOption {
 	values: PhysicalOptionValue[];
 }
 
+/**
+ * One picture of the good, in the order the buyer meets them.
+ *
+ * ⭐ **A good's art is a gallery, not a poster** (Parker, 2026-10-29): the storefront shows
+ * square product photos on a neutral mount, and a single 16:9 thumbnail was almost never
+ * what a creator wanted. The key is a public display image; `alt` is the picture's own
+ * description, empty when the creator has not written one.
+ */
+export interface PhysicalImage {
+	key: string;
+	alt: string;
+	/** Exactly one picture is the cover; the storefront shows it first and the catalog card uses it. */
+	cover: boolean;
+}
+
 // org — a listing is the platform's selling machinery for one creator's good; the carrier
 // and the stock are the creator's facts, held here to run a sale.
 export const workPhysicalListings = pgTable("work_physical_listings", {
@@ -53,10 +68,19 @@ export const workPhysicalListings = pgTable("work_physical_listings", {
 	shippingPrice: numeric("shipping_price").notNull().default("0.00"),
 	/** How long this good takes to leave, in business days. Clamped into the offered range. */
 	handlingBusinessDays: integer("handling_business_days").notNull().default(3),
+	/** The smallest number of this good one order may carry. */
+	minQuantity: integer("min_quantity").notNull().default(1),
+	/** The largest number of this good one order may carry, within the platform ceiling. */
+	maxQuantity: integer("max_quantity").notNull().default(10),
 	/** Which tax category the good falls under — a key into `PHYSICAL_TAX_CATEGORIES`. */
 	taxCategory: text("tax_category").notNull().default("general"),
 	/** The buyer's choices, in the creator's order. Empty for a good with no choices. */
 	options: jsonb("options").$type<PhysicalOption[]>().notNull().default([]),
+	/**
+	 * The storefront's pictures, in the creator's order. Empty until the first upload;
+	 * the first one is also the catalog card's cover.
+	 */
+	images: jsonb("images").$type<PhysicalImage[]>().notNull().default([]),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

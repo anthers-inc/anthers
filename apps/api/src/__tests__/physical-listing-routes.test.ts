@@ -55,8 +55,11 @@ interface ListingJson {
 	listing?: {
 		shippingPrice: string;
 		handlingBusinessDays: number;
+		minQuantity?: number;
+		maxQuantity?: number;
 		taxCategory: string;
 		options: Array<{ name: string; values: Array<{ label: string; stock: number | null }> }>;
+		images?: Array<{ key: string; alt: string; cover?: boolean }>;
 	};
 	error?: string;
 	code?: string;
@@ -107,8 +110,11 @@ describe("a physical Work's listing", () => {
 		expect(body.listing).toEqual({
 			shippingPrice: "0.00",
 			handlingBusinessDays: 3,
+			minQuantity: 1,
+			maxQuantity: 10,
 			taxCategory: "general",
 			options: [],
+			images: [],
 		});
 	});
 

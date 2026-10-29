@@ -54,19 +54,30 @@ function cleaned(value: unknown): string {
  * is wrong with the pick rather than bouncing the buyer back for one problem at a time.
  */
 export function validatePhysicalPick(
-	listing: { options: PhysicalOption[] },
+	listing: { options: PhysicalOption[]; minQuantity?: number; maxQuantity?: number },
 	input: { quantity?: unknown; options?: unknown },
 ): PickValidation {
 	const problems: PickProblem[] = [];
 
-	const rawQuantity = input.quantity == null ? 1 : Number(input.quantity);
+	// A listing may narrow the platform's ceiling; the buyer's own panel offers the same
+	// bounds, and this is the check that a tampered body cannot step outside them.
+	const minQuantity =
+		Number.isInteger(listing.minQuantity) && (listing.minQuantity ?? 1) >= 1
+			? (listing.minQuantity as number)
+			: 1;
+	const maxQuantity = Number.isInteger(listing.maxQuantity)
+		? Math.min(MAX_GOODS_PER_ORDER, Math.max(1, listing.maxQuantity as number))
+		: MAX_GOODS_PER_ORDER;
+
+	const rawQuantity = input.quantity == null ? minQuantity : Number(input.quantity);
 	const quantity = Number.isFinite(rawQuantity) ? Math.trunc(rawQuantity) : Number.NaN;
-	if (!Number.isInteger(quantity) || quantity < 1) {
-		problems.push({ field: "quantity", message: "Choose how many you want." });
-	} else if (quantity > MAX_GOODS_PER_ORDER) {
+	if (!Number.isInteger(quantity) || quantity < minQuantity || quantity > maxQuantity) {
 		problems.push({
 			field: "quantity",
-			message: `A single order carries at most ${MAX_GOODS_PER_ORDER} of one thing.`,
+			message:
+				minQuantity === maxQuantity
+					? `Choose ${minQuantity}.`
+					: `Choose between ${minQuantity} and ${maxQuantity}.`,
 		});
 	}
 
@@ -104,7 +115,7 @@ export function validatePhysicalPick(
 		// buyer why, and the locked pass exists to decide.
 		if (
 			Number.isInteger(quantity) &&
-			quantity >= 1 &&
+			quantity >= minQuantity &&
 			value.stock != null &&
 			value.stock < quantity
 		) {

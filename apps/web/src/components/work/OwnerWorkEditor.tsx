@@ -146,7 +146,6 @@ import { contentTypeMeta } from "../ui/ContentTypeBadge";
 import { InlineField } from "./Editing";
 import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
-import PhysicalListingSection, { PhysicalVariantsSection } from "./PhysicalListingSection";
 import PreviewMediaSection from "./PreviewMediaSection";
 import ShareLinkButton from "./ShareLinkButton";
 import { WorkViewAsSection } from "./ViewAs";
@@ -1574,19 +1573,7 @@ export default function OwnerWorkEditor({
 		);
 
 	const mediaManagerTabs: MediaManagerTab[] = [];
-	if (current.type === "physical") {
-		// A good's variants and its image are what its store panel is made of, so they
-		// are edited where the panel is — behind the media area's pencil (Parker,
-		// 2026-10-28), not at the bottom of the Manage tab.
-		mediaManagerTabs.push({
-			key: "variants",
-			label: "Variants",
-			content: <PhysicalVariantsSection workId={current.id} />,
-		});
-		if (thumbnailTab) {
-			mediaManagerTabs.push({ key: "thumbnail", label: "Thumbnail", content: thumbnailTab });
-		}
-	} else if (!writing && !isGoods(current.type)) {
+	if (!writing && !isGoods(current.type)) {
 		mediaManagerTabs.push({
 			key: "delivery",
 			label: "Delivery",
@@ -1652,12 +1639,6 @@ export default function OwnerWorkEditor({
 						// Same doubling rule: the InlineField names itself "Details".
 						<section className="flex flex-col gap-2">{detailsNoteField}</section>
 					)}
-					{current.type === "physical" && (
-						// What a good needs beyond its Work to be sellable: shipping, handling,
-						// tax and the buyer's choices. A service has the note above and nothing
-						// here, because there is no parcel to send.
-						<PhysicalListingSection workId={current.id} />
-					)}
 					{writing && (
 						<section className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Body</h3>
@@ -1698,26 +1679,19 @@ export default function OwnerWorkEditor({
 			    card; a good's deliverable is the store panel, exactly where every user
 			    meets it. ── */}
 			<section className="relative">
-				{!writing && (!isGoods(current.type) || current.type === "physical") && !mediaManaging && (
+				{!writing && !isGoods(current.type) && !mediaManaging && (
 					<button
 						type="button"
 						className="btn btn-ghost btn-sm btn-circle absolute right-4 top-4 z-10 bg-base-100/80 text-base-content/70 backdrop-blur hover:text-base-content"
-						aria-label={
-							current.type === "physical" ? "Manage This Good" : "Manage This Work's Media"
-						}
+						aria-label="Manage This Work's Media"
 						aria-expanded={mediaManaging}
-						onClick={() => {
-							if (current.type === "physical") setMediaTab("variants");
-							setMediaManaging((open) => !open);
-						}}
+						onClick={() => setMediaManaging((open) => !open)}
 					>
 						<PencilSquareIcon className="size-4" />
 					</button>
 				)}
 				{mediaManaging ? (
 					<WorkMediaManager
-						title={current.type === "physical" ? "Goods Management" : undefined}
-						sectionsLabel={current.type === "physical" ? "Goods management sections" : undefined}
 						tabs={mediaManagerTabs}
 						active={mediaTab}
 						onActive={setMediaTab}
@@ -1737,7 +1711,9 @@ export default function OwnerWorkEditor({
 								slug={current.slug ?? ""}
 								title={current.title ?? "Untitled"}
 								creatorHandle={asRead.creator?.handle ?? ""}
+								thumbnail={current.thumbnail}
 								workType={current.type}
+								owner
 							/>
 						</div>
 					</WorkMediaFrame>

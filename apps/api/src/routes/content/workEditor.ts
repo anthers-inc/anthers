@@ -1282,7 +1282,14 @@ const workEditorRoutes = new Hono()
 		// The service collects every problem rather than throwing on the first, so a
 		// form reports the whole set; the first message is the response's `error`
 		// because that is what a caller renders without walking the list.
-		const saved = await savePhysicalListing(id, c.req.valid("json"));
+		const body = c.req.valid("json");
+		// A gallery key is a file reference the client sent. It must be the creator's own
+		// upload before the listing stores it, exactly as a Work's thumbnail must be.
+		const sentImages = body.images ?? [];
+		const owned = await Promise.all(sentImages.map((image) => isOwnStorageRef(image.key, user.id)));
+		if (!owned.every(Boolean)) return c.json(FOREIGN_FILE_REFUSAL, 400);
+
+		const saved = await savePhysicalListing(id, body);
 		if (!saved.ok) {
 			return c.json(
 				{
@@ -1292,6 +1299,19 @@ const workEditorRoutes = new Hono()
 				400,
 			);
 		}
+		// ⭐ The first gallery picture is the catalog card's cover (Parker, 2026-10-29): a
+		// good's art is its product photos, so the 16:9 poster is derived from the first
+		// one rather than edited as a second, disconnected image. An empty gallery clears
+		// the derived cover; the card falls back to the kind's placeholder.
+		const cover = saved.listing.images.find((image) => image.cover) ?? saved.listing.images[0];
+		await db
+			.update(works)
+			.set({
+				thumbnail: cover?.key ?? "",
+				thumbnailSource: "",
+				thumbnailCrop: null,
+			})
+			.where(eq(works.id, id));
 		return c.json({ listing: saved.listing });
 	});
 
