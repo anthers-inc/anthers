@@ -36,6 +36,8 @@ interface ProjectPricingProps {
 	creatorHasStripe?: boolean;
 	/** The Work's type — `physical` renders the store panel instead of an unlock price. */
 	workType?: string;
+	/** The creator's own view of a physical good: its fields carry pencils. */
+	owner?: boolean;
 }
 
 interface Quote {
@@ -55,6 +57,7 @@ export default function ProjectPricing({
 	thumbnail,
 	creatorHasStripe = false,
 	workType,
+	owner = false,
 }: ProjectPricingProps) {
 	const [quote, setQuote] = useState<Quote | null>(null);
 	const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -105,7 +108,7 @@ export default function ProjectPricing({
 				title={title}
 				creatorHandle={creatorHandle}
 				thumbnail={thumbnail}
-				creatorHasStripe={creatorHasStripe}
+				owner={owner}
 			/>
 		);
 	}

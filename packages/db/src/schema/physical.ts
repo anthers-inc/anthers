@@ -66,6 +66,10 @@ export const workPhysicalListings = pgTable("work_physical_listings", {
 	shippingPrice: numeric("shipping_price").notNull().default("0.00"),
 	/** How long this good takes to leave, in business days. Clamped into the offered range. */
 	handlingBusinessDays: integer("handling_business_days").notNull().default(3),
+	/** The smallest number of this good one order may carry. */
+	minQuantity: integer("min_quantity").notNull().default(1),
+	/** The largest number of this good one order may carry, within the platform ceiling. */
+	maxQuantity: integer("max_quantity").notNull().default(10),
 	/** Which tax category the good falls under — a key into `PHYSICAL_TAX_CATEGORIES`. */
 	taxCategory: text("tax_category").notNull().default("general"),
 	/** The buyer's choices, in the creator's order. Empty for a good with no choices. */

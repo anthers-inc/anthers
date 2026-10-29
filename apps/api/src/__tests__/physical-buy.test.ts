@@ -108,6 +108,20 @@ describe("a pick against its listing", () => {
 		expect(r.ok).toBe(false);
 	});
 
+	it("honors a listing's own quantity bounds", () => {
+		const pick = {
+			quantity: 2,
+			options: [
+				{ name: "Size", label: "Small" },
+				{ name: "Glaze", label: "Blue" },
+			],
+		};
+		const bounded = { ...LISTING, minQuantity: 2, maxQuantity: 3 };
+		expect(validatePhysicalPick(bounded, pick).ok).toBe(true);
+		expect(validatePhysicalPick({ ...bounded, minQuantity: 3 }, pick).ok).toBe(false);
+		expect(validatePhysicalPick({ ...bounded, maxQuantity: 1 }, pick).ok).toBe(false);
+	});
+
 	it("refuses a sold-out value and a count past the shelf", () => {
 		const soldOut = validatePhysicalPick(LISTING, {
 			quantity: 1,

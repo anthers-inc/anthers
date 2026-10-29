@@ -1,39 +1,41 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Goods Management panel's pictures — a physical good's storefront gallery.
+ * The pictures behind the storefront's carousel, edited in the media area itself.
  *
- * ⭐ **A good's art is a gallery, not a 16:9 poster** (Parker, 2026-10-29): a creator uploads
- * square product photos, the buyer meets them as a carousel beside the variants, and the
- * first one becomes the catalog card's cover. The Work's old thumbnail field was the wrong
- * shape for the thing being sold and is no longer edited here.
+ * ⭐ **The carousel's own pencil opens this** (Parker, 2026-10-29): a physical good has no
+ * media manager, so the picture editor takes the carousel's place while it is open and
+ * returns it when the creator is done. The parent owns the listing and passes `images` and
+ * `onChange`; this component owns only the upload, description, order and removal gestures,
+ * so the storefront below cannot drift from the editor above it.
  *
- * Each add, remove, reorder and description is saved immediately through `useListing`, which
- * re-reads the row first so the Manage tab's parcel facts cannot be clobbered. The pictures
- * upload before the listing save, one key per file, through the same public display-image
- * endpoint a thumbnail uses.
+ * Each add, remove, reorder and description is saved immediately through `onChange`. The
+ * parent's save re-reads the listing row first, so the policy fields edited below the price
+ * box cannot be clobbered.
  */
 
 import { keyToPreview, uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
 import { PhotoIcon } from "@heroicons/react/24/outline";
 import { useRef, useState } from "react";
-import { type PhysicalImage, useListing } from "./physical-listing";
-import { WORK_DETAILS_HEADING_CLASS } from "./WorkLayout";
+import type { PhysicalImage } from "./physical-listing";
 
 /** The service's own ceiling; mirrored here so the picker stops at the same number. */
 const MAX_IMAGES = 8;
 
-export default function PhysicalImagesSection({ workId }: { workId: number }) {
-	const { listing, loadError, save } = useListing(workId);
+export function PhysicalImagesEditor({
+	images,
+	onChange,
+	onDone,
+}: {
+	images: PhysicalImage[];
+	onChange: (images: PhysicalImage[]) => Promise<void>;
+	onDone: () => void;
+}) {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	/** Descriptions being typed, keyed by the image's storage key. */
 	const [drafts, setDrafts] = useState<Record<string, string>>({});
 	const picker = useRef<HTMLInputElement | null>(null);
 
-	if (loadError) return <p className="text-sm text-error">{loadError}</p>;
-	if (!listing) return <p className="text-sm text-base-content/50">Reading the pictures…</p>;
-
-	const images = listing.images ?? [];
 	const atCap = images.length >= MAX_IMAGES;
 
 	const add = async (files: FileList | null) => {
@@ -49,7 +51,7 @@ export default function PhysicalImagesSection({ workId }: { workId: number }) {
 				const { key } = await uploadImageFile(file, "thumbnail");
 				uploaded.push({ key, alt: "" });
 			}
-			await save({ images: [...images, ...uploaded] });
+			await onChange([...images, ...uploaded]);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "That picture didn't upload.");
 		} finally {
@@ -62,7 +64,7 @@ export default function PhysicalImagesSection({ workId }: { workId: number }) {
 		setBusy(true);
 		setError(null);
 		try {
-			await save({ images: images.filter((_, i) => i !== index) });
+			await onChange(images.filter((_, i) => i !== index));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "That picture didn't come out.");
 		} finally {
@@ -78,7 +80,7 @@ export default function PhysicalImagesSection({ workId }: { workId: number }) {
 		setBusy(true);
 		setError(null);
 		try {
-			await save({ images: next });
+			await onChange(next);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "The pictures didn't reorder.");
 		} finally {
@@ -92,9 +94,9 @@ export default function PhysicalImagesSection({ workId }: { workId: number }) {
 		setBusy(true);
 		setError(null);
 		try {
-			await save({
-				images: images.map((image) => (image.key === key ? { ...image, alt: alt.trim() } : image)),
-			});
+			await onChange(
+				images.map((image) => (image.key === key ? { ...image, alt: alt.trim() } : image)),
+			);
 			setDrafts((currentDrafts) => {
 				const next = { ...currentDrafts };
 				delete next[key];
@@ -108,15 +110,18 @@ export default function PhysicalImagesSection({ workId }: { workId: number }) {
 	};
 
 	return (
-		<div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-			<div className="flex flex-wrap items-start justify-between gap-2">
-				<div>
-					<h3 className={WORK_DETAILS_HEADING_CLASS}>Photos</h3>
-					<p className="text-xs text-base-content/60">
-						Square photos on a plain background read best. The first one is the cover buyers see on
-						your catalog.
-					</p>
-				</div>
+		<div className="flex flex-col gap-3">
+			<div className="flex items-center justify-between gap-2">
+				<h3 className="text-sm font-semibold">Photos</h3>
+				<button type="button" className="btn btn-ghost btn-xs" onClick={onDone}>
+					Done
+				</button>
+			</div>
+			<p className="text-xs text-base-content/60">
+				Square photos on a plain background read best. The first one is the cover buyers see on your
+				catalog.
+			</p>
+			<div className="flex flex-wrap items-center gap-2">
 				<button
 					type="button"
 					className="btn btn-primary btn-sm"
@@ -125,6 +130,11 @@ export default function PhysicalImagesSection({ workId }: { workId: number }) {
 				>
 					{busy ? "Working…" : "Add photos"}
 				</button>
+				{atCap && (
+					<span className="text-xs text-base-content/60">
+						{MAX_IMAGES} photos is the most a gallery holds.
+					</span>
+				)}
 			</div>
 			<input
 				ref={picker}
@@ -148,7 +158,7 @@ export default function PhysicalImagesSection({ workId }: { workId: number }) {
 					</span>
 				</button>
 			) : (
-				<ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+				<ul className="grid grid-cols-2 gap-3">
 					{images.map((image, index) => (
 						<li
 							key={image.key}
@@ -209,12 +219,6 @@ export default function PhysicalImagesSection({ workId }: { workId: number }) {
 						</li>
 					))}
 				</ul>
-			)}
-
-			{atCap && (
-				<p className="text-xs text-base-content/60">
-					{MAX_IMAGES} photos is the most a gallery holds.
-				</p>
 			)}
 			{error && <p className="text-sm text-error">{error}</p>}
 		</div>

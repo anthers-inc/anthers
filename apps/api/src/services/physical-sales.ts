@@ -21,6 +21,7 @@
  */
 import { db } from "@anthers/db/client";
 import { type PhysicalOption, workPhysicalListings, works } from "@anthers/db/schema";
+import { MAX_GOODS_PER_ORDER } from "@anthers/shared/constants";
 import {
 	isPhysicalTaxCategory,
 	PHYSICAL_TAX_CATEGORIES,
@@ -40,6 +41,8 @@ import { resolveThumbnailUrl } from "./thumbnails.js";
 export interface BuyerListing {
 	shippingPrice: string;
 	handlingBusinessDays: number;
+	minQuantity: number;
+	maxQuantity: number;
 	taxCategory: PhysicalTaxCategory;
 	options: Array<{ name: string; values: Array<{ label: string; stock: number | null }> }>;
 	/** The storefront's pictures, resolved to display URLs in the creator's order. */
@@ -50,6 +53,8 @@ export interface BuyerListing {
 const DEFAULT_LISTING: BuyerListing = {
 	shippingPrice: "0.00",
 	handlingBusinessDays: 3,
+	minQuantity: 1,
+	maxQuantity: MAX_GOODS_PER_ORDER,
 	taxCategory: "general",
 	options: [],
 	images: [],
@@ -75,6 +80,8 @@ export async function buyerListingFor(workId: number): Promise<BuyerListing> {
 	return {
 		shippingPrice: row.shippingPrice,
 		handlingBusinessDays: row.handlingBusinessDays,
+		minQuantity: row.minQuantity,
+		maxQuantity: row.maxQuantity,
 		taxCategory: isPhysicalTaxCategory(row.taxCategory) ? row.taxCategory : "general",
 		options: options.map((option) => ({
 			name: option.name,

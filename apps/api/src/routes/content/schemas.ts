@@ -343,6 +343,8 @@ export const sourceOrderSchema = z.object({ order: z.array(z.number().int()) });
 export const physicalListingSchema = z.object({
 	shippingPrice: z.union([z.string(), z.number()]).optional(),
 	handlingBusinessDays: z.union([z.string(), z.number()]).optional(),
+	minQuantity: z.union([z.string(), z.number()]).optional(),
+	maxQuantity: z.union([z.string(), z.number()]).optional(),
 	taxCategory: z.string().optional(),
 	options: z
 		.array(

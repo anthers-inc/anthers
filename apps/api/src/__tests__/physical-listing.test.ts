@@ -13,6 +13,8 @@ import { validateListing } from "../services/physical-listings.js";
 const base = {
 	shippingPrice: "4.95",
 	handlingBusinessDays: 3,
+	minQuantity: 1,
+	maxQuantity: 10,
 	taxCategory: "general",
 	options: [],
 	images: [],
@@ -130,6 +132,32 @@ describe("options", () => {
 	it("refuses an unnamed choice or value", () => {
 		expect(withOptions([{ name: "  ", values: [{ label: "M" }] }]).ok).toBe(false);
 		expect(withOptions([{ name: "Size", values: [{ label: "" }] }]).ok).toBe(false);
+	});
+});
+
+describe("quantity bounds", () => {
+	it("keeps a whole range in the listing's own order", () => {
+		const r = validateListing({ ...base, minQuantity: 2, maxQuantity: 5 });
+		expect(r.ok).toBe(true);
+		if (r.ok) {
+			expect(r.value.minQuantity).toBe(2);
+			expect(r.value.maxQuantity).toBe(5);
+		}
+	});
+
+	it("defaults to one and the platform ceiling", () => {
+		const r = validateListing({ ...base, minQuantity: undefined, maxQuantity: undefined });
+		expect(r.ok).toBe(true);
+		if (r.ok) {
+			expect(r.value.minQuantity).toBe(1);
+			expect(r.value.maxQuantity).toBe(10);
+		}
+	});
+
+	it("refuses a non-whole bound, a bound outside the range, and an inverted range", () => {
+		expect(validateListing({ ...base, minQuantity: 1.5 }).ok).toBe(false);
+		expect(validateListing({ ...base, maxQuantity: 11 }).ok).toBe(false);
+		expect(validateListing({ ...base, minQuantity: 4, maxQuantity: 3 }).ok).toBe(false);
 	});
 });
 

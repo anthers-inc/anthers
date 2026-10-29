@@ -36,17 +36,20 @@ export interface PhysicalImage {
 export interface Listing {
 	shippingPrice: string;
 	handlingBusinessDays: number;
+	minQuantity: number;
+	maxQuantity: number;
 	taxCategory: PhysicalTaxCategory;
 	options: ListingOption[];
 	images: PhysicalImage[];
 }
 
 /** Reads the good's one listing row, and writes a slice of it over the row as it stands. */
-export function useListing(workId: number) {
+export function useListing(workId: number, enabled = true) {
 	const [listing, setListing] = useState<Listing | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
 
 	useEffect(() => {
+		if (!enabled) return;
 		let stale = false;
 		void (async () => {
 			const res = await client.api.content.works[":id"].physical.$get({
@@ -63,7 +66,7 @@ export function useListing(workId: number) {
 		return () => {
 			stale = true;
 		};
-	}, [workId]);
+	}, [workId, enabled]);
 
 	/**
 	 * Save the caller's slice over a fresh read of the row.
@@ -72,6 +75,7 @@ export function useListing(workId: number) {
 	 * rather than a generic one.
 	 */
 	const save = async (patch: Partial<Listing>): Promise<void> => {
+		if (!enabled) throw new Error("This listing is not yours to edit.");
 		const read = await client.api.content.works[":id"].physical.$get({
 			param: { id: String(workId) },
 		});
@@ -84,6 +88,8 @@ export function useListing(workId: number) {
 			json: {
 				shippingPrice: next.shippingPrice,
 				handlingBusinessDays: next.handlingBusinessDays,
+				minQuantity: next.minQuantity,
+				maxQuantity: next.maxQuantity,
 				taxCategory: next.taxCategory,
 				options: next.options,
 				images: next.images,

@@ -21,6 +21,7 @@
  */
 import { db } from "@anthers/db/client";
 import { type PhysicalImage, type PhysicalOption, workPhysicalListings } from "@anthers/db/schema";
+import { MAX_GOODS_PER_ORDER } from "@anthers/shared/constants";
 import { isPhysicalTaxCategory, type PhysicalTaxCategory } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
@@ -37,11 +38,15 @@ export const LISTING_LIMITS = {
 	maxImages: 8,
 	maxImageKeyChars: 500,
 	maxAltChars: 300,
+	/** The platform's single-order ceiling; a listing can narrow it but not exceed it. */
+	maxQuantity: MAX_GOODS_PER_ORDER,
 } as const;
 
 export interface PhysicalListing {
 	shippingPrice: string;
 	handlingBusinessDays: number;
+	minQuantity: number;
+	maxQuantity: number;
 	taxCategory: PhysicalTaxCategory;
 	options: PhysicalOption[];
 	images: PhysicalImage[];
@@ -57,6 +62,8 @@ export type ListingValidation =
 export const DEFAULT_LISTING: PhysicalListing = {
 	shippingPrice: "0.00",
 	handlingBusinessDays: 3,
+	minQuantity: 1,
+	maxQuantity: MAX_GOODS_PER_ORDER,
 	taxCategory: "general",
 	options: [],
 	images: [],
@@ -77,6 +84,8 @@ function clean(value: unknown): string {
 export function validateListing(input: {
 	shippingPrice?: unknown;
 	handlingBusinessDays?: unknown;
+	minQuantity?: unknown;
+	maxQuantity?: unknown;
 	taxCategory?: unknown;
 	options?: unknown;
 	images?: unknown;
@@ -107,6 +116,33 @@ export function validateListing(input: {
 		});
 	}
 	const handlingBusinessDays = clampHandlingDays(handling);
+
+	const rawMin = input.minQuantity == null ? 1 : Number(input.minQuantity);
+	const rawMax = input.maxQuantity == null ? MAX_GOODS_PER_ORDER : Number(input.maxQuantity);
+	let minQuantity = 1;
+	let maxQuantity = MAX_GOODS_PER_ORDER;
+	if (!Number.isInteger(rawMin) || rawMin < 1 || rawMin > MAX_GOODS_PER_ORDER) {
+		problems.push({
+			field: "minQuantity",
+			message: `The smallest order is a whole number from 1 to ${MAX_GOODS_PER_ORDER}.`,
+		});
+	} else {
+		minQuantity = rawMin;
+	}
+	if (!Number.isInteger(rawMax) || rawMax < 1 || rawMax > MAX_GOODS_PER_ORDER) {
+		problems.push({
+			field: "maxQuantity",
+			message: `The largest order is a whole number from 1 to ${MAX_GOODS_PER_ORDER}.`,
+		});
+	} else {
+		maxQuantity = rawMax;
+	}
+	if (minQuantity > maxQuantity) {
+		problems.push({
+			field: "maxQuantity",
+			message: "The largest order can't be smaller than the smallest.",
+		});
+	}
 
 	const category = clean(input.taxCategory) || "general";
 	if (!isPhysicalTaxCategory(category)) {
@@ -216,6 +252,8 @@ export function validateListing(input: {
 		value: {
 			shippingPrice,
 			handlingBusinessDays,
+			minQuantity,
+			maxQuantity,
 			taxCategory: category as PhysicalTaxCategory,
 			options,
 			images,
@@ -234,6 +272,8 @@ export async function physicalListingFor(workId: number): Promise<PhysicalListin
 	return {
 		shippingPrice: row.shippingPrice,
 		handlingBusinessDays: row.handlingBusinessDays,
+		minQuantity: row.minQuantity,
+		maxQuantity: row.maxQuantity,
 		taxCategory: row.taxCategory as PhysicalTaxCategory,
 		options: row.options ?? [],
 		images: row.images ?? [],
@@ -261,6 +301,8 @@ export async function savePhysicalListing(
 			workId,
 			shippingPrice: value.shippingPrice,
 			handlingBusinessDays: value.handlingBusinessDays,
+			minQuantity: value.minQuantity,
+			maxQuantity: value.maxQuantity,
 			taxCategory: value.taxCategory,
 			options: value.options,
 			images: value.images,
@@ -271,6 +313,8 @@ export async function savePhysicalListing(
 			set: {
 				shippingPrice: value.shippingPrice,
 				handlingBusinessDays: value.handlingBusinessDays,
+				minQuantity: value.minQuantity,
+				maxQuantity: value.maxQuantity,
 				taxCategory: value.taxCategory,
 				options: value.options,
 				images: value.images,
