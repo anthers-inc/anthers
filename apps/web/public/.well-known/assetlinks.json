@@ -1,0 +1,12 @@
+[
+	{
+		"relation": ["delegate_permission/common.handle_all_urls"],
+		"target": {
+			"namespace": "android_app",
+			"package_name": "org.anthers.mobile",
+			"sha256_cert_fingerprints": [
+				"3D:63:44:98:DD:54:C2:8F:45:8A:80:B9:58:D5:20:87:29:61:C0:79:47:D0:EC:18:B9:6C:9C:3D:23:99:39:D8"
+			]
+		}
+	}
+]
