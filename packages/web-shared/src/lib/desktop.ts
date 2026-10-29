@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The web side of the desktop-shell bridge.
+ * The web side of the shell bridge.
  *
  * Lives here rather than in an app because the SAME build serves the browser and is
- * bundled into the Tauri shell, and because `@tauri-apps/api` is already a dependency of
+ * bundled into a Tauri shell, and because `@tauri-apps/api` is already a dependency of
  * this package (imported dynamically, so a browser build never loads it). Everything here
- * is guarded: in a browser `isDesktop()` is false and none of it runs. The shell injects `globalThis.__ANTHERS_DESKTOP__` before any app
- * JS (see `src-tauri/src/main.rs` in anthers-desktop), which is also what
+ * is guarded: in a browser `isNative()` is false and none of it runs. The shell injects
+ * `globalThis.__ANTHERS_NATIVE__` before any app JS (see `src-tauri/src/lib.rs` in
+ * anthers-mobile and `main.rs` in anthers-desktop), which is also what
  * `@anthers/web-shared`'s `apiFetch()` reads to pick its transport.
  *
  * `@tauri-apps/api` is imported dynamically so the browser build never loads it.
  */
-import { isDesktop } from "./rpc";
+import { isDesktop, isMobile, isNative, nativeRuntime } from "./rpc";
 
-export { isDesktop };
+export { isDesktop, isMobile, isNative };
 
 /**
  * Where the desktop app opens after sign-in.
@@ -69,12 +70,9 @@ export function setDesktopHome(home: DesktopHome): void {
 /** Whether the enrolled token survives a restart — the shell reports this honestly. */
 export type Persistence = "keychain" | "memoryOnly";
 
-interface DesktopBridge {
-	setToken(token: string | null): void;
-}
-
-function bridge(): DesktopBridge | null {
-	return (globalThis as { __ANTHERS_DESKTOP__?: DesktopBridge }).__ANTHERS_DESKTOP__ ?? null;
+/** The runtime the shell injected, for the parts of sign-in that write the token back. */
+function bridge() {
+	return nativeRuntime();
 }
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -102,7 +100,7 @@ export async function completeSignIn(
 	const result = await invoke<{ token: string; persistence: Persistence }>("complete_sign_in", {
 		code,
 	});
-	bridge()?.setToken(result.token);
+	bridge()?.setToken?.(result.token);
 	return result;
 }
 
@@ -114,7 +112,7 @@ export function takePendingCode(): Promise<string | null> {
 /** Drop the local credential. Safe to call even if the server-side sign-out failed. */
 export async function desktopSignOut(): Promise<void> {
 	await invoke<void>("sign_out");
-	bridge()?.setToken(null);
+	bridge()?.setToken?.(null);
 }
 
 /**

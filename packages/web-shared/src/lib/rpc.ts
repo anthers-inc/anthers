@@ -3,54 +3,97 @@ import { hc } from "hono/client";
 import type { AppType } from "../../../../apps/api/src/index.js";
 
 /**
- * Runtime injected by the packaged desktop Studio, on `globalThis.__ANTHERS_DESKTOP__`.
+ * Runtime injected by a packaged Anthers shell — the desktop app or the mobile app — on
+ * `globalThis.__ANTHERS_NATIVE__`.
  *
- * A Tauri window serves from `tauri://localhost`, where host-sniffing cannot work and
- * the `.anthers.org` session cookie is never sent — so the shell supplies the API
- * origin explicitly and carries the session as a bearer token instead. See
+ * A Tauri window serves from `tauri://localhost` (macOS, Linux, iOS) or
+ * `http://tauri.localhost` (Windows, Android), where host-sniffing cannot work and the
+ * `.anthers.org` session cookie is never sent — so the shell supplies the API origin
+ * explicitly and carries the session as a bearer token instead. See
  * `apps/api/src/middleware/bearer.ts`.
  *
- * `fetch` is optional and is where `tauri-plugin-http` goes: routing requests through
- * Rust means CORS never enters the picture and the token need not live in JS.
+ * `platform` is what stops every shell from being treated as a desktop: a phone must not
+ * inherit the desktop's home preference or its own settings section. `fetch` is optional
+ * and is where `tauri-plugin-http` goes: routing requests through Rust means CORS never
+ * enters the picture and the token need not live in JS.
  */
-export interface DesktopRuntime {
+export type NativePlatform = "desktop" | "android" | "ios";
+
+export interface NativeRuntime {
+	/** Which shell this is. */
+	platform: NativePlatform;
 	/** Absolute API origin, e.g. "https://anthers.org". No trailing slash. */
 	apiBaseUrl: string;
-	/** The desktop session token, or null before enrollment completes. */
+	/** The session token, or null before sign-in completes. */
 	getToken(): string | null;
+	/** Replace the token the shell holds, where the shell keeps it outside JS. */
+	setToken?(token: string | null): void;
 	/** Optional replacement transport (tauri-plugin-http). Defaults to global fetch. */
 	fetch?: typeof fetch;
 }
 
-function desktopRuntime(): DesktopRuntime | null {
-	if (typeof globalThis === "undefined") return null;
-	return (globalThis as { __ANTHERS_DESKTOP__?: DesktopRuntime }).__ANTHERS_DESKTOP__ ?? null;
+/** The desktop shell's original shape, from before the runtime carried a platform. */
+interface LegacyDesktopRuntime {
+	apiBaseUrl: string;
+	getToken(): string | null;
+	setToken?(token: string | null): void;
+	fetch?: typeof fetch;
 }
 
-/** True when running inside the packaged desktop Studio rather than a browser. */
+/**
+ * The shell's runtime, or null in a browser.
+ *
+ * ⚠️ **`__ANTHERS_DESKTOP__` is still read, as desktop.** The desktop bundles the web
+ * build it was released with, so the two normally move together — but reading the old
+ * name costs one line and makes this change safe against a shell that has not taken the
+ * new one yet, which is exactly the window between two releases.
+ */
+export function nativeRuntime(): NativeRuntime | null {
+	if (typeof globalThis === "undefined") return null;
+	const g = globalThis as {
+		__ANTHERS_NATIVE__?: NativeRuntime;
+		__ANTHERS_DESKTOP__?: LegacyDesktopRuntime;
+	};
+	if (g.__ANTHERS_NATIVE__) return g.__ANTHERS_NATIVE__;
+	const legacy = g.__ANTHERS_DESKTOP__;
+	return legacy ? { ...legacy, platform: "desktop" } : null;
+}
+
+/** True in any packaged shell — desktop, Android or iOS — and false in a browser. */
+export function isNative(): boolean {
+	return nativeRuntime() !== null;
+}
+
+/** True only in the desktop shell, for the surfaces that really are the desktop's own. */
 export function isDesktop(): boolean {
-	return desktopRuntime() !== null;
+	return nativeRuntime()?.platform === "desktop";
+}
+
+/** True on a phone, where the cookie a browser would carry does not exist either. */
+export function isMobile(): boolean {
+	const platform = nativeRuntime()?.platform;
+	return platform === "android" || platform === "ios";
 }
 
 /**
  * Auth headers for transports that CANNOT go through `apiFetch` — specifically the
  * XHR uploads, which exist only because `fetch` has no upload-progress event.
  *
- * Anything bypassing `apiFetch` bypasses the bearer header with it, and on the desktop
- * there is no cookie to fall back on, so the request simply 401s. Use this together
- * with `apiSendsCookies()` wherever a raw request is unavoidable.
+ * Anything bypassing `apiFetch` bypasses the bearer header with it, and in a shell there
+ * is no cookie to fall back on, so the request simply 401s. Use this together with
+ * `apiSendsCookies()` wherever a raw request is unavoidable.
  */
 export function apiAuthHeaders(): Record<string, string> {
-	const token = desktopRuntime()?.getToken();
+	const token = nativeRuntime()?.getToken();
 	return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 /**
- * Whether a raw request should carry cookies. False on the desktop: there is no
- * cookie, and asking for credentialed CORS there only invites a preflight rejection.
+ * Whether a raw request should carry cookies. False in any shell: there is no cookie,
+ * and asking for credentialed CORS there only invites a preflight rejection.
  */
 export function apiSendsCookies(): boolean {
-	return !isDesktop();
+	return !isNative();
 }
 
 /**
@@ -58,7 +101,7 @@ export function apiSendsCookies(): boolean {
  *
  * The API and the SPA share the apex origin (anthers.org), so in a browser this is
  * almost always same-origin:
- *   - the desktop shell   → whatever origin it injected (host-sniffing can't work
+ *   - a packaged shell    → whatever origin it injected (host-sniffing can't work
  *     from `tauri://localhost`, which would otherwise resolve to the app itself)
  *   - localhost / 127.0.0.1 → the dev API, on :8000 or the port the page announces
  *   - a named local URL   → `api.<host>` — portless serves web as `<project>.localhost`
@@ -79,8 +122,8 @@ export function apiSendsCookies(): boolean {
  * this app at `/studio`; the subdomain is gone and nothing serves it.
  */
 export function apiBaseUrl(): string {
-	const desktop = desktopRuntime();
-	if (desktop) return desktop.apiBaseUrl.replace(/\/$/, "");
+	const native = nativeRuntime();
+	if (native) return native.apiBaseUrl.replace(/\/$/, "");
 	if (typeof location === "undefined") return "";
 	const h = location.hostname;
 	// 🚨 **Mirror the page's own host rather than pinning `localhost`, because cookies are
@@ -144,14 +187,14 @@ export function devApiPort(
 /**
  * The transport every API call goes through — pass an API path ("/api/…").
  *
- * In a browser this is plain `fetch` with cookies attached. On the desktop it swaps
- * the implicit cookie for an explicit `Authorization: Bearer` header, and (when the
- * shell supplies one) routes through `tauri-plugin-http` so the request leaves from
- * Rust and CORS never applies.
+ * In a browser this is plain `fetch` with cookies attached. In a shell it swaps the
+ * implicit cookie for an explicit `Authorization: Bearer` header, and (when the shell
+ * supplies one) routes through `tauri-plugin-http` so the request leaves from Rust and
+ * CORS never applies.
  *
  * The URL is re-rooted on `apiBaseUrl()` per-request rather than at module load. That
  * matters twice: it lets the Studio subdomain reach the apex API from a relative path,
- * and it survives the desktop shell injecting its runtime after this module was first
+ * and it survives the shell injecting its runtime after this module was first
  * evaluated — otherwise a baked-in base would silently win and the app would talk to
  * itself. Only API paths belong here; it is not a general-purpose fetch.
  */
@@ -160,12 +203,12 @@ export function apiFetch(input: string | URL | Request, init: RequestInit = {}):
 	const parsed = new URL(rawUrl, "http://relative.invalid");
 	const url = `${apiBaseUrl()}${parsed.pathname}${parsed.search}`;
 
-	const desktop = desktopRuntime();
-	if (!desktop) {
+	const native = nativeRuntime();
+	if (!native) {
 		return fetch(url, { credentials: "include", ...init });
 	}
 
-	const token = desktop.getToken();
+	const token = native.getToken();
 	const headers = new Headers(
 		init.headers ?? (input instanceof Request ? input.headers : undefined),
 	);
@@ -173,7 +216,7 @@ export function apiFetch(input: string | URL | Request, init: RequestInit = {}):
 
 	// No `credentials: "include"` — there is no cookie to send, and asking for one
 	// only invites a CORS preflight we don't need.
-	return (desktop.fetch ?? fetch)(url, { ...init, headers });
+	return (native.fetch ?? fetch)(url, { ...init, headers });
 }
 
 export const client = hc<AppType>(apiBaseUrl(), {
