@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Manage tab's Selling section for a physical good — the four answers a good needs
- * that a digital Work never does (Parker's physical-goods model, 2026-10-26).
+ * The Manage tab's Selling section for a physical good — shipping, handling and tax, the
+ * answers a good needs that a digital Work never does (Parker's physical-goods model,
+ * 2026-10-26).
+ *
+ * ⭐ **The buyer's variants are the fourth answer, and they live behind the media area's
+ * pencil** (`PhysicalVariantsSection`), beside the store panel they configure, rather than
+ * at the bottom of this tab (Parker, 2026-10-28). Shipping, handling and tax stay here
+ * because they describe the parcel rather than what the buyer picks.
  *
  * A creator fulfills their own orders. The platform's job is to know what a parcel costs
  * to send, how long the good takes to leave, what the good is for tax, and what choices
@@ -16,6 +22,11 @@
  * Options are a short ordered list of names with values, validated as a shape rather than
  * against a vocabulary: a creator may offer Scent as readily as Size, and the platform has
  * no business deciding which names are the real ones.
+ *
+ * ⭐ **One listing row, two editing surfaces.** `useListing` re-reads the row immediately
+ * before every save and writes only the slice its caller changed, because the route
+ * replaces the whole listing: a component holding a copy from before the other surface
+ * saved would silently undo that save.
  */
 
 import { PHYSICAL_TAX_CATEGORIES, type PhysicalTaxCategory } from "@anthers/shared/tax-codes";
@@ -45,16 +56,74 @@ interface Listing {
 /** The range the server clamps into; the picker offers the same numbers. */
 const HANDLING_CHOICES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-/** How many choices a good may offer — the service's own ceiling. */
+/** How many variants a good may offer — the service's own ceiling. */
 const MAX_OPTIONS = 3;
 
+/** Reads the good's one listing row, and writes a slice of it over the row as it stands. */
+function useListing(workId: number) {
+	const [listing, setListing] = useState<Listing | null>(null);
+	const [loadError, setLoadError] = useState<string | null>(null);
+
+	useEffect(() => {
+		let stale = false;
+		void (async () => {
+			const res = await client.api.content.works[":id"].physical.$get({
+				param: { id: String(workId) },
+			});
+			if (stale) return;
+			if (!res.ok) {
+				setLoadError("Couldn't read this good's selling details.");
+				return;
+			}
+			const body = (await res.json()) as { listing: Listing };
+			setListing(body.listing);
+		})();
+		return () => {
+			stale = true;
+		};
+	}, [workId]);
+
+	/**
+	 * Save the caller's slice over a fresh read of the row.
+	 *
+	 * The server validates; a refusal's message reads in the field, in its own words
+	 * rather than a generic one.
+	 */
+	const save = async (patch: Partial<Listing>): Promise<void> => {
+		const read = await client.api.content.works[":id"].physical.$get({
+			param: { id: String(workId) },
+		});
+		if (!read.ok) throw new Error("Couldn't read this good's selling details.");
+		const { listing: current } = (await read.json()) as { listing: Listing };
+
+		const next = { ...current, ...patch };
+		const res = await client.api.content.works[":id"].physical.$put({
+			param: { id: String(workId) },
+			json: {
+				shippingPrice: next.shippingPrice,
+				handlingBusinessDays: next.handlingBusinessDays,
+				taxCategory: next.taxCategory,
+				options: next.options,
+			},
+		});
+		if (!res.ok) {
+			const body = (await res.json().catch(() => null)) as { error?: string } | null;
+			throw new Error(body?.error ?? "That listing didn't save.");
+		}
+		const body = (await res.json()) as { listing: Listing };
+		setListing(body.listing);
+	};
+
+	return { listing, loadError, save };
+}
+
 /**
- * The option builder: names down the side, each with its values and a stock count.
+ * The variant builder: names down the side, each with its values and a stock count.
  *
  * A blank count means unlimited, which is the ordinary case for a creator making things
  * to order — so blank is where the field starts rather than a count nobody meant.
  */
-function OptionEditor({
+function VariantEditor({
 	options,
 	onChange,
 }: {
@@ -73,11 +142,11 @@ function OptionEditor({
 	return (
 		<div className="flex flex-col gap-3">
 			{options.map((option, index) => (
-				// biome-ignore lint/suspicious/noArrayIndexKey: a choice has no id — the row is positional, and the position is what every control on it addresses.
+				// biome-ignore lint/suspicious/noArrayIndexKey: a variant has no id — the row is positional, and the position is what every control on it addresses.
 				<div key={index} className="rounded-box border border-base-300 p-3">
 					<div className="flex items-center gap-2">
 						<input
-							aria-label={`Choice ${index + 1} name`}
+							aria-label={`Variant ${index + 1} name`}
 							className="input input-bordered input-sm w-full max-w-48"
 							placeholder="Size, color, scent…"
 							value={option.name}
@@ -86,6 +155,7 @@ function OptionEditor({
 						<button
 							type="button"
 							className="btn btn-ghost btn-sm"
+							aria-label={`Remove variant ${index + 1}`}
 							onClick={() => onChange(options.filter((_, i) => i !== index))}
 						>
 							Remove
@@ -93,10 +163,10 @@ function OptionEditor({
 					</div>
 					<div className="mt-2 flex flex-col gap-1">
 						{option.values.map((value, valueIndex) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: a value has no id either — a label may be edited or repeated under another choice, so only the position is stable.
+							// biome-ignore lint/suspicious/noArrayIndexKey: a value has no id either — a label may be edited or repeated under another variant, so only the position is stable.
 							<div key={valueIndex} className="flex items-center gap-2">
 								<input
-									aria-label={`${option.name || "Choice"} value ${valueIndex + 1}`}
+									aria-label={`${option.name || "Variant"} value ${valueIndex + 1}`}
 									className="input input-bordered input-sm w-full max-w-40"
 									placeholder="Small"
 									value={value.label}
@@ -105,7 +175,7 @@ function OptionEditor({
 									}
 								/>
 								<input
-									aria-label={`${option.name || "Choice"} ${value.label || "value"} left in stock`}
+									aria-label={`${option.name || "Variant"} ${value.label || "value"} left in stock`}
 									type="number"
 									min="0"
 									step="1"
@@ -155,7 +225,7 @@ function OptionEditor({
 					className="btn btn-sm self-start"
 					onClick={() => onChange([...options, { name: "", values: [{ label: "", stock: null }] }])}
 				>
-					Add a choice
+					Add a variant
 				</button>
 			)}
 			<p className="text-xs text-base-content/50">
@@ -166,53 +236,46 @@ function OptionEditor({
 	);
 }
 
-export default function PhysicalListingSection({ workId }: { workId: number }) {
-	const [listing, setListing] = useState<Listing | null>(null);
-	const [loadError, setLoadError] = useState<string | null>(null);
+/**
+ * The buyer's variants, opened by the media area's pencil.
+ *
+ * The content is the store panel's own choices: a variant is a name the buyer picks
+ * under, and each value is one thing they can take.
+ */
+export function PhysicalVariantsSection({ workId }: { workId: number }) {
+	const { listing, loadError, save } = useListing(workId);
 
-	useEffect(() => {
-		let stale = false;
-		void (async () => {
-			const res = await client.api.content.works[":id"].physical.$get({
-				param: { id: String(workId) },
-			});
-			if (stale) return;
-			if (!res.ok) {
-				setLoadError("Couldn't read this good's selling details.");
-				return;
+	if (loadError) return <p className="text-sm text-error">{loadError}</p>;
+	if (!listing) return <p className="text-sm text-base-content/50">Reading the variants…</p>;
+
+	return (
+		<InlineField<ListingOption[]>
+			label="Variants"
+			saved={listing.options}
+			renderRead={() =>
+				listing.options.length === 0 ? (
+					<p className="text-sm text-base-content/40">No variants — a buyer takes it as it is.</p>
+				) : (
+					<ul className="flex flex-col gap-1 text-sm">
+						{listing.options.map((option) => (
+							<li key={option.name}>
+								<span className="font-medium">{option.name}:</span>{" "}
+								<span className="text-base-content/70">
+									{option.values.map((value) => value.label).join(", ")}
+								</span>
+							</li>
+						))}
+					</ul>
+				)
 			}
-			const body = (await res.json()) as { listing: Listing };
-			setListing(body.listing);
-		})();
-		return () => {
-			stale = true;
-		};
-	}, [workId]);
+			renderEdit={(draft, setDraft) => <VariantEditor options={draft} onChange={setDraft} />}
+			save={(options) => save({ options })}
+		/>
+	);
+}
 
-	/**
-	 * Save the whole listing, because the route replaces rather than patches — one row,
-	 * four answers, and a partial write would have to guess at the rest.
-	 *
-	 * The server validates; a refusal's message reads in the field, in its own words
-	 * rather than a generic one.
-	 */
-	const save = async (next: Listing): Promise<void> => {
-		const res = await client.api.content.works[":id"].physical.$put({
-			param: { id: String(workId) },
-			json: {
-				shippingPrice: next.shippingPrice,
-				handlingBusinessDays: next.handlingBusinessDays,
-				taxCategory: next.taxCategory,
-				options: next.options,
-			},
-		});
-		if (!res.ok) {
-			const body = (await res.json().catch(() => null)) as { error?: string } | null;
-			throw new Error(body?.error ?? "That listing didn't save.");
-		}
-		const body = (await res.json()) as { listing: Listing };
-		setListing(body.listing);
-	};
+export default function PhysicalListingSection({ workId }: { workId: number }) {
+	const { listing, loadError, save } = useListing(workId);
 
 	if (loadError) return <p className="text-sm text-error">{loadError}</p>;
 	if (!listing) return <p className="text-sm text-base-content/50">Reading the selling details…</p>;
@@ -253,7 +316,7 @@ export default function PhysicalListingSection({ workId }: { workId: number }) {
 							</p>
 						</div>
 					)}
-					save={(draft) => save({ ...listing, shippingPrice: draft })}
+					save={(draft) => save({ shippingPrice: draft })}
 				/>
 			</section>
 			<section className="flex flex-col gap-2">
@@ -294,7 +357,7 @@ export default function PhysicalListingSection({ workId }: { workId: number }) {
 							</p>
 						</div>
 					)}
-					save={(draft) => save({ ...listing, handlingBusinessDays: draft })}
+					save={(draft) => save({ handlingBusinessDays: draft })}
 				/>
 			</section>
 			<section className="flex flex-col gap-2">
@@ -331,34 +394,7 @@ export default function PhysicalListingSection({ workId }: { workId: number }) {
 							</p>
 						</div>
 					)}
-					save={(draft) => save({ ...listing, taxCategory: draft })}
-				/>
-			</section>
-			<section className="flex flex-col gap-2">
-				<h3 className={WORK_DETAILS_HEADING_CLASS}>Choices</h3>
-				<InlineField<ListingOption[]>
-					label="Choices"
-					saved={listing.options}
-					renderRead={() =>
-						listing.options.length === 0 ? (
-							<p className="text-sm text-base-content/40">
-								No choices — a buyer takes it as it is.
-							</p>
-						) : (
-							<ul className="flex flex-col gap-1 text-sm">
-								{listing.options.map((option) => (
-									<li key={option.name}>
-										<span className="font-medium">{option.name}:</span>{" "}
-										<span className="text-base-content/70">
-											{option.values.map((value) => value.label).join(", ")}
-										</span>
-									</li>
-								))}
-							</ul>
-						)
-					}
-					renderEdit={(draft, setDraft) => <OptionEditor options={draft} onChange={setDraft} />}
-					save={(draft) => save({ ...listing, options: draft })}
+					save={(draft) => save({ taxCategory: draft })}
 				/>
 			</section>
 		</section>

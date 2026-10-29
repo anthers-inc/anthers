@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A physical good's Selling section — the four answers a creator gives in the Studio
- * (Parker's physical-goods model, 2026-10-26).
+ * A physical good's Selling section and the variants behind its media area's pencil — the
+ * answers a creator gives in the Studio (Parker's physical-goods model, 2026-10-26).
  *
  * The walk proves the surface, not the arithmetic: the section exists for a good and is
  * absent for a kind that ships nothing, the unset listing reads as shippable-at-zero with
  * a three-day handling time rather than as a broken checkout, an edit round-trips through
- * a reload, and a choice added in the builder survives as the buyer will see it.
+ * a reload, and a variant added behind the media area's pencil survives a reload with it.
  *
  * The Work is created through the same route the New Work flow calls, so nothing here
  * depends on the four-card flow — the page is the subject.
@@ -50,7 +50,7 @@ test.afterAll(async () => {
 	}
 });
 
-test("a physical good's listing is edited in Selling and survives a reload", async ({
+test("a physical good's variants and thumbnail live in the media area", async ({
 	page,
 	context,
 }) => {
@@ -67,7 +67,9 @@ test("a physical good's listing is edited in Selling and survives a reload", asy
 	// Unsold-in: zero shipping and three business days are answers, not blanks.
 	await expect(manage.getByText(/free shipping/i)).toBeVisible();
 	await expect(manage.getByText(/3 business days to send/i)).toBeVisible();
-	await expect(manage.getByText(/no choices/i)).toBeVisible();
+	// The buyer's variants are not a Manage-tab section any more: they live behind the
+	// media area's pencil, beside the store panel they configure.
+	await expect(manage.getByRole("heading", { name: "Variants" })).toHaveCount(0);
 
 	// Shipping: the pencil opens the field, the checkmark saves it.
 	await manage.getByRole("button", { name: "Edit Shipping" }).click();
@@ -81,24 +83,34 @@ test("a physical good's listing is edited in Selling and survives a reload", asy
 		timeout: 15_000,
 	});
 
-	// A choice, with one value counted and one left unlimited.
-	const reopened = page.locator("#work-side-manage");
-	await reopened.getByRole("button", { name: "Edit Choices" }).click();
-	// An unset listing opens on an empty builder, so the first choice is added before it
+	// A variant, with one value counted and one left unlimited.
+	await page.getByRole("button", { name: "Manage This Good" }).click();
+	await expect(page.getByRole("heading", { name: "Goods Management" })).toBeVisible();
+	// The good's image is buyer-facing too, so it rides the same panel and is reachable
+	// for the first time — the Manage tab never rendered a physical Work's thumbnail.
+	await expect(page.getByRole("tab", { name: "Variants" })).toBeVisible();
+	await expect(page.getByRole("tab", { name: "Thumbnail" })).toBeVisible();
+	await expect(page.getByText(/no variants/i)).toBeVisible();
+	await page.getByRole("button", { name: "Edit Variants" }).click();
+	// An unset listing opens on an empty builder, so the first variant is added before it
 	// can be named.
-	await page.getByRole("button", { name: "Add a choice" }).click();
-	await page.getByLabel("Choice 1 name").fill("Size");
+	await page.getByRole("button", { name: "Add a variant" }).click();
+	await page.getByLabel("Variant 1 name").fill("Size");
 	await page.getByLabel("Size value 1").fill("Mug");
 	await page.getByLabel("Size Mug left in stock").fill("4");
 	await page.getByRole("button", { name: "Add a value" }).click();
 	await page.getByLabel("Size value 2").fill("Big mug");
-	await page.getByRole("button", { name: "Save Choices" }).click();
-	await expect(reopened.getByText(/Size:/)).toBeVisible({ timeout: 15_000 });
+	await page.getByRole("button", { name: "Save Variants" }).click();
+	await expect(page.getByText(/Size:/)).toBeVisible({ timeout: 15_000 });
+
+	// Done returns the media area's pencil. The store panel itself is the buyer's store,
+	// and a draft is not one yet — the variants are read back through this manager.
+	await page.getByRole("button", { name: "Done" }).click();
+	await expect(page.getByRole("button", { name: "Manage This Good" })).toBeVisible();
 
 	await page.reload();
-	await expect(page.locator("#work-side-manage").getByText("Mug, Big mug")).toBeVisible({
-		timeout: 15_000,
-	});
+	await page.getByRole("button", { name: "Manage This Good" }).click();
+	await expect(page.getByText("Mug, Big mug")).toBeVisible({ timeout: 15_000 });
 });
 
 test("a kind that ships nothing carries no Selling section", async ({ page, context }) => {
@@ -110,5 +122,6 @@ test("a kind that ships nothing carries no Selling section", async ({ page, cont
 	const manage = page.locator("#work-side-manage");
 	await expect(manage.getByRole("combobox", { name: "Work kind" })).toBeVisible();
 	await expect(manage.getByRole("heading", { name: "Shipping" })).toHaveCount(0);
-	await expect(manage.getByRole("heading", { name: "Choices" })).toHaveCount(0);
+	await expect(manage.getByRole("heading", { name: "Variants" })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Manage This Good" })).toHaveCount(0);
 });
