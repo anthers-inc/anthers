@@ -139,7 +139,7 @@ import WorkReviews from "../project/WorkReviews";
 import { InlineField } from "./Editing";
 import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
-import PhysicalListingSection from "./PhysicalListingSection";
+import PhysicalListingSection, { PhysicalVariantsSection } from "./PhysicalListingSection";
 import PreviewMediaSection from "./PreviewMediaSection";
 import ShareLinkButton from "./ShareLinkButton";
 import { WorkViewAsSection } from "./ViewAs";
@@ -1553,7 +1553,19 @@ export default function OwnerWorkEditor({
 		);
 
 	const mediaManagerTabs: MediaManagerTab[] = [];
-	if (!writing && !isGoods(current.type)) {
+	if (current.type === "physical") {
+		// A good's variants and its image are what its store panel is made of, so they
+		// are edited where the panel is — behind the media area's pencil (Parker,
+		// 2026-10-28), not at the bottom of the Manage tab.
+		mediaManagerTabs.push({
+			key: "variants",
+			label: "Variants",
+			content: <PhysicalVariantsSection workId={current.id} />,
+		});
+		if (thumbnailTab) {
+			mediaManagerTabs.push({ key: "thumbnail", label: "Thumbnail", content: thumbnailTab });
+		}
+	} else if (!writing && !isGoods(current.type)) {
 		mediaManagerTabs.push({
 			key: "delivery",
 			label: "Delivery",
@@ -1689,19 +1701,26 @@ export default function OwnerWorkEditor({
 			    card; a good's deliverable is the store panel, exactly where every user
 			    meets it. ── */}
 			<section className="relative">
-				{!writing && !isGoods(current.type) && !mediaManaging && (
+				{!writing && (!isGoods(current.type) || current.type === "physical") && !mediaManaging && (
 					<button
 						type="button"
 						className="btn btn-ghost btn-sm btn-circle absolute right-4 top-4 z-10 bg-base-100/80 text-base-content/70 backdrop-blur hover:text-base-content"
-						aria-label={mediaManaging ? "Close Media Management" : "Manage This Work's Media"}
+						aria-label={
+							current.type === "physical" ? "Manage This Good" : "Manage This Work's Media"
+						}
 						aria-expanded={mediaManaging}
-						onClick={() => setMediaManaging((open) => !open)}
+						onClick={() => {
+							if (current.type === "physical") setMediaTab("variants");
+							setMediaManaging((open) => !open);
+						}}
 					>
 						<PencilSquareIcon className="size-4" />
 					</button>
 				)}
 				{mediaManaging ? (
 					<WorkMediaManager
+						title={current.type === "physical" ? "Goods Management" : undefined}
+						sectionsLabel={current.type === "physical" ? "Goods management sections" : undefined}
 						tabs={mediaManagerTabs}
 						active={mediaTab}
 						onActive={setMediaTab}
