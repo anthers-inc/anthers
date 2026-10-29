@@ -22,10 +22,18 @@
  * to `ALLOWED` with a reason — the point is that the exception is deliberate and
  * reviewed, not that the pattern is impossible.
  */
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { join, relative, resolve } from "node:path";
 import { Glob } from "bun";
-import { apiBaseUrl, devApiPort } from "./rpc.js";
+import {
+	apiBaseUrl,
+	apiSendsCookies,
+	devApiPort,
+	isDesktop,
+	isMobile,
+	isNative,
+	nativeRuntime,
+} from "./rpc.js";
 
 const REPO = resolve(import.meta.dir, "../../../..");
 
@@ -147,5 +155,60 @@ describe("the API origin under a named local URL (portless)", () => {
 				writable: true,
 			});
 		}
+	});
+});
+
+describe("the shell runtime the web app reads", () => {
+	const g = globalThis as {
+		__ANTHERS_NATIVE__?: { platform: string; apiBaseUrl: string; getToken(): string | null };
+		__ANTHERS_DESKTOP__?: { apiBaseUrl: string; getToken(): string | null };
+	};
+
+	afterEach(() => {
+		delete g.__ANTHERS_NATIVE__;
+		delete g.__ANTHERS_DESKTOP__;
+	});
+
+	it("is absent in a browser, so nothing is treated as a shell", () => {
+		expect(nativeRuntime()).toBeNull();
+		expect(isNative()).toBe(false);
+		expect(isDesktop()).toBe(false);
+		expect(isMobile()).toBe(false);
+	});
+
+	it("reads the desktop's original name as the desktop", () => {
+		// The installed shell injects `__ANTHERS_DESKTOP__` and bundles the web build it was
+		// released with, so a build that only knew the new name would leave every installed
+		// desktop calling itself a browser. One line of fallback covers the gap.
+		g.__ANTHERS_DESKTOP__ = { apiBaseUrl: "https://anthers.org", getToken: () => null };
+		expect(isNative()).toBe(true);
+		expect(isDesktop()).toBe(true);
+		expect(isMobile()).toBe(false);
+		expect(apiBaseUrl()).toBe("https://anthers.org");
+	});
+
+	it("does not call a phone a desktop", () => {
+		// The whole point of the rename: `isDesktop()` used to answer true for any shell, so
+		// the desktop's home preference and its settings section would appear on a phone.
+		g.__ANTHERS_NATIVE__ = {
+			platform: "android",
+			apiBaseUrl: "https://anthers.org",
+			getToken: () => null,
+		};
+		expect(isNative()).toBe(true);
+		expect(isDesktop()).toBe(false);
+		expect(isMobile()).toBe(true);
+		expect(apiSendsCookies()).toBe(false);
+	});
+
+	it("prefers the platform-tagged runtime when both names are present", () => {
+		g.__ANTHERS_DESKTOP__ = { apiBaseUrl: "https://old.example", getToken: () => null };
+		g.__ANTHERS_NATIVE__ = {
+			platform: "ios",
+			apiBaseUrl: "https://anthers.org",
+			getToken: () => null,
+		};
+		expect(nativeRuntime()?.platform).toBe("ios");
+		expect(apiBaseUrl()).toBe("https://anthers.org");
 	});
 });

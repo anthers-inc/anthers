@@ -23,7 +23,7 @@ import {
 	isTimePoolEligible,
 } from "@anthers/shared/attention";
 import { useAuth } from "@anthers/web-shared/auth";
-import { client } from "@anthers/web-shared/rpc";
+import { client, nativeRuntime } from "@anthers/web-shared/rpc";
 import { type RefObject, useEffect, useRef } from "react";
 import { publishBudget } from "./public-access";
 import { useShareToken } from "./share-link";
@@ -316,11 +316,13 @@ function currentSurface(): string {
 	}
 }
 
-/** Broad device class for the record: the desktop shell, or touch vs not. */
+/** Broad device class for the record: which shell, or touch vs not. */
 function currentDevice(): string {
 	if (typeof navigator === "undefined") return "desktop";
-	// The desktop shell names itself on `globalThis.__ANTHERS_DESKTOP__` (see rpc.ts).
-	if ("__ANTHERS_DESKTOP__" in (window as object)) return "desktop-shell";
+	// A packaged shell names its platform on `globalThis.__ANTHERS_NATIVE__` (see rpc.ts);
+	// an older desktop build still names itself `__ANTHERS_DESKTOP__`, read as `desktop`.
+	const platform = nativeRuntime()?.platform;
+	if (platform) return `${platform}-shell`;
 	return navigator.maxTouchPoints > 0 ? "mobile" : "desktop";
 }
 

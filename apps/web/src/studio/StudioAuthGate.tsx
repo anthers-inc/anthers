@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useAuth } from "@anthers/web-shared/auth";
-import { isDesktop } from "@anthers/web-shared/rpc";
+import { isNative } from "@anthers/web-shared/rpc";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
@@ -24,23 +24,26 @@ import DesktopSignIn from "./DesktopSignIn";
 export default function StudioAuthGate({ children }: { children: ReactNode }) {
 	const { user, isAuthenticated, isLoading } = useAuth();
 	const creatorMode = Boolean(user?.creatorMode);
-	const desktop = isDesktop();
+	// Any packaged shell carries a bearer token instead of a cookie, so the sign-in
+	// surface is the shell's own on every platform — the desktop's today, the phone's
+	// when its sign-in lands.
+	const native = isNative();
 
 	// In a browser these are ordinary in-app routes now — the Studio is a section of this
 	// app, not a separate origin, so what used to be a cross-origin `window.location.href`
 	// is a client-side redirect that keeps the session, the history entry and the bundle.
-	if (!desktop && !isLoading && !isAuthenticated) return <Navigate to="/login" replace />;
+	if (!native && !isLoading && !isAuthenticated) return <Navigate to="/login" replace />;
 	// ⚠️ **`?creator=1`, because the bare redirect was a silent one.** The destination is
 	// right — creator mode is enabled on that page — but somebody who clicked into the Studio
 	// arrived at account settings with nothing saying why they were moved or which of the
 	// switches there was the one they wanted. The flag is what `SettingsPage` reads to say so.
-	if (!desktop && !isLoading && !creatorMode) return <Navigate to="/settings?creator=1" replace />;
+	if (!native && !isLoading && !creatorMode) return <Navigate to="/settings?creator=1" replace />;
 
-	if (desktop && !isLoading && !isAuthenticated) {
+	if (native && !isLoading && !isAuthenticated) {
 		return <DesktopSignIn />;
 	}
 
-	if (desktop && !isLoading && !creatorMode) {
+	if (native && !isLoading && !creatorMode) {
 		return (
 			<div className="min-h-dvh flex items-center justify-center px-4">
 				<div className="card bg-base-200 w-full max-w-md">

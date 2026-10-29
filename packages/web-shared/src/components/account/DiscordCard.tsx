@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../lib/auth";
-import { isDesktop } from "../../lib/desktop";
+import { isNative } from "../../lib/desktop";
 import { useSearchParams } from "../../lib/router";
 import { apiBaseUrl, apiFetch } from "../../lib/rpc";
 
@@ -80,7 +80,7 @@ export default function DiscordCard({
 	// ⚠️ **The desktop shell does not carry this card.** Connecting leaves the app for Discord's
 	// consent screen and comes back to the web app, which would strand the desktop's session;
 	// the connection is made on anthers.org's settings and the roles follow the account either way.
-	if (isDesktop()) return null;
+	if (isNative()) return null;
 
 	const linked = user.isDiscordLinked;
 	const verified = user.isCreator === true;
