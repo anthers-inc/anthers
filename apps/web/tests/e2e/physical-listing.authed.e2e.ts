@@ -120,7 +120,11 @@ test("a kind that ships nothing carries no Selling section", async ({ page, cont
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+/, { timeout: 15_000 });
 
 	const manage = page.locator("#work-side-manage");
-	await expect(manage.getByRole("combobox", { name: "Work kind" })).toBeVisible();
+	// The kind control is the byline's chip, not a Manage-tab select (Parker, 2026-10-29):
+	// this kind ships nothing, so the Selling section never appears beside it.
+	await expect(
+		page.getByRole("button", { name: /^Change the kind, currently Video/ }),
+	).toBeVisible();
 	await expect(manage.getByRole("heading", { name: "Shipping" })).toHaveCount(0);
 	await expect(manage.getByRole("heading", { name: "Variants" })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Manage This Good" })).toHaveCount(0);

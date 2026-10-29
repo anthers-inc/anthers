@@ -67,27 +67,27 @@ test("a Work is drafted from a kind and a name, and its kind changes on its page
 	await expect(page.getByRole("button", { name: "Save Release" })).toBeDisabled();
 	await page.getByRole("button", { name: "Cancel editing Release" }).click();
 
-	// The kind control offers itself for an empty private draft — on the MANAGE tab
-	// (Parker, 2026-10-17): the kind is the machinery's first fact, and the machinery
-	// is the Manage tab's; the Details tab is the Work's composition. Scoped to the
-	// panel, so the walk pins where the select lives, not only that it exists. The
-	// select saves at once and the row answers, so the page follows the row rather
-	// than a bar's save.
-	const kind = page.locator("#work-side-manage").getByRole("combobox", { name: "Work kind" });
-	await expect(kind).toBeVisible();
-	await expect(
-		page.locator("#work-tab-details").getByRole("combobox", { name: "Work kind" }),
-	).toHaveCount(0);
-	await expect(kind).toHaveValue("comic");
-	await kind.selectOption("ebook");
-
-	// The kind select saves at once and the row answers, so the page follows the row:
-	// the file's silhouette is a book's, and no file section claims anything but the
-	// truth. Still scoped to the Manage panel — the select keeps its tab through the
-	// restructure the change causes.
+	// The kind control is the chip in the byline now (Parker, 2026-10-29): the chip a
+	// reader reads is the door a draft's kind is changed through, the same shape as the
+	// access chip beside it, and the Manage tab no longer carries a Kind select — a walk
+	// scoped to the panel pins that the control left it rather than only that it exists
+	// elsewhere. The dialog saves at once and the row answers, so the page follows the
+	// row rather than a bar's save.
+	const kind = page.getByRole("button", { name: /^Change the kind/ });
+	await expect(kind).toHaveAccessibleName("Change the kind, currently Comic");
 	await expect(
 		page.locator("#work-side-manage").getByRole("combobox", { name: "Work kind" }),
-	).toHaveValue("ebook", {
+	).toHaveCount(0);
+	await kind.click();
+	await page
+		.getByRole("dialog")
+		.getByRole("button", { name: /^Book\b/ })
+		.click();
+
+	// The dialog closes on its save, the chip names the new kind, and the row's own
+	// machinery follows: the file's silhouette is a book's, and no file section claims
+	// anything but the truth.
+	await expect(kind).toHaveAccessibleName("Change the kind, currently Book", {
 		timeout: 15_000,
 	});
 	await expect(page.getByText(/the book opens here/i)).toBeVisible();

@@ -322,6 +322,11 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await rowsFor(page).getByRole("link", { name: TITLE }).click();
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 
+	// ⚠️ The kind chip is read-only on a released Work (Parker, 2026-10-29): the chip
+	// opens the kinds in a dialog only while the draft could still be another kind, and a
+	// released Work's kind is its published shape.
+	await expect(page.getByRole("button", { name: /^Change the kind/ })).toHaveCount(0);
+
 	// The access is edited from the chip in the byline strip (the creator's door, the
 	// same dialog the video pass built): its rows are the Access table. Warning first,
 	// while the change is still only in the form — the dialog says what the cut does
