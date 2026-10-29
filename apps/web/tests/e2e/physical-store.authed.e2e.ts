@@ -113,18 +113,16 @@ test("the store panel prices the good, offers its choices and refuses the sold-o
 		timeout: 15_000,
 	});
 
-	// The panel's own headline, not the price chip a card elsewhere on the page now carries:
+	// The panel's own price box, not the price chip a card elsewhere on the page now carries:
 	// a physical Work resolves a price like any other, so "$18.00" appears twice on the page.
-	await expect(page.getByRole("paragraph").filter({ hasText: "$18.00" })).toBeVisible();
-	await expect(page.getByText(/plus \$6\.50 shipping/)).toBeVisible();
+	const panel = page.getByTestId("physical-quote-box");
+	await expect(panel.getByText("$18.00")).toBeVisible();
+	await expect(panel.getByText("$6.50")).toBeVisible();
 	await expect(page.getByRole("button", { name: "Large" })).toBeVisible();
 	await expect(page.getByRole("button", { name: /Bare — sold out/ })).toBeDisabled();
 
-	// The count moves within the range the server accepts.
-	const quantity = page.getByLabel("How many");
-	await expect(quantity).toHaveValue("1");
-	await page.getByRole("button", { name: "One more" }).click();
-	await expect(quantity).toHaveValue("2");
+	// The storefront no longer asks for a count; the basket owns it.
+	await expect(page.getByLabel("How many")).toHaveCount(0);
 
 	expect(errors).toEqual([]);
 });
