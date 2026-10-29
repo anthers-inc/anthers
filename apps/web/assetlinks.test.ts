@@ -38,9 +38,9 @@ type Statement = {
 	};
 };
 
-const statements = await Bun.file(FILE)
+const statements = (await Bun.file(FILE)
 	.json()
-	.catch(() => null) as Statement[] | null;
+	.catch(() => null)) as Statement[] | null;
 
 describe("the Android app-links association file", () => {
 	it("is a list of statements, which is the shape Android reads", () => {
