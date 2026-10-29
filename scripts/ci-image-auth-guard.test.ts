@@ -83,8 +83,8 @@ describe("CI's image pulls", () => {
 		for (const name of ["ci.yml", "ci-image.yml"]) {
 			const source = read(name);
 			expect(source).toContain("docker/build-push-action");
-			expect(source).toContain("username: ${{ secrets.DOCKERHUB_USERNAME }}");
-			expect(source).toContain("password: ${{ secrets.DOCKERHUB_TOKEN }}");
+			expect(source).toMatch(/username: \$\{\{\s*secrets\.DOCKERHUB_USERNAME\s*\}\}/);
+			expect(source).toMatch(/password: \$\{\{\s*secrets\.DOCKERHUB_TOKEN\s*\}\}/);
 		}
 	});
 });
