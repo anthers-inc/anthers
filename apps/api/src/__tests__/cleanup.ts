@@ -35,9 +35,7 @@
 import { afterAll, beforeAll } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	adminAccountEvents,
 	adminAccounts,
-	adminSessions,
 	comments,
 	moderationActions,
 	moderationReports,
@@ -47,10 +45,22 @@ import {
 	votes,
 	works,
 } from "@anthers/db/schema";
-import { and, desc, eq, gt, inArray, or } from "drizzle-orm";
-import { purgeAccountIds, purgeFixtureAccounts, purgeReportsAbout, purgeWorkIds } from "./purge.js";
+import { and, desc, eq, gt, inArray } from "drizzle-orm";
+import {
+	purgeAccountIds,
+	purgeAdminAccountIds,
+	purgeFixtureAccounts,
+	purgeReportsAbout,
+	purgeWorkIds,
+} from "./purge.js";
 
-export { purgeAccountIds, purgeFixtureAccounts, purgeReportsAbout, purgeWorkIds };
+export {
+	purgeAccountIds,
+	purgeAdminAccountIds,
+	purgeFixtureAccounts,
+	purgeReportsAbout,
+	purgeWorkIds,
+};
 
 /**
  * Register teardown for every account a suite creates, however it creates them.
@@ -200,14 +210,6 @@ export function purgeAdminAccountsCreatedHere(): void {
 			.select({ id: adminAccounts.id })
 			.from(adminAccounts)
 			.where(gt(adminAccounts.id, highWater));
-		const ids = created.map((r) => r.id);
-		if (ids.length === 0) return;
-		await db
-			.delete(adminAccountEvents)
-			.where(
-				or(inArray(adminAccountEvents.accountId, ids), inArray(adminAccountEvents.actorId, ids)),
-			);
-		await db.delete(adminSessions).where(inArray(adminSessions.accountId, ids));
-		await db.delete(adminAccounts).where(inArray(adminAccounts.id, ids));
+		await purgeAdminAccountIds(created.map((row) => row.id));
 	});
 }
