@@ -76,6 +76,22 @@ function clean(value: unknown): string {
 }
 
 /**
+ * Exactly one picture is the cover.
+ *
+ * A gallery always needs a cover, and a client that sends none (or two) is normalized
+ * rather than refused: the first picture wins when nobody named one, and the first claimed
+ * cover wins when more than one did.
+ */
+function withOneCover(images: PhysicalImage[]): PhysicalImage[] {
+	if (images.length === 0) return [];
+	const coverIndex = images.findIndex((image) => image.cover);
+	return images.map((image, index) => ({
+		...image,
+		cover: coverIndex === -1 ? index === 0 : index === coverIndex,
+	}));
+}
+
+/**
  * Check a creator's answers and normalize what survives.
  *
  * Every failure is collected rather than thrown on the first, because a form that reports
@@ -224,7 +240,7 @@ export function validateListing(input: {
 	}
 	const seenKeys = new Set<string>();
 	for (const raw of rawImages.slice(0, LISTING_LIMITS.maxImages)) {
-		const source = (raw ?? {}) as { key?: unknown; alt?: unknown };
+		const source = (raw ?? {}) as { key?: unknown; alt?: unknown; cover?: unknown };
 		const key = clean(source.key);
 		const alt = clean(source.alt);
 		if (!key || key.length > LISTING_LIMITS.maxImageKeyChars) {
@@ -243,7 +259,7 @@ export function validateListing(input: {
 			continue;
 		}
 		seenKeys.add(key);
-		images.push({ key, alt });
+		images.push({ key, alt, cover: Boolean(source.cover) });
 	}
 
 	if (problems.length > 0) return { ok: false, problems };
@@ -256,7 +272,7 @@ export function validateListing(input: {
 			maxQuantity,
 			taxCategory: category as PhysicalTaxCategory,
 			options,
-			images,
+			images: withOneCover(images),
 		},
 	};
 }
@@ -276,7 +292,7 @@ export async function physicalListingFor(workId: number): Promise<PhysicalListin
 		maxQuantity: row.maxQuantity,
 		taxCategory: row.taxCategory as PhysicalTaxCategory,
 		options: row.options ?? [],
-		images: row.images ?? [],
+		images: withOneCover(row.images ?? []),
 	};
 }
 

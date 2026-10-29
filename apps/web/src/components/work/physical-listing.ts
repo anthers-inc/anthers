@@ -31,6 +31,8 @@ export interface ListingOption {
 export interface PhysicalImage {
 	key: string;
 	alt: string;
+	/** Exactly one picture is the cover; the storefront shows it first. */
+	cover: boolean;
 }
 
 export interface Listing {

@@ -46,6 +46,8 @@ export interface PhysicalOption {
 export interface PhysicalImage {
 	key: string;
 	alt: string;
+	/** Exactly one picture is the cover; the storefront shows it first and the catalog card uses it. */
+	cover: boolean;
 }
 
 // org — a listing is the platform's selling machinery for one creator's good; the carrier

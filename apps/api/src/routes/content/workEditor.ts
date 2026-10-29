@@ -1303,7 +1303,7 @@ const workEditorRoutes = new Hono()
 		// good's art is its product photos, so the 16:9 poster is derived from the first
 		// one rather than edited as a second, disconnected image. An empty gallery clears
 		// the derived cover; the card falls back to the kind's placeholder.
-		const cover = saved.listing.images[0];
+		const cover = saved.listing.images.find((image) => image.cover) ?? saved.listing.images[0];
 		await db
 			.update(works)
 			.set({

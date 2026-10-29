@@ -172,9 +172,29 @@ describe("pictures", () => {
 		expect(r.ok).toBe(true);
 		if (r.ok) {
 			expect(r.value.images).toEqual([
-				{ key: "creators/1/photo-a.jpg", alt: "The mug from the front" },
-				{ key: "creators/1/photo-b.jpg", alt: "" },
+				{ key: "creators/1/photo-a.jpg", alt: "The mug from the front", cover: true },
+				{ key: "creators/1/photo-b.jpg", alt: "", cover: false },
 			]);
+		}
+	});
+
+	it("keeps exactly one cover, the named one or the first", () => {
+		const named = withImages([
+			{ key: "creators/1/a.jpg", alt: "", cover: false },
+			{ key: "creators/1/b.jpg", alt: "", cover: true },
+		]);
+		expect(named.ok).toBe(true);
+		if (named.ok) {
+			expect(named.value.images.map((image) => image.cover)).toEqual([false, true]);
+		}
+
+		const twoClaims = withImages([
+			{ key: "creators/1/a.jpg", alt: "", cover: true },
+			{ key: "creators/1/b.jpg", alt: "", cover: true },
+		]);
+		expect(twoClaims.ok).toBe(true);
+		if (twoClaims.ok) {
+			expect(twoClaims.value.images.map((image) => image.cover)).toEqual([true, false]);
 		}
 	});
 

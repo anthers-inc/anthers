@@ -364,6 +364,7 @@ export const physicalListingSchema = z.object({
 			z.object({
 				key: z.string().min(1).max(500),
 				alt: z.string().max(300).default(""),
+				cover: z.boolean().optional(),
 			}),
 		)
 		.optional(),

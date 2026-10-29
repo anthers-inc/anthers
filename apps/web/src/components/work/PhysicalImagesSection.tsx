@@ -3,18 +3,24 @@
  * The pictures behind the storefront's carousel, edited in the media area itself.
  *
  * ⭐ **The carousel's own pencil opens this** (Parker, 2026-10-29): a physical good has no
- * media manager, so the picture editor takes the carousel's place while it is open and
- * returns it when the creator is done. The parent owns the listing and passes `images` and
- * `onChange`; this component owns only the upload, description, order and removal gestures,
- * so the storefront below cannot drift from the editor above it.
+ * media manager, so the picture editor takes the whole editing area while it is open and
+ * returns the panel when the creator is done. The parent owns the listing and passes
+ * `images` and `onChange`; this component owns only the upload, cover, description, order
+ * and removal gestures, so the storefront below cannot drift from the editor above it.
  *
- * Each add, remove, reorder and description is saved immediately through `onChange`. The
- * parent's save re-reads the listing row first, so the policy fields edited below the price
- * box cannot be clobbered.
+ * Each add, cover, remove, reorder and description is saved immediately through `onChange`.
+ * The parent's save re-reads the listing row first, so the policy fields edited below the
+ * price box cannot be clobbered.
  */
 
 import { keyToPreview, uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
-import { PhotoIcon } from "@heroicons/react/24/outline";
+import {
+	Bars3Icon,
+	PlusIcon,
+	StarIcon as StarOutlineIcon,
+	TrashIcon,
+} from "@heroicons/react/24/outline";
+import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 import { useRef, useState } from "react";
 import type { PhysicalImage } from "./physical-listing";
 
@@ -32,6 +38,7 @@ export function PhysicalImagesEditor({
 }) {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [dragged, setDragged] = useState<number | null>(null);
 	/** Descriptions being typed, keyed by the image's storage key. */
 	const [drafts, setDrafts] = useState<Record<string, string>>({});
 	const picker = useRef<HTMLInputElement | null>(null);
@@ -49,7 +56,7 @@ export function PhysicalImagesEditor({
 			const uploaded: PhysicalImage[] = [];
 			for (const file of picked) {
 				const { key } = await uploadImageFile(file, "thumbnail");
-				uploaded.push({ key, alt: "" });
+				uploaded.push({ key, alt: "", cover: images.length === 0 && uploaded.length === 0 });
 			}
 			await onChange([...images, ...uploaded]);
 		} catch (err) {
@@ -61,6 +68,7 @@ export function PhysicalImagesEditor({
 	};
 
 	const remove = async (index: number) => {
+		if (!window.confirm("Remove this photo?")) return;
 		setBusy(true);
 		setError(null);
 		try {
@@ -72,17 +80,30 @@ export function PhysicalImagesEditor({
 		}
 	};
 
-	const move = async (index: number, delta: number) => {
-		const target = index + delta;
-		if (target < 0 || target >= images.length) return;
+	const reorder = async (from: number, to: number) => {
+		if (from === to) return;
 		const next = [...images];
-		[next[index], next[target]] = [next[target], next[index]];
+		const [moved] = next.splice(from, 1);
+		next.splice(to, 0, moved);
 		setBusy(true);
 		setError(null);
 		try {
 			await onChange(next);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "The pictures didn't reorder.");
+		} finally {
+			setBusy(false);
+			setDragged(null);
+		}
+	};
+
+	const setCover = async (key: string) => {
+		setBusy(true);
+		setError(null);
+		try {
+			await onChange(images.map((image) => ({ ...image, cover: image.key === key })));
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "That cover didn't save.");
 		} finally {
 			setBusy(false);
 		}
@@ -117,25 +138,6 @@ export function PhysicalImagesEditor({
 					Done
 				</button>
 			</div>
-			<p className="text-xs text-base-content/60">
-				Square photos on a plain background read best. The first one is the cover buyers see on your
-				catalog.
-			</p>
-			<div className="flex flex-wrap items-center gap-2">
-				<button
-					type="button"
-					className="btn btn-primary btn-sm"
-					disabled={busy || atCap}
-					onClick={() => picker.current?.click()}
-				>
-					{busy ? "Working…" : "Add photos"}
-				</button>
-				{atCap && (
-					<span className="text-xs text-base-content/60">
-						{MAX_IMAGES} photos is the most a gallery holds.
-					</span>
-				)}
-			</div>
 			<input
 				ref={picker}
 				type="file"
@@ -145,80 +147,96 @@ export function PhysicalImagesEditor({
 				onChange={(e) => void add(e.target.files)}
 			/>
 
-			{images.length === 0 ? (
-				<button
-					type="button"
-					className="flex flex-col items-center gap-3 rounded-box border border-dashed border-base-content/20 p-8 text-center"
-					disabled={busy}
-					onClick={() => picker.current?.click()}
-				>
-					<PhotoIcon className="size-7 text-base-content/30" />
-					<span className="text-sm text-base-content/60">
-						No photos yet. This is the first thing a buyer looks at.
-					</span>
-				</button>
-			) : (
-				<ul className="grid grid-cols-2 gap-3">
-					{images.map((image, index) => (
-						<li
-							key={image.key}
-							className="flex min-w-0 flex-col gap-2 rounded-box border border-base-300 p-2"
-						>
-							<div className="relative aspect-square overflow-hidden rounded-lg bg-base-100">
-								<img
-									src={keyToPreview(image.key)}
-									alt={image.alt || `Photo ${index + 1}`}
-									className="h-full w-full object-contain"
-									loading="lazy"
-								/>
-								{index === 0 && (
-									<span className="badge badge-primary badge-sm absolute top-2 left-2">Cover</span>
-								)}
-							</div>
-							<input
-								aria-label={`Describe photo ${index + 1}`}
-								className="input input-bordered input-sm w-full"
-								placeholder="Describe the photo…"
-								value={drafts[image.key] ?? image.alt}
-								onChange={(e) =>
-									setDrafts((current) => ({ ...current, [image.key]: e.target.value }))
-								}
-								onBlur={(e) => void saveAlt(image.key, e.target.value)}
+			<ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+				{images.map((image, index) => (
+					<li
+						key={image.key}
+						onDragOver={(e) => e.preventDefault()}
+						onDrop={(e) => {
+							e.preventDefault();
+							if (dragged != null) void reorder(dragged, index);
+						}}
+						className="flex min-w-0 flex-col gap-2 rounded-box border border-base-300 p-2"
+					>
+						<div className="relative aspect-square overflow-hidden rounded-lg bg-base-100">
+							<img
+								src={keyToPreview(image.key)}
+								alt={image.alt || `Photo ${index + 1}`}
+								className="h-full w-full object-contain"
+								loading="lazy"
 							/>
-							<div className="flex items-center justify-between gap-1">
-								<div className="join">
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs join-item"
-										aria-label={`Move photo ${index + 1} earlier`}
-										disabled={busy || index === 0}
-										onClick={() => void move(index, -1)}
-									>
-										←
-									</button>
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs join-item"
-										aria-label={`Move photo ${index + 1} later`}
-										disabled={busy || index === images.length - 1}
-										onClick={() => void move(index, 1)}
-									>
-										→
-									</button>
-								</div>
-								<button
-									type="button"
-									className="btn btn-ghost btn-xs text-error"
-									aria-label={`Remove photo ${index + 1}`}
-									disabled={busy}
-									onClick={() => void remove(index)}
-								>
-									Remove
-								</button>
-							</div>
-						</li>
-					))}
-				</ul>
+							<button
+								type="button"
+								aria-label={
+									image.cover
+										? `Photo ${index + 1} is the cover`
+										: `Set photo ${index + 1} as cover`
+								}
+								aria-pressed={image.cover}
+								disabled={busy || image.cover}
+								onClick={() => void setCover(image.key)}
+								className="btn btn-circle btn-xs absolute top-2 left-2 border-0 bg-base-100/85 text-base-content/70 backdrop-blur hover:text-base-content"
+							>
+								{image.cover ? (
+									<StarSolidIcon className="size-4 text-warning" />
+								) : (
+									<StarOutlineIcon className="size-4" />
+								)}
+							</button>
+							<button
+								type="button"
+								draggable
+								onDragStart={(e) => {
+									setDragged(index);
+									e.dataTransfer.effectAllowed = "move";
+								}}
+								onDragEnd={() => setDragged(null)}
+								title="Drag to reorder"
+								aria-label={`Drag photo ${index + 1} to reorder`}
+								className="absolute top-2 left-1/2 -translate-x-1/2 cursor-grab rounded bg-base-100/85 p-1 text-base-content/60 backdrop-blur"
+							>
+								<Bars3Icon className="size-4" />
+							</button>
+							<button
+								type="button"
+								aria-label={`Remove photo ${index + 1}`}
+								disabled={busy}
+								onClick={() => void remove(index)}
+								className="btn btn-circle btn-xs absolute top-2 right-2 border-0 bg-base-100/85 text-error backdrop-blur"
+							>
+								<TrashIcon className="size-4" />
+							</button>
+						</div>
+						<input
+							aria-label={`Describe photo ${index + 1}`}
+							className="input input-bordered input-sm w-full"
+							placeholder="Describe the photo…"
+							value={drafts[image.key] ?? image.alt}
+							onChange={(e) =>
+								setDrafts((current) => ({ ...current, [image.key]: e.target.value }))
+							}
+							onBlur={(e) => void saveAlt(image.key, e.target.value)}
+						/>
+					</li>
+				))}
+				{!atCap && (
+					<li>
+						<button
+							type="button"
+							aria-label="Add photos"
+							disabled={busy}
+							onClick={() => picker.current?.click()}
+							className="flex aspect-square w-full items-center justify-center rounded-lg border border-dashed border-base-content/25 bg-base-200/30 text-base-content/40 transition-colors hover:border-base-content/40 hover:text-base-content/70"
+						>
+							<PlusIcon className="size-8" />
+						</button>
+					</li>
+				)}
+			</ul>
+			{atCap && (
+				<p className="text-xs text-base-content/60">
+					{MAX_IMAGES} photos is the most a gallery holds.
+				</p>
 			)}
 			{error && <p className="text-sm text-error">{error}</p>}
 		</div>

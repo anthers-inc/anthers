@@ -69,14 +69,16 @@ export async function buyerListingFor(workId: number): Promise<BuyerListing> {
 		.limit(1);
 	if (!row) return { ...DEFAULT_LISTING, options: [], images: [] };
 	const options: PhysicalOption[] = row.options ?? [];
-	const images = (
-		await Promise.all(
-			(row.images ?? []).map(async (image) => {
-				const url = await resolveThumbnailUrl(image.key);
-				return url ? { url, alt: image.alt } : null;
-			}),
-		)
-	).filter((image): image is { url: string; alt: string } => image !== null);
+	const resolved = await Promise.all(
+		(row.images ?? []).map(async (image) => {
+			const url = await resolveThumbnailUrl(image.key);
+			return url ? { url, alt: image.alt, cover: image.cover } : null;
+		}),
+	);
+	const images = resolved
+		.filter((image): image is { url: string; alt: string; cover: boolean } => image !== null)
+		.sort((a, b) => Number(b.cover) - Number(a.cover))
+		.map(({ url, alt }) => ({ url, alt }));
 	return {
 		shippingPrice: row.shippingPrice,
 		handlingBusinessDays: row.handlingBusinessDays,

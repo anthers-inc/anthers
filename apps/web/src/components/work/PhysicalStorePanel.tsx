@@ -273,10 +273,12 @@ export default function PhysicalStorePanel({
 		if (owner && editorListing) {
 			return {
 				...editorListing,
-				images: editorListing.images.map((image) => ({
-					url: keyToPreview(image.key),
-					alt: image.alt,
-				})),
+				images: [...editorListing.images]
+					.sort((a, b) => Number(b.cover) - Number(a.cover))
+					.map((image) => ({
+						url: keyToPreview(image.key),
+						alt: image.alt,
+					})),
 			};
 		}
 		if (!storefront) return null;
@@ -388,6 +390,7 @@ export default function PhysicalStorePanel({
 	};
 
 	const startVariant = (index: number | null, option?: ListingOption) => {
+		setEditingImages(false);
 		setEditError(null);
 		setVariantDraft({
 			index,
@@ -395,6 +398,12 @@ export default function PhysicalStorePanel({
 				? { ...option, values: option.values.map((value) => ({ ...value })) }
 				: { name: "", values: [{ label: "", stock: null }] },
 		});
+	};
+
+	const openPhotos = () => {
+		setVariantDraft(null);
+		setEditError(null);
+		setEditingImages(true);
 	};
 
 	const saveVariantDraft = async () => {
@@ -453,237 +462,241 @@ export default function PhysicalStorePanel({
 	return (
 		<div className="card bg-base-200 border border-base-300 h-full">
 			<div className="card-body flex flex-col gap-4 p-5 text-start">
-				<div className="grid flex-1 items-stretch gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-					<div className="min-w-0">
-						{editingImages && owner && editorListing ? (
-							<PhysicalImagesEditor
-								images={editorListing.images}
-								onChange={(images) => save({ images })}
-								onDone={() => setEditingImages(false)}
-							/>
-						) : (
-							<ProductGallery
-								images={shownListing.images}
-								title={title}
-								fallback={thumbnail}
-								onEdit={owner ? () => setEditingImages(true) : undefined}
-							/>
-						)}
-					</div>
-
-					<div className="flex min-w-0 flex-col gap-4">
-						<div>
-							<div className="mb-2 flex items-center justify-between gap-2">
-								<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-									Variants
-								</h2>
-								{owner && editorListing && !variantDraft && options.length < MAX_OPTIONS && (
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs btn-circle"
-										aria-label="Add a variant"
-										onClick={() => startVariant(null)}
-									>
-										<PlusIcon className="size-4" />
-									</button>
-								)}
+				{editingImages && owner && editorListing ? (
+					<PhysicalImagesEditor
+						images={editorListing.images}
+						onChange={(images) => save({ images })}
+						onDone={() => setEditingImages(false)}
+					/>
+				) : (
+					<>
+						<div className="grid flex-1 items-stretch gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+							<div className="min-w-0">
+								<ProductGallery
+									images={shownListing.images}
+									title={title}
+									fallback={thumbnail}
+									onEdit={owner ? openPhotos : undefined}
+								/>
 							</div>
-							{variantDraft ? (
-								<div className="flex flex-col gap-3">
-									<PhysicalVariantEditor
-										options={[variantDraft.draft]}
-										onChange={(next) =>
-											setVariantDraft((current) =>
-												current ? { ...current, draft: next[0] ?? current.draft } : current,
-											)
-										}
-									/>
-									<div className="flex flex-wrap items-center justify-between gap-2">
-										{variantDraft.index != null ? (
-											<button
-												type="button"
-												className="btn btn-ghost btn-sm text-error"
-												onClick={() => void removeDraft()}
-											>
-												Remove variant
-											</button>
-										) : (
-											<span />
-										)}
-										<div className="flex gap-2">
-											<button
-												type="button"
-												className="btn btn-ghost btn-sm"
-												onClick={() => {
-													setVariantDraft(null);
-													setEditError(null);
-												}}
-											>
-												Cancel
-											</button>
-											<button
-												type="button"
-												className="btn btn-primary btn-sm"
-												onClick={() => void saveVariantDraft()}
-											>
-												Save variant
-											</button>
-										</div>
-									</div>
-									{editError && <p className="text-sm text-error">{editError}</p>}
-								</div>
-							) : options.length > 0 ? (
-								<div className="flex w-full flex-col gap-3">
-									{options.map((option, index) => (
-										<div key={option.name} className="flex items-start gap-1">
-											<div className="min-w-0 flex-1">
-												<VariantRow
-													option={option}
-													chosen={picks[option.name]}
-													onPick={(label) =>
-														setPicks((current) => ({ ...current, [option.name]: label }))
-													}
-												/>
-											</div>
-											{owner && editorListing && (
-												<>
-													<button
-														type="button"
-														className="btn btn-ghost btn-xs"
-														aria-label={`Edit ${option.name} variant`}
-														onClick={() => startVariant(index, option)}
-													>
-														<PencilSquareIcon className="size-4" />
-													</button>
-													<button
-														type="button"
-														className="btn btn-ghost btn-xs text-error"
-														aria-label={`Remove ${option.name} variant`}
-														onClick={() => void removeOption(index)}
-													>
-														<TrashIcon className="size-4" />
-													</button>
-												</>
-											)}
-										</div>
-									))}
-								</div>
-							) : (
-								<p className="text-sm text-base-content/60">
-									This good comes as it is; there is nothing to choose.
-								</p>
-							)}
-							{!variantDraft && editError && <p className="mt-2 text-sm text-error">{editError}</p>}
-						</div>
 
-						{!variantDraft && (
-							<>
-								{/* The price box is visible from the moment the panel is, and stays short:
-						    the policy facts below it are the rest of the right column. */}
-								<div className="flex min-h-0" data-testid="physical-quote-box">
-									{!storefront.priced ? (
-										<div className="w-full rounded-lg border border-base-300 bg-base-100 p-3 text-sm text-base-content/60">
-											This good isn't priced yet. Set its Access row to start selling it.
-										</div>
-									) : quote ? (
-										<dl className="w-full rounded-lg border border-base-300 bg-base-100 p-3 text-sm">
-											<div className="space-y-1.5">
-												<div className="flex justify-between text-base-content/60">
-													<dt>Goods{quote.quantity > 1 ? ` × ${quote.quantity}` : ""}</dt>
-													<dd className="tabular-nums">{money(quote.goods)}</dd>
-												</div>
-												<div className="flex justify-between text-base-content/60">
-													<dt>Shipping</dt>
-													<dd className="tabular-nums">
-														{Number(quote.shipping) > 0 ? money(quote.shipping) : "Free"}
-													</dd>
-												</div>
-												<div className="flex justify-between text-base-content/60">
-													<dt>Sales tax</dt>
-													<dd className="text-xs">
-														{quote.salesTax ? money(quote.salesTax) : "calculated at checkout"}
-													</dd>
+							<div className="flex min-w-0 flex-col gap-4">
+								<div>
+									<div className="mb-2 flex items-center justify-between gap-2">
+										<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+											Variants
+										</h2>
+										{owner && editorListing && !variantDraft && options.length < MAX_OPTIONS && (
+											<button
+												type="button"
+												className="btn btn-ghost btn-xs btn-circle"
+												aria-label="Add a variant"
+												onClick={() => startVariant(null)}
+											>
+												<PlusIcon className="size-4" />
+											</button>
+										)}
+									</div>
+									{variantDraft ? (
+										<div className="flex flex-col gap-3">
+											<PhysicalVariantEditor
+												options={[variantDraft.draft]}
+												onChange={(next) =>
+													setVariantDraft((current) =>
+														current ? { ...current, draft: next[0] ?? current.draft } : current,
+													)
+												}
+											/>
+											<div className="flex flex-wrap items-center justify-between gap-2">
+												{variantDraft.index != null ? (
+													<button
+														type="button"
+														className="btn btn-ghost btn-sm text-error"
+														onClick={() => void removeDraft()}
+													>
+														Remove variant
+													</button>
+												) : (
+													<span />
+												)}
+												<div className="flex gap-2">
+													<button
+														type="button"
+														className="btn btn-ghost btn-sm"
+														onClick={() => {
+															setVariantDraft(null);
+															setEditError(null);
+														}}
+													>
+														Cancel
+													</button>
+													<button
+														type="button"
+														className="btn btn-primary btn-sm"
+														onClick={() => void saveVariantDraft()}
+													>
+														Save variant
+													</button>
 												</div>
 											</div>
-											<div className="mt-1.5 flex justify-between border-t border-base-300 pt-1.5 font-semibold">
-												<dt>You pay</dt>
-												<dd className="tabular-nums">
-													{quote.total
-														? money(quote.total)
-														: `${money(quote.goods)} + shipping + tax`}
-												</dd>
-											</div>
-										</dl>
-									) : quoteError ? (
-										<div className="alert alert-warning w-full text-sm">
-											<span>{quoteError}</span>
+											{editError && <p className="text-sm text-error">{editError}</p>}
 										</div>
-									) : user ? (
-										<div
-											className="w-full space-y-1.5 rounded-lg border border-base-300 bg-base-100 p-3"
-											aria-hidden="true"
-										>
-											<div className="skeleton h-4 w-full" />
-											<div className="skeleton h-4 w-4/5" />
-											<div className="skeleton h-4 w-3/5" />
+									) : options.length > 0 ? (
+										<div className="flex w-full flex-col gap-3">
+											{options.map((option, index) => (
+												<div key={option.name} className="flex items-start gap-1">
+													<div className="min-w-0 flex-1">
+														<VariantRow
+															option={option}
+															chosen={picks[option.name]}
+															onPick={(label) =>
+																setPicks((current) => ({ ...current, [option.name]: label }))
+															}
+														/>
+													</div>
+													{owner && editorListing && (
+														<>
+															<button
+																type="button"
+																className="btn btn-ghost btn-xs"
+																aria-label={`Edit ${option.name} variant`}
+																onClick={() => startVariant(index, option)}
+															>
+																<PencilSquareIcon className="size-4" />
+															</button>
+															<button
+																type="button"
+																className="btn btn-ghost btn-xs text-error"
+																aria-label={`Remove ${option.name} variant`}
+																onClick={() => void removeOption(index)}
+															>
+																<TrashIcon className="size-4" />
+															</button>
+														</>
+													)}
+												</div>
+											))}
 										</div>
 									) : (
-										<div className="flex w-full flex-col gap-1.5 rounded-lg border border-base-300 bg-base-100 p-3 text-sm">
-											<div className="flex justify-between text-base-content/60">
-												<dt>Price</dt>
-												<dd className="tabular-nums">{money(shownPrice)}</dd>
-											</div>
-											<div className="flex justify-between text-base-content/60">
-												<dt>Shipping</dt>
-												<dd className="tabular-nums">
-													{Number(shownListing.shippingPrice) > 0
-														? money(shownListing.shippingPrice)
-														: "Free"}
-												</dd>
-											</div>
-											<div className="flex justify-between text-base-content/60">
-												<dt>Sales tax</dt>
-												<dd className="text-xs">calculated at checkout</dd>
-											</div>
-											<p className="border-t border-base-300 pt-1.5 text-xs text-base-content/50">
-												Sign in to see the total with tax before you pay.
-											</p>
-										</div>
+										<p className="text-sm text-base-content/60">
+											This good comes as it is; there is nothing to choose.
+										</p>
+									)}
+									{!variantDraft && editError && (
+										<p className="mt-2 text-sm text-error">{editError}</p>
 									)}
 								</div>
 
-								<PhysicalPolicyFields
-									listing={owner && editorListing ? editorListing : shownListing}
-									onSave={owner && editorListing ? save : undefined}
-									editable={Boolean(owner && editorListing)}
-								/>
-								{owner && editorError && <p className="text-sm text-error">{editorError}</p>}
-							</>
-						)}
-					</div>
-				</div>
+								{!variantDraft && (
+									<>
+										{/* The price box is visible from the moment the panel is, and stays short:
+						    the policy facts below it are the rest of the right column. */}
+										<div className="flex min-h-0" data-testid="physical-quote-box">
+											{!storefront.priced ? (
+												<div className="w-full rounded-lg border border-base-300 bg-base-100 p-3 text-sm text-base-content/60">
+													This good isn't priced yet. Set its Access row to start selling it.
+												</div>
+											) : quote ? (
+												<dl className="w-full rounded-lg border border-base-300 bg-base-100 p-3 text-sm">
+													<div className="space-y-1.5">
+														<div className="flex justify-between text-base-content/60">
+															<dt>Goods{quote.quantity > 1 ? ` × ${quote.quantity}` : ""}</dt>
+															<dd className="tabular-nums">{money(quote.goods)}</dd>
+														</div>
+														<div className="flex justify-between text-base-content/60">
+															<dt>Shipping</dt>
+															<dd className="tabular-nums">
+																{Number(quote.shipping) > 0 ? money(quote.shipping) : "Free"}
+															</dd>
+														</div>
+														<div className="flex justify-between text-base-content/60">
+															<dt>Sales tax</dt>
+															<dd className="text-xs">
+																{quote.salesTax ? money(quote.salesTax) : "calculated at checkout"}
+															</dd>
+														</div>
+													</div>
+													<div className="mt-1.5 flex justify-between border-t border-base-300 pt-1.5 font-semibold">
+														<dt>You pay</dt>
+														<dd className="tabular-nums">
+															{quote.total
+																? money(quote.total)
+																: `${money(quote.goods)} + shipping + tax`}
+														</dd>
+													</div>
+												</dl>
+											) : quoteError ? (
+												<div className="alert alert-warning w-full text-sm">
+													<span>{quoteError}</span>
+												</div>
+											) : user ? (
+												<div
+													className="w-full space-y-1.5 rounded-lg border border-base-300 bg-base-100 p-3"
+													aria-hidden="true"
+												>
+													<div className="skeleton h-4 w-full" />
+													<div className="skeleton h-4 w-4/5" />
+													<div className="skeleton h-4 w-3/5" />
+												</div>
+											) : (
+												<div className="flex w-full flex-col gap-1.5 rounded-lg border border-base-300 bg-base-100 p-3 text-sm">
+													<div className="flex justify-between text-base-content/60">
+														<dt>Price</dt>
+														<dd className="tabular-nums">{money(shownPrice)}</dd>
+													</div>
+													<div className="flex justify-between text-base-content/60">
+														<dt>Shipping</dt>
+														<dd className="tabular-nums">
+															{Number(shownListing.shippingPrice) > 0
+																? money(shownListing.shippingPrice)
+																: "Free"}
+														</dd>
+													</div>
+													<div className="flex justify-between text-base-content/60">
+														<dt>Sales tax</dt>
+														<dd className="text-xs">calculated at checkout</dd>
+													</div>
+													<p className="border-t border-base-300 pt-1.5 text-xs text-base-content/50">
+														Sign in to see the total with tax before you pay.
+													</p>
+												</div>
+											)}
+										</div>
 
-				{!variantDraft && (
-					<div className="w-full">
-						<div className="flex flex-col gap-2">
-							<button
-								type="button"
-								className="btn btn-primary w-full"
-								disabled={!storefront.priced || adding || soldOutPick}
-								onClick={() => void toBasket(true)}
-							>
-								{adding ? "Adding…" : user ? "Buy Now" : "Sign in to buy"}
-							</button>
-							<button
-								type="button"
-								className="btn btn-outline btn-sm w-full"
-								disabled={!storefront.priced || adding || soldOutPick}
-								onClick={() => void toBasket(false)}
-							>
-								Add to Basket
-							</button>
+										<PhysicalPolicyFields
+											listing={owner && editorListing ? editorListing : shownListing}
+											onSave={owner && editorListing ? save : undefined}
+											editable={Boolean(owner && editorListing)}
+										/>
+										{owner && editorError && <p className="text-sm text-error">{editorError}</p>}
+									</>
+								)}
+							</div>
 						</div>
-					</div>
+
+						{!variantDraft && (
+							<div className="mx-auto w-full sm:w-1/2">
+								<div className="flex flex-col gap-2">
+									<button
+										type="button"
+										className="btn btn-primary w-full"
+										disabled={!storefront.priced || adding || soldOutPick}
+										onClick={() => void toBasket(true)}
+									>
+										{adding ? "Adding…" : user ? "Buy Now" : "Sign in to buy"}
+									</button>
+									<button
+										type="button"
+										className="btn btn-outline btn-sm w-full"
+										disabled={!storefront.priced || adding || soldOutPick}
+										onClick={() => void toBasket(false)}
+									>
+										Add to Basket
+									</button>
+								</div>
+							</div>
+						)}
+					</>
 				)}
 			</div>
 		</div>

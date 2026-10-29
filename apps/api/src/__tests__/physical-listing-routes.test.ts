@@ -59,7 +59,7 @@ interface ListingJson {
 		maxQuantity?: number;
 		taxCategory: string;
 		options: Array<{ name: string; values: Array<{ label: string; stock: number | null }> }>;
-		images?: Array<{ key: string; alt: string }>;
+		images?: Array<{ key: string; alt: string; cover?: boolean }>;
 	};
 	error?: string;
 	code?: string;

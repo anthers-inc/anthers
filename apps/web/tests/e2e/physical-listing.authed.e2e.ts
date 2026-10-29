@@ -110,31 +110,44 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 
 	// Photos: the carousel's own pencil, then two square pictures with descriptions.
 	await page.getByRole("button", { name: "Edit photos" }).click();
-	await expect(page.getByText(/no photos yet/i)).toBeVisible();
+	await expect(page.getByRole("button", { name: "Add photos" })).toBeVisible();
 	await page
 		.locator('input[type="file"][multiple]')
 		.setInputFiles([stubImage("front.png"), stubImage("back.png")]);
 	await expect(page.getByRole("img", { name: "Photo 1" })).toBeVisible({ timeout: 15_000 });
 	await expect(page.getByRole("img", { name: "Photo 2" })).toBeVisible();
-	await expect(page.getByText("Cover", { exact: true })).toBeVisible();
+	// The first picture starts as the cover; the star moves it and never leaves the gallery
+	// without one.
+	await expect(page.getByRole("button", { name: "Photo 1 is the cover" })).toBeVisible();
 	await page.getByLabel("Describe photo 1").fill("Mug front");
 	await page.getByLabel("Describe photo 1").blur();
 	await expect(page.getByRole("img", { name: "Mug front" })).toBeVisible({ timeout: 15_000 });
 	await page.getByLabel("Describe photo 2").fill("Mug back");
 	await page.getByLabel("Describe photo 2").blur();
 	await expect(page.getByRole("img", { name: "Mug back" })).toBeVisible({ timeout: 15_000 });
+	await page.getByRole("button", { name: "Set photo 2 as cover" }).click();
+	await expect(page.getByRole("button", { name: "Photo 2 is the cover" })).toBeVisible({
+		timeout: 15_000,
+	});
 	await page.getByRole("button", { name: "Done" }).click();
 
-	// The carousel returns, and the pictures are the buyer's.
-	await expect(page.getByRole("img", { name: "Mug front" })).toBeVisible({ timeout: 15_000 });
+	// The carousel returns, with the cover first.
+	await expect(page.getByRole("img", { name: "Mug back" })).toBeVisible({ timeout: 15_000 });
 	await page.getByRole("button", { name: "Next photo" }).click();
-	await expect(page.getByRole("img", { name: "Mug back" })).toBeVisible();
+	await expect(page.getByRole("img", { name: "Mug front" })).toBeVisible();
 
 	// The row, not the page, is the truth: a reload reads every edit back.
 	await page.reload();
 	await expect(page.getByText(/\$6\.50 to ship/i)).toBeVisible({ timeout: 15_000 });
 	await expect(page.getByRole("button", { name: "Edit Size variant" })).toBeVisible();
-	await expect(page.getByRole("img", { name: "Mug front" })).toBeVisible();
+	await expect(page.getByRole("img", { name: "Mug back" })).toBeVisible();
+
+	// A removal is confirmed first, and the remaining picture carries the cover.
+	await page.getByRole("button", { name: "Edit photos" }).click();
+	page.once("dialog", (dialog) => void dialog.accept());
+	await page.getByRole("button", { name: "Remove photo 1" }).click();
+	await expect(page.getByRole("img", { name: "Mug back" })).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByRole("button", { name: "Photo 1 is the cover" })).toBeVisible();
 });
 
 test("a kind that ships nothing carries no storefront policy block", async ({ page, context }) => {
