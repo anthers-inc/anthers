@@ -13,7 +13,7 @@
  * price box cannot be clobbered.
  */
 
-import { keyToPreview, uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
+import { uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
 import {
 	Bars3Icon,
 	PlusIcon,
@@ -55,8 +55,14 @@ export function PhysicalImagesEditor({
 		try {
 			const uploaded: PhysicalImage[] = [];
 			for (const file of picked) {
-				const { key } = await uploadImageFile(file, "thumbnail");
-				uploaded.push({ key, alt: "", cover: images.length === 0 && uploaded.length === 0 });
+				// The upload's own address stands in until the save hands back the read's.
+				const { key, url } = await uploadImageFile(file, "thumbnail");
+				uploaded.push({
+					key,
+					alt: "",
+					cover: images.length === 0 && uploaded.length === 0,
+					url,
+				});
 			}
 			await onChange([...images, ...uploaded]);
 		} catch (err) {
@@ -160,7 +166,7 @@ export function PhysicalImagesEditor({
 					>
 						<div className="relative aspect-square overflow-hidden rounded-lg bg-base-100">
 							<img
-								src={keyToPreview(image.key)}
+								src={image.url ?? ""}
 								alt={image.alt || `Photo ${index + 1}`}
 								className="h-full w-full object-contain"
 								loading="lazy"

@@ -12,6 +12,8 @@
  *   three-day handling time, not a broken checkout.
  * - **The service's normalization is what lands.** A price typed `4.9` is stored `4.90`, and
  *   the options round-trip in the creator's order with a blank stock staying unlimited.
+ * - **Every picture comes back addressed.** The read hands over the URL storage mints for a
+ *   key, because a browser cannot rebuild one — the row keeps the key alone.
  * - **A refusal changes nothing.** Every problem comes back at once, and the row that was
  *   there before the refusal is the row that is there after it.
  */
@@ -21,6 +23,7 @@ import { db } from "@anthers/db/client";
 import { workPhysicalListings, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
+import { storage } from "../services/storage/index";
 import { createAccount, type FixtureAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere, purgeWorkIds } from "./cleanup";
 import { insertWork } from "./work-fixtures";
@@ -59,7 +62,7 @@ interface ListingJson {
 		maxQuantity?: number;
 		taxCategory: string;
 		options: Array<{ name: string; values: Array<{ label: string; stock: number | null }> }>;
-		images?: Array<{ key: string; alt: string; cover?: boolean }>;
+		images?: Array<{ key: string; alt: string; cover?: boolean; url?: string | null }>;
 	};
 	error?: string;
 	code?: string;
@@ -141,6 +144,42 @@ describe("a physical Work's listing", () => {
 		const body = (await res.json()) as ListingJson;
 		expect(body.listing?.shippingPrice).toBe("4.90");
 		expect(body.listing?.options[0].name).toBe("Size");
+	});
+
+	it("hands every picture back addressed by storage rather than by its key", async () => {
+		const front = `creators/${creator.userId}/thumbnails/unknown/plist-front.png`;
+		const back = `creators/${creator.userId}/thumbnails/unknown/plist-back.png`;
+		const res = await call("PUT", `/api/content/works/${physicalWork}/physical`, creator.cookie, {
+			...GOOD,
+			images: [
+				{ key: front, alt: "The mug from the front" },
+				{ key: back, alt: "The mug from behind", cover: true },
+			],
+		});
+		expect(res.status).toBe(200);
+
+		const saved = (await res.json()) as ListingJson;
+		expect(saved.listing?.images?.map((image) => image.url)).toEqual([
+			await storage.getUrl(front),
+			await storage.getUrl(back),
+		]);
+
+		// The address is the read's; the row keeps the three facts a save writes.
+		const rows = await db
+			.select()
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, physicalWork));
+		expect(rows[0].images).toEqual([
+			{ key: front, alt: "The mug from the front", cover: false },
+			{ key: back, alt: "The mug from behind", cover: true },
+		]);
+
+		const reread = await call("GET", `/api/content/works/${physicalWork}/physical`, creator.cookie);
+		const body = (await reread.json()) as ListingJson;
+		expect(body.listing?.images?.map((image) => image.url)).toEqual([
+			await storage.getUrl(front),
+			await storage.getUrl(back),
+		]);
 	});
 
 	it("replaces rather than accumulates on a second save", async () => {

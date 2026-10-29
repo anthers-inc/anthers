@@ -7,12 +7,14 @@
  * The walk proves the surface, not the arithmetic: the policy block exists for a good and is
  * absent for a kind that ships nothing, the unset listing reads as shippable-at-zero with a
  * three-day handling time rather than as a broken checkout, each field opens from its own
- * pencil, and every edit round-trips through a reload.
+ * pencil, every edit round-trips through a reload, and each picture the gallery shows has
+ * actually decoded rather than merely holding its place in the layout.
  *
  * The Work is created through the same route the New Work flow calls, so nothing here
  * depends on the four-card flow — the page is the subject.
  */
 
+import type { Page } from "@playwright/test";
 import {
 	API_URL,
 	createDraftWork,
@@ -34,6 +36,26 @@ function stubImage(name: string): { name: string; mimeType: string; buffer: Buff
 			"base64",
 		),
 	};
+}
+
+/**
+ * Wait until a picture has actually decoded.
+ *
+ * ⭐ **A visible `<img>` proves nothing.** An element whose source failed still carries its
+ * alt text and its role, so a gallery of broken pictures passed this spec on 2026-10-29 while
+ * a creator saw nothing but placeholder icons. The natural width is the browser's own word
+ * that it read pixels.
+ */
+async function expectDecoded(page: Page, name: string): Promise<void> {
+	await expect
+		.poll(
+			async () =>
+				page
+					.getByRole("img", { name })
+					.evaluate((image) => (image as HTMLImageElement).naturalWidth),
+			{ timeout: 15_000 },
+		)
+		.toBeGreaterThan(0);
 }
 
 let session = "";
@@ -116,6 +138,8 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 		.setInputFiles([stubImage("front.png"), stubImage("back.png")]);
 	await expect(page.getByRole("img", { name: "Photo 1" })).toBeVisible({ timeout: 15_000 });
 	await expect(page.getByRole("img", { name: "Photo 2" })).toBeVisible();
+	// The card renders the address storage handed back, and that address is a picture.
+	await expectDecoded(page, "Photo 1");
 	// The first picture starts as the cover; the star moves it and never leaves the gallery
 	// without one.
 	await expect(page.getByRole("button", { name: "Photo 1 is the cover" })).toBeVisible();
@@ -133,14 +157,17 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 
 	// The carousel returns, with the cover first.
 	await expect(page.getByRole("img", { name: "Mug back" })).toBeVisible({ timeout: 15_000 });
+	await expectDecoded(page, "Mug back");
 	await page.getByRole("button", { name: "Next photo" }).click();
 	await expect(page.getByRole("img", { name: "Mug front" })).toBeVisible();
+	await expectDecoded(page, "Mug front");
 
 	// The row, not the page, is the truth: a reload reads every edit back.
 	await page.reload();
 	await expect(page.getByText(/\$6\.50 to ship/i)).toBeVisible({ timeout: 15_000 });
 	await expect(page.getByRole("button", { name: "Edit Size variant" })).toBeVisible();
 	await expect(page.getByRole("img", { name: "Mug back" })).toBeVisible();
+	await expectDecoded(page, "Mug back");
 
 	// A removal is confirmed first, and the remaining picture carries the cover.
 	await page.getByRole("button", { name: "Edit photos" }).click();

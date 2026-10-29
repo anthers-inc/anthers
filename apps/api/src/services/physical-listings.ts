@@ -26,6 +26,7 @@ import { isPhysicalTaxCategory, type PhysicalTaxCategory } from "@anthers/shared
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
 import { clampHandlingDays } from "./shipments.js";
+import { resolveThumbnailUrl } from "./thumbnails.js";
 
 /** What one listing may carry. Small bounds, deliberately: a picker is not a catalog. */
 export const LISTING_LIMITS = {
@@ -50,6 +51,25 @@ export interface PhysicalListing {
 	taxCategory: PhysicalTaxCategory;
 	options: PhysicalOption[];
 	images: PhysicalImage[];
+}
+
+/**
+ * A picture as a read hands it over: the row's own facts plus the address storage mints.
+ *
+ * 🚨 **The address is resolved here rather than rebuilt by the client.** A gallery key only
+ * means something next to a storage backend, and a browser can only guess at the backend it
+ * is talking to — `/content/<key>` is a local-storage path, so on a deployed host that
+ * address answers with the web app's own shell and the picture silently never renders. Every
+ * other surface already renders a server-resolved URL (`resolveThumbnailUrl`); a listing read
+ * is where that stopped.
+ */
+export interface PhysicalListingPicture extends PhysicalImage {
+	url: string | null;
+}
+
+/** A listing as a read hands it over — the stored answers, with their pictures addressed. */
+export interface PhysicalListingRead extends Omit<PhysicalListing, "images"> {
+	images: PhysicalListingPicture[];
 }
 
 export type ListingProblem = { field: string; message: string };
@@ -89,6 +109,25 @@ function withOneCover(images: PhysicalImage[]): PhysicalImage[] {
 		...image,
 		cover: coverIndex === -1 ? index === 0 : index === coverIndex,
 	}));
+}
+
+/**
+ * Address every picture through storage, keeping the key a later save writes.
+ *
+ * A refusal is one picture's address, not the listing's failure: `storage.getUrl` throws for
+ * an object that may not be served (a quarantined key), and the creator still needs the row
+ * to reach the editor that removes it. Such a picture reads as an address-less entry.
+ */
+async function withImageUrls(images: PhysicalImage[]): Promise<PhysicalListingPicture[]> {
+	return Promise.all(
+		images.map(async (image) => {
+			try {
+				return { ...image, url: await resolveThumbnailUrl(image.key) };
+			} catch {
+				return { ...image, url: null };
+			}
+		}),
+	);
 }
 
 /**
@@ -278,7 +317,7 @@ export function validateListing(input: {
 }
 
 /** The listing behind a Work, or the defaults when nobody has set one up yet. */
-export async function physicalListingFor(workId: number): Promise<PhysicalListing> {
+export async function physicalListingFor(workId: number): Promise<PhysicalListingRead> {
 	const [row] = await db
 		.select()
 		.from(workPhysicalListings)
@@ -292,7 +331,7 @@ export async function physicalListingFor(workId: number): Promise<PhysicalListin
 		maxQuantity: row.maxQuantity,
 		taxCategory: row.taxCategory as PhysicalTaxCategory,
 		options: row.options ?? [],
-		images: withOneCover(row.images ?? []),
+		images: await withImageUrls(withOneCover(row.images ?? [])),
 	};
 }
 
@@ -307,7 +346,7 @@ export async function savePhysicalListing(
 	workId: number,
 	input: Parameters<typeof validateListing>[0],
 	now: Date = new Date(),
-): Promise<{ ok: true; listing: PhysicalListing } | { ok: false; problems: ListingProblem[] }> {
+): Promise<{ ok: true; listing: PhysicalListingRead } | { ok: false; problems: ListingProblem[] }> {
 	const checked = validateListing(input);
 	if (!checked.ok) return checked;
 	const value = checked.value;
@@ -337,5 +376,5 @@ export async function savePhysicalListing(
 				updatedAt: now,
 			},
 		});
-	return { ok: true, listing: value };
+	return { ok: true, listing: { ...value, images: await withImageUrls(value.images) } };
 }
