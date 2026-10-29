@@ -26,10 +26,15 @@
 import { db } from "@anthers/db/client";
 import {
 	abuseReports,
+	adminAccountEvents,
+	adminAccounts,
+	adminSessions,
 	charitableLedger,
 	comments,
 	creatorCredits,
 	dmcaNotices,
+	hostedAccounts,
+	hostedIdentities,
 	invoices,
 	legalHolds,
 	mediaQuarantine,
@@ -107,9 +112,14 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 
 		// The operator-side records. Each names an actor rather than belonging to one, which is
 		// why every column here is nullable and none of them cascade.
+		//
+		// ⚠️ **Only `moderation_actions` belongs here, because only its actor is a user.**
+		// `legal_holds.placed_by` and `dmca_notices.actor_id` reference `admin_accounts`
+		// (`packages/db/src/schema/moderation.ts:274`, `dmca.ts:250`), so a sweep passing user
+		// ids either matched nothing or — worse, when a user id happened to equal an admin id —
+		// deleted a row some other suite's operator had placed. They are taken by
+		// `purgeAdminAccountIds` now, which knows which id space it is holding.
 		await db.delete(moderationActions).where(inArray(moderationActions.actorId, ids));
-		await db.delete(legalHolds).where(inArray(legalHolds.placedBy, ids));
-		await db.delete(dmcaNotices).where(inArray(dmcaNotices.actorId, ids));
 		await db
 			.delete(abuseReports)
 			.where(or(inArray(abuseReports.reporterId, ids), inArray(abuseReports.resolvedBy, ids)));
@@ -198,8 +208,56 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 		await db.delete(works).where(inArray(works.creatorId, ids));
 		await db.delete(posts).where(inArray(posts.creatorId, ids));
 
+		// 🚨 **The identities they held, and the DID has to be read while the account still
+		// points at it.** `hosted_accounts.user_id` is `set null` and `hosted_identities` has
+		// no user column at all, so the moment the `users` rows below go there is no route
+		// back to either row — which is exactly the population this sweep was blind to.
+		// Measured on 2026-10-29, one full unit run left 698 `hosted_accounts` and 716
+		// `hosted_identities` rows behind, an order of magnitude more than every other leak
+		// in the database combined.
+		//
+		// ⚠️ **Deleting a watch row is deliberate here and only here.** In production the list
+		// only ever grows, because a row disappearing is itself the alert and removing one is a
+		// person's decision. A fixture's identity was never something to watch: it was issued
+		// minutes ago on a network that is about to be thrown away.
+		const heldIdentities = await db
+			.select({ did: hostedAccounts.did })
+			.from(hostedAccounts)
+			.where(inArray(hostedAccounts.userId, ids));
+		const heldDids = heldIdentities.map((row) => row.did);
+		if (heldDids.length > 0) {
+			await db.delete(hostedAccounts).where(inArray(hostedAccounts.did, heldDids));
+			await db.delete(hostedIdentities).where(inArray(hostedIdentities.did, heldDids));
+		}
+
 		await db.delete(users).where(inArray(users.id, ids));
 	}
+}
+
+/**
+ * Remove admin accounts a suite created, and the operator-side records they filed.
+ *
+ * The same dependency order as `purgeAccountIds`, and the same class of trap: a hold and a
+ * DMCA notice name their operator through a `set null` column that points at
+ * `admin_accounts`, not at `users` — an operator is an admin account id. A sweep holding
+ * user ids cannot match those columns, so a full run kept leaving the notices and holds
+ * behind long after every table looked covered.
+ *
+ * ⚠️ **Only rows the operator *created* are taken** (`placed_by`, `actor_id`). A column that
+ * records what an operator later did to somebody else's record — `lifted_by`, `cleared_by`,
+ * `resolved_by` — must not delete the record: the fixture lifted a hold, it did not own it.
+ */
+export async function purgeAdminAccountIds(ids: number[]): Promise<void> {
+	if (ids.length === 0) return;
+	await db
+		.delete(adminAccountEvents)
+		.where(
+			or(inArray(adminAccountEvents.accountId, ids), inArray(adminAccountEvents.actorId, ids)),
+		);
+	await db.delete(adminSessions).where(inArray(adminSessions.accountId, ids));
+	await db.delete(legalHolds).where(inArray(legalHolds.placedBy, ids));
+	await db.delete(dmcaNotices).where(inArray(dmcaNotices.actorId, ids));
+	await db.delete(adminAccounts).where(inArray(adminAccounts.id, ids));
 }
 
 /**
