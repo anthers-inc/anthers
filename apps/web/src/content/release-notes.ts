@@ -71,6 +71,20 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.39",
+		date: "2026-10-29",
+		lede: "A physical good's page is the storefront now, and its creator edits the good where a buyer meets it.",
+		entries: [
+			"A physical good's page shows its pictures as a gallery now: up to eight of them, each shown whole inside a square frame, moved through with arrows or the thumbnails beneath, and each carrying the description its creator wrote for readers who cannot see it.",
+			"The page is composed around those pictures, with the variants and the price box beside them and the buy buttons at the foot beneath both. A catalog card takes the gallery's first picture as the good's art, so a good's pictures are chosen in one place rather than two.",
+			"A creator's own view of the page is the editor now: each variant row and the picture gallery carry a pencil, and shipping, handling time, and tax category sit under the price box as the facts a buyer reads. The Goods Management area is gone from the Manage tab, because a good no longer opens a media manager.",
+			"A visitor who is not signed in reads the price as a breakdown now: the good's price, its shipping, and sales tax marked as calculated at checkout, with a note that an account is what shows the total with tax, because the estimate resolves from a saved billing address.",
+			"A good's page adds the smallest number its listing will take to the basket, and the count is changed there now, where the line's quantity already lived, rather than in a stepper beside the buy buttons.",
+			"A creator's own draft reads in its storefront before it has a price, saying the good is not priced yet and naming the Access row as where to set one, where the page answered that the good was not priced for sale.",
+			"A draft's kind is changed from the chip under the Work's title, the one that already names the kind to a reader: it carries a pencil and saves on the choice, the way the access chip beside it works. Only a draft whose kind could still change carries the pencil, and a released Work's chip is read-only.",
+		],
+	},
+	{
 		version: "2026.10.38",
 		date: "2026-10-28",
 		lede: "A physical good's variants and image are edited beside the store panel they configure, and each answer on the listing saves on its own.",
