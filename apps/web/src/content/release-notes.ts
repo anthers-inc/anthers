@@ -71,6 +71,16 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.40",
+		date: "2026-10-30",
+		lede: "A physical good's gallery shows its pictures on the deployed site, and the platform's side of the Android app is in place.",
+		entries: [
+			"A physical good's gallery shows its pictures on the deployed site now. Each address is resolved by storage when the listing is read, where the page rebuilt it from the picture's key as a site address that only the local storage backend answers; on anthers.org it returned the site's own page, and the gallery drew placeholder icons. The creator's editor draws each picture from that same address.",
+			"The site answers `/.well-known/assetlinks.json` now, the file Android reads to see that an `anthers.org` link belongs to the Anthers app, naming the app's package and the release certificate's fingerprint. The path used to return the site's page, which Android reads as nothing; a device needs an app that registers the link before it opens the app, and the mobile app's next build carries it.",
+			"The authorize page can hand its one-time code to a phone now: `?redirect=mobile` returns it over an `anthers.org` link rather than the desktop's `anthers://` scheme, because any Android app may claim a custom scheme. The web build knows its shell now, so a phone can have its own start page and settings section rather than the desktop's. Signing in from the Android app is still to come.",
+		],
+	},
+	{
 		version: "2026.10.39",
 		date: "2026-10-29",
 		lede: "A physical good's page is the storefront now, and its creator edits the good where a buyer meets it.",
