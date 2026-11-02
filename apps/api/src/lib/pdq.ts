@@ -111,18 +111,35 @@ export async function pdqHashPixels(
 }
 
 /**
- * Hash an encoded image. Returns `null` when the bytes are not a decodable image, which is
- * an ordinary outcome rather than an error — an upload may be any file at all, and the
- * caller decides what an unhashable object means.
+ * The pixel ceiling for an image that will be decoded in the request path.
+ *
+ * A 16000×16000 PNG is 256 MP and roughly 768 MB as RGB — enough to take the whole API
+ * container down before the hash is computed. 40 MP is comfortably above every real
+ * avatar, cover, screenshot and gallery page, and it is enforced twice: sharp's own
+ * `limitInputPixels` refuses a lying header, and the metadata check refuses a declared
+ * one before any decode.
+ */
+export const PDQ_MAX_INPUT_PIXELS = 40_000_000;
+
+/**
+ * Hash an encoded image. Returns `null` when the bytes are not a decodable image, or when
+ * the image is too large to decode safely, which is an ordinary outcome rather than an
+ * error — an upload may be any file at all, and the caller decides what an unhashable
+ * object means.
  */
 export async function pdqHashImage(input: Buffer | Uint8Array): Promise<PdqHash | null> {
 	let raw: { data: Buffer; info: sharp.OutputInfo };
 	try {
+		const header = sharp(input, { failOn: "none", limitInputPixels: PDQ_MAX_INPUT_PIXELS });
+		const meta = await header.metadata();
+		if (!meta.width || !meta.height || meta.width * meta.height > PDQ_MAX_INPUT_PIXELS) {
+			return null;
+		}
 		// `removeAlpha` rather than `flatten`: PDQ wants three channels, and compositing a
 		// transparent image onto an assumed background would invent pixels that were never
 		// in the file. `failOn: "none"` keeps a slightly-corrupt-but-decodable image
 		// scannable, since refusing to hash it is how something slips through unexamined.
-		raw = await sharp(input, { failOn: "none" })
+		raw = await sharp(input, { failOn: "none", limitInputPixels: PDQ_MAX_INPUT_PIXELS })
 			.removeAlpha()
 			.raw()
 			.toBuffer({ resolveWithObject: true });
