@@ -35,7 +35,12 @@ import {
 	users,
 	workAssets,
 } from "@anthers/db/schema";
-import { currentCycleKey, cycleKeyFor, cycleStart, nextCycleKey } from "@anthers/shared/billing-cycle";
+import {
+	currentCycleKey,
+	cycleKeyFor,
+	cycleStart,
+	nextCycleKey,
+} from "@anthers/shared/billing-cycle";
 import { calculateFees, cardFee, reductionFor } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -43,6 +48,7 @@ import Stripe from "stripe";
 import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
 import { anthersUserId } from "../services/anthers-badges";
+import { cancelSubscriptionForUser } from "../services/billing.js";
 import { retryFailedTransfers } from "../services/purchase-split.js";
 import { createAccount } from "./account-fixture";
 import { ensureAnthersLadder } from "./anthers-ladder-fixture";
@@ -238,6 +244,9 @@ function fakeStripe() {
 			})),
 			retrieve: record("subscriptions.retrieve", (id: string) => subscription({ id })),
 			update: record("subscriptions.update", (id: string) => subscription({ id })),
+			cancel: record("subscriptions.cancel", (id: string) =>
+				subscription({ id, status: "canceled" }),
+			),
 		},
 		invoices: {
 			createPreview: record("invoices.createPreview", () => ({ amount_due: 300 })),
@@ -3351,5 +3360,31 @@ describe("Webhook: charge.refunded", () => {
 			.from(userBadges)
 			.where(and(eq(userBadges.userId, subscriberId), eq(userBadges.badgeId, badge.id)));
 		expect(held).toEqual([]);
+	});
+});
+
+describe("Account deletion: the subscription", () => {
+	it("cancels the account's own subscription while the row still names it", async () => {
+		const subId = `sub_delete_${uid()}`;
+		await db
+			.insert(stripeCustomers)
+			.values({ userId: subscriberId, stripeCustomerId: `cus_delete_${uid()}` })
+			.onConflictDoNothing();
+		await db
+			.update(stripeCustomers)
+			.set({ stripeSubscriptionId: subId })
+			.where(eq(stripeCustomers.userId, subscriberId));
+		const [acct] = await db
+			.select({ id: stripeCustomers.stripeSubscriptionId })
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, subscriberId));
+		const result = await cancelSubscriptionForUser(subscriberId);
+		expect(result).toBe("canceled");
+		expect(fake.lastCall("subscriptions.cancel")?.args[0]).toBe(acct.id);
+		const [after] = await db
+			.select({ id: stripeCustomers.stripeSubscriptionId })
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, subscriberId));
+		expect(after.id).toBe("");
 	});
 });
