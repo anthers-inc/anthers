@@ -48,6 +48,8 @@ describe("ffmpegCommand", () => {
 			"ffmpeg",
 			"-v",
 			"error",
+			"-protocol_whitelist",
+			"file,pipe",
 			...threads,
 			"-i",
 			"in.mp4",
@@ -56,6 +58,13 @@ describe("ffmpegCommand", () => {
 			"libx264",
 			"out.m3u8",
 		]);
+	});
+
+	it("confines a local input to the file and pipe protocols, and leaves a network input to the probe", () => {
+		expect(ffmpegCommand("in.mp4", ["out.mp4"])).toContain("-protocol_whitelist");
+		expect(ffmpegCommand("https://pds.example/in.mp4", ["out.mp4"])).not.toContain(
+			"-protocol_whitelist",
+		);
 	});
 });
 

@@ -30,5 +30,12 @@ const THREAD_ARGS = ["-threads", String(FFMPEG_THREADS)];
  * describes the output, including the output path, goes in `output`.
  */
 export function ffmpegCommand(input: string, output: string[], before: string[] = []): string[] {
-	return ["ffmpeg", ...before, ...THREAD_ARGS, "-i", input, ...THREAD_ARGS, ...output];
+	// A local input is a file this process already holds, so it has no business opening a
+	// second protocol. A playlist uploaded as a video asks ffmpeg to fetch every absolute
+	// segment or key URI; the whitelist refuses that fetch before it starts. A network
+	// input is a signed storage address the caller chose, and the probe's format check is
+	// what refuses a playlist there.
+	const local = !/^[a-z][a-z0-9+.-]*:\/\//i.test(input);
+	const protocol = local ? ["-protocol_whitelist", "file,pipe"] : [];
+	return ["ffmpeg", ...before, ...protocol, ...THREAD_ARGS, "-i", input, ...THREAD_ARGS, ...output];
 }

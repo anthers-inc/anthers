@@ -16,7 +16,7 @@
  * instant of every upload.
  */
 import { describe, expect, it } from "bun:test";
-import { rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -103,6 +103,44 @@ describe("hashVideoFrames — the real ffmpeg path", () => {
 			expect(probe!.durationSeconds).toBeGreaterThan(4);
 		} finally {
 			await rm(path).catch(() => {});
+		}
+	});
+
+	it("refuses an HLS playlist instead of following its segments", async () => {
+		// An `.m3u8` uploaded as a video is not a picture; it is a list of addresses ffmpeg
+		// will fetch. The probe reads `format_name` and refuses it, so the sampler never
+		// reaches the segment fetch and the transcode job carries the same refusal.
+		const dir = await mkdtemp(join(tmpdir(), "vf_hls_"));
+		const playlist = join(dir, "index.m3u8");
+		try {
+			const proc = Bun.spawn(
+				[
+					"ffmpeg",
+					"-v",
+					"error",
+					"-f",
+					"lavfi",
+					"-i",
+					"testsrc=duration=2:size=160x120:rate=10",
+					"-c:v",
+					"libx264",
+					"-pix_fmt",
+					"yuv420p",
+					"-f",
+					"hls",
+					"-hls_time",
+					"1",
+					"-hls_list_size",
+					"0",
+					playlist,
+					"-y",
+				],
+				{ stdout: "pipe", stderr: "pipe" },
+			);
+			expect(await proc.exited, "ffmpeg could not generate the HLS fixture").toBe(0);
+			expect(await probeVideo(playlist)).toBeNull();
+		} finally {
+			await rm(dir, { recursive: true, force: true }).catch(() => {});
 		}
 	});
 

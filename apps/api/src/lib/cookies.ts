@@ -50,6 +50,20 @@ export function setSessionCookie(c: Context, token: string): void {
 }
 
 /**
+ * Clear a cookie written by `setSecureCookie`, with the same path and domain it was set
+ * under. A bare `deleteCookie` omits `Domain`, so a domain-scoped cookie survives it — the
+ * browser keeps sending a state value the server believes it has forgotten.
+ */
+export function clearSecureCookie(c: Context, name: string): void {
+	deleteCookie(c, name, {
+		path: "/",
+		secure: isPublicDeployment(),
+		sameSite: "Lax",
+		...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
+	});
+}
+
+/**
  * The admin app's session cookie, written as `__Host-admin_session`.
  *
  * 🚨 **It shares none of the site cookie's attributes, and each difference is load-bearing.** The

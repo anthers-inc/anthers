@@ -10,7 +10,7 @@ import BadgeMaker from "@anthers/web-shared/post/BadgeMaker";
 import {
 	frameImageFile,
 	keyToPreview,
-	uploadImageFile,
+	uploadImageSource,
 } from "@anthers/web-shared/post/mediaUpload";
 import { displayHandle, handleFromParam } from "@anthers/web-shared/profile";
 import {
@@ -280,7 +280,7 @@ export default function CreatorProfilePage() {
 		setImageError(null);
 		try {
 			// A new file becomes the source first; a reposition already has the stored one.
-			const source = file ? (await uploadImageFile(file, kind)).url : framing.source;
+			const source = file ? (await uploadImageSource(file, kind)).url : framing.source;
 			if (!source) throw new Error("That image isn't available any more. Upload it again.");
 			const framed = await frameImageFile(source, kind, crop);
 			await saveProfileField(

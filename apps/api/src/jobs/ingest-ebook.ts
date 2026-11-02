@@ -64,6 +64,9 @@ const EPUB_SOURCE_MAX_BYTES = 256 * 1024 * 1024;
  */
 const EXTRACT_MAX_BYTES = 512 * 1024 * 1024;
 
+/** The largest container accepted as a source — the compressed file itself. */
+const EXTRACT_SOURCE_MAX_BYTES = 128 * 1024 * 1024;
+
 /** A single component: XHTML chapters, CSS and fonts are tiny; this catches a pathological embed. */
 const COMPONENT_MAX_BYTES = 64 * 1024 * 1024;
 
@@ -96,13 +99,19 @@ export function extractUnderCaps(
 		maxEntries?: number;
 	},
 ): Record<string, Uint8Array> {
+	const sourceMax = caps?.sourceMax ?? EXTRACT_SOURCE_MAX_BYTES;
 	const totalMax = caps?.totalMax ?? EXTRACT_MAX_BYTES;
 	const componentMax = caps?.componentMax ?? COMPONENT_MAX_BYTES;
 	const maxEntries = caps?.maxEntries ?? MAX_ENTRIES;
+	if (container.byteLength > sourceMax) {
+		throw new Error(
+			`This EPUB is ${container.byteLength} bytes; the largest accepted source is ${sourceMax}`,
+		);
+	}
 	let total = 0;
 	let count = 0;
 	return unzipSync(container, {
-		filter: ({ name, size }) => {
+		filter: ({ name, originalSize }) => {
 			if (name.endsWith("/")) return false; // directory entries carry no bytes
 			count += 1;
 			if (count > maxEntries) {
@@ -110,12 +119,16 @@ export function extractUnderCaps(
 					`This EPUB declares over ${maxEntries} entries; it may be malformed or hostile`,
 				);
 			}
-			if (size > componentMax) {
+			// 🚨 `originalSize`, not `size`. fflate passes `size` as the COMPRESSED entry
+			// size, and a 10 KB deflate entry can declare a 4 GB expansion. The declared
+			// uncompressed size is what the inflater will allocate, so that is what the
+			// caps must read.
+			if (originalSize > componentMax) {
 				throw new Error(
-					`A component of this EPUB (${name}) decompresses to ${size} bytes; the limit for one component is ${componentMax}`,
+					`A component of this EPUB (${name}) decompresses to ${originalSize} bytes; the limit for one component is ${componentMax}`,
 				);
 			}
-			total += size;
+			total += originalSize;
 			if (total > totalMax) {
 				throw new Error(
 					`This EPUB would extract ${total} bytes in total; the limit for one book is ${totalMax}`,

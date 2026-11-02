@@ -43,7 +43,13 @@ import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { blueskyDoorRefusal } from "../lib/bluesky-door.js";
-import { PENDING_SIGNUP_COOKIE, setPendingSignupCookie, setSessionCookie } from "../lib/cookies.js";
+import {
+	clearSecureCookie,
+	PENDING_SIGNUP_COOKIE,
+	setPendingSignupCookie,
+	setSecureCookie,
+	setSessionCookie,
+} from "../lib/cookies.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
 	atprotoPublishEnabled,
@@ -159,7 +165,23 @@ interface AppState {
 	intent: "login" | "signup" | "publish";
 	userId?: number;
 	next?: string;
+	/** The browser nonce, set as a cookie at `/auth` and required at `/callback`. */
+	nonce?: string;
 }
+
+/**
+ * The browser binding for an ATProto round trip.
+ *
+ * The state is a JSON document the callback parses, so it can say which intent and which
+ * account the flow belongs to — but nothing in it proves the browser that started the flow
+ * is the browser that finished it. Without that, a callback URL is a bearer capability: an
+ * attacker starts a login (or a signup) as themselves and sends the callback to a victim,
+ * whose browser then receives a session for the attacker's identity, or binds the attacker's
+ * DID to the victim's pending signup. The nonce is random per start, carried in both the
+ * state and an HttpOnly `SameSite=Lax` cookie, and both must match at the callback.
+ */
+const ATPROTO_STATE_COOKIE = "atproto_oauth_state";
+const ATPROTO_STATE_MAX_AGE = 10 * 60;
 
 /**
  * Where to send the browser once the round trip is over.
@@ -251,14 +273,19 @@ async function grantedScopeOf(session: {
  * happen, and the error page is the right answer to it; a denied publishing grant is a creator
  * who is still signed in and has made a choice with a consequence worth explaining.
  */
-function deniedPublishGrant(err: unknown): { next: string | undefined } | null {
+function deniedPublishGrant(
+	err: unknown,
+): { next: string | undefined; nonce: string | undefined } | null {
 	if (!(err instanceof OAuthCallbackError) || err.params.get("error") !== "access_denied") {
 		return null;
 	}
 	try {
 		const state = JSON.parse(err.state ?? "") as Partial<AppState>;
 		if (state.intent !== "publish") return null;
-		return { next: sanitizeNextPath(state.next) ?? undefined };
+		return {
+			next: sanitizeNextPath(state.next) ?? undefined,
+			nonce: typeof state.nonce === "string" ? state.nonce : undefined,
+		};
 	} catch {
 		return null;
 	}
@@ -336,10 +363,14 @@ const atprotoRoutes = new Hono()
 			// in either table, so this is the only place that can be relied on to run.
 			await Promise.all([sweepExpiredOauthState(), sweepExpiredPendingSignups()]);
 
+			const nonce = crypto.randomUUID();
+			setSecureCookie(c, ATPROTO_STATE_COOKIE, nonce, ATPROTO_STATE_MAX_AGE);
+
 			const appState: AppState = {
 				intent,
 				userId,
 				next: sanitizeNextPath(next) ?? undefined,
+				nonce,
 			};
 			const url = await getAtprotoClient().authorize(subject, {
 				state: JSON.stringify(appState),
@@ -377,11 +408,22 @@ const atprotoRoutes = new Hono()
 			return back({ error: reason });
 		};
 
+		// 🚨 **The state proves which intent and account; the cookie proves which browser.**
+		// The OAuth client keeps our JSON state in its own store and returns it from
+		// `callback`, so the comparison happens on the returned app state rather than on the
+		// query's opaque key. The cookie is read and cleared before the exchange, and the
+		// binding is refused before any session is minted or any pending row is touched.
+		const expectedState = getCookie(c, ATPROTO_STATE_COOKIE);
+		clearSecureCookie(c, ATPROTO_STATE_COOKIE);
+
 		try {
 			const params = new URL(c.req.url).searchParams;
 			const { session, state } = await getAtprotoClient().callback(params);
 
 			const appState: AppState = state ? JSON.parse(state) : { intent: "login" };
+			if (!expectedState || !appState.nonce || appState.nonce !== expectedState) {
+				return fail("state_mismatch");
+			}
 			console.log(
 				`[atproto/callback] intent=${appState.intent} did=${session.did} ` +
 					`pendingCookie=${getCookie(c, PENDING_SIGNUP_COOKIE) ? "present" : "absent"}`,
@@ -541,7 +583,10 @@ const atprotoRoutes = new Hono()
 			// work" and a link back to log in, from an account they were already signed in to.
 			// It lands where a narrower grant does, on Studio settings saying what it means.
 			const denied = deniedPublishGrant(err);
-			if (denied) return back({ success: "publish_declined", next: denied.next });
+			if (denied) {
+				if (!expectedState || denied.nonce !== expectedState) return fail("state_mismatch");
+				return back({ success: "publish_declined", next: denied.next });
+			}
 
 			const message = err instanceof Error ? err.message : "exchange_failed";
 			return fail(message, err);

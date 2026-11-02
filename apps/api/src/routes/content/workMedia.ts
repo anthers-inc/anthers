@@ -42,6 +42,7 @@ import { heldAnthersBadgeAmount } from "../../services/access.js";
 import { mintAccessGrant, verifyAccessGrant } from "../../services/access-grants.js";
 import { receiptIdFor } from "../../services/access-receipts.js";
 import { accessIssuerDocument, accessSigningKey } from "../../services/access-signing.js";
+import { mediaMutabilityRefusal } from "../../services/media-mutability.js";
 import { collectWorkMedia, sweepCollected } from "../../services/media-purge.js";
 import { queueWorkSave, queueWorkSaveRemoval } from "../../services/reader-state-migration.js";
 import { markPurchaseDownloaded } from "../../services/refunds.js";
@@ -298,6 +299,9 @@ const workMediaRoutes = new Hono()
 		const userId = await getOptionalUserId(c);
 		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
 
+		const versionRefusal = await mediaMutabilityRefusal(work);
+		if (versionRefusal) return c.json(versionRefusal.body, versionRefusal.status);
+
 		const versionId = parseNumericId(c.req.param("versionId") ?? "");
 		if (versionId == null) return c.json({ error: "Version not found" }, 404);
 		const removed = await removeWorkVersion(work, versionId);
@@ -349,11 +353,11 @@ const workMediaRoutes = new Hono()
 		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
 		const jobId = Number(c.req.param("jobId"));
 
-		// A quarantined Work is untouchable at 404, on the same reasoning as the PATCH —
-		// and this route's storage-adjacent half makes it the more important one here.
-		if (work.quarantineStatus === "quarantined") {
-			return c.json({ error: "Work not found" }, 404);
-		}
+		// A quarantined, taken-down or held Work is untouchable at 404 or 409, on the same
+		// reasoning as the PATCH — and this route's storage-adjacent half makes it the more
+		// important one here.
+		const cancelRefusal = await mediaMutabilityRefusal(work);
+		if (cancelRefusal) return c.json(cancelRefusal.body, cancelRefusal.status);
 
 		const [job] = await db
 			.select()
@@ -409,9 +413,8 @@ const workMediaRoutes = new Hono()
 		const user = c.get("user");
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
-		if (work.quarantineStatus === "quarantined") {
-			return c.json({ error: "Work not found" }, 404);
-		}
+		const removalRefusal = await mediaMutabilityRefusal(work);
+		if (removalRefusal) return c.json(removalRefusal.body, removalRefusal.status);
 		if (work.releasedAt) {
 			return c.json(
 				{

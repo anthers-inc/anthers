@@ -34,6 +34,7 @@ import {
 } from "../services/pending-signups.js";
 import { issueSignupCode } from "../services/signup-codes.js";
 import { createAccount } from "./account-fixture";
+import { boundState } from "./atproto-oauth-state";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { solvePow } from "./signup-fixture";
 
@@ -123,11 +124,12 @@ async function runCallback(staged: {
 	intent?: string;
 	next?: string;
 }): Promise<{ url: URL; cookies: string }> {
-	nextCallback = {
-		did: staged.did,
-		state: JSON.stringify({ intent: staged.intent ?? "signup", next: staged.next }),
-	};
-	const res = await app.request("/api/atproto/callback?code=x&state=y&iss=https://bsky.social");
+	const bound = boundState({ intent: staged.intent ?? "signup", next: staged.next });
+	nextCallback = { did: staged.did, state: bound.state };
+	const res = await app.request(
+		`/api/atproto/callback?code=x&state=${encodeURIComponent(bound.state)}&iss=https://bsky.social`,
+		{ headers: { Cookie: bound.cookie } },
+	);
 	expect(res.status).toBe(302);
 	return {
 		url: new URL(res.headers.get("location") as string),
@@ -181,9 +183,11 @@ describe("the browser stays on one host", () => {
 		const previous = process.env.FRONTEND_URL;
 		delete process.env.FRONTEND_URL;
 		try {
-			nextCallback = { did: did("host"), state: JSON.stringify({ intent: "signup" }) };
+			const bound = boundState({ intent: "signup" });
+			nextCallback = { did: did("host"), state: bound.state };
 			const res = await app.request(
-				"http://127.0.0.1:8000/api/atproto/callback?code=x&state=y&iss=https://bsky.social",
+				`http://127.0.0.1:8000/api/atproto/callback?code=x&state=${encodeURIComponent(bound.state)}&iss=https://bsky.social`,
+				{ headers: { Cookie: bound.cookie } },
 			);
 			expect(res.status).toBe(302);
 			const location = new URL(res.headers.get("location") as string);
@@ -201,9 +205,11 @@ describe("the browser stays on one host", () => {
 		const previous = process.env.FRONTEND_URL;
 		process.env.FRONTEND_URL = "https://anthers.org";
 		try {
-			nextCallback = { did: did("hostprod"), state: JSON.stringify({ intent: "signup" }) };
+			const bound = boundState({ intent: "signup" });
+			nextCallback = { did: did("hostprod"), state: bound.state };
 			const res = await app.request(
-				"http://127.0.0.1:8000/api/atproto/callback?code=x&state=y&iss=https://bsky.social",
+				`http://127.0.0.1:8000/api/atproto/callback?code=x&state=${encodeURIComponent(bound.state)}&iss=https://bsky.social`,
+				{ headers: { Cookie: bound.cookie } },
 			);
 			const location = new URL(res.headers.get("location") as string);
 			expect(location.origin).toBe("https://anthers.org");
@@ -538,13 +544,12 @@ describe("the proved identity on a pending signup", () => {
 		const started = pendingCookie(begin.headers.get("set-cookie") ?? "") as string;
 		expect(started).toBeTruthy();
 
-		nextCallback = {
-			did: did("carries"),
-			state: JSON.stringify({ intent: "signup" }),
-		};
-		const res = await app.request("/api/atproto/callback?code=x&state=y&iss=https://bsky.social", {
-			headers: { Cookie: `signup_pending=${started}` },
-		});
+		const bound = boundState({ intent: "signup" });
+		nextCallback = { did: did("carries"), state: bound.state };
+		const res = await app.request(
+			`/api/atproto/callback?code=x&state=${encodeURIComponent(bound.state)}&iss=https://bsky.social`,
+			{ headers: { Cookie: `signup_pending=${started}; ${bound.cookie}` } },
+		);
 		expect(res.status).toBe(302);
 
 		const row = await readPendingSignup(started);

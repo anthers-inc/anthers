@@ -33,7 +33,12 @@ export function buildPathProblem(value: string): string | null {
 		return "Paths are relative to the build's root, without leading or trailing slashes.";
 	}
 	if (value.includes("\\")) return "Paths use forward slashes.";
-	if (value.includes("\0")) return "That path contains a character file names cannot carry.";
+	if (/\p{Cc}/u.test(value)) {
+		return "That path contains a character file names cannot carry.";
+	}
+	if (/["'<>]/.test(value)) {
+		return "Paths cannot carry quotes or angle brackets — they would break the URL a build is served under.";
+	}
 	if (value.includes("%")) return "Paths cannot carry a % sign.";
 	const parts = value.split("/");
 	if (parts.some((p) => p === "" || p === "." || p === "..")) {

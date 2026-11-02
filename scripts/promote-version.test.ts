@@ -55,7 +55,7 @@ describe("nextVersion", () => {
 
 describe("bumpPlan", () => {
 	it("writes the next patch from the committed constant on a clean tree", () => {
-		expect(bumpPlan("2026.10.21", "2026.10.21")).toEqual({
+		expect(bumpPlan("2026.10.21", "2026.10.21", undefined, inMonth("2026-10-05"))).toEqual({
 			action: "write",
 			target: "2026.10.22",
 		});
@@ -66,7 +66,7 @@ describe("bumpPlan", () => {
 		// target from that constant instead of HEAD's is the double-bump this plan exists
 		// to prevent. HEAD's committed constant is the only baseline a promote computes
 		// from.
-		expect(bumpPlan("2026.10.21", "2026.10.22")).toEqual({
+		expect(bumpPlan("2026.10.21", "2026.10.22", undefined, inMonth("2026-10-05"))).toEqual({
 			action: "no-op",
 			target: "2026.10.22",
 		});
@@ -77,7 +77,7 @@ describe("bumpPlan", () => {
 		// tree, and a promote that computes .22. Nothing this flow wrote put .23 there,
 		// so publishing it is refusing no one's plan; the script's failure names the
 		// way out (restore, or pin deliberately).
-		expect(bumpPlan("2026.10.21", "2026.10.23")).toEqual({
+		expect(bumpPlan("2026.10.21", "2026.10.23", undefined, inMonth("2026-10-05"))).toEqual({
 			action: "refuse",
 			target: "2026.10.22",
 			committed: "2026.10.21",

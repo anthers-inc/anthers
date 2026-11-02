@@ -31,11 +31,59 @@ export const PUBLIC_MEDIA_TYPES: ReadonlySet<string> = new Set([
 	// `thumbnail` covers a Work's and a Project's poster; `cover` is the retired Project word.
 	"thumbnail",
 	"cover",
-	"gallery",
-	"image",
-	"screenshot",
+	// A post body's inline image is display chrome before purchase. A storefront preview
+	// image is not: it follows the Work's rating and disappears with the Work, so it stays
+	// private and is served through the access-checked preview route.
 	"inline-image",
 ]);
+
+/**
+ * The image media types an upload may name, for the MIME and extension allowlist.
+ *
+ * `image`, `gallery` and `screenshot` are deliberately absent: an image Work's source set
+ * is its gallery, and a gallery is the deliverable, not the storefront. They are stored
+ * private under `source-images/` and reach a reader only through an access-checked route.
+ */
+export const IMAGE_MEDIA_TYPES: ReadonlySet<string> = new Set([
+	"avatar",
+	"banner",
+	"header",
+	"cover",
+	"thumbnail",
+	"inline-image",
+	"preview-image",
+	"image",
+	"gallery",
+	"screenshot",
+]);
+
+/** The raster types an image upload may carry, and the extensions each may use. */
+export const IMAGE_MIME_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
+	"image/png": ["png"],
+	"image/jpeg": ["jpg", "jpeg"],
+	"image/webp": ["webp"],
+	"image/avif": ["avif"],
+};
+
+/**
+ * Whether an image upload's declared MIME and filename agree with the allowlist.
+ *
+ * Returns the reason to refuse, or null. The extension is checked rather than trusted
+ * because the key's extension is what a browser and a CDN read, and a PNG named `.html`
+ * would be served as HTML from a trusted subdomain even though the bytes were an image.
+ * SVG is absent on purpose: it is a script-capable document, not a raster image.
+ */
+export function imageUploadProblem(mimeType: string, filename: string): string | null {
+	const allowed = IMAGE_MIME_EXTENSIONS[mimeType];
+	if (!allowed)
+		return "That file isn't one of the image types this surface accepts. Use PNG, JPEG, WebP or AVIF.";
+	const dot = filename.lastIndexOf(".");
+	const ext = dot >= 0 ? filename.slice(dot + 1).toLowerCase() : "";
+	if (!allowed.includes(ext)) {
+		return "That file's extension does not match its image type.";
+	}
+	return null;
+}
 
 /**
  * The stored ACL for an uploaded media type. Fails closed: anything not explicitly
@@ -133,7 +181,6 @@ export const PUBLIC_KEY_PREFIXES: readonly string[] = [
 	"headers/",
 	"thumbnails/",
 	"covers/",
-	"gallery/",
 	"inline-images/",
 ];
 

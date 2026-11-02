@@ -96,6 +96,20 @@ describe("pdq", () => {
 		expect(fromPixels.hash).toBe(fromFile!.hash);
 	});
 
+	it("refuses an image over the pixel bound without decoding it", async () => {
+		// 6500×6500 is 42 MP, just over the 40 MP ceiling; the old decoder would allocate
+		// a 126 MB RGB buffer for this and a larger one for the attack shape. The bound is
+		// checked from the header before the decode, and sharp's own limit is the second
+		// refusal if the header lies.
+		const sharpMod = (await import("sharp")).default;
+		const big = await sharpMod({
+			create: { width: 6500, height: 6500, channels: 3, background: "#000" },
+		})
+			.png()
+			.toBuffer();
+		expect(await pdqHashImage(big)).toBeNull();
+	});
+
 	it("gives a flat image a low quality score", async () => {
 		// A featureless image carries no structure to fingerprint. PDQ says so through
 		// `quality`, and the caller is expected to decline to match on it.

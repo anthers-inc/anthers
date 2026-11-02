@@ -31,7 +31,14 @@ export const adminHostOnly = createMiddleware(async (c, next) => {
 	if (bearerToken(c)) {
 		return c.json({ error: "Not found" }, 404);
 	}
-	if (!SAFE_METHODS.has(c.req.method) && !isAdminOrigin(c.req.header("Origin"))) {
+	// 🚨 **Any Origin that is present must be the admin origin, on GET as well as on a
+	// mutation.** The old check was guarded by `!SAFE_METHODS.has(...)`, so a site-origin
+	// GET passed the host gate, and the global CORS reflected the site origin with
+	// credentials — every admin GET was readable from a script on `anthers.org`. A
+	// same-origin admin GET carries no Origin at all, so absence is allowed for a safe
+	// method; a mutation still has to name the admin origin.
+	const origin = c.req.header("Origin");
+	if (origin ? !isAdminOrigin(origin) : !SAFE_METHODS.has(c.req.method)) {
 		return c.json({ error: "CSRF validation failed" }, 403);
 	}
 	await next();

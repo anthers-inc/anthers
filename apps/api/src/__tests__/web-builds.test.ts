@@ -26,6 +26,7 @@ import { workBuildFiles, workBuilds, works } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
 import { queue } from "../jobs/queue";
+import { WEB_BUILD_FILE_MAX } from "../lib/web-build.js";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -149,6 +150,43 @@ afterAll(async () => {
 });
 
 describe("web build upload surface", () => {
+	it("refuses a registered file whose declared size is past the transport bound", async () => {
+		const workId = await createGameWork(creator.cookie);
+		const create = await call("POST", `/api/web-builds/works/${workId}/web-build`, creator.cookie, {
+			entryPath: "index.html",
+		});
+		expect(create.status).toBe(201);
+		const { build } = (await create.json()) as { build: { id: number } };
+
+		const presign = await call(
+			"POST",
+			`/api/web-builds/works/${workId}/web-build/${build.id}/presign`,
+			creator.cookie,
+			{ path: "huge.pck" },
+		);
+		expect(presign.status).toBe(200);
+		const info = (await presign.json()) as { key: string };
+		await storage.upload(info.key, Buffer.from("small"), "application/octet-stream", "private");
+		storedKeys.push(info.key);
+
+		const register = await call(
+			"POST",
+			`/api/web-builds/works/${workId}/web-build/${build.id}/files`,
+			creator.cookie,
+			{
+				files: [
+					{
+						path: "huge.pck",
+						storageRef: info.key,
+						fileSize: WEB_BUILD_FILE_MAX + 1,
+						contentType: "application/octet-stream",
+					},
+				],
+			},
+		);
+		expect(register.status).toBe(413);
+	});
+
 	it("creates a build unit on the creator's game Work, and only there", async () => {
 		const workId = await createGameWork(creator.cookie);
 

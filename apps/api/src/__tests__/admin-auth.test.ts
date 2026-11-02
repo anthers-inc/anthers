@@ -123,6 +123,24 @@ describe("the admin host", () => {
 		).toBe(true);
 	});
 
+	test("a site-origin GET with a live admin cookie is refused and carries no CORS grant", async () => {
+		const email = addr("cors");
+		await createAdminAccount({ email, displayName: "Cors" }, null);
+		const cookie = await signIn(email);
+
+		const refused = await call(ADMIN_HOST, "/api/admin/auth/me", {
+			headers: { Cookie: cookie, Origin: "http://localhost:3000" },
+		});
+		expect(refused.status).toBe(403);
+		expect(refused.headers.get("Access-Control-Allow-Origin")).toBeNull();
+
+		// A same-origin admin GET carries no Origin and must still open the console.
+		const sameOrigin = await call(ADMIN_HOST, "/api/admin/auth/me", {
+			headers: { Cookie: cookie },
+		});
+		expect(sameOrigin.status).toBe(200);
+	});
+
 	test("a mutation from the site's origin, or with no origin, is refused", async () => {
 		const fromSite = await call(ADMIN_HOST, "/api/admin/auth/signin/start", {
 			method: "POST",

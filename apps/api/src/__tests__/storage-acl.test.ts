@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { aclForMediaType, PUBLIC_MEDIA_TYPES } from "../services/storage/acl";
+import { aclForMediaType, imageUploadProblem, PUBLIC_MEDIA_TYPES } from "../services/storage/acl";
 import { resolveStorageConfig } from "../services/storage/config";
 
 describe("upload ACL allowlist", () => {
@@ -24,17 +24,7 @@ describe("upload ACL allowlist", () => {
 		// The imagery a user is meant to see before they have access. Enumerated
 		// rather than looped over the set, so deleting an entry fails a test instead
 		// of quietly shrinking both sides of the assertion.
-		for (const type of [
-			"avatar",
-			"banner",
-			"header",
-			"cover",
-			"thumbnail",
-			"gallery",
-			"image",
-			"screenshot",
-			"inline-image",
-		]) {
+		for (const type of ["avatar", "banner", "header", "cover", "thumbnail", "inline-image"]) {
 			expect(aclForMediaType(type), type).toBe("public");
 		}
 	});
@@ -44,6 +34,9 @@ describe("upload ACL allowlist", () => {
 			"video",
 			"audio",
 			"asset",
+			"image",
+			"gallery",
+			"screenshot",
 			"preview-image",
 			"preview-video",
 			"preview-caption",
@@ -58,6 +51,18 @@ describe("upload ACL allowlist", () => {
 		for (const type of [null, undefined, "", "wat", "Avatar", "AVATAR", "video ", "__proto__"]) {
 			expect(aclForMediaType(type), JSON.stringify(type)).toBe("private");
 		}
+	});
+
+	it("accepts only raster image types whose extension agrees", () => {
+		expect(imageUploadProblem("image/png", "avatar.png")).toBeNull();
+		expect(imageUploadProblem("image/jpeg", "banner.jpeg")).toBeNull();
+		expect(imageUploadProblem("image/webp", "thumb.webp")).toBeNull();
+		// The one the route must refuse: an image-named HTML document on a trusted subdomain.
+		expect(imageUploadProblem("text/html", "avatar.html")).toContain("isn't one");
+		// A real image with a mismatched name would be served as the wrong type.
+		expect(imageUploadProblem("image/png", "avatar.html")).toContain("extension");
+		// SVG is a script-capable document, not a raster image.
+		expect(imageUploadProblem("image/svg+xml", "avatar.svg")).toContain("isn't one");
 	});
 
 	it("treats the allowlist as exact — no case folding, no trimming", () => {

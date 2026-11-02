@@ -10,7 +10,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { csrfProtection } from "./middleware/csrf.js";
-import { allowedOrigins } from "./origins.js";
+import { adminOrigins, allowedOrigins } from "./origins.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { adminRoutes } from "./routes/admin.js";
 import { atprotoRoutes } from "./routes/atproto.js";
@@ -42,6 +42,13 @@ import { isQuarantinedKey } from "./services/storage/acl.js";
 import { isLocalStorage } from "./services/storage/index.js";
 import { LocalStorageService } from "./services/storage/local.js";
 
+// The site's credentialed CORS and the admin's are separate policies: the admin app is
+// same-origin with its API, and the site origin must never be able to read an admin
+// response with the operator's cookie. Applying the site list to `/api/admin/*` was the
+// defect; this is the one place the two are chosen.
+const siteCors = cors({ origin: allowedOrigins(), credentials: true });
+const adminCors = cors({ origin: adminOrigins(), credentials: true });
+
 const app = new Hono()
 	.use(logger())
 	// The dev build-delivery harness frames its build from the preview page, which is a
@@ -64,12 +71,7 @@ const app = new Hono()
 		if (isBuildDeliveryRequest(c.req.url)) c.res.headers.delete("X-Frame-Options");
 	})
 	.use(secureHeaders({ crossOriginResourcePolicy: "cross-origin" }))
-	.use(
-		cors({
-			origin: allowedOrigins(),
-			credentials: true,
-		}),
-	)
+	.use((c, next) => (c.req.path.startsWith("/api/admin") ? adminCors(c, next) : siteCors(c, next)))
 	.use(csrfProtection)
 	// The hand-rolled error tracker: every unhandled exception in a route lands here —
 	// fingerprinted, deduped into `error_events`, and alerted on first sight. Registered
