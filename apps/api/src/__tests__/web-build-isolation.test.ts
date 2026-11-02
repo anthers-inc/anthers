@@ -190,6 +190,51 @@ describe("isolation posture", () => {
 		expect(await serve.text()).toContain("bytes-for-game.pck");
 	});
 
+	it("escapes a legacy entry path that would break the frame src, and carries a nonced CSP", async () => {
+		const w = await insertWork({
+			creatorId: creator.id,
+			type: "game",
+			title: `xss ${run}`,
+			access: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		workIds.push(w.id);
+		const malicious = 'x.html"><script>document.title="pwned"</script>';
+		await db.insert(workBuilds).values({
+			workId: w.id,
+			entryPath: malicious,
+			isPrimary: true,
+			requiresIsolation: true,
+		});
+
+		const res = await call("GET", `/api/play/${w.id}`, creator.cookie);
+		expect(res.status).toBe(200);
+		const html = await res.text();
+		expect(html).not.toContain(malicious);
+		expect(html).toContain("%22%3E%3Cscript%3E");
+		const csp = res.headers.get("Content-Security-Policy") ?? "";
+		expect(csp).toContain("default-src 'none'");
+		expect(csp).toContain("frame-ancestors 'none'");
+		expect(csp).toMatch(/script-src 'nonce-[A-Za-z0-9]+'/);
+		const nonce = csp.match(/script-src 'nonce-([A-Za-z0-9]+)'/)?.[1];
+		expect(nonce).toBeTruthy();
+		expect(html).toContain(`<script nonce="${nonce}">`);
+	});
+
+	it("refuses a new build whose entry path carries quotes or angle brackets", async () => {
+		const w = await insertWork({
+			creatorId: creator.id,
+			type: "game",
+			title: `badpath ${run}`,
+			access: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		workIds.push(w.id);
+		const res = await call("POST", `/api/web-builds/works/${w.id}/web-build`, creator.cookie, {
+			entryPath: 'x.html"><script>',
+			requiresIsolation: false,
+		});
+		expect(res.status).toBe(400);
+	});
+
 	it("an ordinary build's play page omits the isolation headers", async () => {
 		const w = await insertWork({ creatorId: creator.id, type: "game", title: `plainpage ${run}` });
 		workIds.push(w.id);

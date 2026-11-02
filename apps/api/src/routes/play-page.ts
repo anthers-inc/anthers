@@ -45,7 +45,27 @@ import {
  * meters stopped gets a sentence they can read, not a blank frame. Plain, no scripts,
  * and the styles are inline because the page has exactly one job.
  */
-function page(title: string, body: string, extraHeaders?: Record<string, string>): Response {
+function page(
+	title: string,
+	body: string,
+	extraHeaders?: Record<string, string>,
+	nonce?: string,
+): Response {
+	// The page is server-rendered on the site's own origin, so it carries its own policy
+	// rather than relying on the API's response middleware: no script may run except the
+	// one inline shim this page minted, nothing may be framed in, and the only frame it
+	// may load is the delivery host the src names. The nonce is per response.
+	const csp = [
+		"default-src 'none'",
+		"base-uri 'none'",
+		"form-action 'none'",
+		"frame-ancestors 'none'",
+		"style-src 'unsafe-inline'",
+		nonce ? `script-src 'nonce-${nonce}'` : "script-src 'none'",
+		"frame-src https: http:",
+		"img-src https: http: data:",
+		"connect-src 'self'",
+	].join("; ");
 	const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -68,6 +88,8 @@ ${body}
 		headers: {
 			"Content-Type": "text/html;charset=utf-8",
 			"Cache-Control": "no-store",
+			"Content-Security-Policy": csp,
+			"X-Content-Type-Options": "nosniff",
 			...extraHeaders,
 		},
 	});
@@ -154,7 +176,10 @@ export function createPlayPageRoutes(): Hono {
 		const scheme = suffixSet
 			? "https"
 			: (c.req.header("x-forwarded-proto") ?? new URL(c.req.url).protocol.replace(":", ""));
-		const src = `${scheme}://${host}/build/${token}/${build.entryPath}`;
+		const src = `${scheme}://${host}/build/${token}/${build.entryPath
+			.split("/")
+			.map(encodeURIComponent)
+			.join("/")}`;
 
 		const escapedTitle =
 			work.title?.replace(
@@ -314,10 +339,12 @@ export function createPlayPageRoutes(): Hono {
 			}
 		})();`;
 
+		const nonce = crypto.randomUUID().replace(/-/g, "");
 		return page(
 			`Playing ${escapedTitle} — Anthers`,
-			`<div class="wrap"><div class="frame-wrap"><iframe src="${src}" title="${escapedTitle}" sandbox="allow-scripts allow-same-origin allow-popups" allowfullscreen></iframe></div></div><script>${parentShim}</script>`,
+			`<div class="wrap"><div class="frame-wrap"><iframe src="${src}" title="${escapedTitle}" sandbox="allow-scripts allow-same-origin allow-popups" allowfullscreen></iframe></div></div><script nonce="${nonce}">${parentShim}</script>`,
 			build.requiresIsolation ? ISOLATION_HEADERS : {},
+			nonce,
 		);
 	});
 }
