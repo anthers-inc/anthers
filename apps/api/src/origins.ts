@@ -35,8 +35,7 @@ const DESKTOP_ORIGINS = ["tauri://localhost", "http://tauri.localhost"];
  */
 export function allowedOrigins(): string[] {
 	const configured = [process.env.FRONTEND_URL].filter((o): o is string => !!o);
-	if (isPublicDeployment())
-		return [...new Set([...configured, ...DESKTOP_ORIGINS, ...statusPageOrigins()])];
+	if (isPublicDeployment()) return [...new Set([...configured, ...DESKTOP_ORIGINS])];
 	return [
 		...new Set([
 			...configured,
@@ -114,7 +113,7 @@ export function adminOrigins(): string[] {
  */
 const STATUS_PAGE_HOST = "status.anthers.org";
 
-function statusPageOrigins(): string[] {
+export function publicStatusOrigins(): string[] {
 	// Configurable so a rehearsal deployment can point the page elsewhere; the
 	// production value is the status subdomain. Unset, dev adds none — a dev checkout
 	// has no status page to serve.

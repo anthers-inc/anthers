@@ -16,6 +16,8 @@
  * not on `requireAuth`, which would model a person where there is a machine.
  */
 import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { publicStatusOrigins } from "../origins.js";
 import { type HeartbeatVerdict, recordHeartbeat } from "../services/heartbeat.js";
 import { statusReport } from "../services/status.js";
 import { statusPageHistory } from "../services/status-history.js";
@@ -30,6 +32,16 @@ function heartbeatToken(header: string | undefined): string | null {
 }
 
 export const statusRoutes = new Hono()
+	// The status page is a public, credential-less read. Its origin answers CORS without
+	// `Access-Control-Allow-Credentials`, and it is not in the CSRF or credentialed list.
+	.use(
+		"*",
+		cors({
+			// Read per request, not at import: the status origin is configuration.
+			origin: (origin) => (origin && publicStatusOrigins().includes(origin) ? origin : undefined),
+			credentials: false,
+		}),
+	)
 	.get("/", async (c) => {
 		// No cache, no rate limit needed: this is the route the page polls, and every probe
 		// it makes is a read. Answered from the composed reports in services/status.ts.

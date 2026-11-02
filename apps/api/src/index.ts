@@ -71,7 +71,13 @@ const app = new Hono()
 		if (isBuildDeliveryRequest(c.req.url)) c.res.headers.delete("X-Frame-Options");
 	})
 	.use(secureHeaders({ crossOriginResourcePolicy: "cross-origin" }))
-	.use((c, next) => (c.req.path.startsWith("/api/admin") ? adminCors(c, next) : siteCors(c, next)))
+	.use((c, next) => {
+		if (c.req.path.startsWith("/api/admin")) return adminCors(c, next);
+		// The status page has its own credential-less CORS on its router. The site policy
+		// would add `Access-Control-Allow-Credentials: true` to the same response.
+		if (c.req.path.startsWith("/api/status")) return next();
+		return siteCors(c, next);
+	})
 	.use(csrfProtection)
 	// The hand-rolled error tracker: every unhandled exception in a route lands here —
 	// fingerprinted, deduped into `error_events`, and alerted on first sight. Registered
