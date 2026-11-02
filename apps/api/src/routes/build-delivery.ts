@@ -78,13 +78,27 @@ export function createBuildDeliveryRoutes(): Hono {
 
 				const workId = payload.w;
 				const [work] = await db
-					.select({ id: works.id, publicId: works.publicId, visibility: works.visibility })
+					.select({
+						id: works.id,
+						publicId: works.publicId,
+						visibility: works.visibility,
+						quarantineStatus: works.quarantineStatus,
+						takedownStatus: works.takedownStatus,
+					})
 					.from(works)
 					.where(eq(works.id, workId))
 					.limit(1);
-				// A withdrawn or deleted Work invalidates every outstanding token for it: the
-				// row is what the entitlement points at, and when it goes the addresses go.
-				if (!work || work.visibility === "withdrawn") {
+				// A withdrawn, quarantined, taken-down or deleted Work invalidates every
+				// outstanding token for it: the row is what the entitlement points at, and
+				// when it goes the addresses go. The quarantine and takedown checks are what
+				// kill a token minted before the finding; a signed URL is not revocable, but
+				// this route is the one that reads it.
+				if (
+					!work ||
+					work.visibility === "withdrawn" ||
+					work.quarantineStatus === "quarantined" ||
+					work.takedownStatus === "taken_down"
+				) {
 					return c.json({ error: "not found" }, 404);
 				}
 

@@ -31,10 +31,20 @@ import {
 	purchases,
 	users,
 	workAssets,
+	workBuildFiles,
+	workBuilds,
+	workCaptionTracks,
+	workMediaVersions,
+	workPages,
+	workPreviewMedia,
+	workSectionAssets,
+	workSections,
+	workSourceFiles,
 	works,
 } from "@anthers/db/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import app from "../index";
+import { mintPlayToken } from "../lib/web-build.js";
 import { isUnderHold } from "../services/legal-hold.js";
 import {
 	clearQuarantine,
@@ -724,4 +734,132 @@ afterAll(async () => {
 	await db.execute(
 		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${buyerName}@example.com`}`], sql`, `)})`,
 	);
+});
+
+describe("A Work's whole footprint", () => {
+	/**
+	 * 🚨 The enumeration is the feature. A quarantine that moves the source and leaves a
+	 * page, a section, a preview, a caption, an archived version or a browser build is a
+	 * denial that looks complete in the database and is not complete in storage — and the
+	 * signed URL or the pre-minted play token is what makes the difference visible.
+	 */
+	it("moves every object and kills a build token minted before the finding", async () => {
+		const work = await insertWork({
+			creatorId,
+			type: "comic",
+			title: `Full footprint ${crypto.randomUUID().slice(0, 6)}`,
+			access: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		const base = `creators/${creatorId}`;
+
+		const [build] = await db
+			.insert(workBuilds)
+			.values({ workId: work.id, entryPath: "index.html", isPrimary: true })
+			.returning();
+
+		const gallery = `${base}/source-images/${work.publicId}/gallery.webp`;
+		const page = `${base}/pages/${work.publicId}/page.webp`;
+		const section = `${base}/sections/${work.publicId}/ch1.xhtml`;
+		const sectionAsset = `${base}/sections/${work.publicId}/pic.png`;
+		const preview = `${base}/previews/${work.publicId}/shot.png`;
+		const caption = `${base}/previews/captions/${work.publicId}/en.vtt`;
+		const version = `${base}/versions/${work.publicId}/v1.zip`;
+		const asset = `${base}/assets/${work.publicId}/asset.zip`;
+		const thumbnail = `${base}/thumbnails/${work.publicId}/thumb.webp`;
+		const thumbnailSource = `${base}/sources/thumbnails/${work.publicId}/source.webp`;
+		const original = `${base}/source-originals/${work.publicId}/original.zip`;
+		const buildFile = `${base}/web-builds/${build.id}/index.html`;
+		const all = [
+			gallery,
+			page,
+			section,
+			sectionAsset,
+			preview,
+			caption,
+			version,
+			asset,
+			thumbnail,
+			thumbnailSource,
+			original,
+			buildFile,
+		];
+		for (const k of all)
+			await storage.upload(k, Buffer.from("whole-footprint"), "application/octet-stream");
+
+		await db
+			.update(works)
+			.set({ sourceKey: gallery, sourceOriginalKey: original, thumbnail, thumbnailSource })
+			.where(eq(works.id, work.id));
+		await db.insert(workSourceFiles).values({
+			workId: work.id,
+			position: 1,
+			file: gallery,
+			filename: "gallery.webp",
+			fileSize: 1,
+		});
+		await db.insert(workPages).values({ workId: work.id, pageNumber: 1, file: page });
+		await db.insert(workSections).values({
+			workId: work.id,
+			position: 1,
+			href: "ch1.xhtml",
+			file: section,
+		});
+		await db.insert(workSectionAssets).values({
+			workId: work.id,
+			path: "pic.png",
+			file: sectionAsset,
+		});
+		const [previewRow] = await db
+			.insert(workPreviewMedia)
+			.values({ workId: work.id, kind: "image", file: preview, position: 0 })
+			.returning();
+		await db.insert(workCaptionTracks).values({
+			previewId: previewRow.id,
+			language: "en",
+			storageKey: caption,
+			byteSize: 1,
+			cueCount: 1,
+		});
+		await db.insert(workMediaVersions).values({
+			workId: work.id,
+			uploadedAt: new Date(),
+			media: {
+				kind: "source",
+				file: { file: version, filename: "v1.zip", fileSize: 1, mimeType: "application/zip" },
+			},
+		});
+		await db
+			.insert(workAssets)
+			.values({ workId: work.id, file: asset, filename: "asset.zip", fileSize: 1 });
+		await db.insert(workBuildFiles).values({
+			buildId: build.id,
+			path: "index.html",
+			storageKey: buildFile,
+		});
+
+		// A token minted while the Work was healthy is the case a state check in the
+		// delivery route exists for; a token minted after the finding would prove nothing.
+		const token = mintPlayToken(work.id, 3600);
+		const before = await req(`/build/${token}/index.html`);
+		expect(before.status).toBe(200);
+
+		const result = await quarantineWork({
+			workId: work.id,
+			source: "operator",
+			classification: "csam",
+			adminId: operatorId,
+		});
+		expect(result.objectsMoved).toBeGreaterThanOrEqual(all.length);
+
+		for (const k of all) {
+			expect({ key: k, exists: await storage.exists(k) }).toEqual({ key: k, exists: false });
+			expect({ key: k, parked: await storage.exists(`${QUARANTINE_PREFIX}${k}`) }).toEqual({
+				key: k,
+				parked: true,
+			});
+		}
+
+		const after = await req(`/build/${token}/index.html`);
+		expect(after.status).toBe(404);
+	});
 });

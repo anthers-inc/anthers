@@ -48,6 +48,13 @@ import {
 	moderationReports,
 	users,
 	workAssets,
+	workBuildFiles,
+	workBuilds,
+	workCaptionTracks,
+	workPages,
+	workPreviewMedia,
+	workSectionAssets,
+	workSections,
 	works,
 	workTranscodingJobs,
 } from "@anthers/db/schema";
@@ -56,17 +63,29 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { safeFailureReason, writingMatchData } from "../lib/match-data.js";
 import { placeHold, preservationExpiry } from "./legal-hold.js";
+import { collectWorkMedia } from "./media-purge.js";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void.js";
 import { originalKeyFor, quarantineKeyFor } from "./storage/acl.js";
 import { storage } from "./storage/index.js";
-import { urlToKey } from "./storage/keys.js";
+import { isKeyUnder, urlToKey } from "./storage/keys.js";
 import { queueWorkListingSync } from "./work-listing.js";
 
 /** How a finding arrived. A hash match and a classifier hunch may never collapse into one. */
 export type QuarantineSource = "report" | "scan" | "operator";
 
 /** Which of a Work's objects a row names, for the operator and for the restore. */
-export type WorkObjectKind = "source" | "thumbnail" | "asset" | "audio" | "hls";
+export type WorkObjectKind =
+	| "source"
+	| "thumbnail"
+	| "asset"
+	| "audio"
+	| "hls"
+	| "page"
+	| "section"
+	| "preview"
+	| "caption"
+	| "version"
+	| "build";
 
 /**
  * An object belonging to no Work — display chrome and badge art.
@@ -207,6 +226,13 @@ interface WorkObject {
 /**
  * Every object of a Work's that could be delivered.
  *
+ * 🚨 **This is the media-purge enumeration, not a second list.** `collectWorkMedia` already
+ * names the source, the retained original, the thumbnail and its source, every source-file
+ * row, every storefront preview and its captions, every asset, every transcoded output and
+ * every archived version. What it returns as *prefixes* — the paged Work's `ebook/` tree and
+ * a browser build's `web-builds/` tree — is expanded here into the rows that minted them,
+ * because a quarantine moves keys and a prefix is not a key.
+ *
  * ⚠️ **HLS renditions and processed audio are included even though they are derived**,
  * which is the opposite of the rule the child-safety coverage map, which is deliberately not public states for *scanning* — there, a transform of
  * a source already handled needs no independent scan. Detection and quarantine ask
@@ -216,13 +242,30 @@ interface WorkObject {
  */
 async function objectsFor(workId: number): Promise<WorkObject[]> {
 	const [work] = await db
-		.select({ sourceKey: works.sourceKey, thumbnail: works.thumbnail })
+		.select({
+			id: works.id,
+			creatorId: works.creatorId,
+			sourceKey: works.sourceKey,
+			sourceOriginalKey: works.sourceOriginalKey,
+			thumbnail: works.thumbnail,
+			thumbnailSource: works.thumbnailSource,
+		})
 		.from(works)
 		.where(eq(works.id, workId))
 		.limit(1);
 	if (!work) return [];
 
-	const [assetRows, jobRows] = await Promise.all([
+	const [
+		collected,
+		assetRows,
+		jobRows,
+		pageRows,
+		sectionRows,
+		sectionAssetRows,
+		previewRows,
+		buildFileRows,
+	] = await Promise.all([
+		collectWorkMedia([workId]),
 		db.select({ file: workAssets.file }).from(workAssets).where(eq(workAssets.workId, workId)),
 		db
 			.select({
@@ -231,21 +274,70 @@ async function objectsFor(workId: number): Promise<WorkObject[]> {
 			})
 			.from(workTranscodingJobs)
 			.where(eq(workTranscodingJobs.workId, workId)),
+		db.select({ file: workPages.file }).from(workPages).where(eq(workPages.workId, workId)),
+		db
+			.select({ file: workSections.file })
+			.from(workSections)
+			.where(eq(workSections.workId, workId)),
+		db
+			.select({ file: workSectionAssets.file })
+			.from(workSectionAssets)
+			.where(eq(workSectionAssets.workId, workId)),
+		db
+			.select({ id: workPreviewMedia.id, file: workPreviewMedia.file })
+			.from(workPreviewMedia)
+			.where(eq(workPreviewMedia.workId, workId)),
+		db
+			.select({ storageKey: workBuildFiles.storageKey })
+			.from(workBuildFiles)
+			.innerJoin(workBuilds, eq(workBuildFiles.buildId, workBuilds.id))
+			.where(eq(workBuilds.workId, workId)),
 	]);
+
+	const previewCaptionRows =
+		previewRows.length === 0
+			? []
+			: await db
+					.select({ storageKey: workCaptionTracks.storageKey })
+					.from(workCaptionTracks)
+					.where(
+						inArray(
+							workCaptionTracks.previewId,
+							previewRows.map((p) => p.id),
+						),
+					);
 
 	const out: WorkObject[] = [];
 	const seen = new Set<string>();
-	const add = (raw: string | null, kind: WorkObjectKind) => {
+	const add = (raw: string | null | undefined, kind: WorkObjectKind) => {
 		if (!raw) return;
 		const key = urlToKey(raw);
 		if (!key || seen.has(key)) return;
+		// A row written before the ownership check existed may name somebody else's
+		// object; moving it would be moving another creator's file.
+		if (work.creatorId == null || !isKeyUnder(key, work.creatorId)) return;
 		seen.add(key);
 		out.push({ key, kind });
 	};
 
+	// The precise kinds first, so an operator sees "source" and "asset" rather than the
+	// generic catch-all the collected set would give them.
 	add(work.sourceKey, "source");
+	add(work.sourceOriginalKey, "source");
 	add(work.thumbnail, "thumbnail");
+	add(work.thumbnailSource, "thumbnail");
 	for (const a of assetRows) add(a.file, "asset");
+	for (const p of pageRows) add(p.file, "page");
+	for (const s of sectionRows) add(s.file, "section");
+	for (const a of sectionAssetRows) add(a.file, "section");
+	for (const p of previewRows) add(p.file, "preview");
+	for (const c of previewCaptionRows) add(c.storageKey, "caption");
+	for (const b of buildFileRows) add(b.storageKey, "build");
+
+	// Everything `collectWorkMedia` found that the rows above did not name: the version
+	// keys, the archived source originals, and any future row the purge enumeration learns.
+	for (const key of collected.keys) add(key, "version");
+
 	for (const j of jobRows) {
 		add(j.outputFileUrl, "audio");
 		// The manifest names a directory of segments. Every one of them is a separate
