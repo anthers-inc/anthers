@@ -159,8 +159,16 @@ async function startAuth(body: unknown, token?: string) {
 }
 
 async function runCallback(staged: { did: string; state?: string; scope?: string }): Promise<URL> {
-	nextCallback = staged;
-	const res = await app.request("/api/atproto/callback?code=x&state=y&iss=https://bsky.social");
+	const nonce = crypto.randomUUID();
+	const state = JSON.stringify({
+		...(staged.state ? JSON.parse(staged.state) : { intent: "publish" }),
+		nonce,
+	});
+	nextCallback = { ...staged, state };
+	const res = await app.request(
+		`/api/atproto/callback?code=x&state=${encodeURIComponent(state)}&iss=https://bsky.social`,
+		{ headers: { Cookie: `atproto_oauth_state=${nonce}` } },
+	);
 	expect(res.status).toBe(302);
 	return new URL(res.headers.get("location") as string);
 }
@@ -381,12 +389,22 @@ describe("coming back from the consent screen", () => {
 	it("reports pressing Deny as a decline, not as a failed sign-in", async () => {
 		const user = await makeUser("deny");
 		const denied = async (intent: string) => {
+			const nonce = crypto.randomUUID();
+			const state = JSON.stringify({
+				intent,
+				userId: user.id,
+				next: "/studio/catalog",
+				nonce,
+			});
 			nextCallbackError = new OAuthCallbackError(
-				new URLSearchParams({ error: "access_denied", state: "x" }),
+				new URLSearchParams({ error: "access_denied", state }),
 				undefined,
-				JSON.stringify({ intent, userId: user.id, next: "/studio/catalog" }),
+				state,
 			);
-			const res = await app.request("/api/atproto/callback?error=access_denied&state=x");
+			const res = await app.request(
+				`/api/atproto/callback?error=access_denied&state=${encodeURIComponent(state)}`,
+				{ headers: { Cookie: `atproto_oauth_state=${nonce}` } },
+			);
 			expect(res.status).toBe(302);
 			return new URL(res.headers.get("location") as string);
 		};

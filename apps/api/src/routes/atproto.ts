@@ -43,7 +43,13 @@ import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
 import { blueskyDoorRefusal } from "../lib/bluesky-door.js";
-import { PENDING_SIGNUP_COOKIE, setPendingSignupCookie, setSessionCookie } from "../lib/cookies.js";
+import {
+	clearSecureCookie,
+	PENDING_SIGNUP_COOKIE,
+	setPendingSignupCookie,
+	setSecureCookie,
+	setSessionCookie,
+} from "../lib/cookies.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
 	atprotoPublishEnabled,
@@ -159,7 +165,23 @@ interface AppState {
 	intent: "login" | "signup" | "publish";
 	userId?: number;
 	next?: string;
+	/** The browser nonce, set as a cookie at `/auth` and required at `/callback`. */
+	nonce?: string;
 }
+
+/**
+ * The browser binding for an ATProto round trip.
+ *
+ * The state is a JSON document the callback parses, so it can say which intent and which
+ * account the flow belongs to — but nothing in it proves the browser that started the flow
+ * is the browser that finished it. Without that, a callback URL is a bearer capability: an
+ * attacker starts a login (or a signup) as themselves and sends the callback to a victim,
+ * whose browser then receives a session for the attacker's identity, or binds the attacker's
+ * DID to the victim's pending signup. The nonce is random per start, carried in both the
+ * state and an HttpOnly `SameSite=Lax` cookie, and both must match at the callback.
+ */
+const ATPROTO_STATE_COOKIE = "atproto_oauth_state";
+const ATPROTO_STATE_MAX_AGE = 10 * 60;
 
 /**
  * Where to send the browser once the round trip is over.
@@ -336,10 +358,14 @@ const atprotoRoutes = new Hono()
 			// in either table, so this is the only place that can be relied on to run.
 			await Promise.all([sweepExpiredOauthState(), sweepExpiredPendingSignups()]);
 
+			const nonce = crypto.randomUUID();
+			setSecureCookie(c, ATPROTO_STATE_COOKIE, nonce, ATPROTO_STATE_MAX_AGE);
+
 			const appState: AppState = {
 				intent,
 				userId,
 				next: sanitizeNextPath(next) ?? undefined,
+				nonce,
 			};
 			const url = await getAtprotoClient().authorize(subject, {
 				state: JSON.stringify(appState),
@@ -379,6 +405,25 @@ const atprotoRoutes = new Hono()
 
 		try {
 			const params = new URL(c.req.url).searchParams;
+
+			// 🚨 **The state proves which intent and account; the cookie proves which browser.**
+			// Both are required before the code is exchanged. A callback URL is otherwise a
+			// capability anyone can hand to a victim: a login callback signs the victim into the
+			// attacker's account, and a signup callback binds the attacker's DID to the victim's
+			// address. The cookie is cleared on every path, before the exchange, so a failed
+			// callback cannot be replayed.
+			const expectedState = getCookie(c, ATPROTO_STATE_COOKIE);
+			clearSecureCookie(c, ATPROTO_STATE_COOKIE);
+			let browserBound = false;
+			try {
+				const rawState = params.get("state");
+				const parsed = rawState ? (JSON.parse(rawState) as Partial<AppState>) : null;
+				browserBound = !!expectedState && !!parsed?.nonce && parsed.nonce === expectedState;
+			} catch {
+				browserBound = false;
+			}
+			if (!browserBound) return fail("state_mismatch");
+
 			const { session, state } = await getAtprotoClient().callback(params);
 
 			const appState: AppState = state ? JSON.parse(state) : { intent: "login" };

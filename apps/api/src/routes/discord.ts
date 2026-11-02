@@ -20,8 +20,8 @@ import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
 import { and, eq, ne } from "drizzle-orm";
 import { type Context, Hono } from "hono";
-import { deleteCookie, getCookie } from "hono/cookie";
-import { setSecureCookie } from "../lib/cookies.js";
+import { getCookie } from "hono/cookie";
+import { clearSecureCookie, setSecureCookie } from "../lib/cookies.js";
 import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
 import {
 	addMemberToServer,
@@ -58,7 +58,7 @@ export const discordRoutes = new Hono()
 	.get("/callback", async (c) => {
 		const state = c.req.query("state");
 		const expected = getCookie(c, STATE_COOKIE);
-		deleteCookie(c, STATE_COOKIE, { path: "/" });
+		clearSecureCookie(c, STATE_COOKIE);
 
 		const userId = await getOptionalUserId(c);
 		if (userId === null) return back(c, "signin");

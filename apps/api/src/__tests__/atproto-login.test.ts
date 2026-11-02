@@ -101,8 +101,16 @@ function startAuth(body: unknown, headers: Record<string, string> = {}) {
 
 /** Run the callback with a staged outcome, and read where it sent the browser. */
 async function runCallback(staged: { did: string; state?: string }): Promise<URL> {
-	nextCallback = staged;
-	const res = await app.request("/api/atproto/callback?code=x&state=y&iss=https://bsky.social");
+	const nonce = crypto.randomUUID();
+	const state = JSON.stringify({
+		...(staged.state ? JSON.parse(staged.state) : { intent: "login" }),
+		nonce,
+	});
+	nextCallback = { ...staged, state };
+	const res = await app.request(
+		`/api/atproto/callback?code=x&state=${encodeURIComponent(state)}&iss=https://bsky.social`,
+		{ headers: { Cookie: `atproto_oauth_state=${nonce}` } },
+	);
 	expect(res.status).toBe(302);
 	return new URL(res.headers.get("location") as string);
 }
@@ -145,8 +153,11 @@ describe("where a sign-in lands", () => {
 		expect(url.pathname).toBe("/auth/atproto/callback");
 		expect(url.searchParams.get("success")).toBe("login");
 		expect(url.searchParams.get("next")).toBe("/works/a-game-4");
-		// The session cookie is the actual sign-in; the redirect only says where to go.
-		expect(started.headers.get("set-cookie")).toBeNull();
+		// The session cookie is the actual sign-in; the redirect only says where to go. The
+		// one cookie the start does set is the browser binding, never a session.
+		const setCookie = started.headers.get("set-cookie") ?? "";
+		expect(setCookie).toContain("atproto_oauth_state=");
+		expect(setCookie).not.toContain("session=");
 		expect(user.id).toBeGreaterThan(0);
 	});
 
@@ -245,5 +256,44 @@ describe("which addresses a sign-in code can reach", () => {
 		expect(hasReachableEmail("did:plc:abc@atproto.invalid")).toBe(false);
 		expect(hasReachableEmail("")).toBe(false);
 		expect(hasReachableEmail(null)).toBe(false);
+	});
+});
+
+describe("the callback is bound to the browser that started it", () => {
+	// 🚨 A callback URL is a capability. Without the browser nonce, an attacker starts a
+	// login as themselves and hands the callback to a victim, whose browser then holds a
+	// session for the attacker's account; the signup half is worse, binding the attacker's
+	// DID to the victim's address. Both are refused before the code is exchanged.
+	it("refuses a callback with no state cookie", async () => {
+		const nonce = crypto.randomUUID();
+		nextCallback = { did: did("nobind"), state: JSON.stringify({ intent: "login", nonce }) };
+		const res = await app.request(
+			`/api/atproto/callback?code=x&state=${encodeURIComponent(nextCallback.state)}&iss=https://bsky.social`,
+		);
+		expect(res.status).toBe(302);
+		const url = new URL(res.headers.get("location") as string);
+		expect(url.searchParams.get("error")).toBe("state_mismatch");
+		expect(url.searchParams.get("success")).toBeNull();
+	});
+
+	it("refuses a callback whose state cookie belongs to another flow", async () => {
+		const nonce = crypto.randomUUID();
+		nextCallback = { did: did("wrongbind"), state: JSON.stringify({ intent: "login", nonce }) };
+		const res = await app.request(
+			`/api/atproto/callback?code=x&state=${encodeURIComponent(nextCallback.state)}&iss=https://bsky.social`,
+			{ headers: { Cookie: `atproto_oauth_state=${crypto.randomUUID()}` } },
+		);
+		expect(res.status).toBe(302);
+		const url = new URL(res.headers.get("location") as string);
+		expect(url.searchParams.get("error")).toBe("state_mismatch");
+	});
+
+	it("refuses a state that is not the JSON the route issued", async () => {
+		const res = await app.request("/api/atproto/callback?code=x&state=y&iss=https://bsky.social", {
+			headers: { Cookie: `atproto_oauth_state=${crypto.randomUUID()}` },
+		});
+		expect(res.status).toBe(302);
+		const url = new URL(res.headers.get("location") as string);
+		expect(url.searchParams.get("error")).toBe("state_mismatch");
 	});
 });
