@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { isDevCheckout } from "@anthers/db/dev-only";
 import { isPublicDeployment } from "./lib/deployment.js";
 
 /**
@@ -35,8 +36,7 @@ const DESKTOP_ORIGINS = ["tauri://localhost", "http://tauri.localhost"];
  */
 export function allowedOrigins(): string[] {
 	const configured = [process.env.FRONTEND_URL].filter((o): o is string => !!o);
-	if (isPublicDeployment())
-		return [...new Set([...configured, ...DESKTOP_ORIGINS, ...statusPageOrigins()])];
+	if (isPublicDeployment()) return [...new Set([...configured, ...DESKTOP_ORIGINS])];
 	return [
 		...new Set([
 			...configured,
@@ -114,7 +114,16 @@ export function adminOrigins(): string[] {
  */
 const STATUS_PAGE_HOST = "status.anthers.org";
 
-function statusPageOrigins(): string[] {
+/**
+ * The origins the status routes answer: the standalone status page, plus a dev checkout's
+ * own web previews. The second group exists because the page and the API are on different
+ * ports in dev; it is read with `credentials: false`, so it grants no ambient authority.
+ */
+export function statusCorsOrigins(): string[] {
+	return [...new Set([...publicStatusOrigins(), ...(isDevCheckout() ? allowedOrigins() : [])])];
+}
+
+export function publicStatusOrigins(): string[] {
 	// Configurable so a rehearsal deployment can point the page elsewhere; the
 	// production value is the status subdomain. Unset, dev adds none — a dev checkout
 	// has no status page to serve.

@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { type Context, Hono } from "hono";
 import { PENDING_SIGNUP_COOKIE, setSecureCookie, setSessionCookie } from "../lib/cookies.js";
 import { isPublicDeployment, publicOrigin } from "../lib/deployment.js";
-import { allowedOrigins } from "../origins.js";
+import { allowedOrigins, publicStatusOrigins } from "../origins.js";
 import { sendAbuseAlert } from "../services/email.js";
 
 const TOUCHED = [
@@ -109,10 +109,10 @@ describe("allowedOrigins in production's actual environment", () => {
 		// carry no ambient authority, and both merely LOOK like localhost.
 		expect(origins).toContain("tauri://localhost");
 		expect(origins).toContain("http://tauri.localhost");
-		// The standalone status page's origin, served by the droplet — a cross-origin read
-		// of the public answer that carries no credentials, so letting CORS return it grants
-		// nothing ambient.
-		expect(origins).toContain("https://status.anthers.org");
+		// The standalone status page's origin is a public, credential-less read. It is NOT
+		// in the credentialed CORS and CSRF list; the status route serves it its own CORS.
+		expect(origins).not.toContain("https://status.anthers.org");
+		expect(publicStatusOrigins()).toContain("https://status.anthers.org");
 	});
 
 	it("admits a configured status-page origin over the default, and none on a dev checkout without one", () => {
@@ -120,12 +120,12 @@ describe("allowedOrigins in production's actual environment", () => {
 		process.env.STATUS_PAGE_URL = "https://status.staging.example.org/";
 		// The trailing slash is normalized away — an allowlist entry that never matches a
 		// browser's actual Origin header would be a guard that never fires.
-		expect(allowedOrigins()).toContain("https://status.staging.example.org");
-		expect(allowedOrigins()).not.toContain("https://status.anthers.org");
+		expect(publicStatusOrigins()).toContain("https://status.staging.example.org");
+		expect(publicStatusOrigins()).not.toContain("https://status.anthers.org");
 		asDevelopment();
 		delete process.env.STATUS_PAGE_URL;
 		// A dev checkout serves no status page, so it admits no origin for one.
-		expect(allowedOrigins().filter((o) => o.includes("status.anthers.org"))).toEqual([]);
+		expect(publicStatusOrigins()).toEqual([]);
 	});
 
 	it("still admits the dev and e2e origins on a developer's machine", () => {

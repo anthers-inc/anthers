@@ -95,14 +95,15 @@ export async function sendEmail({ to, subject, html }: SendArgs): Promise<SendRe
 	// use, and the address is `@example.com`, which Resend rejects with a 422 anyway. A
 	// suite whose outcome depends on a third party's latency is not testing our code.
 	if (process.env.NODE_ENV === "test") {
-		console.warn(`[email] test run — not sending "${subject}" to ${to}`);
+		// The subject is deliberately not logged: a code email carries the code there.
+		console.warn(`[email] test run — not sending mail to ${redactAddress(to)}`);
 		return { sent: false, messageId: null };
 	}
 	const catcher = mailCatcherUrl();
 	if (catcher) return deliverToCatcher(catcher, { to, subject, html });
 	const client = resendClient();
 	if (!client) {
-		console.warn(`[email] RESEND_API_KEY unset — skipped "${subject}" to ${to}`);
+		console.warn(`[email] RESEND_API_KEY unset — skipped mail to ${redactAddress(to)}`);
 		return { sent: false, messageId: null };
 	}
 	try {
@@ -336,6 +337,19 @@ export function escapeHtml(s: string): string {
  * link would take them somewhere else and lose the picks they had already made. That is
  * the whole reason this flow uses a code instead of a link email.
  */
+/**
+ * A failure log's address: enough to correlate, not enough to be a contact record.
+ *
+ * The code itself is never logged. A send failure used to print the plaintext code, which
+ * made the application log stream a second delivery channel for a ten-minute sign-in
+ * credential; the redacted address is the only part a developer needs to trace a bounce.
+ */
+function redactAddress(address: string): string {
+	const [local, domain] = address.split("@");
+	if (!domain) return "(unparseable address)";
+	return `${local.slice(0, 1)}…@${domain}`;
+}
+
 /** The signup code email's template, as {@link sendSignupCodeEmail} sends it. */
 export function renderSignupCodeEmail(code: string): RenderedEmail {
 	return {
@@ -352,7 +366,7 @@ export function renderSignupCodeEmail(code: string): RenderedEmail {
 export async function sendSignupCodeEmail(to: string, code: string): Promise<void> {
 	const { subject, html } = renderSignupCodeEmail(code);
 	const { sent } = await sendEmail({ to, subject, html });
-	if (!sent) console.info(`[email] signup code for ${to}: ${code}`);
+	if (!sent) console.warn(`[email] signup code for ${redactAddress(to)} was not sent`);
 }
 
 /**
@@ -385,7 +399,7 @@ export function renderSignInCodeEmail(code: string): RenderedEmail {
 export async function sendSignInCodeEmail(to: string, code: string): Promise<void> {
 	const { subject, html } = renderSignInCodeEmail(code);
 	const { sent } = await sendEmail({ to, subject, html });
-	if (!sent) console.info(`[email] sign-in code for ${to}: ${code}`);
+	if (!sent) console.warn(`[email] sign-in code for ${redactAddress(to)} was not sent`);
 }
 
 /**
@@ -410,7 +424,7 @@ export function renderAdminSignInCodeEmail(code: string): RenderedEmail {
 export async function sendAdminSignInCodeEmail(to: string, code: string): Promise<void> {
 	const { subject, html } = renderAdminSignInCodeEmail(code);
 	const { sent } = await sendEmail({ to, subject, html });
-	if (!sent) console.info(`[email] admin sign-in code for ${to}: ${code}`);
+	if (!sent) console.warn(`[email] admin sign-in code for ${redactAddress(to)} was not sent`);
 }
 
 /**
@@ -440,7 +454,7 @@ export async function sendAdminInvitationEmail(
 ): Promise<void> {
 	const { subject, html } = renderAdminInvitationEmail(invitedBy, adminUrl);
 	const { sent } = await sendEmail({ to, subject, html });
-	if (!sent) console.info(`[email] admin invitation for ${to}: ${adminUrl}`);
+	if (!sent) console.warn(`[email] admin invitation for ${redactAddress(to)} was not sent`);
 }
 
 // ─── What a DMCA complainant is told ─────────────────────────────────────────

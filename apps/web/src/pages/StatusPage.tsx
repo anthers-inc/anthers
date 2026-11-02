@@ -349,7 +349,9 @@ export default function StatusPage() {
 		let aborted = false;
 		async function poll() {
 			try {
-				const res = await apiFetch("/api/status");
+				// The public read is credential-less by design; the CORS answer carries no
+				// `Access-Control-Allow-Credentials`, and a credentialed fetch could not read it.
+				const res = await apiFetch("/api/status", { credentials: "omit" });
 				if (!res.ok) throw new Error(String(res.status));
 				const body = (await res.json()) as StatusReport;
 				if (!aborted) {
@@ -363,7 +365,7 @@ export default function StatusPage() {
 			// quietly: bars and Past Incidents are the record's decoration on a live page,
 			// and a read hiccup hides them rather than darkening the headline.
 			try {
-				const res = await apiFetch("/api/status/history");
+				const res = await apiFetch("/api/status/history", { credentials: "omit" });
 				if (!res.ok) throw new Error(String(res.status));
 				const body = (await res.json()) as HistoryAnswer;
 				if (!aborted) setHistory(body);

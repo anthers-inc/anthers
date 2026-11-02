@@ -40,15 +40,24 @@ describe("the mail catcher a session names", () => {
 
 describe("a code that was not sent", () => {
 	const info = spyOn(console, "info");
-	afterEach(() => info.mockClear());
+	const warn = spyOn(console, "warn");
+	afterEach(() => {
+		info.mockClear();
+		warn.mockClear();
+	});
 
-	// ⚠️ The fallback read `if (!sent)` of an object that is always truthy, so it never ran and the
-	// code reached a developer's console only because it happens to be in the subject line.
-	it("is written to the console, so the flow can still be finished by hand", async () => {
+	// 🚨 The code used to reach the console twice — once from the failure branch's `if (!sent)`,
+	// which read an object that is always truthy and so never ran, and once because the code is
+	// in the subject line of the skipped-send warning. Both are closed; a developer reads the
+	// code from the session's mail catcher or the database, not from the log stream.
+	it("is not written to the console, and the address is redacted", async () => {
 		await sendSignupCodeEmail("someone@example.com", "ABC234");
 		await sendSignInCodeEmail("someone@example.com", "XYZ789");
-		const logged = info.mock.calls.map((call) => String(call[0]));
-		expect(logged).toContain("[email] signup code for someone@example.com: ABC234");
-		expect(logged).toContain("[email] sign-in code for someone@example.com: XYZ789");
+		const logged = [...info.mock.calls, ...warn.mock.calls]
+			.map((call) => call.map(String).join(" "))
+			.join("\n");
+		expect(logged).not.toContain("ABC234");
+		expect(logged).not.toContain("XYZ789");
+		expect(logged).toContain("s…@example.com");
 	});
 });
