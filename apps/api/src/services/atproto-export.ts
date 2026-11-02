@@ -22,6 +22,7 @@ import { db } from "@anthers/db";
 import { users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { strToU8, type Zippable, zipSync } from "fflate";
+import { fetchPublicUrl, readLimited } from "../lib/atproto-fetch.js";
 import { buildAccountExport } from "./account-data.js";
 import { type BackupRegistry, readSpaceArtifacts, type SpaceArtifacts } from "./space-backup.js";
 import { type OwnedSpace, ownedSpacesFor, registeredSpacesFor } from "./space-registry.js";
@@ -222,13 +223,16 @@ function summarize(registry: OwnedSpace, artifacts: SpaceArtifacts): AtprotoExpo
 	};
 }
 
+/** A public repository larger than this is not a bundle worth carrying; it is a denial. */
+const MAX_PUBLIC_REPO_BYTES = 128 * 1024 * 1024;
+
 /** `sync.getRepo` with no credential, for an identity on a server Anthers may only read. */
 async function publicRepoWithoutSession(pdsUrl: string, did: string): Promise<Uint8Array> {
 	const url = new URL("/xrpc/com.atproto.sync.getRepo", pdsUrl);
 	url.searchParams.set("did", did);
-	const response = await fetch(url);
+	const response = await fetchPublicUrl(url, {}, { maxBytes: MAX_PUBLIC_REPO_BYTES });
 	if (!response.ok) throw new Error(`getRepo failed with ${response.status}`);
-	return new Uint8Array(await response.arrayBuffer());
+	return readLimited(response, MAX_PUBLIC_REPO_BYTES);
 }
 
 /**

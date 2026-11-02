@@ -31,6 +31,7 @@
  * question. An unreadable record is reported `blocked` with the error rather than guessed
  * about: "cannot read" and "reads and disagrees" are different findings.
  */
+
 import { db } from "@anthers/db";
 import { posts, projects, users, works } from "@anthers/db/schema";
 import {
@@ -40,6 +41,7 @@ import {
 	workRecord,
 } from "@anthers/shared/lexicons";
 import { eq } from "drizzle-orm";
+import { fetchPublicUrl, readLimited } from "../lib/atproto-fetch.js";
 import {
 	type PostRecord,
 	type ProjectRecord,
@@ -124,9 +126,11 @@ async function fetchRecord(
 	const url = recordFetchUrlFor(atUri, pdsUrl);
 	if (!url) return { ok: false, error: "no readable record URL (malformed URI or PDS)" };
 	try {
-		const res = await fetchImpl(url);
+		const res = await fetchPublicUrl(url, {}, { fetchImpl, maxBytes: 4 * 1024 * 1024 });
 		if (!res.ok) return { ok: false, error: `getRecord answered ${res.status}` };
-		const body = (await res.json()) as { value?: unknown };
+		const body = JSON.parse(new TextDecoder().decode(await readLimited(res, 4 * 1024 * 1024))) as {
+			value?: unknown;
+		};
 		// getRecord answers `{ uri, cid, value }`; the value is the record.
 		if (!body || typeof body !== "object" || !("value" in body)) {
 			return { ok: false, error: "getRecord answered without a record value" };
