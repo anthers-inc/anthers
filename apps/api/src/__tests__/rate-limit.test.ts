@@ -87,6 +87,14 @@ describe("clientIp", () => {
 		expect(clientIp(headers)).toBe("9.10.11.12");
 	});
 
+	it("ignores cf-connecting-ip, which App Platform does not set, and reads the edge's last entry", () => {
+		const headers = new Headers({
+			"cf-connecting-ip": "1.2.3.4",
+			"x-forwarded-for": "9.9.9.9, 203.0.113.7",
+		});
+		expect(clientIp(headers)).toBe("203.0.113.7");
+	});
+
 	it("falls back through x-real-ip and then unknown", () => {
 		expect(clientIp(new Headers({ "x-real-ip": "5.6.7.8" }))).toBe("5.6.7.8");
 		expect(clientIp(new Headers())).toBe("unknown");
