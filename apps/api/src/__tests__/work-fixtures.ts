@@ -194,8 +194,14 @@ export async function insertWork(fixture: WorkFixture) {
  * reason that is not the suite's subject either.
  */
 export async function giveWorkAFile(workId: number): Promise<void> {
+	const [work] = await db
+		.select({ creatorId: works.creatorId })
+		.from(works)
+		.where(eq(works.id, workId))
+		.limit(1);
+	if (!work) return;
 	await db
 		.update(works)
-		.set({ sourceKey: `creators/0/media/fixture-file-${workId}` })
+		.set({ sourceKey: `creators/${work.creatorId}/media/fixture-file-${workId}` })
 		.where(eq(works.id, workId));
 }

@@ -47,7 +47,8 @@ import { collectWorkMedia, sweepCollected } from "../../services/media-purge.js"
 import { queueWorkSave, queueWorkSaveRemoval } from "../../services/reader-state-migration.js";
 import { markPurchaseDownloaded } from "../../services/refunds.js";
 import { storage } from "../../services/storage/index.js";
-import { urlToKey } from "../../services/storage/keys.js";
+import { isKeyUnder, urlToKey } from "../../services/storage/keys.js";
+import { signOwnWorkObject } from "../../services/storage/own.js";
 import {
 	findWorkVersion,
 	listWorkVersions,
@@ -217,7 +218,11 @@ const workMediaRoutes = new Hono()
 
 		// Assets are stored private; hand back a short-lived signed URL (local mode
 		// ignores signing and serves via /content).
-		const url = await storage.getUrl(asset.file, { signed: true, expiresIn: 300 });
+		const url = await signOwnWorkObject(asset.file, work.creatorId, {
+			signed: true,
+			expiresIn: 300,
+		});
+		if (!url) return c.json({ error: "Not found" }, 404);
 		return c.json({ url });
 	})
 
@@ -274,11 +279,12 @@ const workMediaRoutes = new Hono()
 		if (files.length === 1) {
 			// A single original is one attachment URL; the browser saves it without this
 			// process touching the bytes.
-			const url = await storage.getUrl(files[0].file, {
+			const url = await signOwnWorkObject(files[0].file, work.creatorId, {
 				signed: true,
 				expiresIn: 300,
 				download: files[0].filename,
 			});
+			if (!url) return c.json({ error: "Version not found" }, 404);
 			c.header("Cache-Control", "no-store");
 			return c.redirect(url, 302);
 		}
@@ -486,10 +492,11 @@ const workMediaRoutes = new Hono()
 			.limit(1);
 		if (!job?.outputFileUrl) return c.json({ error: "Not found" }, 404);
 
-		const url = await storage.getUrl(urlToKey(job.outputFileUrl), {
+		const url = await signOwnWorkObject(job.outputFileUrl, work.creatorId, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
+		if (!url) return c.json({ error: "Not found" }, 404);
 		// no-store so the 302 (which carries a signed URL, and is access-dependent) is
 		// never cached by a proxy and replayed at a user who shouldn't have it.
 		c.header("Cache-Control", "no-store");
@@ -525,10 +532,11 @@ const workMediaRoutes = new Hono()
 		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
 		if (limited) return c.json(limited, 403);
 
-		const url = await storage.getUrl(work.sourceKey, {
+		const url = await signOwnWorkObject(work.sourceKey, work.creatorId, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
+		if (!url) return c.json({ error: "Not found" }, 404);
 		// no-store, for the same reason as the audio redirect: this 302 carries a
 		// signed URL and is access-dependent, so a proxy must never replay it.
 		c.header("Cache-Control", "no-store");
@@ -567,10 +575,11 @@ const workMediaRoutes = new Hono()
 			.limit(1);
 		if (!page) return c.json({ error: "Not found" }, 404);
 
-		const url = await storage.getUrl(page.file, {
+		const url = await signOwnWorkObject(page.file, work.creatorId, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
+		if (!url) return c.json({ error: "Not found" }, 404);
 		// no-store, for the same reason as the audio redirect: this 302 carries a signed
 		// URL and is access-dependent, so a proxy must never replay it at somebody else.
 		c.header("Cache-Control", "no-store");
@@ -661,10 +670,11 @@ const workMediaRoutes = new Hono()
 			.limit(1);
 		if (!section) return c.json({ error: "Not found" }, 404);
 
-		const url = await storage.getUrl(section.file, {
+		const url = await signOwnWorkObject(section.file, work.creatorId, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
+		if (!url) return c.json({ error: "Not found" }, 404);
 		// no-store: this 302 carries a signed URL and is access-dependent, for the same
 		// reason as every redirect above.
 		c.header("Cache-Control", "no-store");
@@ -696,10 +706,11 @@ const workMediaRoutes = new Hono()
 			.limit(1);
 		if (!asset) return c.json({ error: "Not found" }, 404);
 
-		const url = await storage.getUrl(asset.file, {
+		const url = await signOwnWorkObject(asset.file, work.creatorId, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
+		if (!url) return c.json({ error: "Not found" }, 404);
 		c.header("Cache-Control", "no-store");
 		return c.redirect(url, 302);
 	})
@@ -1049,6 +1060,9 @@ const workMediaRoutes = new Hono()
 		// HLS request 404. The audio endpoint above already used the helper, so the two
 		// delivery routes disagreed about how to read the same kind of URL.
 		const masterKey = urlToKey(manifestUrl);
+		if (work.creatorId == null || !isKeyUnder(masterKey, work.creatorId)) {
+			return c.json({ error: "Not found" }, 404);
+		}
 		const prefixKey = masterKey.replace(/\/[^/]+$/, "");
 
 		// Read the playlist straight out of storage rather than signing a URL and fetching
@@ -1073,6 +1087,7 @@ const workMediaRoutes = new Hono()
 				share: sharedBy != null ? (c.req.query("share") ?? null) : null,
 			},
 			workId,
+			creatorId: work.creatorId,
 		});
 		return c.body(rewritten, 200, {
 			"Content-Type": "application/vnd.apple.mpegurl",
@@ -1087,7 +1102,13 @@ const workMediaRoutes = new Hono()
  */
 export async function rewriteHlsPlaylist(
 	text: string,
-	opts: { isMaster: boolean; prefixKey: string; ctx: DeliveryCtx; workId: number },
+	opts: {
+		isMaster: boolean;
+		prefixKey: string;
+		ctx: DeliveryCtx;
+		workId: number;
+		creatorId: number | null;
+	},
 ): Promise<string> {
 	const out: string[] = [];
 	for (const raw of text.split("\n")) {
@@ -1101,12 +1122,11 @@ export async function rewriteHlsPlaylist(
 			out.push(buildHlsManifestUrl(opts.ctx, opts.workId, encodeURIComponent(line)));
 		} else {
 			// A segment (e.g. "720p_000.ts") → a short-lived signed CDN URL.
-			out.push(
-				await storage.getUrl(`${opts.prefixKey}/${line}`, {
-					signed: true,
-					expiresIn: SIGNED_MEDIA_TTL_SECONDS,
-				}),
-			);
+			const segment = await signOwnWorkObject(`${opts.prefixKey}/${line}`, opts.creatorId, {
+				signed: true,
+				expiresIn: SIGNED_MEDIA_TTL_SECONDS,
+			});
+			if (segment) out.push(segment);
 		}
 	}
 	return out.join("\n");

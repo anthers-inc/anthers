@@ -29,6 +29,7 @@ import {
 	users,
 	workAssets,
 	workSourceFiles,
+	works,
 	workTranscodingJobs,
 } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -55,15 +56,12 @@ async function signUp(username: string) {
 }
 
 /** The raw stored URLs the fixtures below stand in for. Neither may reach a denied user. */
-const AUDIO_URL = "https://cdn.example.com/creators/x/audio/processed/secret.mp3";
-const HLS_URL = "https://cdn.example.com/creators/x/videos/hls/secret/master.m3u8";
+let AUDIO_URL = "";
+let HLS_URL = "";
 
 /** The image set the gallery specs stand in for, in the display order its positions name. */
-const GALLERY_URLS = [
-	"https://cdn.example.com/creators/x/gallery/first.png",
-	"https://cdn.example.com/creators/x/gallery/second.png",
-];
-const SINGLE_URL = "https://cdn.example.com/creators/x/gallery/single.png";
+let GALLERY_URLS: string[] = [];
+let SINGLE_URL = "";
 
 /** Insert the gallery's rows, second position first, so a position-order read cannot
  * pass by arriving at raw rowid order. */
@@ -108,6 +106,11 @@ describe("Delivery-layer access", () => {
 			.where(eq(users.email, `${creatorName}@example.com`))
 			.limit(1);
 		creatorId = creator.id;
+		const media = (path: string) => `https://cdn.example.com/creators/${creatorId}/${path}`;
+		AUDIO_URL = media("audio/processed/secret.mp3");
+		HLS_URL = media("videos/hls/secret/master.m3u8");
+		GALLERY_URLS = [media("gallery/first.png"), media("gallery/second.png")];
+		SINGLE_URL = media("gallery/single.png");
 
 		// An audio and a video Work, each with a COMPLETED job carrying a stored media URL —
 		// the state a real upload reaches once the worker is done with it. Both LOCKED, so
@@ -168,7 +171,7 @@ describe("Delivery-layer access", () => {
 			.insert(workAssets)
 			.values({
 				workId: freeWorkId,
-				file: "creators/x/games/open-game.zip",
+				file: `creators/${creatorId}/games/open-game.zip`,
 				filename: "open-game.zip",
 				fileSize: 1024,
 				mimeType: "application/zip",
@@ -459,6 +462,33 @@ describe("Delivery-layer access", () => {
 		expect(res.status).toBe(302);
 		expect(res.headers.get("location")).toBeTruthy();
 		expect(res.headers.get("cache-control")).toBe("no-store");
+	});
+
+	it("refuses a Work row whose stored key names another creator's object", async () => {
+		// A row written before the write-time ownership check can name a stranger's key.
+		// The read-side signer is the second half; without it this route would hand out a
+		// signed address into another creator's source.
+		const work = await insertWork({
+			creatorId,
+			type: "audio",
+			title: "Foreign source",
+			access: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		const foreign = `creators/${creatorId + 1}/audio/processed/secret.mp3`;
+		await db.update(works).set({ sourceKey: foreign }).where(eq(works.id, work.id));
+		await db.insert(workTranscodingJobs).values({
+			workId: work.id,
+			mediaType: "audio",
+			status: "completed",
+			progress: 100,
+			outputFileUrl: foreign,
+		});
+
+		const res = await req(`/api/content/works/${work.id}/audio`, {
+			headers: { Cookie: userCookie },
+			redirect: "manual",
+		});
+		expect(res.status).toBe(404);
 	});
 
 	it("rejects a non-numeric Work id instead of 500ing on it", async () => {

@@ -39,7 +39,7 @@ function pathOf(url: string): string {
 }
 
 const id = crypto.randomUUID().slice(0, 8);
-const PREFIX = `creators/share-hls-${id}/videos/hls/${id}`;
+let PREFIX = "";
 const MASTER = [
 	"#EXTM3U",
 	"#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720",
@@ -70,6 +70,7 @@ describe("a shared video, signed out", () => {
 	beforeAll(async () => {
 		const sharer = await createAccount(`slh_sharer_${id}`);
 		const creator = await createAccount(`slh_creator_${id}`);
+		PREFIX = `creators/${creator.userId}/videos/hls/${id}`;
 
 		for (const [file, text] of Object.entries(FILES)) {
 			await storage.upload(

@@ -103,7 +103,7 @@ describe("Consuming a Work requires an account", () => {
 			workId: audioId,
 			mediaType: "audio",
 			status: "completed",
-			outputFileUrl: "https://cdn.example.com/creators/x/audio/processed/open.mp3",
+			outputFileUrl: `https://cdn.example.com/creators/${creatorId}/audio/processed/open.mp3`,
 		});
 
 		const video = await insertWork({
@@ -118,7 +118,7 @@ describe("Consuming a Work requires an account", () => {
 			workId: videoId,
 			mediaType: "video",
 			status: "completed",
-			hlsManifestUrl: "https://cdn.example.com/creators/x/videos/hls/open/master.m3u8",
+			hlsManifestUrl: `https://cdn.example.com/creators/${creatorId}/videos/hls/open/master.m3u8`,
 		});
 
 		const text = await insertWork({
@@ -146,7 +146,7 @@ describe("Consuming a Work requires an account", () => {
 			.insert(workAssets)
 			.values({
 				workId: downloadId,
-				file: "creators/x/assets/build.zip",
+				file: `creators/${creatorId}/assets/build.zip`,
 				filename: "build.zip",
 				fileSize: 1024,
 				mimeType: "application/zip",
