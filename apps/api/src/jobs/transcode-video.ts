@@ -67,6 +67,7 @@ import { db } from "@anthers/db";
 import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { FFMPEG_THREADS, ffmpegCommand } from "../lib/ffmpeg.js";
+import { MAX_VIDEO_DIMENSION, MAX_VIDEO_PIXELS } from "../lib/video-frames.js";
 import {
 	classifyVideoStreams,
 	type DeliverableContainer,
@@ -829,6 +830,13 @@ async function runTranscode(
 		const duration = Number.parseFloat(probe.format?.duration ?? "0");
 		const sourceHeight = Number.parseInt(videoStream.height ?? "0", 10);
 		const sourceWidth = Number.parseInt(videoStream.width ?? "0", 10);
+		if (
+			sourceWidth > MAX_VIDEO_DIMENSION ||
+			sourceHeight > MAX_VIDEO_DIMENSION ||
+			sourceWidth * sourceHeight > MAX_VIDEO_PIXELS
+		) {
+			throw new Error("This video's frame size is larger than the platform accepts.");
+		}
 
 		// Update the content item's duration
 		if (duration > 0) {

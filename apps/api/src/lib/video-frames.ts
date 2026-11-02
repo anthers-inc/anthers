@@ -86,6 +86,8 @@ export async function probeVideo(source: string): Promise<{
 	const width = Number(stream?.width ?? 0);
 	const height = Number(stream?.height ?? 0);
 	if (!width || !height) return null;
+	if (width > MAX_VIDEO_DIMENSION || height > MAX_VIDEO_DIMENSION) return null;
+	if (width * height > MAX_VIDEO_PIXELS) return null;
 	return {
 		width,
 		height,
@@ -105,6 +107,16 @@ export async function probeVideo(source: string): Promise<{
  * long enough to matter is sampled several times over. One frame per video would be close
  * to useless and every frame would be tens of thousands of hashes for a feature.
  */
+/**
+ * The largest frame the sampler will accept, in either dimension and in pixels.
+ *
+ * A container's header can declare any dimensions it likes, and the frame parser sizes its
+ * buffer from them: a 100000×100000 declaration is 30 GB. 8K on the long edge and 40 MP
+ * overall are above every camera this platform serves and bounded for the worker.
+ */
+export const MAX_VIDEO_DIMENSION = 8192;
+export const MAX_VIDEO_PIXELS = 40_000_000;
+
 export const FRAME_INTERVAL_SECONDS = 10;
 
 /**
