@@ -138,6 +138,16 @@ const webBuildRoutes = new Hono()
 			if (!(await isOwnStorageRef(f.storageRef, user.id))) {
 				return c.json(FOREIGN_FILE_REFUSAL, 400);
 			}
+			// The declared size is a hint; storage is the authority. Both are checked so a
+			// client cannot register a lie and a presigned PUT cannot land an object past
+			// the transport's own bound.
+			if (f.fileSize != null && f.fileSize > WEB_BUILD_FILE_MAX) {
+				return c.json({ error: "A build file is larger than the upload bound." }, 413);
+			}
+			const actual = await storage.size(f.storageRef);
+			if (actual != null && actual > WEB_BUILD_FILE_MAX) {
+				return c.json({ error: "A build file is larger than the upload bound." }, 413);
+			}
 		}
 
 		const inserted = await db
