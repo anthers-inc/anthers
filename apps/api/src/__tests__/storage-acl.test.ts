@@ -58,11 +58,11 @@ describe("upload ACL allowlist", () => {
 		expect(imageUploadProblem("image/jpeg", "banner.jpeg")).toBeNull();
 		expect(imageUploadProblem("image/webp", "thumb.webp")).toBeNull();
 		// The one the route must refuse: an image-named HTML document on a trusted subdomain.
-		expect(imageUploadProblem("text/html", "avatar.html")).toContain("not accepted");
+		expect(imageUploadProblem("text/html", "avatar.html")).toContain("isn't one");
 		// A real image with a mismatched name would be served as the wrong type.
 		expect(imageUploadProblem("image/png", "avatar.html")).toContain("extension");
 		// SVG is a script-capable document, not a raster image.
-		expect(imageUploadProblem("image/svg+xml", "avatar.svg")).toContain("not accepted");
+		expect(imageUploadProblem("image/svg+xml", "avatar.svg")).toContain("isn't one");
 	});
 
 	it("treats the allowlist as exact — no case folding, no trimming", () => {

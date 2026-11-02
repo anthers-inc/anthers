@@ -75,7 +75,8 @@ export const IMAGE_MIME_EXTENSIONS: Readonly<Record<string, readonly string[]>> 
  */
 export function imageUploadProblem(mimeType: string, filename: string): string | null {
 	const allowed = IMAGE_MIME_EXTENSIONS[mimeType];
-	if (!allowed) return "That image type is not accepted. Use PNG, JPEG, WebP or AVIF.";
+	if (!allowed)
+		return "That file isn't one of the image types this surface accepts. Use PNG, JPEG, WebP or AVIF.";
 	const dot = filename.lastIndexOf(".");
 	const ext = dot >= 0 ? filename.slice(dot + 1).toLowerCase() : "";
 	if (!allowed.includes(ext)) {
