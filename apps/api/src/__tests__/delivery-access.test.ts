@@ -474,10 +474,15 @@ describe("Delivery-layer access", () => {
 			title: "Foreign source",
 			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
-		await db
-			.update(works)
-			.set({ sourceKey: `creators/${creatorId + 1}/audio/processed/secret.mp3` })
-			.where(eq(works.id, work.id));
+		const foreign = `creators/${creatorId + 1}/audio/processed/secret.mp3`;
+		await db.update(works).set({ sourceKey: foreign }).where(eq(works.id, work.id));
+		await db.insert(workTranscodingJobs).values({
+			workId: work.id,
+			mediaType: "audio",
+			status: "completed",
+			progress: 100,
+			outputFileUrl: foreign,
+		});
 
 		const res = await req(`/api/content/works/${work.id}/audio`, {
 			headers: { Cookie: userCookie },
