@@ -38,17 +38,17 @@ function byId(id: string): ComplianceObligation {
 
 describe("COMPLIANCE_OBLIGATIONS — the Calendar's dated and annual tables", () => {
 	it("carries every dated and recurring row, and no behavioral or running one", () => {
-		// Eight: five dated (HB26-1223, first 990, charity renewal, periodic report, 1023,
-		// DMCA agent) plus the recurring-only rows (990-T, NCMEC review) — nothing from
+		// Seven: two fixed dates (HB26-1223, DMCA agent) and five annual rows (the 990,
+		// charity renewal, periodic report, 990-T, NCMEC review) — nothing from
 		// § Behavioral, nothing from § Running, not even the sales-tax return cadence,
-		// whose frequency does not exist until licensing assigns one.
+		// whose frequency does not exist until licensing assigns one. The Form 1023-EZ
+		// has no row because it was filed on 2026-11-02; a filed form is not an obligation.
 		expect(COMPLIANCE_OBLIGATIONS.map((o) => o.id)).toEqual([
 			"hb26-1223",
 			"form-990",
 			"charity-registration-renewal",
 			"periodic-report",
 			"form-990-t",
-			"form-1023",
 			"dmca-designated-agent",
 			"ncmec-contact-review",
 		]);
@@ -56,12 +56,11 @@ describe("COMPLIANCE_OBLIGATIONS — the Calendar's dated and annual tables", ()
 
 	it("resolves every fixed date to the Calendar's absolute", () => {
 		expect(obligationInstanceIn(byId("hb26-1223"), 2026).dueAt).toEqual(at("2027-01-01T00:00:00Z"));
-		expect(obligationInstanceIn(byId("form-1023"), 2026).dueAt).toEqual(at("2028-11-30T00:00:00Z"));
 		expect(obligationInstanceIn(byId("dmca-designated-agent"), 2026).dueAt).toEqual(
 			at("2029-08-15T00:00:00Z"),
 		);
 		// A fixed date is the same in any year asked of it — there is no recurrence to compute.
-		expect(obligationInstanceIn(byId("form-1023"), 2029).dueAt).toEqual(at("2028-11-30T00:00:00Z"));
+		expect(obligationInstanceIn(byId("hb26-1223"), 2029).dueAt).toEqual(at("2027-01-01T00:00:00Z"));
 	});
 
 	it("resolves the first instances to the Calendar's absolutes", () => {
@@ -124,7 +123,7 @@ describe("COMPLIANCE_OBLIGATIONS — the Calendar's dated and annual tables", ()
 describe("calendarDeadlines — resolution around a moment", () => {
 	it("before every first instance, contributes only the upcoming ones", () => {
 		const rows = calendarDeadlines(at("2026-10-01T00:00:00Z"));
-		expect(rows.length).toBe(8);
+		expect(rows.length).toBe(7);
 		expect(rows.find((r) => r.id === "hb26-1223")?.dueAt).toEqual(at("2027-01-01T00:00:00Z"));
 		// The recurring rows have not started: their first instances are 2027's.
 		expect(rows.find((r) => r.id === "form-990")?.dueAt).toEqual(at("2027-05-15T00:00:00Z"));

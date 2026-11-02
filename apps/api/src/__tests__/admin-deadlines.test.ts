@@ -263,7 +263,8 @@ describe("GET /api/admin/deadlines — the gather", () => {
 	it("carries the calendar's own obligations, with terminal flags on exactly three", async () => {
 		const body = await deadlines();
 		const calendar = body.deadlines.filter((d) => d.source === "compliance-calendar");
-		expect(calendar.length).toBeGreaterThanOrEqual(8);
+		// Seven: the Calendar carries no row for the Form 1023-EZ, filed on 2026-11-02.
+		expect(calendar.length).toBeGreaterThanOrEqual(7);
 		const terminal = body.deadlines.filter((d) => d.terminal).map((d) => d.key);
 		for (const key of terminal) {
 			// A terminal flag anywhere but the calendar would widen the Calendar's rule, which

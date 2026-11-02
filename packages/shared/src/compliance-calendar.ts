@@ -152,15 +152,6 @@ export const COMPLIANCE_OBLIGATIONS: readonly ComplianceObligation[] = [
 		recurrence: { kind: "annual", first: "2027-05-15", month: 5, day: 15 },
 	},
 	{
-		id: "form-1023",
-		title: "Form 1023 — the Full 1023, Not the EZ",
-		consequence:
-			"Exemption runs from the submission date instead of 2026-08-07: Form 1120 exposure for the gap, non-deductible donations, no retroactive donor benefit.",
-		terminal: false,
-		note: "27 months after the end of the month of formation.",
-		recurrence: { kind: "fixed", date: "2028-11-30" },
-	},
-	{
 		id: "dmca-designated-agent",
 		title: "DMCA Designated Agent Designation Expires (Copyright Office DMCA-1078418)",
 		consequence:

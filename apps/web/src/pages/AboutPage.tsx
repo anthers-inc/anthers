@@ -46,29 +46,25 @@
 // list are all on the wiki's roadmap already. **This page says what is true; the
 // roadmap says when.** That division is why nothing here promises a date.
 //
-// ── 🚨 Federal status: the rule CHANGED on 2026-08-21 ────────────────────────
+// ── 🚨 Federal status ────────────────────────────────────────────────────────
 //
-// The wiki's *How Anthers Talks About Itself* § Claims used to read *"say nothing about federal status at
-// all"*, and this page said nothing. **Parker's call is that the page states the
-// intention** — the two-list structure below is what makes that safe, because it
-// partitions present from future explicitly rather than leaving a user to guess
-// which column a sentence belongs in. The wiki's *How Anthers Talks About Itself* carries the narrowed rule now.
+// The wiki's *How Anthers Talks About Itself* § Claims owns the rule; this is the
+// part the page implements. The two-list structure below separates what binds the
+// Corporation now from what federal recognition would add, so a reader never has to
+// work out which column a sentence belongs in.
 //
-// What did NOT change, and what `about-claims.test.ts` still holds:
+// What `about-claims.test.ts` holds:
 //
-//   • Anthers may not be CALLED a 501(c)(3), or described as tax-exempt, or as
-//     having a pending or filed application. The Form 1023 has not been filed.
+//   • Anthers may say it applied for 501(c)(3) recognition and that the application
+//     is pending, because the Form 1023-EZ was filed on 2026-11-02. It may never be
+//     CALLED a 501(c)(3) or described as tax-exempt; only the determination letter
+//     makes those true.
 //   • No money given to Anthers may be called deductible **today**. Where the
 //     "soon" column says donations become deductible, the sentence beside it
 //     says they are not yet — same co-presence rule as "free forever" and the
 //     monthly limit, and the guard asserts the pairing.
-//   • ⚠️ **No date.** Parker's note proposed "later this year"; the vault's Colorado Nonprofit
-//     Compliance Reference puts the
-//     Form 1023 deadline at 2028-11-30, counsel is on its critical path and none
-//     is engaged, and the organizational meeting has not happened. A date is a
-//     claim about the future the project's own sequencing does not support, so
-//     the copy states the intention without one. Add a date only when the plan
-//     has one.
+//   • ⚠️ **No date.** The Service sets no decision date, so the copy states the
+//     pending status without promising when it ends.
 //
 // ── Voice ────────────────────────────────────────────────────────────────────
 //
@@ -220,9 +216,8 @@ export default function AboutPage() {
 					<H2>What Anthers Is</H2>
 					<Lede>
 						Anthers, Inc. is a Colorado nonprofit corporation, Secretary of State ID 20261969882. We
-						aren't a registered 501(c)(3) exempt organization yet; we intend to file for that
-						recognition. In case you're not familiar with the terms, there are some differences
-						between the two:
+						have applied for federal 501(c)(3) recognition, and the application is pending. In case
+						you're not familiar with the terms, there are some differences between the two:
 					</Lede>
 				</Reveal>
 

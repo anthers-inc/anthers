@@ -43,6 +43,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import FeedTile from "../components/cards/FeedTile";
 import BadgesTab from "../components/creator/BadgesTab";
+import ContentMonths from "../components/creator/ContentMonths";
 import CreatorCredits from "../components/creator/CreatorCredits";
 import ReportDialog from "../components/ui/ReportDialog";
 import { InlineField } from "../components/work/Editing";
@@ -75,6 +76,30 @@ function postEntry(post: PostListItem): { kind: "post"; id: number } & Record<st
  */
 function projectEntry(project: Project): { kind: "project"; id: number } & Record<string, unknown> {
 	return { kind: "project", ...project };
+}
+
+/**
+ * One tile in a profile grid, carrying the date its month section groups on. The kind
+ * names the tile shape; the date is the one the page has always sorted by — a Work's
+ * creator-asserted original release first, a post's publication first — so a month's
+ * heading and the sort order agree by construction.
+ */
+type ProfileEntry =
+	| { kind: "project"; id: number; date: string; item: Project }
+	| { kind: "post"; id: number; date: string; item: PostListItem }
+	| { kind: "work"; id: number; date: string; item: CatalogWork };
+
+const entryDate = (entry: ProfileEntry): string => entry.date;
+
+/** The tile for one entry — the same switch every content tab renders through. */
+function tileFor(entry: ProfileEntry) {
+	if (entry.kind === "project") {
+		return <FeedTile key={`proj-${entry.id}`} entry={projectEntry(entry.item)} />;
+	}
+	if (entry.kind === "post") {
+		return <FeedTile key={`post-${entry.id}`} entry={postEntry(entry.item)} />;
+	}
+	return <FeedTile key={`work-${entry.id}`} entry={workEntry(entry.item)} />;
 }
 
 type Tab =
@@ -444,34 +469,36 @@ export default function CreatorProfilePage() {
 		] as const
 	).filter(([, , nonzero]) => nonzero);
 
-	// The "All" tab is the timeline: everything this creator has put out, Posts included,
-	// in the order it first came out. The API already sorts works by the creator-asserted
-	// original release date; posts and projects interleave on theirs.
-	const allItems: {
-		type: "project" | "work" | "post";
-		item: Project | CatalogWork | PostListItem;
-		date: string;
-	}[] = [];
-	projects.forEach((p) => {
-		allItems.push({ type: "project", item: p, date: p.createdAt });
+	// Every content tab renders through one entry shape — the tile to draw plus the date
+	// its month section groups on — so the mixed timeline and each type tab sort, group
+	// and space identically. The "All" tab is the timeline: everything this creator has
+	// put out, Posts included, newest first whichever kind it is.
+	const workEntryOf = (work: CatalogWork): ProfileEntry => ({
+		kind: "work",
+		id: work.id,
+		date: work.originallyReleased ?? work.releasedAt ?? work.createdAt ?? "",
+		item: work,
 	});
-	works.forEach((w) => {
-		allItems.push({
-			type: "work",
-			item: w,
-			date: w.originallyReleased ?? w.releasedAt ?? w.createdAt ?? "",
-		});
-	});
-	posts.forEach((p) => {
-		allItems.push({
-			type: "post",
-			item: p,
-			// A post's when is when it was published; `createdAt` is only the fallback for
-			// an unpublished straggler, which the creator-scoped listing already filters out.
-			date: p.publishedAt ?? p.createdAt,
-		});
-	});
-	allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+	const workEntries = works.map(workEntryOf);
+	const projectEntries: ProfileEntry[] = projects.map((project) => ({
+		kind: "project",
+		id: project.id,
+		date: project.createdAt,
+		item: project,
+	}));
+	const postEntries: ProfileEntry[] = posts.map((post) => ({
+		kind: "post",
+		id: post.id,
+		// A post's when is when it was published; `createdAt` is only the fallback for an
+		// unpublished straggler, which the creator-scoped listing already filters out.
+		date: post.publishedAt ?? post.createdAt,
+		item: post,
+	}));
+	const allEntries = [...projectEntries, ...workEntries, ...postEntries];
+	const gameEntries = gameWorks.map(workEntryOf);
+	const videoEntries = videoWorks.map(workEntryOf);
+	const audioEntries = audioWorks.map(workEntryOf);
+	const textEntries = textWorks.map(workEntryOf);
 
 	// The read half of each inline field, shared by the owner's pencil and the visitor's
 	// plain rendering: a visitor meets exactly what the creator reads, minus the pencils.
@@ -843,37 +870,11 @@ export default function CreatorProfilePage() {
 					{tab === "dashboard" && isOwnProfile && <DashboardPage />}
 
 					{tab === "all" &&
-						(allItems.length > 0 ? (
-							// The same uniform tile grid the feed renders — every listing
-							// surface shares one widget, so a creator's page reads like the
-							// feed the creator's releases also ride. A Project uses the
+						(allEntries.length > 0 ? (
+							// The same uniform tile grid the feed renders, split into the
+							// months the creator's work came out in. A Project uses the
 							// tile's own album shape, so all three kinds sit in one grid.
-							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-								{allItems.map((entry) => {
-									if (entry.type === "project") {
-										return (
-											<FeedTile
-												key={`proj-${entry.item.id}`}
-												entry={projectEntry(entry.item as Project)}
-											/>
-										);
-									}
-									if (entry.type === "post") {
-										return (
-											<FeedTile
-												key={`post-${entry.item.id}`}
-												entry={postEntry(entry.item as PostListItem)}
-											/>
-										);
-									}
-									return (
-										<FeedTile
-											key={`work-${(entry.item as CatalogWork).id}`}
-											entry={workEntry(entry.item as CatalogWork)}
-										/>
-									);
-								})}
-							</div>
+							<ContentMonths items={allEntries} dateOf={entryDate} renderItem={tileFor} />
 						) : (
 							<EmptyState
 								title="No content yet"
@@ -882,12 +883,8 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "posts" &&
-						(posts.length > 0 ? (
-							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-								{posts.map((p) => (
-									<FeedTile key={`post-${p.id}`} entry={postEntry(p)} />
-								))}
-							</div>
+						(postEntries.length > 0 ? (
+							<ContentMonths items={postEntries} dateOf={entryDate} renderItem={tileFor} />
 						) : (
 							<EmptyState
 								title="No posts yet"
@@ -896,12 +893,8 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "games" &&
-						(gameWorks.length > 0 ? (
-							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-								{gameWorks.map((w) => (
-									<FeedTile key={w.id} entry={workEntry(w)} />
-								))}
-							</div>
+						(gameEntries.length > 0 ? (
+							<ContentMonths items={gameEntries} dateOf={entryDate} renderItem={tileFor} />
 						) : (
 							<EmptyState
 								title="No games yet"
@@ -910,12 +903,8 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "videos" &&
-						(videoWorks.length > 0 ? (
-							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-								{videoWorks.map((w) => (
-									<FeedTile key={w.id} entry={workEntry(w)} />
-								))}
-							</div>
+						(videoEntries.length > 0 ? (
+							<ContentMonths items={videoEntries} dateOf={entryDate} renderItem={tileFor} />
 						) : (
 							<EmptyState
 								title="No videos yet"
@@ -924,12 +913,8 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "audio" &&
-						(audioWorks.length > 0 ? (
-							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-								{audioWorks.map((w) => (
-									<FeedTile key={w.id} entry={workEntry(w)} />
-								))}
-							</div>
+						(audioEntries.length > 0 ? (
+							<ContentMonths items={audioEntries} dateOf={entryDate} renderItem={tileFor} />
 						) : (
 							<EmptyState
 								title="No audio yet"
@@ -938,12 +923,8 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "writing" &&
-						(textWorks.length > 0 ? (
-							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-								{textWorks.map((w) => (
-									<FeedTile key={w.id} entry={workEntry(w)} />
-								))}
-							</div>
+						(textEntries.length > 0 ? (
+							<ContentMonths items={textEntries} dateOf={entryDate} renderItem={tileFor} />
 						) : (
 							<EmptyState
 								title="No writing yet"
