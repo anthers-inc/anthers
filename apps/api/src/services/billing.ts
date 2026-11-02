@@ -43,6 +43,7 @@ import Decimal from "decimal.js";
 import { and, eq, ne, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import {
+	cancelSubscription,
 	createCustomer,
 	createProduct,
 	createSubscription,
@@ -753,6 +754,41 @@ export async function saveBillingAddress(
  * nothing to clear (`"none"`, not `"failed"`): the settings card reflects a saved state
  * that can legitimately be empty. `"failed"` is the one signal deletion defers on.
  */
+/**
+ * Cancel the user's own support subscription before the account row is wiped.
+ *
+ * 🚨 **Order is the promise.** `stripe_customers` cascades from `users`, so once the wipe
+ * runs the subscription id is gone and nobody can find the charge to stop it. The cancel
+ * has to happen while the row still names the subscription; a failure defers the delete
+ * the same way the billing-address clear does, and the sweep retries tomorrow.
+ */
+export async function cancelSubscriptionForUser(
+	userId: number,
+): Promise<"canceled" | "none" | "failed"> {
+	if (!paymentsConfigured()) return "none";
+	const [acct] = await db
+		.select({ id: stripeCustomers.id, stripeSubscriptionId: stripeCustomers.stripeSubscriptionId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
+		.limit(1);
+	if (!acct?.stripeSubscriptionId) return "none";
+	try {
+		await cancelSubscription(acct.stripeSubscriptionId);
+		await db
+			.update(stripeCustomers)
+			.set({
+				stripeSubscriptionId: "",
+				isActive: false,
+				canceledAt: new Date(),
+				updatedAt: new Date(),
+			})
+			.where(eq(stripeCustomers.id, acct.id));
+		return "canceled";
+	} catch {
+		return "failed";
+	}
+}
+
 export async function clearSavedBillingAddress(
 	userId: number,
 ): Promise<"cleared" | "none" | "failed"> {
