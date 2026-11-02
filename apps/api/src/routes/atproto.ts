@@ -273,14 +273,19 @@ async function grantedScopeOf(session: {
  * happen, and the error page is the right answer to it; a denied publishing grant is a creator
  * who is still signed in and has made a choice with a consequence worth explaining.
  */
-function deniedPublishGrant(err: unknown): { next: string | undefined } | null {
+function deniedPublishGrant(
+	err: unknown,
+): { next: string | undefined; nonce: string | undefined } | null {
 	if (!(err instanceof OAuthCallbackError) || err.params.get("error") !== "access_denied") {
 		return null;
 	}
 	try {
 		const state = JSON.parse(err.state ?? "") as Partial<AppState>;
 		if (state.intent !== "publish") return null;
-		return { next: sanitizeNextPath(state.next) ?? undefined };
+		return {
+			next: sanitizeNextPath(state.next) ?? undefined,
+			nonce: typeof state.nonce === "string" ? state.nonce : undefined,
+		};
 	} catch {
 		return null;
 	}
@@ -403,30 +408,22 @@ const atprotoRoutes = new Hono()
 			return back({ error: reason });
 		};
 
+		// 🚨 **The state proves which intent and account; the cookie proves which browser.**
+		// The OAuth client keeps our JSON state in its own store and returns it from
+		// `callback`, so the comparison happens on the returned app state rather than on the
+		// query's opaque key. The cookie is read and cleared before the exchange, and the
+		// binding is refused before any session is minted or any pending row is touched.
+		const expectedState = getCookie(c, ATPROTO_STATE_COOKIE);
+		clearSecureCookie(c, ATPROTO_STATE_COOKIE);
+
 		try {
 			const params = new URL(c.req.url).searchParams;
-
-			// 🚨 **The state proves which intent and account; the cookie proves which browser.**
-			// Both are required before the code is exchanged. A callback URL is otherwise a
-			// capability anyone can hand to a victim: a login callback signs the victim into the
-			// attacker's account, and a signup callback binds the attacker's DID to the victim's
-			// address. The cookie is cleared on every path, before the exchange, so a failed
-			// callback cannot be replayed.
-			const expectedState = getCookie(c, ATPROTO_STATE_COOKIE);
-			clearSecureCookie(c, ATPROTO_STATE_COOKIE);
-			let browserBound = false;
-			try {
-				const rawState = params.get("state");
-				const parsed = rawState ? (JSON.parse(rawState) as Partial<AppState>) : null;
-				browserBound = !!expectedState && !!parsed?.nonce && parsed.nonce === expectedState;
-			} catch {
-				browserBound = false;
-			}
-			if (!browserBound) return fail("state_mismatch");
-
 			const { session, state } = await getAtprotoClient().callback(params);
 
 			const appState: AppState = state ? JSON.parse(state) : { intent: "login" };
+			if (!expectedState || !appState.nonce || appState.nonce !== expectedState) {
+				return fail("state_mismatch");
+			}
 			console.log(
 				`[atproto/callback] intent=${appState.intent} did=${session.did} ` +
 					`pendingCookie=${getCookie(c, PENDING_SIGNUP_COOKIE) ? "present" : "absent"}`,
@@ -586,7 +583,10 @@ const atprotoRoutes = new Hono()
 			// work" and a link back to log in, from an account they were already signed in to.
 			// It lands where a narrower grant does, on Studio settings saying what it means.
 			const denied = deniedPublishGrant(err);
-			if (denied) return back({ success: "publish_declined", next: denied.next });
+			if (denied) {
+				if (!expectedState || denied.nonce !== expectedState) return fail("state_mismatch");
+				return back({ success: "publish_declined", next: denied.next });
+			}
 
 			const message = err instanceof Error ? err.message : "exchange_failed";
 			return fail(message, err);
