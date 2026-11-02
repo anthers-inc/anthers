@@ -65,7 +65,7 @@ function report(body: Record<string, unknown>) {
 		headers: {
 			"Content-Type": "application/json",
 			Origin: ORIGIN,
-			"cf-connecting-ip": `198.51.100.${ipSeq}`,
+			"x-forwarded-for": `198.51.100.${ipSeq}`,
 		},
 		body: JSON.stringify(body),
 	});
@@ -139,7 +139,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Anyone can file, with no account", () => {
 				"Content-Type": "application/json",
 				Origin: ORIGIN,
 				Cookie: creatorCookie,
-				"cf-connecting-ip": "198.51.100.200",
+				"x-forwarded-for": "198.51.100.200",
 			},
 			body: JSON.stringify({
 				url: "https://anthers.org/posts/something",
@@ -286,7 +286,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Too many from one caller", () => {
 				headers: {
 					"Content-Type": "application/json",
 					Origin: ORIGIN,
-					"cf-connecting-ip": ip,
+					"x-forwarded-for": ip,
 				},
 				body: JSON.stringify({
 					url: "https://anthers.org/works/x-123456",

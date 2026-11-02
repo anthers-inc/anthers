@@ -34,6 +34,7 @@ import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { publicOrigin } from "../lib/deployment.js";
 import { WORK_COLLECTION } from "./atproto-repo.js";
 import { clientJwks } from "./client-attestation.js";
+import { open, seal, secretBoxConfigured } from "./secret-box.js";
 
 /** How long a half-finished authorization stays resumable. */
 const STATE_TTL_MS = 60 * 60 * 1000;
@@ -107,6 +108,38 @@ export async function sweepExpiredOauthState(): Promise<void> {
  * about Anthers accounts, which is why the row can exist before the account does; the
  * caller reconciles `userId` afterwards via `attachSessionToUser`.
  */
+/**
+ * Seal an ATProto session before it reaches the database, or open one on the way back.
+ *
+ * 🚨 **The session is not an ordinary object.** It carries the access token, the refresh
+ * token and the DPoP private key, so a database dump or a read-only SQL credential is
+ * repository write access without cracking anything. The hosted PDS session has been sealed
+ * with `HOSTED_ACCOUNT_KEY` since it was built; this closes the same gap for the OAuth
+ * session.
+ *
+ * A row written before this change is a plain JSON object, not a sealed string. It is read
+ * as-is and resealed on the next write, so an existing sign-in survives the deploy.
+ */
+function sealedAtprotoSession(value: unknown): object {
+	if (!secretBoxConfigured()) {
+		if (!isDevCheckout()) {
+			throw new Error("HOSTED_ACCOUNT_KEY is required to seal an ATProto session.");
+		}
+		return value as object;
+	}
+	return seal(JSON.stringify(value)) as unknown as object;
+}
+
+function openedAtprotoSession(value: unknown): Record<string, unknown> | undefined {
+	if (value == null) return undefined;
+	if (typeof value !== "string") return value as Record<string, unknown>;
+	try {
+		return JSON.parse(open(value)) as Record<string, unknown>;
+	} catch {
+		return undefined;
+	}
+}
+
 export const oauthSessionStore = withDpopKey({
 	async get(did: string) {
 		const [row] = await db
@@ -114,15 +147,15 @@ export const oauthSessionStore = withDpopKey({
 			.from(atprotoSessions)
 			.where(eq(atprotoSessions.did, did))
 			.limit(1);
-		return (row?.session as Record<string, unknown>) ?? undefined;
+		return openedAtprotoSession(row?.session);
 	},
 	async set(did: string, value: unknown) {
 		await db
 			.insert(atprotoSessions)
-			.values({ did, session: value as object })
+			.values({ did, session: sealedAtprotoSession(value) })
 			.onConflictDoUpdate({
 				target: atprotoSessions.did,
-				set: { session: value as object, updatedAt: new Date() },
+				set: { session: sealedAtprotoSession(value), updatedAt: new Date() },
 			});
 	},
 	async del(did: string) {

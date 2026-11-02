@@ -404,6 +404,38 @@ describe("Delivery-layer access", () => {
 		expect(owner.status).toBe(200);
 	});
 
+	it("404s a private Work's media route too, not only its page", async () => {
+		// The page check alone left this door open: the access table said free, and the
+		// media route resolved it without reading visibility. Work ids are small serials.
+		const staging = await insertWork({
+			creatorId,
+			type: "video",
+			title: "Private media",
+			visibility: "private",
+			streamEnabled: true,
+			access: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		await db.insert(workTranscodingJobs).values({
+			workId: staging.id,
+			mediaType: "video",
+			status: "completed",
+			progress: 100,
+			outputFileUrl: AUDIO_URL,
+		});
+
+		const denied = await req(`/api/content/works/${staging.id}/audio`, {
+			headers: { Cookie: userCookie },
+			redirect: "manual",
+		});
+		expect(denied.status).toBe(404);
+
+		const owner = await req(`/api/content/works/${staging.id}/audio`, {
+			headers: { Cookie: creatorCookie },
+			redirect: "manual",
+		});
+		expect(owner.status).toBe(302);
+	});
+
 	// ── The transcoding poller ─────────────────────────────────────────────────
 
 	it("withholds media URLs from a denied user on the transcoding route", async () => {

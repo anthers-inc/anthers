@@ -55,7 +55,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { charitableLedger, purchases } from "@anthers/db/schema";
+import { badgeCharges, charitableLedger, purchases } from "@anthers/db/schema";
 import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
 import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
@@ -233,12 +233,22 @@ export async function refundPurchase(
 	 * long-tested path for the overwhelmingly common case, and there is no reason to
 	 * move it onto a new one for symmetry's sake.
 	 */
-	const siblingCount = (
-		await db
+	// 🚨 **A Badge line is a sibling too.** The test used to count only `purchases`, so a
+	// basket of one Work and one Badge looked like a lone purchase and the refund returned
+	// the WHOLE PaymentIntent — the Work's price and the Badge's first month — while the
+	// Badge and its holding survived. Counting every component makes the Work's refund
+	// name its own amount and leaves the Badge paid for.
+	const [purchaseSiblings, badgeSiblings] = await Promise.all([
+		db
 			.select({ id: purchases.id })
 			.from(purchases)
-			.where(eq(purchases.stripePaymentIntentId, purchase.stripePaymentIntentId))
-	).length;
+			.where(eq(purchases.stripePaymentIntentId, purchase.stripePaymentIntentId)),
+		db
+			.select({ id: badgeCharges.id })
+			.from(badgeCharges)
+			.where(eq(badgeCharges.stripePaymentIntentId, purchase.stripePaymentIntentId)),
+	]);
+	const siblingCount = purchaseSiblings.length + badgeSiblings.length;
 	const itemCents =
 		siblingCount > 1
 			? Math.round(new Decimal(purchase.amount).plus(purchase.salesTax).toNumber() * 100)

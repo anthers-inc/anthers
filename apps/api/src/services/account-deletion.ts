@@ -72,7 +72,7 @@ import {
 } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { revokeAtprotoGrant } from "./atproto-client.js";
-import { clearSavedBillingAddress } from "./billing.js";
+import { cancelSubscriptionForUser, clearSavedBillingAddress } from "./billing.js";
 import { unlinkAccount } from "./discord.js";
 import { escapeHtml, sendOperationalAlert } from "./email.js";
 import { hostedHandlesFor, isHostedIdentity, releaseHostedIdentities } from "./hosted-accounts.js";
@@ -454,6 +454,17 @@ export async function eraseAccount(
 	// way `releaseHostedIdentities` defers on the node: the sweep re-selects the account
 	// tomorrow and tries again. "None" is the ordinary buyer who saved nothing — the
 	// clear is a no-op for them, which is the point of the one-Customer posture.
+	// The subscription is the recurring charge, and the row that names it cascades with the
+	// account. Cancel it before the wipe, while the id is still findable; a Stripe failure
+	// defers the deletion exactly as the address clear below does.
+	const subscription = await cancelSubscriptionForUser(userId);
+	if (subscription === "failed") {
+		console.warn(
+			`account-deletion: Stripe would not cancel user ${userId}'s subscription — deletion deferred`,
+		);
+		return { erased: false };
+	}
+
 	const cleared = await clearSavedBillingAddress(userId);
 	if (cleared === "failed") {
 		console.warn(

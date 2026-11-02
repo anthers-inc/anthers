@@ -30,6 +30,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
+	badgeCharges,
 	charitableLedger,
 	creatorNettings,
 	purchaseReceipts,
@@ -37,6 +38,7 @@ import {
 	users,
 	workAssets,
 } from "@anthers/db/schema";
+import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
@@ -46,6 +48,7 @@ import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
 import { markPurchaseDownloaded, refundsAfterDownloadInWindow } from "../services/refunds";
 import { createAccount } from "./account-fixture";
+import { createBadgeRung } from "./badge-fixtures.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
@@ -201,6 +204,7 @@ let previousWebhookSecret: string | undefined;
 let buyerCookie: string;
 let otherCookie: string;
 let creatorId: number;
+let creatorCookie = "";
 let buyerId: number;
 let otherId: number;
 
@@ -313,7 +317,7 @@ beforeAll(async () => {
 	previousWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 	process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
 
-	({ id: creatorId } = await signUp(creatorName));
+	({ id: creatorId, cookie: creatorCookie } = await signUp(creatorName));
 	({ cookie: buyerCookie, id: buyerId } = await signUp(buyerName));
 	({ cookie: otherCookie, id: otherId } = await signUp(otherName));
 }, DB_SETUP_TIMEOUT);
@@ -459,6 +463,31 @@ describe("A basket refunds one item at a time", () => {
 		// would book the whole fee once — never three times over.
 		expect(new Decimal(ledger[0].amount).negated().toFixed(2)).toBe(rows[0].processingFee);
 		expect(await ledgerFor(rows[1].id)).toHaveLength(0);
+	});
+
+	it("counts a Badge charge on the same intent as a sibling, so the Work's refund names its own amount", async () => {
+		const purchase = await completedPurchase();
+		const badgeId = await createBadgeRung(creatorCookie, "5.00", "Test Badge");
+		await db.insert(badgeCharges).values({
+			buyerId,
+			badgeId,
+			creatorId,
+			badgeLabel: "Test Badge",
+			threshold: "5.00",
+			chargedAmount: "5.00",
+			processingFee: "0.45",
+			billingCycle: currentCycleKey(),
+			stripePaymentIntentId: purchase.stripePaymentIntentId,
+			status: "completed",
+		});
+
+		await refundAs(buyerCookie, purchase.id);
+		const params = fake.lastCall("refunds.create")?.args[0] as Stripe.RefundCreateParams;
+		// Without the Badge line in the sibling count this is `undefined` — the whole
+		// PaymentIntent — and the refund hands the Badge's first month back too.
+		expect(params.amount).toBe(
+			Math.round(new Decimal(purchase.amount).plus(purchase.salesTax).toNumber() * 100),
+		);
 	});
 
 	it("still refunds a lone purchase in full, with no amount at all", async () => {
