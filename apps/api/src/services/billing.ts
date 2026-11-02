@@ -23,6 +23,7 @@
  */
 import { db } from "@anthers/db/client";
 import {
+	badgeCharges,
 	badges,
 	invoices,
 	stripeCustomers,
@@ -787,6 +788,50 @@ export async function cancelSubscriptionForUser(
 	} catch {
 		return "failed";
 	}
+}
+
+/**
+ * Unwind a fully refunded charge's Badge lines: mark the charge refunded, remove the
+ * holding that charge created, and leave the row as the record.
+ *
+ * 🚨 **The settlement job credits every `completed` Badge charge, and the holding is what
+ * opens the rung's gates.** A dashboard refund that moved the money but left both would
+ * give the buyer the Badge for free and pay the creator for it. This is the writer the
+ * `charge.refunded` branch calls; the per-item Work refund never reaches here because it
+ * refunds only the purchase's share.
+ */
+export async function refundBadgeChargesForIntent(intentId: string): Promise<number> {
+	const rows = await db
+		.select({
+			id: badgeCharges.id,
+			buyerId: badgeCharges.buyerId,
+			badgeId: badgeCharges.badgeId,
+			billingCycle: badgeCharges.billingCycle,
+		})
+		.from(badgeCharges)
+		.where(
+			and(eq(badgeCharges.stripePaymentIntentId, intentId), eq(badgeCharges.status, "completed")),
+		);
+	for (const row of rows) {
+		await db.transaction(async (tx) => {
+			await tx
+				.update(badgeCharges)
+				.set({ status: "refunded", updatedAt: new Date() })
+				.where(eq(badgeCharges.id, row.id));
+			if (row.buyerId != null && row.badgeId != null) {
+				await tx
+					.delete(userBadges)
+					.where(
+						and(
+							eq(userBadges.userId, row.buyerId),
+							eq(userBadges.badgeId, row.badgeId),
+							eq(userBadges.billingCycle, row.billingCycle),
+						),
+					);
+			}
+		});
+	}
+	return rows.length;
 }
 
 export async function clearSavedBillingAddress(

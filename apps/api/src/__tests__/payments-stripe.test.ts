@@ -35,7 +35,7 @@ import {
 	users,
 	workAssets,
 } from "@anthers/db/schema";
-import { cycleKeyFor, cycleStart, nextCycleKey } from "@anthers/shared/billing-cycle";
+import { currentCycleKey, cycleKeyFor, cycleStart, nextCycleKey } from "@anthers/shared/billing-cycle";
 import { calculateFees, cardFee, reductionFor } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -3298,5 +3298,58 @@ describe("The badge checkout routes", () => {
 			.orderBy(desc(badgeCharges.id))
 			.limit(1);
 		expect(row.creatorId).toBe(anthersId);
+	});
+});
+
+describe("Webhook: charge.refunded", () => {
+	it("marks a Badge charge refunded and removes the holding it created", async () => {
+		const anthersId = await ensureAnthersLadder();
+		const [badge] = await db
+			.insert(badges)
+			.values({
+				creatorId: anthersId,
+				threshold: "7.00",
+				label: `Refund Badge ${uid()}`,
+			})
+			.returning();
+		const intent = `pi_refund_badge_${uid()}`;
+		const cycle = currentCycleKey();
+		await db.insert(badgeCharges).values({
+			buyerId: subscriberId,
+			badgeId: badge.id,
+			creatorId: anthersId,
+			badgeLabel: badge.label,
+			threshold: "7.00",
+			chargedAmount: "7.00",
+			processingFee: "0.51",
+			billingCycle: cycle,
+			stripePaymentIntentId: intent,
+			status: "completed",
+		});
+		await db.insert(userBadges).values({
+			userId: subscriberId,
+			badgeId: badge.id,
+			billingCycle: cycle,
+		});
+
+		await sendWebhook(
+			stripeEvent("charge.refunded", {
+				id: `ch_${uid()}`,
+				payment_intent: intent,
+				refunded: true,
+			}),
+		);
+
+		const [charge] = await db
+			.select({ status: badgeCharges.status })
+			.from(badgeCharges)
+			.where(eq(badgeCharges.stripePaymentIntentId, intent));
+		expect(charge.status).toBe("refunded");
+
+		const held = await db
+			.select({ id: userBadges.id })
+			.from(userBadges)
+			.where(and(eq(userBadges.userId, subscriberId), eq(userBadges.badgeId, badge.id)));
+		expect(held).toEqual([]);
 	});
 });
