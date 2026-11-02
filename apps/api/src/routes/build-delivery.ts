@@ -121,28 +121,29 @@ export function createBuildDeliveryRoutes(): Hono {
 				if (!build) return c.json({ error: "not found" }, 404);
 
 				const [file] = await db
-					.select({ storageKey: workBuildFiles.storageKey })
+					.select({
+						storageKey: workBuildFiles.storageKey,
+						contentType: workBuildFiles.mimeType,
+					})
 					.from(workBuildFiles)
 					.where(and(eq(workBuildFiles.buildId, build.id), eq(workBuildFiles.path, requestedPath)))
 					.limit(1);
 				if (!file) return c.json({ error: "not found" }, 404);
 
-				// Stream the object out of the private bucket. There deliberately is no redirect
-				// to a signed storage URL: the object's own signed address would outlive this
-				// check's answer by the storage TTL and be re-shareable — the exact shape the
-				// playlist lesson warns about (a working set of directions around the gate).
-				const bytes = await storage.read(file.storageKey);
-				if (!bytes) return c.json({ error: "not found" }, 404);
+				// There deliberately is no redirect to a signed storage URL: the object's own
+				// signed address would outlive this check's answer by the storage TTL and be
+				// re-shareable — the exact shape the playlist lesson warns about (a working set
+				// of directions around the gate). HTML entries are small and get the save shim;
+				// everything else streams in bounded chunks, because `storage.read` would put a
+				// 500 MB engine build in a 512 MB api container's heap.
+				const total = await storage.size(file.storageKey);
+				if (total == null) return c.json({ error: "not found" }, 404);
 
-				// 🚨 **HTML entries get the save shim injected ahead of any engine script** —
-				// the serving-side half of the settled save design. The shim hooks the
-				// frame's own per-origin store and postMessages to the parent; it holds no
-				// credential and makes no Anthers call, so a build that strips it saves
-				// locally and a malicious build gains nothing. Injection (rather than a
-				// stored shim file) is the playlist-rewrite precedent: served content
-				// shaped at the checked endpoint. Non-HTML files are untouched.
 				if (contentTypeIsHtml(requestedPath)) {
-					const html = new TextDecoder().decode(bytes as unknown as Uint8Array);
+					if (total > 8 * 1024 * 1024) return c.json({ error: "not found" }, 404);
+					const bytes = await storage.read(file.storageKey);
+					if (!bytes) return c.json({ error: "not found" }, 404);
+					const html = new TextDecoder().decode(bytes);
 					// The shim's engine family is a constant of the shim itself ("godot" —
 					// the IDBFS record shape is what restore is written against); the save
 					// row's runtime col carries what the parent relayed, for the desktop
@@ -152,19 +153,37 @@ export function createBuildDeliveryRoutes(): Hono {
 						headers: {
 							"Content-Type": buildFileContentType(requestedPath),
 							"Cache-Control": "no-store",
+							"X-Content-Type-Options": "nosniff",
 						},
 					});
 				}
 
-				// Raw Response: the object bytes are a Uint8Array, which Hono's typed `c.body`
-				// narrows out — the dev harness returns one the same way.
-				return new Response(bytes as unknown as BodyInit, {
+				const CHUNK = 4 * 1024 * 1024;
+				let offset = 0;
+				const stream = new ReadableStream<Uint8Array>({
+					async pull(controller) {
+						if (offset >= total) {
+							controller.close();
+							return;
+						}
+						const length = Math.min(CHUNK, total - offset);
+						const chunk = await storage.readRange(file.storageKey, offset, length);
+						if (!chunk) {
+							controller.error(new Error("build object disappeared mid-stream"));
+							return;
+						}
+						offset += chunk.byteLength;
+						controller.enqueue(chunk);
+					},
+				});
+				return new Response(stream, {
 					headers: {
-						"Content-Type": buildFileContentType(requestedPath),
+						"Content-Type": file.contentType || buildFileContentType(requestedPath),
+						"Content-Length": String(total),
 						// Per-request: the token rides in the URL, so a response must never be
 						// cached at a shared layer and replayed at a user the check would refuse.
-						// This is the audio route's no-store reasoning, carried to build delivery.
 						"Cache-Control": "no-store",
+						"X-Content-Type-Options": "nosniff",
 					},
 				});
 			})

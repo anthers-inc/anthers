@@ -166,6 +166,11 @@ describe("browser-build delivery", () => {
 		const _pck = src.replace("/index.html", "/game.pck");
 		const pckRes = await app.fetch(new Request(`http://localhost/build/${token}/game.pck`));
 		expect(pckRes.status).toBe(200);
+		expect(pckRes.headers.get("Content-Length")).toBe(
+			String(Buffer.byteLength("bytes-for-game.pck")),
+		);
+		expect(pckRes.headers.get("X-Content-Type-Options")).toBe("nosniff");
+		expect(pckRes.headers.get("Cache-Control")).toContain("no-store");
 		expect(await pckRes.text()).toContain("bytes-for-game.pck");
 	});
 
