@@ -42,6 +42,7 @@ import {
 } from "../../services/storage/acl.js";
 import { isLocalStorage, storage } from "../../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../../services/storage/keys.js";
+import { signOwnWorkObject } from "../../services/storage/own.js";
 import { mediaUploadKeyFor } from "../../services/upload-sessions.js";
 import {
 	attachPreviewMedia,
@@ -638,10 +639,11 @@ const uploadsRoutes = new Hono()
 		}
 		const preview = await findPreviewMedia(work.id, previewId);
 		if (!preview) return c.json({ error: "Not found" }, 404);
-		const url = await storage.getUrl(preview.file, {
+		const url = await signOwnWorkObject(preview.file, work.creatorId, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
+		if (!url) return c.json({ error: "Not found" }, 404);
 		c.header("Cache-Control", "no-store");
 		return c.redirect(url, 302);
 	})
