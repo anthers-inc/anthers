@@ -79,6 +79,33 @@ export function allowedOrigins(): string[] {
 }
 
 /**
+ * Origins allowed to make credentialed requests to the admin API.
+ *
+ * The admin app is same-origin with its API in production, so it needs no CORS at all — and
+ * the site origin must never be admitted here. `allowedOrigins()` includes `anthers.org` and
+ * `status.anthers.org` for the site's own credentialed calls; passing that list to the admin
+ * routes let a script on the site read every admin GET with the operator's cookie. This list
+ * is the admin origin plus the dev previews, and nothing else.
+ */
+export function adminOrigins(): string[] {
+	const configured = [process.env.ADMIN_URL]
+		.filter((o): o is string => !!o)
+		.map((o) => o.replace(/\/+$/, ""));
+	if (isPublicDeployment()) return [...new Set(configured)];
+	const origins = [
+		...configured,
+		"http://localhost:3001",
+		"http://127.0.0.1:3001",
+		"http://localhost:4174",
+		"http://127.0.0.1:4174",
+		"https://admin.anthers.localhost",
+	];
+	const m = /^https:\/\/(.+)\.api\.anthers\.localhost$/.exec(process.env.PORTLESS_URL ?? "");
+	if (m) origins.push(`https://${m[1]}.admin.anthers.localhost`);
+	return [...new Set(origins)];
+}
+
+/**
  * The standalone status page's origins. The page answers at `status.anthers.org`, served
  * by the droplet — deliberately a failure domain apart from the hub it reports on. Its
  * fetch of `GET /api/status` is cross-origin and carries **no credentials** (no session

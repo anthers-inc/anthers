@@ -266,9 +266,10 @@ describe("the callback is bound to the browser that started it", () => {
 	// DID to the victim's address. Both are refused before the code is exchanged.
 	it("refuses a callback with no state cookie", async () => {
 		const nonce = crypto.randomUUID();
-		nextCallback = { did: did("nobind"), state: JSON.stringify({ intent: "login", nonce }) };
+		const state = JSON.stringify({ intent: "login", nonce });
+		nextCallback = { did: did("nobind"), state };
 		const res = await app.request(
-			`/api/atproto/callback?code=x&state=${encodeURIComponent(nextCallback.state)}&iss=https://bsky.social`,
+			`/api/atproto/callback?code=x&state=${encodeURIComponent(state)}&iss=https://bsky.social`,
 		);
 		expect(res.status).toBe(302);
 		const url = new URL(res.headers.get("location") as string);
@@ -278,9 +279,10 @@ describe("the callback is bound to the browser that started it", () => {
 
 	it("refuses a callback whose state cookie belongs to another flow", async () => {
 		const nonce = crypto.randomUUID();
-		nextCallback = { did: did("wrongbind"), state: JSON.stringify({ intent: "login", nonce }) };
+		const state = JSON.stringify({ intent: "login", nonce });
+		nextCallback = { did: did("wrongbind"), state };
 		const res = await app.request(
-			`/api/atproto/callback?code=x&state=${encodeURIComponent(nextCallback.state)}&iss=https://bsky.social`,
+			`/api/atproto/callback?code=x&state=${encodeURIComponent(state)}&iss=https://bsky.social`,
 			{ headers: { Cookie: `atproto_oauth_state=${crypto.randomUUID()}` } },
 		);
 		expect(res.status).toBe(302);
