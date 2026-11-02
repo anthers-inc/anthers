@@ -17,7 +17,7 @@
  */
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { publicStatusOrigins } from "../origins.js";
+import { statusCorsOrigins } from "../origins.js";
 import { type HeartbeatVerdict, recordHeartbeat } from "../services/heartbeat.js";
 import { statusReport } from "../services/status.js";
 import { statusPageHistory } from "../services/status-history.js";
@@ -38,7 +38,7 @@ export const statusRoutes = new Hono()
 		"*",
 		cors({
 			// Read per request, not at import: the status origin is configuration.
-			origin: (origin) => (origin && publicStatusOrigins().includes(origin) ? origin : undefined),
+			origin: (origin) => (origin && statusCorsOrigins().includes(origin) ? origin : undefined),
 			credentials: false,
 		}),
 	)

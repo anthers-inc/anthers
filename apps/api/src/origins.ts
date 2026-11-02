@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { isDevCheckout } from "@anthers/db/dev-only";
 import { isPublicDeployment } from "./lib/deployment.js";
 
 /**
@@ -112,6 +113,15 @@ export function adminOrigins(): string[] {
  * the body; nothing ambient is granted.
  */
 const STATUS_PAGE_HOST = "status.anthers.org";
+
+/**
+ * The origins the status routes answer: the standalone status page, plus a dev checkout's
+ * own web previews. The second group exists because the page and the API are on different
+ * ports in dev; it is read with `credentials: false`, so it grants no ambient authority.
+ */
+export function statusCorsOrigins(): string[] {
+	return [...new Set([...publicStatusOrigins(), ...(isDevCheckout() ? allowedOrigins() : [])])];
+}
 
 export function publicStatusOrigins(): string[] {
 	// Configurable so a rehearsal deployment can point the page elsewhere; the
