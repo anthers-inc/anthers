@@ -14,6 +14,7 @@
  * because an empty editor has nothing to return to.
  */
 import { PHYSICAL_TAX_CATEGORIES, type PhysicalTaxCategory } from "@anthers/shared/tax-codes";
+import type { ReactNode } from "react";
 import { InlineField } from "./Editing";
 import type { Listing, ListingOption, ListingValue } from "./physical-listing";
 
@@ -137,7 +138,27 @@ export function PhysicalVariantEditor({
 	);
 }
 
-/** The parcel facts a buyer reads under the price. */
+/** One fact in the policy join: a label and its value, side by side on a narrow panel
+ * and stacked in a column when there is room for three. A field that opens for editing
+ * takes the whole row, so its control is never squeezed into a third of the panel. */
+function PolicyFact({ label, children }: { label: string; children: ReactNode }) {
+	return (
+		<div className="flex min-w-0 items-baseline justify-between gap-3 border-t border-base-300 py-1.5 first:border-t-0 first:pt-0 last:pb-0 has-[[data-editing]]:block has-[[data-editing]]:space-y-1 has-[[data-editing]]:pt-2 has-[[data-editing]]:lg:col-span-3 has-[[data-editing]]:lg:border-l-0 has-[[data-editing]]:lg:border-t has-[[data-editing]]:lg:px-0 has-[[data-editing]]:lg:pt-2 lg:block lg:border-t-0 lg:border-l lg:px-4 lg:py-0 lg:first:border-l-0 lg:first:pl-0 lg:last:pr-0">
+			<p className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{label}</p>
+			<div className="min-w-0 text-sm lg:mt-1">{children}</div>
+		</div>
+	);
+}
+
+/**
+ * The parcel facts a buyer reads under the price, as one join rather than three
+ * sentences: the shipping cost, the handling time and the tax category are three short
+ * values, each named by its own label. Three columns where the right column is wide
+ * enough for them, label-and-value rows where it is not — the panel's right column is a
+ * third of the card at a narrow window, which is narrower than a phone's whole width.
+ * The creator reads and edits the same facts, so the pencils sit where the buyer's
+ * values do.
+ */
 export function PhysicalPolicyFields({
 	listing,
 	onSave,
@@ -148,120 +169,105 @@ export function PhysicalPolicyFields({
 	editable: boolean;
 }) {
 	const shippingValue = (
-		<p className="text-sm">
-			{Number(listing.shippingPrice) > 0 ? `$${listing.shippingPrice} to ship` : "Free shipping"}
-			<span className="text-base-content/50"> — one charge per order.</span>
-		</p>
+		<p>{Number(listing.shippingPrice) > 0 ? `$${listing.shippingPrice}` : "Free"}</p>
 	);
 	const handlingValue = (
-		<p className="text-sm">
-			{listing.handlingBusinessDays} business {listing.handlingBusinessDays === 1 ? "day" : "days"}{" "}
-			to send
-			<span className="text-base-content/50"> — the deadline a refund rests on.</span>
+		<p>
+			{listing.handlingBusinessDays} {listing.handlingBusinessDays === 1 ? "day" : "days"}
 		</p>
 	);
-	const taxValue = (
-		<p className="text-sm">
-			{PHYSICAL_TAX_CATEGORIES[listing.taxCategory].label}
-			<span className="text-base-content/50"> — what sales tax is worked out from.</span>
-		</p>
-	);
+	const taxValue = <p>{PHYSICAL_TAX_CATEGORIES[listing.taxCategory].label}</p>;
 
 	return (
-		<section className="flex flex-col gap-3 border-t border-base-300 pt-3">
-			<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-				Shipping &amp; Policies
-			</h2>
+		<section
+			className="flex flex-col gap-2 border-t border-base-300 pt-3"
+			aria-label="Shipping and policies"
+			data-testid="physical-policies"
+		>
 			{editable && onSave ? (
-				<>
-					<InlineField<string>
-						label="Shipping"
-						saved={listing.shippingPrice}
-						renderRead={() => shippingValue}
-						renderEdit={(draft, setDraft) => (
-							<div>
-								<label className="text-xs text-base-content/60" htmlFor="physical-shipping">
-									Shipping price
-								</label>
-								<input
-									id="physical-shipping"
-									type="number"
-									min="0"
-									step="0.01"
-									inputMode="decimal"
-									aria-label="Shipping price"
-									className="input input-bordered input-sm w-full"
-									value={draft}
-									onChange={(e) => setDraft(e.target.value)}
-								/>
-								<p className="text-xs text-base-content/50">
-									What a parcel costs you. Enter 0 if you build shipping into the price.
-								</p>
-							</div>
-						)}
-						save={(draft) => onSave({ shippingPrice: draft })}
-					/>
-					<InlineField<number>
-						label="Handling time"
-						saved={listing.handlingBusinessDays}
-						renderRead={() => handlingValue}
-						renderEdit={(draft, setDraft) => (
-							<div>
-								<label className="text-xs text-base-content/60" htmlFor="physical-handling">
-									Handling time
-								</label>
-								<select
-									id="physical-handling"
-									aria-label="Handling time"
-									className="select select-sm select-bordered w-full"
-									value={draft}
-									onChange={(e) => setDraft(Number(e.target.value))}
-								>
-									{HANDLING_CHOICES.map((days) => (
-										<option key={days} value={days}>
-											{days} business {days === 1 ? "day" : "days"}
-										</option>
-									))}
-								</select>
-							</div>
-						)}
-						save={(draft) => onSave({ handlingBusinessDays: draft })}
-					/>
-					<InlineField<PhysicalTaxCategory>
-						label="Tax category"
-						saved={listing.taxCategory}
-						renderRead={() => taxValue}
-						renderEdit={(draft, setDraft) => (
-							<div>
-								<label className="text-xs text-base-content/60" htmlFor="physical-tax">
-									Tax category
-								</label>
-								<select
-									id="physical-tax"
-									aria-label="Tax category"
-									className="select select-sm select-bordered w-full"
-									value={draft}
-									onChange={(e) => setDraft(e.target.value as PhysicalTaxCategory)}
-								>
-									{Object.entries(PHYSICAL_TAX_CATEGORIES).map(([key, category]) => (
-										<option key={key} value={key}>
-											{category.label}
-										</option>
-									))}
-								</select>
-								<p className="text-xs text-base-content/50">
-									{PHYSICAL_TAX_CATEGORIES[draft].detail}
-								</p>
-							</div>
-						)}
-						save={(draft) => onSave({ taxCategory: draft })}
-					/>
-				</>
+				<div className="grid grid-cols-1 lg:grid-cols-3">
+					<PolicyFact label="Shipping cost">
+						<InlineField<string>
+							label="Shipping cost"
+							saved={listing.shippingPrice}
+							renderRead={() => shippingValue}
+							renderEdit={(draft, setDraft) => (
+								<div>
+									<input
+										type="number"
+										min="0"
+										step="0.01"
+										inputMode="decimal"
+										aria-label="Shipping price"
+										className="input input-bordered input-sm w-full"
+										value={draft}
+										onChange={(e) => setDraft(e.target.value)}
+									/>
+									<p className="text-xs text-base-content/50">
+										What a parcel costs you. Enter 0 if you build shipping into the price.
+									</p>
+								</div>
+							)}
+							save={(draft) => onSave({ shippingPrice: draft })}
+						/>
+					</PolicyFact>
+					<PolicyFact label="Handling time">
+						<InlineField<number>
+							label="Handling time"
+							saved={listing.handlingBusinessDays}
+							renderRead={() => handlingValue}
+							renderEdit={(draft, setDraft) => (
+								<div>
+									<select
+										aria-label="Handling time"
+										className="select select-sm select-bordered w-full"
+										value={draft}
+										onChange={(e) => setDraft(Number(e.target.value))}
+									>
+										{HANDLING_CHOICES.map((days) => (
+											<option key={days} value={days}>
+												{days} business {days === 1 ? "day" : "days"}
+											</option>
+										))}
+									</select>
+								</div>
+							)}
+							save={(draft) => onSave({ handlingBusinessDays: draft })}
+						/>
+					</PolicyFact>
+					<PolicyFact label="Tax category">
+						<InlineField<PhysicalTaxCategory>
+							label="Tax category"
+							saved={listing.taxCategory}
+							renderRead={() => taxValue}
+							renderEdit={(draft, setDraft) => (
+								<div>
+									<select
+										aria-label="Tax category"
+										className="select select-sm select-bordered w-full"
+										value={draft}
+										onChange={(e) => setDraft(e.target.value as PhysicalTaxCategory)}
+									>
+										{Object.entries(PHYSICAL_TAX_CATEGORIES).map(([key, category]) => (
+											<option key={key} value={key}>
+												{category.label}
+											</option>
+										))}
+									</select>
+									<p className="text-xs text-base-content/50">
+										{PHYSICAL_TAX_CATEGORIES[draft].detail}
+									</p>
+								</div>
+							)}
+							save={(draft) => onSave({ taxCategory: draft })}
+						/>
+					</PolicyFact>
+				</div>
 			) : (
-				<div className="flex flex-col gap-2">
-					{shippingValue}
-					{handlingValue}
-					{taxValue}
+				<div className="grid grid-cols-1 lg:grid-cols-3">
+					<PolicyFact label="Shipping cost">{shippingValue}</PolicyFact>
+					<PolicyFact label="Handling time">{handlingValue}</PolicyFact>
+					<PolicyFact label="Tax category">{taxValue}</PolicyFact>
 				</div>
 			)}
 		</section>
