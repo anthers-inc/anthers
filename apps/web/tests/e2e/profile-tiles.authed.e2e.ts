@@ -47,6 +47,31 @@ test("the profile's timeline renders the feed's tiles carrying the creator's own
 	await expect(project).toContainText("Project");
 });
 
+test("the timeline splits into month sections, each with a heading and a rule", async ({
+	page,
+}) => {
+	test.setTimeout(60_000);
+	const handle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
+	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}`);
+
+	const sections = page.locator("[data-testid='content-month']");
+	const headings = page.locator("[data-testid='content-month-heading']");
+	await expect(sections.first(), "the timeline renders month sections").toBeVisible();
+
+	// Every tile sits inside a section: the flat run of tiles is gone rather than
+	// merely decorated with headings beside it.
+	expect(await sections.locator("[data-testid='feed-tile']").count()).toBe(
+		await tiles(page).count(),
+	);
+
+	// One heading and one rule per section, and the heading names a real month.
+	expect(await headings.count()).toBe(await sections.count());
+	expect(await page.locator("[data-testid='content-month-rule']").count()).toBe(
+		await sections.count(),
+	);
+	await expect(headings.first()).toHaveText(/^[A-Z][a-z]+ \d{4}$/);
+});
+
 test("the posts tab renders the same tiles", async ({ page }) => {
 	test.setTimeout(60_000);
 	const handle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
@@ -54,6 +79,10 @@ test("the posts tab renders the same tiles", async ({ page }) => {
 
 	await expect(tiles(page).first(), "the posts tab carries tiles").toBeVisible();
 	expect(await tiles(page).count()).toBeGreaterThan(0);
+	await expect(
+		page.locator("[data-testid='content-month-heading']").first(),
+		"the posts tab groups by month too",
+	).toBeVisible();
 	for (const tile of await tiles(page).all()) {
 		const text = await tile.textContent();
 		expect(text, "every post tile names its creator").toContain("Gauntlet Creator");

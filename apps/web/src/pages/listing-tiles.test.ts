@@ -23,6 +23,7 @@ const read = (path: string) => readFileSync(join(import.meta.dir, path), "utf8")
 const discovery = read("DiscoverPage.tsx");
 const library = read("LibraryPage.tsx");
 const creator = read("CreatorProfilePage.tsx");
+const contentMonths = read("../components/creator/ContentMonths.tsx");
 const tile = read("../components/cards/FeedTile.tsx");
 
 /** The auto-fill grid every listing surface shares. */
@@ -46,8 +47,16 @@ describe("every listing surface renders the shared tile", () => {
 
 	it("lays its entries out in the one grid shape", () => {
 		for (const [surface, source] of SURFACES) {
+			if (surface === "Creator page") continue;
 			expect(source, `${surface} uses a grid of its own`).toContain(SHARED_GRID);
 		}
+		// The creator page's grid moved into the month-section renderer it shares with
+		// every content tab (2026-11-02). The page still owns the tiles and the entries;
+		// what it must not do is grow a second grid shape beside the shared one.
+		expect(creator, "the creator page no longer renders its month sections").toContain(
+			'import ContentMonths from "../components/creator/ContentMonths"',
+		);
+		expect(contentMonths, "the creator page uses a grid of its own").toContain(SHARED_GRID);
 	});
 
 	it("leaves the Library no private card family", () => {
