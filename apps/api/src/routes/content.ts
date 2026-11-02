@@ -1747,6 +1747,7 @@ export type WorkReachability = { refusal: Response } | { userId: number | null; 
 export async function workReachability(
 	c: Parameters<typeof getOptionalUserId>[0],
 	work: typeof works.$inferSelect,
+	opts: { skipAdult?: boolean } = {},
 ): Promise<WorkReachability> {
 	const userId = await getOptionalUserId(c);
 	const isOwner = userId != null && userId === work.creatorId;
@@ -1788,7 +1789,7 @@ export async function workReachability(
 	// ⚠️ Placed after the owner and withdrawn-purchaser branches deliberately. A creator
 	// reaches their own Work whatever their setting says, and this must not become the
 	// reason somebody cannot see a thing they made.
-	if (!isOwner && requiresAdultVerification(work.maturity)) {
+	if (!opts.skipAdult && !isOwner && requiresAdultVerification(work.maturity)) {
 		const { access } = await adultVisibility(userId);
 		if (!access.canReach) return { refusal: c.json({ error: "Work not found" }, 404) };
 	}

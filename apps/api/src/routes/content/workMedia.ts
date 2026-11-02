@@ -91,7 +91,15 @@ import { grantBody, grantRefusal, saveBlobSchema } from "./schemas.js";
 const requireReachableWork = createMiddleware(async (c, next) => {
 	const work = await findWorkRow(c.req.param("id") ?? "");
 	if (!work) return c.json({ error: "Work not found" }, 404);
-	const reach = await workReachability(c, work);
+	// A quarantine or a takedown is a stronger state with its own 403 and reason; the
+	// resolver below answers it, and this gate must not turn it into a 404.
+	if (work.quarantineStatus === "quarantined" || work.takedownStatus === "taken_down") {
+		await next();
+		return;
+	}
+	// Visibility only. The Adult rung is the resolver's answer on a delivery route (403
+	// `adult_gated`), while the page and the play page keep their 404 invisibility rule.
+	const reach = await workReachability(c, work, { skipAdult: true });
 	if ("refusal" in reach) return reach.refusal;
 	await next();
 });
