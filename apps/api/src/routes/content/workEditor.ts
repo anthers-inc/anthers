@@ -43,6 +43,7 @@ import {
 	notifyCreditedAccounts,
 } from "../../services/credit-acceptance.js";
 import { syncAccountRoles } from "../../services/discord.js";
+import { mediaMutabilityRefusal } from "../../services/media-mutability.js";
 import { purgeReplacedWorkMedia, purgeWorkMedia } from "../../services/media-purge.js";
 import { notifyMany } from "../../services/notifications.js";
 import { physicalListingFor, savePhysicalListing } from "../../services/physical-listings.js";
@@ -913,9 +914,8 @@ const workEditorRoutes = new Hono()
 		// running this path would be destroying evidence under a statutory hold — a
 		// federal offense under 18 U.S.C. § 1519, committed by a cron job on a creator's
 		// button press. 404 rather than 403, on the same reasoning as the PATCH above.
-		if (item.quarantineStatus === "quarantined") {
-			return c.json({ error: "Work not found" }, 404);
-		}
+		const deleteRefusal = await mediaMutabilityRefusal(item);
+		if (deleteRefusal) return c.json(deleteRefusal.body, deleteRefusal.status);
 
 		// Read once: it decides whether to stop and ask before a Work with buyers is taken
 		// out of public circulation. It does not decide *how* the Work goes — preservation
@@ -1239,6 +1239,8 @@ const workEditorRoutes = new Hono()
 				409,
 			);
 		}
+		const sourceRefusal = await mediaMutabilityRefusal(item);
+		if (sourceRefusal) return c.json(sourceRefusal.body, sourceRefusal.status);
 		const job = await removeSourceFile(item, Number(c.req.param("fileId")));
 		if (!job) return c.json({ error: "Not found" }, 404);
 		return c.json({ transcoding: job });

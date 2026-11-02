@@ -45,7 +45,7 @@ import {
 import { and, eq, isNull, sql } from "drizzle-orm";
 import app from "../index";
 import { mintPlayToken } from "../lib/web-build.js";
-import { isUnderHold } from "../services/legal-hold.js";
+import { isUnderHold, liftHold, placeHold } from "../services/legal-hold.js";
 import {
 	clearQuarantine,
 	loadQuarantineFindings,
@@ -861,5 +861,67 @@ describe("A Work's whole footprint", () => {
 
 		const after = await req(`/build/${token}/index.html`);
 		expect(after.status).toBe(404);
+	});
+
+	it("refuses to empty a Work's media while it is under a preservation hold", async () => {
+		const work = await insertWork({
+			creatorId,
+			type: "comic",
+			title: `Held ${crypto.randomUUID().slice(0, 6)}`,
+			visibility: "private",
+		});
+		const { holdId } = await placeHold({
+			subjectType: "work",
+			subjectId: work.id,
+			reason: "Media mutability test",
+			placedBy: operatorId,
+		});
+		try {
+			const res = await req(`/api/content/works/${work.id}/media`, {
+				method: "DELETE",
+				headers: { Origin: ORIGIN, Cookie: creatorCookie },
+			});
+			expect(res.status).toBe(409);
+			expect(((await res.json()) as { code?: string }).code).toBe("media_held");
+		} finally {
+			await liftHold(holdId, operatorId);
+		}
+	});
+
+	it("refuses a build token even when the object is still at its old key", async () => {
+		// A quarantine that failed partway can leave an object behind. The build route's
+		// status check is what makes the token dead independently of whether the move
+		// succeeded; proving it with the object present is the only way to isolate it.
+		const work = await insertWork({
+			creatorId,
+			type: "game",
+			title: `Partial ${crypto.randomUUID().slice(0, 6)}`,
+			access: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		const [build] = await db
+			.insert(workBuilds)
+			.values({ workId: work.id, entryPath: "index.html", isPrimary: true })
+			.returning();
+		const key = `creators/${creatorId}/web-builds/${build.id}/index.html`;
+		await storage.upload(key, Buffer.from("still-here"), "text/html");
+		await db.insert(workBuildFiles).values({
+			buildId: build.id,
+			path: "index.html",
+			storageKey: key,
+		});
+
+		const token = mintPlayToken(work.id, 3600);
+		expect((await req(`/build/${token}/index.html`)).status).toBe(200);
+
+		await quarantineWork({
+			workId: work.id,
+			source: "operator",
+			classification: "csam",
+			adminId: operatorId,
+		});
+		// Put the bytes back where the row says they are, simulating a partial move.
+		await storage.upload(key, Buffer.from("still-here"), "text/html");
+
+		expect((await req(`/build/${token}/index.html`)).status).toBe(404);
 	});
 });

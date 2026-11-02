@@ -32,6 +32,7 @@ import {
 	ImageFrameRefusal,
 	normalizeDisplayImage,
 } from "../../services/image-framing.js";
+import { mediaMutabilityRefusal } from "../../services/media-mutability.js";
 import { scanInlineUpload } from "../../services/safety-scan.js";
 import {
 	aclForMediaType,
@@ -540,6 +541,8 @@ const uploadsRoutes = new Hono()
 		}
 		const preview = await findPreviewMedia(work.id, previewId);
 		if (!preview) return c.json({ error: "Not found" }, 404);
+		const removalRefusal = await mediaMutabilityRefusal(work);
+		if (removalRefusal) return c.json(removalRefusal.body, removalRefusal.status);
 		await removePreviewMedia(work, previewId);
 		return c.json({ previewMedia: await previewMediaPayload(work) });
 	})
@@ -608,6 +611,8 @@ const uploadsRoutes = new Hono()
 			.from(workCaptionTracks)
 			.where(and(eq(workCaptionTracks.previewId, previewId), eq(workCaptionTracks.id, trackId)));
 		if (!track) return c.json({ error: "Not found" }, 404);
+		const captionRefusal = await mediaMutabilityRefusal(work);
+		if (captionRefusal) return c.json(captionRefusal.body, captionRefusal.status);
 		await deletePreviewCaptionTrack(track, work.creatorId ?? -1);
 		const remaining = await listPreviewCaptionTracks(previewId);
 		const ctx = deliveryCtx() ?? localDelivery;
