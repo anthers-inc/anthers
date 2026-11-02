@@ -5,7 +5,7 @@
  * and a stubbed store would test the stub. Each case names the break it would catch:
  * most of them are the concurrency shapes the fixed-window upsert exists to survive.
  */
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import { checkRate, clientIp } from "../services/rate-limit";
@@ -13,13 +13,20 @@ import { checkRate, clientIp } from "../services/rate-limit";
 /**
  * 🚨 This is the ONE suite where the limiter must be live: test sessions set
  * `RATE_LIMITS_DISABLED=1` (the SIGNUP_POW_DIFFICULTY-shaped opt-in), which would make
- * every case here pass vacuously. The knob is removed for this file's run and restored
- * at process exit — and the refusing cases below are what keeps the opt-in from ever
- * becoming the way the limiter quietly stopped being testable.
+ * every case here pass vacuously. The knob is removed around each case and restored
+ * afterwards — ⚠️ **around the case rather than for the whole process**, because a
+ * delete at module load is still in force when every other suite in the same process
+ * runs. That leak turned a real door limit into a real 429 for `pending-signup.test.ts`
+ * the first time `/signup/begin` grew one, and read as eight unrelated failures.
  */
 const KNOB = process.env.RATE_LIMITS_DISABLED;
-delete process.env.RATE_LIMITS_DISABLED;
-process.on("exit", () => {
+
+beforeEach(() => {
+	// `beforeEach` below also clears this suite's rows; this line is the live-limiter half.
+	delete process.env.RATE_LIMITS_DISABLED;
+});
+
+afterEach(() => {
 	if (KNOB !== undefined) process.env.RATE_LIMITS_DISABLED = KNOB;
 });
 

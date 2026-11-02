@@ -14,7 +14,7 @@
  * admin console renders a reporter's words verbatim and a plausible-sounding fake bug in a
  * dev queue is indistinguishable from a real one unless the row says so.
  */
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { issueReports, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -165,9 +165,18 @@ describe("Too many from one caller", () => {
 	// the run and put back at process exit, so the opt-in never makes a refusal test
 	// pass vacuously.
 	const knob = process.env.RATE_LIMITS_DISABLED;
-	delete process.env.RATE_LIMITS_DISABLED;
-	process.on("exit", () => {
-		process.env.RATE_LIMITS_DISABLED = knob;
+	// ⚠️ Removed around each case, never for the whole process: a delete at module load is
+	// still in force while every later file runs, which turns another suite's real door limit
+	// into a 429 it never asked for.
+	beforeEach(() => {
+		delete process.env.RATE_LIMITS_DISABLED;
+	});
+	afterEach(() => {
+		if (knob !== undefined) process.env.RATE_LIMITS_DISABLED = knob;
+	});
+	afterAll(() => {
+		if (knob === undefined) delete process.env.RATE_LIMITS_DISABLED;
+		else process.env.RATE_LIMITS_DISABLED = knob;
 	});
 
 	it("declines the sixth in ten minutes, with its own cap that never touches the abuse one", async () => {
