@@ -87,7 +87,7 @@ export const SHIPPING_TAX_CODE = "txcd_92010001";
 export const PHYSICAL_TAX_CATEGORIES = {
 	general: {
 		code: "txcd_99999999",
-		label: "A general physical good",
+		label: "General Physical Goods",
 		detail: "A print, a mug, a figure, anything that ships and is not clothing.",
 	},
 	clothing: {

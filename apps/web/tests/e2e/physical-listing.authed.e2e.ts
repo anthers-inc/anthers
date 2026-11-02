@@ -98,14 +98,14 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 	// storefront is where they are read and edited.
 	const manage = page.locator("#work-side-manage");
 	await expect(manage.getByRole("heading", { name: "Shipping" })).toHaveCount(0);
-	await expect(page.getByRole("heading", { name: "Shipping & Policies" })).toBeVisible();
+	await expect(page.getByTestId("physical-policies")).toBeVisible();
 	await expect(page.getByText("Work not found")).toHaveCount(0);
 
 	// Shipping: the pencil in the policy block opens it.
-	await page.getByRole("button", { name: "Edit Shipping" }).click();
+	await page.getByRole("button", { name: "Edit Shipping cost" }).click();
 	await page.getByLabel("Shipping price").fill("6.5");
-	await page.getByRole("button", { name: "Save Shipping" }).click();
-	await expect(page.getByText(/\$6\.50 to ship/i)).toBeVisible({ timeout: 15_000 });
+	await page.getByRole("button", { name: "Save Shipping cost" }).click();
+	await expect(page.getByText("$6.50", { exact: true })).toBeVisible({ timeout: 15_000 });
 
 	// A variant, built in the storefront and read back as a row with its own pencil.
 	await expect(page.getByText(/nothing to choose/i)).toBeVisible();
@@ -125,7 +125,7 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 	// variants and the buy door step out of its way until it closes.
 	await page.getByRole("button", { name: "Edit Size variant" }).click();
 	await expect(page.getByTestId("physical-quote-box")).toHaveCount(0);
-	await expect(page.getByRole("heading", { name: "Shipping & Policies" })).toHaveCount(0);
+	await expect(page.getByTestId("physical-policies")).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Buy Now" })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Edit Size variant" })).toHaveCount(0);
 	await page.getByRole("button", { name: "Cancel" }).click();
@@ -164,7 +164,7 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 
 	// The row, not the page, is the truth: a reload reads every edit back.
 	await page.reload();
-	await expect(page.getByText(/\$6\.50 to ship/i)).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByText("$6.50", { exact: true })).toBeVisible({ timeout: 15_000 });
 	await expect(page.getByRole("button", { name: "Edit Size variant" })).toBeVisible();
 	await expect(page.getByRole("img", { name: "Mug back" })).toBeVisible();
 	await expectDecoded(page, "Mug back");
@@ -190,6 +190,6 @@ test("a kind that ships nothing carries no storefront policy block", async ({ pa
 		page.getByRole("button", { name: /^Change the kind, currently Video/ }),
 	).toBeVisible();
 	await expect(manage.getByRole("heading", { name: "Shipping" })).toHaveCount(0);
-	await expect(page.getByRole("heading", { name: "Shipping & Policies" })).toHaveCount(0);
+	await expect(page.getByTestId("physical-policies")).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Edit photos" })).toHaveCount(0);
 });

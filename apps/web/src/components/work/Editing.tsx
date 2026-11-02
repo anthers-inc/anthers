@@ -158,7 +158,11 @@ export function InlineField<V>({
 	);
 
 	return (
-		<div ref={rootRef} className={`group relative ${fill ? "h-full w-full" : ""} ${className}`}>
+		<div
+			ref={rootRef}
+			className={`group relative ${fill ? "h-full w-full" : ""} ${className}`}
+			data-editing={mode === "read" ? undefined : "true"}
+		>
 			{mode === "read" ? (
 				pencilPlacement === "corner" && !fill && !disabledReason ? (
 					// The gutter on both sides is what keeps the text centered while the
