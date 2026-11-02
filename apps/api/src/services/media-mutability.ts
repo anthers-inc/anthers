@@ -7,7 +7,7 @@
  * delivering infringing bytes but keeps them as evidence. A **preservation hold** is the
  * operator's own promise that a subject will not be destroyed while a matter is open.
  *
- * A creator-facing delete route that honours only the quarantine lets the other two be
+ * A creator-facing delete route that honors only the quarantine lets the other two be
  * emptied from underneath — the held object is gone, the hold row remains, and nothing
  * reads as wrong. So every route that deletes, replaces or cancels a Work's stored media
  * asks this first.
