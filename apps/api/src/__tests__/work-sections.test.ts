@@ -191,6 +191,21 @@ describe("extractUnderCaps — the bomb guard, on declared sizes", () => {
 		).toThrow("decompresses to");
 	});
 
+	it("refuses a deflated bomb whose compressed size is tiny", () => {
+		// `level: 0` in the other cases makes compressed and uncompressed sizes equal,
+		// which is exactly the test that cannot see this bug: fflate's `size` is the
+		// COMPRESSED entry size, so a 4 MB run of zeros compresses to a few kilobytes and
+		// passes a cap read from `size` while the inflater is about to allocate 4 MB.
+		const bomb = zipSync({ "OEBPS/bomb.bin": new Uint8Array(4 * 1024 * 1024) }, { level: 9 });
+		expect(() =>
+			extractUnderCaps(bomb, {
+				componentMax: 1024 * 1024,
+				totalMax: 8 * 1024 * 1024,
+				maxEntries: 100,
+			}),
+		).toThrow("decompresses to");
+	});
+
 	it("refuses the set's total across entries", () => {
 		const halfMib = crypto.getRandomValues(new Uint8Array(512 * 1024));
 		const zip = zipSync({ "a.bin": halfMib, "b.bin": halfMib, "c.bin": halfMib }, { level: 0 });
