@@ -44,7 +44,7 @@ import {
 	ISSUE_URL_MAX,
 } from "../services/issue-reports.js";
 import { fileReport, findSubject } from "../services/moderation.js";
-import { checkRate } from "../services/rate-limit.js";
+import { checkRate, clientIp } from "../services/rate-limit.js";
 
 const reportSchema = z.object({
 	subjectType: z.string().refine(isModerationSubjectType, "Unknown subject type"),
@@ -105,8 +105,8 @@ const issueReportSchema = z.object({
  * are `checkRate` calls on the shared table; the inline Map shapes were retired with the
  * shared limiter's arrival, which is the whole point of one mechanism.
  */
-function clientKeyFor(c: { req: { header: (name: string) => string | undefined } }): string {
-	return c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? "";
+function clientKeyFor(c: { req: { raw: Request } }): string {
+	return clientIp(c.req.raw.headers);
 }
 
 const moderationRoutes = new Hono()

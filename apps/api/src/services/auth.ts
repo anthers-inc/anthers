@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHash } from "node:crypto";
 import { db } from "@anthers/db/client";
 import { desktopAuthRequests, userSessions, users } from "@anthers/db/schema";
-import { and, desc, eq, gt, isNull, lt, notInArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, notInArray } from "drizzle-orm";
 import { allHeldSubjectIds } from "./legal-hold.js";
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -39,6 +40,18 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 
 // ─── Session Management ──────────────────────────────────────────────────────
 
+/**
+ * The stored form of a session token.
+ *
+ * 🚨 **The raw token is a bearer credential, so the database keeps only its SHA-256.** A
+ * dump, a replica or a read-only SQL credential then yields nothing that can be presented
+ * as a session. The token is already 256 bits of randomness, so a plain hash is enough; no
+ * password-style KDF is needed for a value that was never chosen by a person.
+ */
+export function hashSessionToken(token: string): string {
+	return createHash("sha256").update(token).digest("hex");
+}
+
 /** Create a new session for a user. Returns the session token. */
 export async function createSession(
 	userId: number,
@@ -50,7 +63,7 @@ export async function createSession(
 	const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_MS);
 
 	await db.insert(userSessions).values({
-		token,
+		token: hashSessionToken(token),
 		userId,
 		ipAddress: ipAddress ?? null,
 		userAgent: userAgent ?? null,
@@ -64,29 +77,44 @@ export async function createSession(
 
 /** Validate a session token. Returns the user if valid, null if expired/invalid. */
 export async function validateSession(token: string) {
-	const result = await db
-		.select({
-			session: userSessions,
-			user: users,
-		})
-		.from(userSessions)
-		.innerJoin(users, eq(userSessions.userId, users.id))
-		.where(
-			and(
-				eq(userSessions.token, token),
-				gt(userSessions.expiresAt, new Date()),
-				// A suspended account is gone as far as its holder is concerned: no session
-				// of it may authenticate, however fresh. `suspendAccount` deletes the rows
-				// outright, so this predicate is the backstop rather than the mechanism —
-				// the one fact every user of a session agrees on, in case a token
-				// outlives the action that should have destroyed it. Session deletion is
-				// not content deletion: a session is a credential, and `deleteExpiredSessions`
-				// destroys them as routine hygiene.
-				isNull(users.suspendedAt),
-			),
-		)
-		.limit(1);
+	const stored = hashSessionToken(token);
+	const find = (value: string) =>
+		db
+			.select({
+				session: userSessions,
+				user: users,
+			})
+			.from(userSessions)
+			.innerJoin(users, eq(userSessions.userId, users.id))
+			.where(
+				and(
+					eq(userSessions.token, value),
+					gt(userSessions.expiresAt, new Date()),
+					// A suspended account is gone as far as its holder is concerned: no session
+					// of it may authenticate, however fresh. `suspendAccount` deletes the rows
+					// outright, so this predicate is the backstop rather than the mechanism —
+					// the one fact every user of a session agrees on, in case a token
+					// outlives the action that should have destroyed it. Session deletion is
+					// not content deletion: a session is a credential, and `deleteExpiredSessions`
+					// destroys them as routine hygiene.
+					isNull(users.suspendedAt),
+				),
+			)
+			.limit(1);
 
+	let result = await find(stored);
+	if (result.length === 0 && token !== stored) {
+		// A row written before the hash migration: the raw token still names it. Accept
+		// once and rewrite it in place, so the next request takes the ordinary path and
+		// the credential does not stay in the clear.
+		result = await find(token);
+		if (result.length > 0) {
+			await db
+				.update(userSessions)
+				.set({ token: stored })
+				.where(eq(userSessions.id, result[0].session.id));
+		}
+	}
 	if (result.length === 0) return null;
 
 	return {
@@ -97,7 +125,11 @@ export async function validateSession(token: string) {
 
 /** Delete a session (sign out) */
 export async function deleteSession(token: string): Promise<void> {
-	await db.delete(userSessions).where(eq(userSessions.token, token));
+	// Both spellings: the hashed row and, on a database that has not finished the lazy
+	// migration, the legacy raw one.
+	await db
+		.delete(userSessions)
+		.where(inArray(userSessions.token, [hashSessionToken(token), token]));
 }
 
 /**

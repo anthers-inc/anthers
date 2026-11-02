@@ -51,7 +51,7 @@ function report(body: Record<string, unknown>) {
 		headers: {
 			"Content-Type": "application/json",
 			Origin: ORIGIN,
-			"cf-connecting-ip": `198.51.100.${ipSeq}`,
+			"x-forwarded-for": `198.51.100.${ipSeq}`,
 		},
 		body: JSON.stringify(body),
 	});
@@ -103,7 +103,7 @@ describe("Anyone can file, with no account", () => {
 				"Content-Type": "application/json",
 				Origin: ORIGIN,
 				Cookie: filerCookie,
-				"cf-connecting-ip": "198.51.100.200",
+				"x-forwarded-for": "198.51.100.200",
 			},
 			body: JSON.stringify({
 				summary: `Test fixture: player stalls (${id})`,
@@ -178,7 +178,7 @@ describe("Too many from one caller", () => {
 				headers: {
 					"Content-Type": "application/json",
 					Origin: ORIGIN,
-					"cf-connecting-ip": ip,
+					"x-forwarded-for": ip,
 				},
 				body: JSON.stringify({
 					summary: `Test fixture: burst (${id})`,

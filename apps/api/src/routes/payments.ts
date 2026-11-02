@@ -89,6 +89,7 @@ import {
 	ensureBadgeProduct,
 	ensureCreatorProduct,
 	linkCheckoutCustomer,
+	refundBadgeChargesForIntent,
 	savedBillingAddress,
 	stripeCustomerIdFor,
 	syncSubscriptionToAccount,
@@ -2825,6 +2826,10 @@ const paymentRoutes = new Hono()
 						: charge.payment_intent.id;
 				// A support charge refunded in full is never credited, or is netted if it already was.
 				await markInvoiceMoneyReturned(intentId, "refunded");
+				// The Badge lines on the same charge: mark them refunded and remove the
+				// holding they created, so neither settlement nor a gate keeps treating the
+				// money as paid. A per-item Work refund never lands here with a full charge.
+				await refundBadgeChargesForIntent(intentId);
 				// 🚨 Every purchase on the charge, not the first — the `.limit(1)` here was
 				// correct only while a charge could carry one purchase.
 				//

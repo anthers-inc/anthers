@@ -32,6 +32,7 @@ import { isListened, isPaged } from "@anthers/shared/content";
 import { zValidator } from "@hono/zod-validator";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import { refreshQueuePositions } from "../../jobs/queue-position.js";
 import { buildDeliveryHost, mintPlayToken, PLAY_TOKEN_TTL_SECONDS } from "../../lib/web-build.js";
@@ -77,7 +78,42 @@ import {
 import { parseNumericId, requireUserOrShareLink } from "./access.js";
 import { grantBody, grantRefusal, saveBlobSchema } from "./schemas.js";
 
+/**
+ * The visibility gate every byte-bearing route inherits.
+ *
+ * `workAccessFor` answers "does this person's standing open this Work?" and deliberately
+ * does not read `works.visibility`; only the page route did. A private Work with a
+ * qualifying `$0` access row therefore resolved as accessible on the media routes, and
+ * Work ids are small serials. This middleware runs the page's own `workReachability` first,
+ * so the owner and a withdrawn Work's buyers still reach it and everybody else gets the
+ * same 404 the page does.
+ */
+const requireReachableWork = createMiddleware(async (c, next) => {
+	const work = await findWorkRow(c.req.param("id") ?? "");
+	if (!work) return c.json({ error: "Work not found" }, 404);
+	// A quarantine or a takedown is a stronger state with its own 403 and reason; the
+	// resolver below answers it, and this gate must not turn it into a 404.
+	if (work.quarantineStatus === "quarantined" || work.takedownStatus === "taken_down") {
+		await next();
+		return;
+	}
+	// Visibility only. The Adult rung is the resolver's answer on a delivery route (403
+	// `adult_gated`), while the page and the play page keep their 404 invisibility rule.
+	const reach = await workReachability(c, work, { skipAdult: true });
+	if ("refusal" in reach) return reach.refusal;
+	await next();
+});
+
 const workMediaRoutes = new Hono()
+	.use("/works/:id/audio", requireReachableWork)
+	.use("/works/:id/original", requireReachableWork)
+	.use("/works/:id/pages/:page", requireReachableWork)
+	.use("/works/:id/sections/:section", requireReachableWork)
+	.use("/works/:id/assets/:assetId", requireReachableWork)
+	.use("/works/:id/assets/:assetId/download", requireReachableWork)
+	.use("/works/:id/hls/:file{.+}", requireReachableWork)
+	.use("/works/:id/grant", requireReachableWork)
+	.use("/works/:id/versions/:versionId/download", requireReachableWork)
 	.get("/access/issuer.json", (c) => {
 		const document = accessIssuerDocument();
 		if (!document) return c.json({ error: "No access key is configured." }, 503);

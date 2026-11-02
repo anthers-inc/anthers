@@ -38,6 +38,7 @@ import {
 	publicAccessGate,
 	requireUserOrShareLink,
 	workAccessFor,
+	workReachability,
 } from "./content.js";
 
 /**
@@ -118,6 +119,12 @@ export function createPlayPageRoutes(): Hono {
 	return new Hono().get("/:id", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work)
+			return refusal("Work not found", "This play page reached for a Work that is not here.");
+
+		// The page and the frame inherit the same visibility rule: a private Work is a
+		// 404 to everyone but its owner, and a withdrawn one still reaches its buyers.
+		const reach = await workReachability(c, work);
+		if ("refusal" in reach)
 			return refusal("Work not found", "This play page reached for a Work that is not here.");
 
 		const access = await workAccessFor(c, work);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { users } from "@anthers/db/schema";
+import { userSessions, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -86,6 +86,20 @@ describe("Auth System", () => {
 	// ── Session ──────────────────────────────────────────────────────────────
 
 	describe("session", () => {
+		it("stores only the token's hash, and still authenticates the raw token", async () => {
+			const account = await createAccount(`hash_${crypto.randomUUID().slice(0, 8)}`);
+			const rows = await db
+				.select({ token: userSessions.token })
+				.from(userSessions)
+				.where(eq(userSessions.userId, account.userId));
+			expect(rows.length).toBeGreaterThan(0);
+			for (const row of rows) expect(row.token).toMatch(/^[0-9a-f]{64}$/);
+			expect(rows.some((row) => row.token === account.token)).toBe(false);
+
+			const me = await makeRequest("/api/auth/me", { headers: { Cookie: account.cookie } });
+			expect(((await me.json()) as { user: { id: number } }).user.id).toBe(account.userId);
+		});
+
 		it("/me returns user when authenticated", async () => {
 			const res = await makeRequest("/api/auth/me", {
 				headers: { Cookie: sessionCookie },

@@ -185,6 +185,13 @@ export async function updateSubscription(
 	return (await getStripe()?.subscriptions.update(subscriptionId, params)) ?? null;
 }
 
+/** Mirrors `stripe.subscriptions.cancel` — ending an existing subscription now. */
+export async function cancelSubscription(
+	subscriptionId: string,
+): Promise<Stripe.Subscription | null> {
+	return (await getStripe()?.subscriptions.cancel(subscriptionId)) ?? null;
+}
+
 /** Mirrors `stripe.subscriptions.create` — a new subscription. */
 export async function createSubscription(
 	params: Stripe.SubscriptionCreateParams,
