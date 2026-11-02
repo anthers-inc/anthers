@@ -523,12 +523,17 @@ export function createWorkUploadStore(transport: WorkUploadTransport): WorkUploa
 					(percent) => update(id, { progress: percent }),
 					controller.signal,
 				);
-			} catch {
+			} catch (err) {
 				// A canceled run lands here because it aborted itself; the entry is already
-				// gone, so there is no state left to mark failed.
+				// gone, so there is no state left to mark failed. A refusal with a sentence
+				// from the server — a non-image, a type outside the allowlist — is shown as
+				// that sentence rather than as a connection failure the person cannot act on.
 				update(id, {
 					status: "failed",
-					error: `${file.name} didn't finish uploading. Check your connection and try again.`,
+					error:
+						err instanceof Error
+							? `${file.name}: ${err.message}`
+							: `${file.name} didn't finish uploading. Check your connection and try again.`,
 				});
 				settle(batchId, id, "failed");
 				return;
