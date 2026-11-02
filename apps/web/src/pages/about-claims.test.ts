@@ -115,19 +115,13 @@ const PREMATURE: { claim: string; phrases: string[]; sayableWhen: string }[] = [
 		sayableWhen: "the first audit is complete",
 	},
 	{
-		claim: "Anthers already holds federal tax-exempt status, or has applied for it",
-		// 🚨 **This row was `["501(c)", "tax-exempt", …]` — the bare term — until 2026-08-21,
-		// when Parker's call moved the wiki's *How Anthers Talks About Itself* off *"say nothing about federal status at all"*.
-		// The page now states the intention to file, and the § What Anthers Is two-column
-		// split (what binds us NOW / what recognition ADDS) is what makes that safe: it
-		// partitions present from future on the page itself rather than leaving a user to
-		// work out which column a sentence belongs in.
-		//
-		// So what is forbidden is the **present tense**, in every form that would let a
-		// user conclude we hold the status or have asked for it. The Form 1023 has not
-		// been filed. Note "another charitable organization" is fine and describes where the
-		// assets go, not what we are; and the positive assertion below pins the future
-		// framing, so a re-tensing breaks two tests rather than none.
+		claim: "Anthers holds federal tax-exempt status",
+		// The Form 1023-EZ was filed on 2026-11-02, so *applied for* and *pending* became
+		// sayable that day and the phrases carrying them left this row in the same commit.
+		// What remains forbidden is the status itself, in every construction a reader would
+		// take as present-tense — including "pending 501(c)(3)", which names the status
+		// rather than the application. The positive assertion below pins the filed-and-
+		// pending framing, so re-tensing breaks two tests rather than none.
 		phrases: [
 			"is a 501(c)",
 			"are a 501(c)",
@@ -138,13 +132,9 @@ const PREMATURE: { claim: string; phrases: string[]; sayableWhen: string }[] = [
 			"501(c)(3) charity",
 			"tax-exempt",
 			"tax exempt",
-			"exemption is pending",
-			"application is pending",
 			"pending 501(c)",
-			"applied for 501(c)",
 		],
-		sayableWhen:
-			"the IRS determination letter arrives — and 'applied for' only once the Form 1023 is actually filed",
+		sayableWhen: "the IRS determination letter arrives",
 	},
 	{
 		claim: "money given to Anthers is deductible today",
@@ -191,12 +181,11 @@ describe("/about describes the organization as it is", () => {
 	}
 
 	// The positive half of the federal-status rule, and it is what lets the negative half
-	// above be narrow. Every mention of 501(c)(3) on this page has to sit inside the
-	// explicit future framing; re-tense the sentence and this fails alongside whichever
-	// present-tense phrase the reword reached for. Rewording is fine — update this line
-	// with the reword rather than dropping it.
-	it("states federal recognition as something ahead of us, never as something we hold", () => {
-		expect(COPY).toContain("we intend to file for that recognition");
+	// above be narrow. The application is filed and the page states it as pending; the
+	// status is what waits for the letter. Rewording is fine — update this line with the
+	// reword rather than dropping it.
+	it("states the application as filed and pending, never the status as held", () => {
+		expect(COPY).toContain("we have applied for federal 501(c)(3) recognition");
 	});
 
 	// 🚨 The co-presence rule, same shape as "free forever" beside the monthly limit: a
