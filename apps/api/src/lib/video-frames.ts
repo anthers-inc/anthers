@@ -36,7 +36,7 @@ export async function ffprobeJson(source: string): Promise<{
 		height?: number;
 		avg_frame_rate?: string;
 	}>;
-	format?: { duration?: string };
+	format?: { duration?: string; format_name?: string };
 }> {
 	const proc = Bun.spawn(
 		["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", source],
@@ -77,6 +77,11 @@ export async function probeVideo(source: string): Promise<{
 	framesPerSecond: number;
 } | null> {
 	const probe = await ffprobeJson(source);
+	// An HLS/DASH playlist is a set of directions, not a picture. ffprobe will happily
+	// resolve one and report a video stream; the sampler must not, because the next thing
+	// ffmpeg would do is fetch every URI it names. The transcode job carries the same
+	// refusal for its own probe.
+	if (/(^|,)(hls|applehttp)(,|$)/i.test(probe.format?.format_name ?? "")) return null;
 	const stream = probe.streams?.find((s) => s.codec_type === "video");
 	const width = Number(stream?.width ?? 0);
 	const height = Number(stream?.height ?? 0);

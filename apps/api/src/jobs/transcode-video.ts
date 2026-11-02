@@ -815,6 +815,12 @@ async function runTranscode(
 			await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
 		);
 		timing.mark("probeEnd");
+		const formatName = String(
+			(probe as { format?: { format_name?: string } }).format?.format_name ?? "",
+		);
+		if (/(^|,)(hls|applehttp)(,|$)/i.test(formatName)) {
+			throw new Error("This file is a playlist, not a video. Upload the video file itself.");
+		}
 		const videoStream = probe.streams?.find(
 			(s: { codec_type: string }) => s.codec_type === "video",
 		);
