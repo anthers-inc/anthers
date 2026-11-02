@@ -38,6 +38,23 @@ const FRAMED_PREFIX: Record<ImageFrameType, string> = {
  * `isOwnStorageRef` covers it like every other upload, and under the surface's existing
  * public-chrome prefix so the bucket policy needs no new case.
  */
+/**
+ * Re-encode an uploaded display image before it is stored.
+ *
+ * The upload door used to store the client's bytes with the client's declared type, so an
+ * image-named HTML file could be served from a trusted subdomain, and an image could carry
+ * EXIF or an oversized canvas into every reader's browser. This decodes with sharp, applies
+ * EXIF rotation, bounds the long edge, strips metadata and writes WebP. Anything sharp
+ * cannot decode is refused by the caller.
+ */
+export async function normalizeDisplayImage(source: Buffer): Promise<Buffer> {
+	return sharp(source, { failOn: "none" })
+		.rotate()
+		.resize(2048, 2048, { fit: "inside", withoutEnlargement: true })
+		.webp({ quality: 90 })
+		.toBuffer();
+}
+
 export function framedImageKey(userId: number, mediaType: ImageFrameType): string {
 	const uuid = crypto.randomUUID().replace(/-/g, "");
 	return `creators/${userId}/${FRAMED_PREFIX[mediaType]}/framed/${uuid}.webp`;

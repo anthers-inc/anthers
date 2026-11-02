@@ -26,10 +26,12 @@ export async function uploadImageFile(
 	file: File,
 	mediaType: ImageMediaType = "image",
 	signal?: AbortSignal,
+	purpose?: "source",
 ): Promise<{ key: string; url: string }> {
 	const formData = new FormData();
 	formData.append("file", file);
 	formData.append("mediaType", mediaType);
+	if (purpose) formData.append("purpose", purpose);
 	const res = await apiFetch("/api/content/media-upload/direct", {
 		method: "POST",
 		body: formData,
@@ -44,6 +46,21 @@ export async function uploadImageFile(
 		);
 	}
 	return (await res.json()) as { key: string; url: string };
+}
+
+/**
+ * Upload the whole picture a framing surface keeps in its `*Source` column.
+ *
+ * The source is owner-only: it is stored private under `sources/`, and only the derivative
+ * `frameImageFile` writes is public. The surface still displays the derivative, so a reader
+ * never needs the source URL.
+ */
+export async function uploadImageSource(
+	file: File,
+	mediaType: ImageMediaType,
+	signal?: AbortSignal,
+): Promise<{ key: string; url: string }> {
+	return uploadImageFile(file, mediaType, signal, "source");
 }
 
 /**

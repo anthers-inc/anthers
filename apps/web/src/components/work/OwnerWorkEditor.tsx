@@ -95,7 +95,7 @@ import AccessTables, {
 import {
 	frameImageFile,
 	keyToPreview,
-	uploadImageFile,
+	uploadImageSource,
 } from "@anthers/web-shared/post/mediaUpload";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { publishingPermissionMissing, usePublishingState } from "@anthers/web-shared/publishing";
@@ -535,7 +535,7 @@ export default function OwnerWorkEditor({
 		setThumbError(null);
 		try {
 			const source = thumbFrame.file
-				? (await uploadImageFile(thumbFrame.file, "thumbnail")).url
+				? (await uploadImageSource(thumbFrame.file, "thumbnail")).url
 				: thumbFrame.source;
 			if (!source) throw new Error("That image isn't available any more. Upload it again.");
 			const { url } = await frameImageFile(source, "thumbnail", crop);

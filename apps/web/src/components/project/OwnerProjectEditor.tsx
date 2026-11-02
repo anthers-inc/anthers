@@ -29,7 +29,7 @@ import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import {
 	frameImageFile,
 	keyToPreview,
-	uploadImageFile,
+	uploadImageSource,
 } from "@anthers/web-shared/post/mediaUpload";
 import { publishingPermissionMissing, usePublishingState } from "@anthers/web-shared/publishing";
 import { Link } from "@anthers/web-shared/router";
@@ -143,7 +143,7 @@ export default function OwnerProjectEditor({
 		setThumbnailBusy(true);
 		try {
 			const source = framing.file
-				? (await uploadImageFile(framing.file, "thumbnail")).url
+				? (await uploadImageSource(framing.file, "thumbnail")).url
 				: framing.source;
 			if (!source) throw new Error("That image isn't available any more. Upload it again.");
 			const framed = await frameImageFile(source, "thumbnail", crop);

@@ -26,9 +26,19 @@ import {
 	listPreviewCaptionTracksForWork,
 	VttRefusal,
 } from "../../services/captions.js";
-import { framedImageKey, frameImage, ImageFrameRefusal } from "../../services/image-framing.js";
+import {
+	framedImageKey,
+	frameImage,
+	ImageFrameRefusal,
+	normalizeDisplayImage,
+} from "../../services/image-framing.js";
 import { scanInlineUpload } from "../../services/safety-scan.js";
-import { aclForMediaType, scannedObjectKind } from "../../services/storage/acl.js";
+import {
+	aclForMediaType,
+	IMAGE_MEDIA_TYPES,
+	imageUploadProblem,
+	scannedObjectKind,
+} from "../../services/storage/acl.js";
 import { isLocalStorage, storage } from "../../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../../services/storage/keys.js";
 import { mediaUploadKeyFor } from "../../services/upload-sessions.js";
@@ -124,6 +134,10 @@ const uploadsRoutes = new Hono()
 		const file = formData.get("file");
 		const mediaType = formData.get("mediaType") as string | null;
 		const entityId = formData.get("entityId") as string | null;
+		// `purpose=source` names the whole picture a framing surface keeps in its `*Source`
+		// column. The source is owner-only, so it is stored private under `sources/`; the
+		// derivative the frame route writes is the public display image.
+		const purpose = formData.get("purpose") as string | null;
 
 		if (!(file instanceof File)) return c.json({ error: "No file provided" }, 400);
 
@@ -137,7 +151,30 @@ const uploadsRoutes = new Hono()
 			return c.json({ error: `File too large (max ${isMedia ? "500MB" : "10MB"})` }, 413);
 		}
 
-		const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
+		const isImage = IMAGE_MEDIA_TYPES.has(mediaType ?? "");
+		if (isImage) {
+			const problem = imageUploadProblem(file.type, file.name);
+			if (problem) return c.json({ error: problem, code: "image_type" }, 415);
+		}
+
+		// Every image is re-encoded before it is stored: the client's declared type is not
+		// evidence, an image-named HTML file must never reach a trusted subdomain, and the
+		// bytes that reach a reader carry no EXIF and no unbounded canvas.
+		let contentType = file.type;
+		let body: Buffer = Buffer.from(await file.arrayBuffer());
+		if (isImage) {
+			try {
+				body = await normalizeDisplayImage(body);
+				contentType = "image/webp";
+			} catch {
+				return c.json(
+					{ error: "That image could not be read. Try another file.", code: "image_decode" },
+					415,
+				);
+			}
+		}
+
+		const ext = isImage ? "webp" : file.name.includes(".") ? file.name.split(".").pop() : "";
 		const uuid = crypto.randomUUID().replace(/-/g, "");
 		const prefix = `creators/${user.id}`;
 		let key: string;
@@ -194,7 +231,9 @@ const uploadsRoutes = new Hono()
 			case "gallery":
 			case "image":
 			case "screenshot":
-				key = `${prefix}/gallery/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				// An image Work's source set IS its gallery, so this is a deliverable rather
+				// than storefront chrome. `source-images/` is not a public prefix.
+				key = `${prefix}/source-images/${entityId ?? "unknown"}/${uuid}.${ext}`;
 				break;
 			case "asset":
 				key = `${prefix}/assets/${entityId ?? "unknown"}/${uuid}.${ext}`;
@@ -206,12 +245,21 @@ const uploadsRoutes = new Hono()
 				key = `${prefix}/uploads/${uuid}.${ext}`;
 		}
 
-		// Public ONLY for display chrome; everything else private, including any
-		// mediaType this route doesn't recognize (it arrives unvalidated off the form).
-		const acl = aclForMediaType(mediaType);
-
-		const buffer = Buffer.from(await file.arrayBuffer());
-		await storage.upload(key, buffer, file.type, acl);
+		// A framing source is owner-only even when its surface type is public; the derived
+		// image the frame route writes is the one the world sees. Everything else follows
+		// the display-chrome allowlist and fails closed.
+		if (purpose === "source" && isImage) {
+			const folder =
+				mediaType === "banner" || mediaType === "header"
+					? "banners"
+					: mediaType === "avatar"
+						? "avatars"
+						: "thumbnails";
+			key = `${prefix}/sources/${folder}/${uuid}.${ext}`;
+		}
+		const acl = purpose === "source" && isImage ? "private" : aclForMediaType(mediaType);
+		const buffer = body;
+		await storage.upload(key, buffer, contentType, acl);
 		// 🚨 **Scanned inline, and this is the door the child-safety coverage map describes as
 		// the inline path.** The bytes are fully buffered here, so there is nothing to defer to a
 		// job — and unlike a Work there is no release gate behind which a queued scan could
