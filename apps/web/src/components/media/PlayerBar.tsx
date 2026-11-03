@@ -111,7 +111,7 @@ export default function PlayerBar() {
 	return (
 		<Appear
 			show={track !== null}
-			className="fixed inset-x-0 bottom-0 z-50 border-t border-base-300 bg-base-200/95 shadow-lg backdrop-blur"
+			className="fixed inset-x-0 bottom-0 z-50 border-t border-base-300 bg-base-200/95 shadow-lg backdrop-blur safe-bottom safe-sides"
 			distance={24}
 			duration={MOTION.base}
 			exitDuration={MOTION.base}
