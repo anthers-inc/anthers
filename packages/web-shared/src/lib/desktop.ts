@@ -143,15 +143,24 @@ export function onAuthCode(handler: (code: string) => void): () => void {
  * A human-recognizable name for this machine, used as the device label in the Devices
  * list. The webview cannot read a hostname, so this is the best honest approximation —
  * the creator sees it on the authorize page before approving, which is what matters.
+ *
+ * ⚠️ **The phone is checked first, and that is the whole ordering.** Android's user agent
+ * also carries `Linux` and an iPhone's carries `Mac OS X`, so the desktop checks below
+ * would name a phone after the operating system underneath it — an Android sign-in read
+ * "Anthers on Linux" in the Devices list, which is a label that cannot be told apart from
+ * a development machine. `userAgent` is a parameter so the mapping can be pinned.
  */
-export function deviceLabel(): string {
-	const ua = navigator.userAgent;
-	const os = /Windows/.test(ua)
-		? "Windows"
-		: /Mac OS X|Macintosh/.test(ua)
-			? "Mac"
-			: /Linux/.test(ua)
-				? "Linux"
-				: "Desktop";
+export function deviceLabel(userAgent = navigator.userAgent): string {
+	const os = /Android/.test(userAgent)
+		? "Android"
+		: /iPhone|iPad|iPod/.test(userAgent)
+			? "iOS"
+			: /Windows/.test(userAgent)
+				? "Windows"
+				: /Mac OS X|Macintosh/.test(userAgent)
+					? "Mac"
+					: /Linux/.test(userAgent)
+						? "Linux"
+						: "Desktop";
 	return `Anthers on ${os}`;
 }
