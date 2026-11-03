@@ -99,6 +99,7 @@ export function adminOrigins(): string[] {
 		"http://localhost:4174",
 		"http://127.0.0.1:4174",
 		"https://admin.anthers.localhost",
+		...sessionAdminPreviewOrigins(),
 	];
 	const m = /^https:\/\/(.+)\.api\.anthers\.localhost$/.exec(process.env.PORTLESS_URL ?? "");
 	if (m) origins.push(`https://${m[1]}.admin.anthers.localhost`);
@@ -157,4 +158,18 @@ function sessionPreviewOrigins(): string[] {
 	return [process.env.PREVIEW_PORT, process.env.ADMIN_PREVIEW_PORT]
 		.filter((port): port is string => !!port && /^\d{2,5}$/.test(port))
 		.flatMap((port) => [`http://localhost:${port}`, `http://127.0.0.1:${port}`]);
+}
+
+/**
+ * The admin preview's own origin for a browser run, which took a free port rather than :4174.
+ *
+ * 🚨 **The site preview's port must never join this list.** `adminOrigins()` is the boundary
+ * that keeps the main site out of every admin route; admitting the site origin here would hand
+ * a script on the site the operator's credentials, which is the finding that put this function
+ * in place. Exactly the admin preview's port, never a range.
+ */
+function sessionAdminPreviewOrigins(): string[] {
+	const port = process.env.ADMIN_PREVIEW_PORT;
+	if (!port || !/^\d{2,5}$/.test(port)) return [];
+	return [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 }
