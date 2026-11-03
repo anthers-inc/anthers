@@ -35,7 +35,7 @@ import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { allowedOrigins } from "../origins.js";
-import { captureError, type ErrorFrame } from "../services/error-tracker.js";
+import { captureError, type ErrorFrame, stripQuery } from "../services/error-tracker.js";
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { rowsOf } from "../services/rows.js";
 
@@ -101,7 +101,7 @@ export const errorCaptureRoutes = new Hono().post("/browser", async (c) => {
 			message,
 			frames: parsedFrames,
 			context: {
-				route: typeof path === "string" ? path.slice(0, 300) : undefined,
+				route: typeof path === "string" ? stripQuery(path) : undefined,
 				userAgent: typeof userAgent === "string" ? userAgent.slice(0, 300) : undefined,
 			},
 		});

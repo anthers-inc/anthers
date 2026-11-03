@@ -115,6 +115,23 @@ describe("POST /api/errors/browser", () => {
 		expect(last).toBe(429);
 	});
 
+	it("stores the route without its query string", async () => {
+		const message = `beacon-test query ${crypto.randomUUID()}`;
+		await beacon(
+			{ message, path: "/works/1?share=SHARE-SECRET&next=/works/2" },
+			ORIGIN_OK,
+			"10.9.77.9",
+		);
+		const [row] = await db
+			.select()
+			.from(errorEvents)
+			.where(like(errorEvents.message, "beacon-test query%"))
+			.limit(1);
+		const context = row?.sampleContext as { route?: string } | null | undefined;
+		expect(JSON.stringify(context ?? {})).not.toContain("SHARE-SECRET");
+		expect(context?.route).toBe("/works/1");
+	});
+
 	it("never leaks a token or an email from the message — redaction is the server's job", async () => {
 		const message = `beacon-test redaction ${crypto.randomUUID()}`;
 		await beacon({ message: `${message} mail user@example.com token /s/tok_abc12345xyz` });
