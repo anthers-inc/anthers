@@ -117,8 +117,12 @@ export default function LoggedOutLayout() {
 		// `relative isolate` scopes the decor z-order: content + footer (z-10) sit
 		// below the side vines (z-20), which sit below the grassy floor (z-30). The
 		// sticky nav stays on top (z-40).
-		<div className="relative isolate min-h-screen flex flex-col">
+		<div className="relative isolate min-h-dvh flex flex-col safe-bottom safe-sides">
 			<header className="py-1 nav-edge bg-base-200/50 backdrop-blur-md sticky top-0 z-40">
+				{/* The status bar and camera cutout sit over the page in a packaged shell. The
+				    strip is inside the header so the header's own backdrop paints underneath
+				    them; the bar below keeps the height it always had. See globals.css. */}
+				<div className="safe-top" aria-hidden="true" />
 				{/* Theme + language utilities, floated into the page's top-right corner —
 					deliberately outside the centered nav. Desktop only; on mobile the theme
 					picker drops into the hamburger menu below. (The picker stands in the

@@ -244,62 +244,72 @@ function LoggedInLayoutInner() {
 
 	return (
 		<ViewFilterProvider>
-			<div className="h-screen flex flex-col overflow-hidden">
+			<div className="h-dvh flex flex-col overflow-hidden safe-bottom safe-sides">
 				{/* Top bar: brand and the mode switch on the left, search in the middle, the
 		    reader's notifications on the right. It is the one header in both modes; studio
 		    mode leaves out search and the basket, which belong to user mode. The sidebar's
 		    own toggle used to live here too and moved onto the sidebar's edge (2026-10-16),
 		    and the account menu left on 2026-10-26 — the sidebar is the door to Settings and
-		    Badges & Purchases lives in the account pages' footer. */}
-				<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40 h-14 min-h-0">
-					<div className="navbar-start gap-3">
-						{/* A plain flex link rather than a `btn`, for the same reason as the brand link in
+		    Badges & Purchases lives in the account pages' footer.
+
+		    ⚠️ **The safe-area strip is INSIDE the header, not padding on it.** The bar is a
+		    fixed `h-14` and the page's background sits behind it, so padding on the header
+		    would eat into the bar's own height; a strip above the navbar grows the header by
+		    the inset and paints the same backdrop under the status bar and camera cutout. */}
+				<header className="nav-edge bg-base-200/50 backdrop-blur-md sticky top-0 z-40">
+					<div className="safe-top" aria-hidden="true" />
+					<div className="navbar px-4 h-14 min-h-0">
+						<div className="navbar-start gap-3">
+							{/* A plain flex link rather than a `btn`, for the same reason as the brand link in
 					    LoggedOutLayout: the ghost button's hover background draws a rectangle the trimmed
 					    logo artwork doesn't fill. */}
-						<Link
-							to={studio ? creatorHome : userHome}
-							className="flex items-center gap-2 pl-2 pr-1"
-						>
-							<Logo variant="oneline" className="h-9" />
-						</Link>
-						{/* The mode switch sits beside the logo rather than at the top of the sidebar: it names
+							<Link
+								to={studio ? creatorHome : userHome}
+								className="flex items-center gap-2 pl-2 pr-1"
+							>
+								<Logo variant="oneline" className="h-9" />
+							</Link>
+							{/* The mode switch sits beside the logo rather than at the top of the sidebar: it names
 						    the two halves of the whole app, so it belongs to the one header both halves share,
 						    and the sidebar's first row is free for where the creator actually is. */}
-						{creatorMode && !chromeHidden && (
-							<ModeSwitch
-								mode={mode}
-								userHome={userHome}
-								creatorHome={creatorHome}
-								pathname={pathname}
-							/>
-						)}
-					</div>
+							{creatorMode && !chromeHidden && (
+								<ModeSwitch
+									mode={mode}
+									userHome={userHome}
+									creatorHome={creatorHome}
+									pathname={pathname}
+								/>
+							)}
+						</div>
 
-					<div className="navbar-center flex-1 px-4 hidden sm:flex">{!studio && <SearchBar />}</div>
+						<div className="navbar-center flex-1 px-4 hidden sm:flex">
+							{!studio && <SearchBar />}
+						</div>
 
-					<div className="navbar-end gap-1">
-						{/* Basket — only rendered when it has items, so an empty basket costs no
+						<div className="navbar-end gap-1">
+							{/* Basket — only rendered when it has items, so an empty basket costs no
 					    header space. The header is tight on mobile and a permanent "0" badge
 					    would be noise; a control that appears when it has content is strictly
 					    better than one that is always there. The count is a `badge` so a
 					    buyer who navigates away from the Work page can always get back to
 					    the one surface where money changes hands. */}
-						{!studio && basketCount > 0 && (
-							<Link
-								to="/basket"
-								className="btn btn-ghost btn-sm btn-circle relative"
-								aria-label={`Basket (${basketCount} item${basketCount > 1 ? "s" : ""})`}
-							>
-								<ShoppingBagIcon className="w-5 h-5" />
-								<span className="badge badge-primary badge-xs absolute -top-1 -right-1">
-									{basketCount}
-								</span>
-							</Link>
-						)}
-						{/* The bell — the same appear-when-there's-content rule as the basket, with the
+							{!studio && basketCount > 0 && (
+								<Link
+									to="/basket"
+									className="btn btn-ghost btn-sm btn-circle relative"
+									aria-label={`Basket (${basketCount} item${basketCount > 1 ? "s" : ""})`}
+								>
+									<ShoppingBagIcon className="w-5 h-5" />
+									<span className="badge badge-primary badge-xs absolute -top-1 -right-1">
+										{basketCount}
+									</span>
+								</Link>
+							)}
+							{/* The bell — the same appear-when-there's-content rule as the basket, with the
 					    count riding the shared store so one poll serves every surface. Studio mode
 					    leaves it out with search and the basket: creator chrome, not reader chrome. */}
-						{!studio && <NotificationBell />}
+							{!studio && <NotificationBell />}
+						</div>
 					</div>
 				</header>
 

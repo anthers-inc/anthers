@@ -20,6 +20,28 @@
 @source "../../../../packages/web-shared/src";
 
 /* ============================================
+   SAFE AREAS — THE PHONE'S BARS AND CUTOUTS
+   ============================================ */
+
+/* The shell's chrome claims back the screen the system bar and camera cutout sit over.
+   `--anthers-inset-*` is what the mobile shell measures from Android's window insets and
+   writes onto the document (see `anthers-mobile`'s `MainActivity`), because an Android
+   WebView does not report the status bar to `env()`; `env()` is the fallback for iOS and
+   for a WebView new enough to report the system bars itself. Both are zero in a browser on
+   a desktop, so the utilities are inert there. The padding belongs in the shell, never in a
+   page: every page inherits the same safe frame. */
+.safe-top {
+	height: var(--anthers-inset-top, env(safe-area-inset-top, 0px));
+}
+.safe-bottom {
+	padding-bottom: var(--anthers-inset-bottom, env(safe-area-inset-bottom, 0px));
+}
+.safe-sides {
+	padding-left: var(--anthers-inset-left, env(safe-area-inset-left, 0px));
+	padding-right: var(--anthers-inset-right, env(safe-area-inset-right, 0px));
+}
+
+/* ============================================
    WIKI/PROSE STYLING
    Typography and formatting for wiki documentation pages.
    ============================================ */
