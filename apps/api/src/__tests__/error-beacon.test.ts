@@ -8,7 +8,7 @@
  * body, answered 400/204 rather than thrown. A failed capture becoming an error is the
  * exact inversion the golden rule exists to stop.
  */
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { errorEvents } from "@anthers/db/schema";
 import { like } from "drizzle-orm";
@@ -26,20 +26,24 @@ function beacon(body: unknown, origin = ORIGIN_OK, ip = "10.9.9.9") {
 	);
 }
 
+const SAVED_KNOB = process.env.RATE_LIMITS_DISABLED;
+
 beforeEach(async () => {
 	// This suite's rows carry the test marker in the message; the heartbeat's row does not.
 	await db.delete(errorEvents).where(like(errorEvents.message, "beacon-test%"));
 	// 🚨 The limiter's refusing case needs the limiter live: test sessions set
 	// RATE_LIMITS_DISABLED=1 (see scripts/session.ts), which would make the 429 case
-	// vacuous. Removed for this file, restored at exit — the same discipline
-	// rate-limit.test.ts (the limiter's own suite) applies.
+	// vacuous. ⚠️ **Removed around the case, never at module load** — a delete at load time
+	// is still in force while every later file in the same process runs, which is how a
+	// real door limit (the one `/signup/begin` now carries) became a 429 in an unrelated
+	// suite. The knob is restored in `afterEach`, in `beforeAll`'s captured state.
 	delete process.env.RATE_LIMITS_DISABLED;
 });
 
-process.on("exit", () => {
+afterEach(() => {
 	// Sessions set the knob; leaving it unset would strip the opt-in from every later
-	// file in this process. Restore unconditionally, for whichever state we found.
-	process.env.RATE_LIMITS_DISABLED = "1";
+	// case in this process. Restore in the state `beforeAll` found.
+	if (SAVED_KNOB !== undefined) process.env.RATE_LIMITS_DISABLED = SAVED_KNOB;
 });
 
 describe("POST /api/errors/browser", () => {

@@ -28,14 +28,69 @@ export function generateToken(): string {
 // parental-control PIN, and the admin app's own sign-in codes. argon2id, by name, so a
 // cheap digest cannot be substituted where the keyspace is small.
 
+/**
+ * The most argon2 operations this process runs at once.
+ *
+ * 🚨 **The API container is one vCPU and one gigabyte.** argon2id is expensive on purpose —
+ * that is what makes a dumped hash useless — and Bun runs it on the thread pool, so a hundred
+ * concurrent requests do not queue behind one another, they all allocate. A burst of
+ * `/signup/begin` calls, each minting a code for a fresh address, could make every other
+ * request on the platform wait on memory; a script did not need an account to do it.
+ *
+ * Two slots keeps one caller's ceremony exactly as costly as it was while bounding what a
+ * crowd can ask for. The rate limiters in front of the doors are what stop the crowd from
+ * forming; this is the floor under a limiter that is disabled in a test, misconfigured, or
+ * racing a window boundary.
+ */
+const HASH_CONCURRENCY = 2;
+let hashSlots = HASH_CONCURRENCY;
+const hashWaiters: Array<() => void> = [];
+
+/** Run `work` while holding one of the hash slots, waiting for a free one if need be. */
+async function withHashSlot<T>(work: () => Promise<T>): Promise<T> {
+	if (hashSlots > 0) {
+		hashSlots -= 1;
+	} else {
+		await new Promise<void>((resolve) => hashWaiters.push(resolve));
+	}
+	try {
+		return await work();
+	} finally {
+		// Hand the slot straight to the next waiter rather than releasing and re-taking it,
+		// which would let a later arrival overtake somebody already queued.
+		const next = hashWaiters.shift();
+		if (next) next();
+		else hashSlots += 1;
+	}
+}
+
 /** Hash a short-lived secret using Bun's built-in argon2id */
 export async function hashPassword(password: string): Promise<string> {
-	return Bun.password.hash(password, { algorithm: "argon2id" });
+	return withHashSlot(() => Bun.password.hash(password, { algorithm: "argon2id" }));
 }
 
 /** Verify a secret against a hash */
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-	return Bun.password.verify(password, hash);
+	return withHashSlot(() => Bun.password.verify(password, hash));
+}
+
+/**
+ * Spend one hash's work on a comparison that is already known to fail.
+ *
+ * 🚨 **This is timing uniformity, and it is the reason a miss must do real work.** The admin
+ * sign-in door mints a code row only for an active admin's address; without this, a wrong code
+ * for an address with no account returns in microseconds while the same wrong code for a real
+ * admin spends argon2, and the response time answers "is this person an admin?" for anybody
+ * willing to ask twice. The hash is computed once and reused, so the cost is the comparison
+ * rather than a fresh hash each time.
+ */
+let dummyHash: Promise<string> | null = null;
+
+export async function spendPasswordWork(secret: string): Promise<void> {
+	dummyHash ??= hashPassword(generateToken());
+	// A verify against a valid hash cannot throw for a reason the caller can act on; a broken
+	// constant would be a bug here, not a property of the submitted secret.
+	await verifyPassword(secret, await dummyHash);
 }
 
 // ─── Session Management ──────────────────────────────────────────────────────

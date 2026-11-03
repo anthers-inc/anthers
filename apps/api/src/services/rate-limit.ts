@@ -114,6 +114,29 @@ export async function checkRate(
 	}
 }
 
+/**
+ * Forget a key's spent window — the counterpart to `checkRate` for a door that only counts
+ * failures.
+ *
+ * A door that increments before it judges cannot tell a correct secret from a wrong one until
+ * after the fact, so a run of legitimate uses spends budget meant for guesses. Calling this
+ * when the secret was right resets the account's window and leaves the counter meaning what it
+ * says: attempts that failed.
+ */
+export async function clearRate(door: string, ip: string): Promise<void> {
+	if (process.env.RATE_LIMITS_DISABLED === "1") return;
+	try {
+		await db.execute(sql`DELETE FROM rate_limits WHERE door = ${door} AND ip = ${ip}`);
+	} catch (error) {
+		// Same rule as `checkRate`: a limiter that cannot clear is a looser limiter, never a
+		// door that fails closed on a real person.
+		console.error(
+			`[rate-limit] clear failed for ${door}:`,
+			error instanceof Error ? error.message : error,
+		);
+	}
+}
+
 /** Hono handler body: the 429 a limited route returns, with the retry window. */
 export function limitResponse(verdict: LimitVerdict) {
 	return Response.json(
