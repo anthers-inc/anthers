@@ -34,9 +34,9 @@
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { intakeBodyLimit, intakeLimit } from "../middleware/intake.js";
 import { allowedOrigins } from "../origins.js";
-import { captureError, type ErrorFrame } from "../services/error-tracker.js";
-import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
+import { captureError, type ErrorFrame, stripQuery } from "../services/error-tracker.js";
 import { rowsOf } from "../services/rows.js";
 
 /** The day's free intake, as *expected events* — the budget is consumed by fingerprinted issues, not raw POSTs. */
@@ -44,69 +44,84 @@ const DAILY_EVENT_BUDGET = 2000;
 /** Probabilistic sampling keeps accepting after the budget; this is the fraction, not a hard stop. */
 const SAMPLE_RATE_PAST_BUDGET = 0.05;
 
-export const errorCaptureRoutes = new Hono().post("/browser", async (c) => {
-	// Origin: present-but-foreign refused, absent admitted (see the docblock's ruling).
-	const origin = c.req.header("Origin");
-	if (origin && !allowedOrigins().includes(origin)) {
-		return c.json({ error: "CSRF validation failed" }, 403);
-	}
-
-	// The door's per-IP limit — tight, because a real page fires at most a handful of
-	// beacons per session (the client-side cap is the primary defense; this is the net).
-	const limited = await checkRate("error-beacon", clientIp(c.req.raw.headers), 10, 3600);
-	if (!limited.ok) return limitResponse(limited);
-
-	const body = await c.req.json().catch(() => null);
-	if (!body || typeof body !== "object") return c.json({ error: "Not found" }, 400);
-	const { message, frames, path, userAgent } = body as {
-		message?: unknown;
-		frames?: unknown;
-		path?: unknown;
-		userAgent?: unknown;
-	};
-
-	if (typeof message !== "string" || message.length === 0 || message.length > 1000) {
-		return c.json({ error: "Not found" }, 400);
-	}
-	// Frames: the client sends at most 10, each of at most two strings. Anything else
-	// is not the beacon's shape and is dropped whole — never stored partially.
-	const parsedFrames: ErrorFrame[] = [];
-	if (Array.isArray(frames)) {
-		for (const frame of frames.slice(0, 10)) {
-			if (!frame || typeof frame !== "object") continue;
-			const { fn, loc } = frame as { fn?: unknown; loc?: unknown };
-			if (typeof fn !== "string" || typeof loc !== "string") continue;
-			parsedFrames.push({ fn: fn.slice(0, 150), loc: loc.slice(0, 200) });
+export const errorCaptureRoutes = new Hono().post(
+	"/browser",
+	// The door and the body cap run before the JSON parse: a beacon is a small, fixed-shape
+	// object, and an oversized one is either a bug or a flood, neither of which should be
+	// read into memory to find out.
+	intakeLimit({
+		door: "error-beacon",
+		max: 10,
+		windowSecs: 3600,
+		refusal: {
+			error: "Too many requests. Try again shortly.",
+			code: "rate_limited",
+		},
+	}),
+	intakeBodyLimit(32 * 1024),
+	async (c) => {
+		// Origin: present-but-foreign refused, absent admitted (see the docblock's ruling).
+		const origin = c.req.header("Origin");
+		if (origin && !allowedOrigins().includes(origin)) {
+			return c.json({ error: "CSRF validation failed" }, 403);
 		}
-	}
 
-	// The day's budget, read from the tracker's own store: events captured in the last
-	// 24h across both sources. Past it, sample — never refuse (see the docblock).
-	let accepted = true;
-	try {
-		const recent = await db.execute(sql`
-				SELECT coalesce(sum(count), 0)::int AS n FROM error_events WHERE last_seen_at > now() - interval '24 hours'
-			`);
-		const seen = rowsOf<{ n: number }>(recent)[0]?.n ?? 0;
-		if (seen >= DAILY_EVENT_BUDGET) {
-			accepted = Math.random() < SAMPLE_RATE_PAST_BUDGET;
+		// The door's per-IP limit and cap are the route's first middleware, above — tight,
+		// because a real page fires at most a handful of beacons per session (the client-side
+		// cap is the primary defense; this is the net).
+
+		const body = await c.req.json().catch(() => null);
+		if (!body || typeof body !== "object") return c.json({ error: "Not found" }, 400);
+		const { message, frames, path, userAgent } = body as {
+			message?: unknown;
+			frames?: unknown;
+			path?: unknown;
+			userAgent?: unknown;
+		};
+
+		if (typeof message !== "string" || message.length === 0 || message.length > 1000) {
+			return c.json({ error: "Not found" }, 400);
 		}
-	} catch {
-		// The budget read failing must not fail the beacon; accept and let the caps work.
-	}
+		// Frames: the client sends at most 10, each of at most two strings. Anything else
+		// is not the beacon's shape and is dropped whole — never stored partially.
+		const parsedFrames: ErrorFrame[] = [];
+		if (Array.isArray(frames)) {
+			for (const frame of frames.slice(0, 10)) {
+				if (!frame || typeof frame !== "object") continue;
+				const { fn, loc } = frame as { fn?: unknown; loc?: unknown };
+				if (typeof fn !== "string" || typeof loc !== "string") continue;
+				parsedFrames.push({ fn: fn.slice(0, 150), loc: loc.slice(0, 200) });
+			}
+		}
 
-	if (accepted) {
-		await captureError({
-			source: "browser",
-			message,
-			frames: parsedFrames,
-			context: {
-				route: typeof path === "string" ? path.slice(0, 300) : undefined,
-				userAgent: typeof userAgent === "string" ? userAgent.slice(0, 300) : undefined,
-			},
-		});
-	}
+		// The day's budget, read from the tracker's own store: events captured in the last
+		// 24h across both sources. Past it, sample — never refuse (see the docblock).
+		let accepted = true;
+		try {
+			const recent = await db.execute(sql`
+					SELECT coalesce(sum(count), 0)::int AS n FROM error_events WHERE last_seen_at > now() - interval '24 hours'
+				`);
+			const seen = rowsOf<{ n: number }>(recent)[0]?.n ?? 0;
+			if (seen >= DAILY_EVENT_BUDGET) {
+				accepted = Math.random() < SAMPLE_RATE_PAST_BUDGET;
+			}
+		} catch {
+			// The budget read failing must not fail the beacon; accept and let the caps work.
+		}
 
-	// 204 whatever happened — the beacon never learns anything about the tracker's state.
-	return c.body(null, 204);
-});
+		if (accepted) {
+			await captureError({
+				source: "browser",
+				message,
+				frames: parsedFrames,
+				context: {
+					route: typeof path === "string" ? stripQuery(path) : undefined,
+					userAgent: typeof userAgent === "string" ? userAgent.slice(0, 300) : undefined,
+				},
+			});
+		}
+
+		// 204 whatever happened — the beacon never learns anything about the tracker's state.
+		return c.body(null, 204);
+	},
+);

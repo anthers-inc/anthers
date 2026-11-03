@@ -109,7 +109,9 @@ export function installBrowserErrorCapture(): void {
 		void sendBeacon({
 			message,
 			frames,
-			path: `${location.pathname}${location.search}`.slice(0, 300),
+			// The query is where a share or unsubscribe token travels; the beacon never needs it,
+			// and the log pipeline upstream reads what it is sent.
+			path: location.pathname.slice(0, 300),
 			userAgent: navigator.userAgent.slice(0, 300),
 		});
 	});
@@ -122,7 +124,9 @@ export function installBrowserErrorCapture(): void {
 		void sendBeacon({
 			message,
 			frames,
-			path: `${location.pathname}${location.search}`.slice(0, 300),
+			// The query is where a share or unsubscribe token travels; the beacon never needs it,
+			// and the log pipeline upstream reads what it is sent.
+			path: location.pathname.slice(0, 300),
 			userAgent: navigator.userAgent.slice(0, 300),
 		});
 	});

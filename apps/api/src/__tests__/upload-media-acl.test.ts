@@ -37,6 +37,30 @@ function upload(form: FormData) {
 	);
 }
 
+describe("the direct upload door's size policy", () => {
+	it("refuses a declared length over the ceiling before reading the form", async () => {
+		// 🚨 The test session stores locally, so the ceiling here is the dev one (500 MB).
+		// A deployed API's ceiling is 10 MB — media goes presigned to R2 and never reaches
+		// this route — but the guard is the same statement either way.
+		const form = new FormData();
+		form.append("file", new File(["x"], "avatar.png", { type: "image/png" }));
+		form.append("mediaType", "avatar");
+		const res = await app.fetch(
+			new Request("http://localhost/api/content/media-upload/direct", {
+				method: "POST",
+				headers: {
+					Origin: "http://localhost:3000",
+					Cookie: creator.cookie,
+					"content-length": String(600 * 1024 * 1024),
+				},
+				body: form,
+			}),
+		);
+		expect(res.status).toBe(413);
+		expect((await res.json()).code).toBe("file_too_large");
+	});
+});
+
 describe("the direct upload door's storage policy", () => {
 	it("refuses an HTML document named as an avatar", async () => {
 		const form = new FormData();

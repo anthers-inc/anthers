@@ -315,6 +315,20 @@ export async function alertOperational(
  * Redact a request path for storage: uuid- and token-shaped segments out, ids shape-matched
  * out. Route shapes are stored — `/works/n-[id]` — never the addressing that hit them.
  */
+/**
+ * A URL without its query string or fragment — what a stored route may carry.
+ *
+ * 🚨 **The beacon's `path` field is `location.pathname + location.search`, and the server
+ * stored it whole.** A page that failed while reading a share link or an unsubscribe token
+ * therefore wrote that token into `error_events.sample_context`, where it outlived the link
+ * — the same bearer credential the access log was printing. The route is the diagnostic
+ * half; the query is the half that must never be kept.
+ */
+export function stripQuery(path: string): string {
+	const cut = path.search(/[?#]/);
+	return (cut === -1 ? path : path.slice(0, cut)).slice(0, MAX_ROUTE);
+}
+
 export function redactRoute(path: string): string {
 	return path
 		.replace(UUID_SHAPE, "[id]")
