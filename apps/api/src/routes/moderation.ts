@@ -28,6 +28,7 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { z } from "zod";
 import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
+import { intakeBodyLimit, intakeLimit } from "../middleware/intake.js";
 import {
 	ABUSE_DETAILS_MAX,
 	ABUSE_DETAILS_MIN,
@@ -44,7 +45,6 @@ import {
 	ISSUE_URL_MAX,
 } from "../services/issue-reports.js";
 import { fileReport, findSubject } from "../services/moderation.js";
-import { checkRate, clientIp } from "../services/rate-limit.js";
 
 const reportSchema = z.object({
 	subjectType: z.string().refine(isModerationSubjectType, "Unknown subject type"),
@@ -96,18 +96,6 @@ const issueReportSchema = z.object({
  * genuine report of child sexual abuse material is not comparable to the cost of an
  * extra email.
  */
-
-/**
- * The client's address for the two intake doors below. 🚨 The same last-hop read the
- * shared limiter makes (`services/rate-limit.ts` carries the why) — the *left* end of an
- * `X-Forwarded-For` list is client-forgeable, and these are intake doors a flood would
- * drown, which is the exact shape a forged left end buys an attacker. Both doors' limits
- * are `checkRate` calls on the shared table; the inline Map shapes were retired with the
- * shared limiter's arrival, which is the whole point of one mechanism.
- */
-function clientKeyFor(c: { req: { raw: Request } }): string {
-	return clientIp(c.req.raw.headers);
-}
 
 const moderationRoutes = new Hono()
 	// The taxonomy, served so the report dialog and any future client read the
@@ -174,36 +162,40 @@ const moderationRoutes = new Hono()
 	 * this form is fine and knowing who they were is useful — but it is never required
 	 * and never asked for.
 	 */
-	.post("/abuse-reports", zValidator("json", abuseReportSchema), async (c) => {
-		// Now on the shared limiter — shared storage, so the cap binds every instance, and
-		// the same refusal shape every other limited door answers with (services/rate-limit.ts).
-		const limited = await checkRate("abuse-report", clientKeyFor(c) || "unknown", 5, 3600);
-		if (!limited.ok) {
-			return c.json(
-				{
-					error:
-						"Too many reports from here in the last few minutes. If this is urgent, email abuse@anthers.org.",
-					code: "rate_limited",
-				},
-				429,
-			);
-		}
+	.post(
+		"/abuse-reports",
+		// 🚨 Before the validator, not after it. The limiter and the body cap answer without
+		// parsing anything, so an oversized or malformed flood is refused before the schema
+		// and the JSON parse are paid for — and every refused request is still counted.
+		intakeLimit({
+			door: "abuse-report",
+			max: 5,
+			windowSecs: 3600,
+			refusal: {
+				error:
+					"Too many reports from here in the last few minutes. If this is urgent, email abuse@anthers.org.",
+				code: "rate_limited",
+			},
+		}),
+		intakeBodyLimit(16 * 1024),
+		zValidator("json", abuseReportSchema),
+		async (c) => {
+			const { url, reason, details, reporterEmail } = c.req.valid("json");
+			const { reportId } = await fileAbuseReport({
+				url,
+				reason,
+				details,
+				reporterEmail,
+				// Optional, never required. `getOptionalUserId` returns null for a signed-out
+				// caller rather than refusing, which is the difference this route exists for.
+				reporterId: await getOptionalUserId(c),
+			});
 
-		const { url, reason, details, reporterEmail } = c.req.valid("json");
-		const { reportId } = await fileAbuseReport({
-			url,
-			reason,
-			details,
-			reporterEmail,
-			// Optional, never required. `getOptionalUserId` returns null for a signed-out
-			// caller rather than refusing, which is the difference this route exists for.
-			reporterId: await getOptionalUserId(c),
-		});
-
-		// Same silence as the authenticated route and the DMCA intake: what we do next is
-		// operator information. What the reporter is told is that it arrived.
-		return c.json({ reported: true, reportId }, 201);
-	})
+			// Same silence as the authenticated route and the DMCA intake: what we do next is
+			// operator information. What the reporter is told is that it arrived.
+			return c.json({ reported: true, reportId }, 201);
+		},
+	)
 
 	/**
 	 * Report a bug or defect in Anthers itself, with no account required.
@@ -223,33 +215,36 @@ const moderationRoutes = new Hono()
 	 * than the retired per-instance Map: an unauthenticated write endpoint needs *something*,
 	 * and something shared across instances is the something that actually binds.
 	 */
-	.post("/issue-reports", zValidator("json", issueReportSchema), async (c) => {
-		const limited = await checkRate("issue-report", clientKeyFor(c) || "unknown", 5, 3600);
-		if (!limited.ok) {
-			return c.json(
-				{
-					error: "Too many reports from here in the last few minutes. Please try again shortly.",
-					code: "rate_limited",
-				},
-				429,
-			);
-		}
+	.post(
+		"/issue-reports",
+		intakeLimit({
+			door: "issue-report",
+			max: 5,
+			windowSecs: 3600,
+			refusal: {
+				error: "Too many reports from here in the last few minutes. Please try again shortly.",
+				code: "rate_limited",
+			},
+		}),
+		intakeBodyLimit(16 * 1024),
+		zValidator("json", issueReportSchema),
+		async (c) => {
+			const { summary, details, pageUrl, reporterEmail } = c.req.valid("json");
+			const { issueId } = await fileIssueReport({
+				summary,
+				details,
+				pageUrl,
+				reporterEmail,
+				// Optional, never required, for the same reason the abuse intake reads a session
+				// with `getOptionalUserId` — a signed-out filer is ordinary, not an error.
+				reporterId: await getOptionalUserId(c),
+			});
 
-		const { summary, details, pageUrl, reporterEmail } = c.req.valid("json");
-		const { issueId } = await fileIssueReport({
-			summary,
-			details,
-			pageUrl,
-			reporterEmail,
-			// Optional, never required, for the same reason the abuse intake reads a session
-			// with `getOptionalUserId` — a signed-out filer is ordinary, not an error.
-			reporterId: await getOptionalUserId(c),
-		});
-
-		// What the reporter is told is that it arrived. What we do with it — triage,
-		// filing, dismissal as a duplicate — is operator information, exactly as on
-		// every other public intake in this app.
-		return c.json({ reported: true, issueId }, 201);
-	});
+			// What the reporter is told is that it arrived. What we do with it — triage,
+			// filing, dismissal as a duplicate — is operator information, exactly as on
+			// every other public intake in this app.
+			return c.json({ reported: true, issueId }, 201);
+		},
+	);
 
 export { moderationRoutes };

@@ -7,9 +7,9 @@ import { isDevCheckout } from "@anthers/db/dev-only";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
-import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { csrfProtection } from "./middleware/csrf.js";
+import { requestLog } from "./middleware/request-log.js";
 import { adminOrigins, allowedOrigins } from "./origins.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { adminRoutes } from "./routes/admin.js";
@@ -50,7 +50,7 @@ const siteCors = cors({ origin: allowedOrigins(), credentials: true });
 const adminCors = cors({ origin: adminOrigins(), credentials: true });
 
 const app = new Hono()
-	.use(logger())
+	.use(requestLog)
 	// The dev build-delivery harness frames its build from the preview page, which is a
 	// different origin (port) than this API, and `secureHeaders` below stamps
 	// `X-Frame-Options: SAMEORIGIN` on every response — which blocks exactly that frame.
