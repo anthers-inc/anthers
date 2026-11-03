@@ -115,6 +115,23 @@ describe("POST /api/errors/browser", () => {
 		expect(last).toBe(429);
 	});
 
+	it("stores the route without its query string", async () => {
+		const message = `beacon-test query ${crypto.randomUUID()}`;
+		await beacon(
+			{ message, path: "/works/1?share=SHARE-SECRET&next=/works/2" },
+			ORIGIN_OK,
+			"10.9.77.9",
+		);
+		const [row] = await db
+			.select()
+			.from(errorEvents)
+			.where(like(errorEvents.message, "beacon-test query%"))
+			.limit(1);
+		const context = row?.sampleContext as { route?: string } | null | undefined;
+		expect(JSON.stringify(context ?? {})).not.toContain("SHARE-SECRET");
+		expect(context?.route).toBe("/works/1");
+	});
+
 	it("refuses a body over the cap before reading it, and stores nothing", async () => {
 		const message = `beacon-test oversized ${crypto.randomUUID()}`;
 		const res = await beacon(

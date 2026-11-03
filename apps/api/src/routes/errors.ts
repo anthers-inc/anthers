@@ -36,7 +36,7 @@ import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { intakeBodyLimit, intakeLimit } from "../middleware/intake.js";
 import { allowedOrigins } from "../origins.js";
-import { captureError, type ErrorFrame } from "../services/error-tracker.js";
+import { captureError, type ErrorFrame, stripQuery } from "../services/error-tracker.js";
 import { rowsOf } from "../services/rows.js";
 
 /** The day's free intake, as *expected events* — the budget is consumed by fingerprinted issues, not raw POSTs. */
@@ -115,7 +115,7 @@ export const errorCaptureRoutes = new Hono().post(
 				message,
 				frames: parsedFrames,
 				context: {
-					route: typeof path === "string" ? path.slice(0, 300) : undefined,
+					route: typeof path === "string" ? stripQuery(path) : undefined,
 					userAgent: typeof userAgent === "string" ? userAgent.slice(0, 300) : undefined,
 				},
 			});
