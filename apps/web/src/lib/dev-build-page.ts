@@ -29,6 +29,27 @@
 
 const PAGE_TITLE = "Web Build Test Harness";
 
+/**
+ * Whether this server is a checkout's preview — the only place the page is served.
+ *
+ * 🚨 **The gate is a positive signal, because the obvious one is already true in production.**
+ * `isDevCheckout()` from `@anthers/db/dev-only` asks whether `.do/app.yaml` and `Makefile` sit
+ * above this module, which is how the API's container is identified: its `Dockerfile` copies
+ * only `packages/` and `apps/api/`, so those files are absent there. The `web` component is a
+ * source deploy — `source_dir: /`, a build command, and `run_command: bun run
+ * apps/web/serve.ts` — so the whole repository, root files included, is present at run time.
+ * The check that closes the API's door would leave this one open, which is exactly the shape
+ * of the `NODE_ENV` branch this repository has already paid for.
+ *
+ * ⭐ **`API_PORT` is set by a browser session and by nothing else.** `.do/app.yaml` gives the
+ * web component `API_ORIGIN` (the private network) and never a local port, because a deployed
+ * preview has no local API to name. A missing variable therefore removes the page, which is
+ * the right direction for a missing variable to point.
+ */
+export function servesDevBuildPage(env: Record<string, string | undefined> = process.env): boolean {
+	return /^\d{2,5}$/.test(env.API_PORT ?? "");
+}
+
 /** The API origin the harness page calls, from the request it was served for. */
 export function devBuildApiOrigin(req: Request, announcePort?: string): string {
 	// Bun's router may hand the handler the listen origin in req.url rather than the proxied
