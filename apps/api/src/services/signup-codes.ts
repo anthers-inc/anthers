@@ -38,7 +38,8 @@
 import { db } from "@anthers/db/client";
 import { type adminSignInCodes, pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { and, eq, gt, lt, sql } from "drizzle-orm";
-import { hashPassword, verifyPassword } from "./auth.js";
+import { hashPassword, spendPasswordWork, verifyPassword } from "./auth.js";
+import { rowsOf } from "./rows.js";
 
 /** How long an issued code stays good. */
 export const SIGNUP_CODE_TTL_MS = 10 * 60 * 1000;
@@ -158,30 +159,30 @@ export async function mintEmailedCode(
 	email: string,
 	now = new Date(),
 ): Promise<{ code: string | null; throttled: boolean }> {
-	const [live] = await db
-		.select({ lastSentAt: table.lastSentAt })
-		.from(table)
-		.where(eq(table.email, email))
-		.limit(1);
-
-	if (live && now.getTime() - live.lastSentAt.getTime() < SIGNUP_CODE_RESEND_MS) {
-		return { code: null, throttled: true };
-	}
-
 	const code = generateSignupCode();
 	const codeHash = await hashPassword(code);
 	const expiresAt = new Date(now.getTime() + SIGNUP_CODE_TTL_MS);
 
-	// Upsert on the address: a re-request replaces the live code rather than adding a
-	// second one, and resets `attempts` — the new code has not been guessed at.
-	await db
+	// 🚨 **The throttle is the upsert's own condition, not a read before it.** Reading
+	// `last_sent_at`, deciding, and then writing left a window in which two concurrent
+	// requests both read "no recent code" and both minted — so one address could be sent two
+	// codes at once, and a script could hold that window open. `WHERE` on the conflict
+	// branch makes "may this address be sent a code now?" and "replace the code" one atomic
+	// statement: zero rows returned means the throttle won.
+	//
+	// A re-request replaces the live code rather than adding a second one, and resets
+	// `attempts` — the new code has not been guessed at.
+	const written = await db
 		.insert(table)
 		.values({ email, codeHash, expiresAt, lastSentAt: now, attempts: 0 })
 		.onConflictDoUpdate({
 			target: table.email,
 			set: { codeHash, expiresAt, lastSentAt: now, attempts: 0 },
-		});
+			setWhere: sql`${table.lastSentAt} <= ${new Date(now.getTime() - SIGNUP_CODE_RESEND_MS).toISOString()}::timestamptz`,
+		})
+		.returning({ id: table.id });
 
+	if (written.length === 0) return { code: null, throttled: true };
 	return { code, throttled: false };
 }
 
@@ -297,39 +298,46 @@ export async function spendEmailedCode(
 	const email = normalizeEmail(rawEmail);
 	const code = rawCode.trim().toUpperCase();
 
-	const [row] = await db
-		.select({
-			id: table.id,
-			codeHash: table.codeHash,
-			attempts: table.attempts,
-			expiresAt: table.expiresAt,
-		})
-		.from(table)
-		.where(eq(table.email, email))
-		.limit(1);
-	if (!row) return { ok: false, reason: "no_code" };
+	// 🚨 **Claim one attempt atomically.** Reading `attempts`, checking the cap, then
+	// incrementing let every request that arrived inside the same window read the same
+	// pre-increment value and pass the cap together — so a scripted walk could spend far more
+	// than five guesses. The `WHERE` makes the claim and the count one statement: exactly
+	// `SIGNUP_CODE_MAX_ATTEMPTS` callers can ever win the row, and only a winner reaches the
+	// hash comparison. Counted before the comparison, so a crash or a killed connection
+	// cannot leave a free attempt behind.
+	const claimed = await db.execute(sql`
+		UPDATE ${table}
+		SET attempts = attempts + 1
+		WHERE email = ${email}
+			AND expires_at > ${now.toISOString()}::timestamptz
+			AND attempts < ${SIGNUP_CODE_MAX_ATTEMPTS}
+		RETURNING code_hash
+	`);
+	const row = rowsOf<{ code_hash: string }>(claimed)[0];
 
-	if (row.expiresAt.getTime() <= now.getTime()) {
-		await db.delete(table).where(eq(table.id, row.id));
-		return { ok: false, reason: "expired" };
-	}
-
-	if (row.attempts >= SIGNUP_CODE_MAX_ATTEMPTS) {
+	if (!row) {
+		// Nothing was claimed. Read once to say why, and never compare against a code the
+		// caller may not guess at.
+		const [live] = await db
+			.select({ id: table.id, expiresAt: table.expiresAt, attempts: table.attempts })
+			.from(table)
+			.where(eq(table.email, email))
+			.limit(1);
+		await spendPasswordWork(code);
+		if (!live) return { ok: false, reason: "no_code" };
+		if (live.expiresAt.getTime() <= now.getTime()) {
+			// By id, not by address: a fresh code may have replaced this one between the
+			// refused claim and the delete, and deleting by address would take it with it.
+			await db.delete(table).where(eq(table.id, live.id));
+			return { ok: false, reason: "expired" };
+		}
 		return { ok: false, reason: "too_many_attempts" };
 	}
 
-	// Count the attempt before testing it. If this throws, or the process dies between
-	// here and the comparison, the guess is still spent — the failure mode of the other
-	// order is an attacker who gets unlimited tries by killing the connection.
-	await db
-		.update(table)
-		.set({ attempts: sql`${table.attempts} + 1` })
-		.where(eq(table.id, row.id));
-
-	const matches = await verifyPassword(code, row.codeHash);
+	const matches = await verifyPassword(code, row.code_hash);
 	if (!matches) return { ok: false, reason: "wrong_code" };
 
-	await db.delete(table).where(eq(table.id, row.id));
+	await db.delete(table).where(eq(table.email, email));
 	return { ok: true, email };
 }
 
