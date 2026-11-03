@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The desktop app's sign-in screen.
+ * The app's sign-in screen — the front door of every packaged shell, desktop or phone.
  *
  * 🚨 **Signing in happens in the person's browser, for every identity.** The shell mints a PKCE
  * challenge, opens the authorize page in the system browser, and a one-time code comes back over
- * the `anthers://` scheme. That is the same OAuth flow the website runs, and it is the shape the
- * packaged app needs: the credential is typed at the server that holds it, and a webview is
- * never the thing asking for it.
+ * the shell's own link — `anthers://` on desktop, the verified `https://anthers.org` app link on
+ * Android. That is the same OAuth flow the website runs, and it is the shape a packaged app
+ * needs: the credential is typed at the server that holds it, and a webview is never the thing
+ * asking for it.
  *
  * ⚠️ **There is deliberately no in-app method.** One existed from 2026-10-16 until 2026-10-27 —
  * an emailed code typed into the window — because Anthers accounts had a password door of their
@@ -14,7 +15,8 @@
  * either a second credential path or an authorization page inside the webview, which is exactly
  * what the handoff exists to avoid.
  *
- * Browser builds never render this; `StudioAuthGate` bounces to the consumer login.
+ * Browser builds never render this: `RootRedirect` sends a signed-out browser to the marketing
+ * page, and `StudioAuthGate` bounces a signed-out browser to the consumer login.
  */
 import { useAuth } from "@anthers/web-shared/auth";
 import {
@@ -30,7 +32,7 @@ import { useEffect, useRef, useState } from "react";
 
 type Phase = "idle" | "waiting" | "completing" | "error";
 
-export default function DesktopSignIn() {
+export default function AppSignIn() {
 	const { refreshUser } = useAuth();
 	const [phase, setPhase] = useState<Phase>("idle");
 	const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export default function DesktopSignIn() {
 	const redeeming = useRef(false);
 
 	// The redemption. Live only while this screen is up: the sign-in's code comes back
-	// here over the anthers:// scheme.
+	// here over the shell's own link.
 	useEffect(() => {
 		const redeem = async (code: string) => {
 			if (redeeming.current) return;
