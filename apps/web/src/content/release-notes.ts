@@ -71,6 +71,20 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.0",
+		date: "2026-11-02",
+		lede: "The Android app opens at its own door and fits a phone, and a creator's page reads by month.",
+		entries: [
+			"The Android app opens at the sign-in handoff now, rather than at the marketing homepage: somebody who has installed the app is past the pitch, and wants their account or the door to it. Signed in, it lands on the account's starting tab, and the marketing pages stay reachable by link.",
+			"The app's topbar and page edges clear the phone's status bar, camera cutout, and gesture bar now, in both portrait and landscape: the topbar carries a strip the height of the system inset, and the page's bottom edge follows the real window inset the shell measures rather than a value the webview cannot see.",
+			"The signed-in phone shell carries Library, Discovery, and Settings in a bottom tab bar, one tap away rather than behind the navigation drawer, which keeps the filters and page sections it is actually for. The player bar stacks above the tabs rather than covering them.",
+			"A creator's page splits its grid into months now, newest first, with the month's name and a rule above its section and a vertical ellipsis where a run of months had nothing. A screen reader hears the span the ellipsis stands for, so a quiet stretch reads as a quiet stretch rather than a jump in time.",
+			"A physical good's Shipping & Policies facts sit in one joined block now, three labeled values where the column is wide enough and label-and-value rows where it is not, with Buy Now and Add to Basket centered beneath the facts rather than at the panel's foot. The general tax category reads General Physical Goods, which is what the row means.",
+			"The About page says the exemption application is filed and pending, now that the Form 1023-EZ was submitted on 2026-11-02; the determination is the IRS's to make.",
+			"A private Work's media no longer reaches an account that cannot open the Work, a refund of a basket holding a Badge closes the Badge and the benefits it carried, and an erased account no longer leaves a subscription charging a card with no account behind it.",
+		],
+	},
+	{
 		version: "2026.10.40",
 		date: "2026-10-30",
 		lede: "A physical good's gallery shows its pictures on the deployed site, and the platform's side of the Android app is in place.",
