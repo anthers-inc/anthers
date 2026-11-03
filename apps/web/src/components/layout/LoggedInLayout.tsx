@@ -165,6 +165,56 @@ function ProfileRow({ rail, active }: { rail: boolean; active: boolean }) {
 	);
 }
 
+/**
+ * The signed-in app's phone navigation: Library, Discovery and Settings at thumb height.
+ *
+ * 🚨 **This is a third shape for the phone, not a breakpoint on the desktop bar.** The
+ * desktop's sidebar is a drawer below `md`, so every destination there costs two taps — open
+ * the drawer, then tap — on the surface a reader navigates from most. The bar puts the two
+ * content tabs and the account door one tap away, and leaves the drawer for its real phone
+ * job: the filters and page sections the sidebar carries. The Studio keeps that drawer and
+ * has no bar, because its seven places are a tool's nav rather than a reader's.
+ *
+ * The bar is hidden while the drawer is open so the backdrop and the bar never compete for
+ * the same tap, and while the chrome is hidden by its shortcut. It carries the bottom inset
+ * itself; `main` reserves `.phone-tabs-space` above it (see globals.css).
+ */
+function PhoneTabs({ hidden }: { hidden: boolean }) {
+	const { pathname } = useLocation();
+	const items = [
+		...USER_TABS.map(({ to, label, icon: Icon }) => ({ to, label, Icon })),
+		{ to: "/settings", label: "Settings", Icon: Cog6ToothIcon },
+	];
+	return (
+		<nav
+			aria-label="Anthers tabs"
+			data-phone-tabs
+			className={`md:hidden fixed inset-x-0 bottom-0 z-40 border-t border-base-300 bg-base-200/95 backdrop-blur safe-bottom safe-sides ${
+				hidden ? "hidden" : ""
+			}`}
+		>
+			<div className="flex h-16 items-stretch">
+				{items.map(({ to, label, Icon }) => {
+					const active = pathname === to || pathname.startsWith(`${to}/`);
+					return (
+						<NavLink
+							key={to}
+							to={to}
+							aria-current={active ? "page" : undefined}
+							className={`flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors ${
+								active ? "text-primary" : "text-base-content/60 hover:text-base-content"
+							}`}
+						>
+							<Icon className="w-5 h-5" />
+							<span>{label}</span>
+						</NavLink>
+					);
+				})}
+			</div>
+		</nav>
+	);
+}
+
 function LoggedInLayoutInner() {
 	const { user } = useAuth();
 	const { currentTrack } = useMediaPlayer();
@@ -199,6 +249,12 @@ function LoggedInLayoutInner() {
 	// onboarding still owes.)
 	const onboarding = user ? user.termsAcceptedAt === null : false;
 	const chromeHidden = !user || onboarding;
+	/**
+	 * The phone tab bar's presence. Studio keeps the drawer because its seven places are a
+	 * tool's nav, and onboarding has nothing the drawer or the bar can point at — both would
+	 * be dead ends behind ProtectedRoute.
+	 */
+	const phoneTabbed = !studio && !chromeHidden;
 
 	/**
 	 * Collapsed reads as a RAIL rather than a closed drawer (Parker, 2026-10-19): on a desktop
@@ -244,7 +300,11 @@ function LoggedInLayoutInner() {
 
 	return (
 		<ViewFilterProvider>
-			<div className="h-dvh flex flex-col overflow-hidden safe-bottom safe-sides">
+			<div
+				className={`h-dvh flex flex-col overflow-hidden safe-bottom safe-sides ${
+					phoneTabbed ? "phone-tabbed" : ""
+				}`}
+			>
 				{/* Top bar: brand and the mode switch on the left, search in the middle, the
 		    reader's notifications on the right. It is the one header in both modes; studio
 		    mode leaves out search and the basket, which belong to user mode. The sidebar's
@@ -481,7 +541,9 @@ function LoggedInLayoutInner() {
 					<div className="relative isolate flex flex-1 min-w-0 flex-col">
 						<MeadowBackdrop />
 						<main
-							className={`flex flex-1 min-h-0 flex-col overflow-y-auto [scrollbar-gutter:stable] transition-[padding-bottom] duration-base ease-settle ${currentTrack ? "pb-16" : ""}`}
+							className={`flex flex-1 min-h-0 flex-col overflow-y-auto [scrollbar-gutter:stable] transition-[padding-bottom] duration-base ease-settle ${
+								phoneTabbed ? "phone-tabs-space" : ""
+							} ${currentTrack ? `pb-16 ${phoneTabbed ? "phone-tabs-space-player" : ""}` : ""}`}
 						>
 							<RouteSuspense>
 								<Outlet />
@@ -590,6 +652,7 @@ function LoggedInLayoutInner() {
 				</div>
 
 				<PlayerBar />
+				{phoneTabbed && <PhoneTabs hidden={sidebarOpen} />}
 			</div>
 		</ViewFilterProvider>
 	);

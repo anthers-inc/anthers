@@ -41,6 +41,24 @@
 	padding-right: var(--anthers-inset-right, env(safe-area-inset-right, 0px));
 }
 
+/* The signed-in shell's phone tab bar. It is `fixed`, so the scroll area reserves the space
+   it covers, and the player bar stacks above it rather than sharing the bottom edge. Only
+   the signed-in shell carries `phone-tabbed`; the marketing shell keeps its content nav in
+   the header. The tab bar owns the bottom safe inset on this shell, so the player bar's own
+   inset is cleared here to avoid a gap between the two. */
+@media (width < 48rem) {
+	.phone-tabs-space {
+		padding-bottom: 4rem;
+	}
+	.phone-tabs-space-player {
+		padding-bottom: 8rem;
+	}
+	.phone-tabbed .player-bar-root {
+		bottom: calc(4rem + var(--anthers-inset-bottom, env(safe-area-inset-bottom, 0px)));
+		padding-bottom: 0;
+	}
+}
+
 /* ============================================
    WIKI/PROSE STYLING
    Typography and formatting for wiki documentation pages.
