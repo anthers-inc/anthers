@@ -12,7 +12,7 @@ import { inlineImages, workCaptionTracks, works } from "@anthers/db/schema";
 import { isImageFrameType, normalizeCrop } from "@anthers/shared/image-frame";
 import { zValidator } from "@hono/zod-validator";
 import { and, eq } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { z } from "zod";
 import { getOptionalUserId, requireAuth } from "../../middleware/auth.js";
 import {
@@ -74,6 +74,46 @@ import {
 	previewUpdateSchema,
 } from "./schemas.js";
 
+/**
+ * Refuse a direct upload whose declared length is over the deployment's allowance.
+ *
+ * 🚨 **Before `formData()` is called**, because that call buffers the whole multipart body to
+ * find out what a `file.size` check would then refuse. A browser always declares a length for
+ * `FormData`, and Bun's `maxRequestBodySize` is the floor under a chunked request that does
+ * not. The allowance is the deployment's: see `DIRECT_UPLOAD_MAX`.
+ */
+async function uploadLengthGuard(
+	c: Context,
+	next: () => Promise<void>,
+): Promise<Response | undefined> {
+	const declared = Number(c.req.header("content-length") ?? "0");
+	if (declared > DIRECT_UPLOAD_MAX + MULTIPART_SLACK) {
+		return c.json(
+			{
+				error: `File too large (max ${Math.round(DIRECT_UPLOAD_MAX / (1024 * 1024))}MB)`,
+				code: "file_too_large",
+			},
+			413,
+		);
+	}
+	await next();
+}
+
+/**
+ * The largest file each kind of direct upload accepts.
+ *
+ * 🚨 **Media is presigned in production and direct only in a checkout.** `STORAGE_BACKEND`
+ * decides: local storage has no bucket to presign against, so the browser posts the bytes to
+ * this route; with R2/S3 the bytes never touch the API. The 500 MB allowance therefore belongs
+ * to a developer's machine, and a deployed API accepts a direct upload no larger than the
+ * image surfaces it also serves.
+ */
+const DIRECT_UPLOAD_MAX = isLocalStorage ? 500 * 1024 * 1024 : 10 * 1024 * 1024;
+const IMAGE_UPLOAD_MAX = 10 * 1024 * 1024;
+
+/** Multipart framing around one file: boundaries, part headers, and the form's other fields. */
+const MULTIPART_SLACK = 64 * 1024;
+
 const uploadsRoutes = new Hono()
 	// ══════════════════════════════════════════════════════════════════════════
 	// MEDIA UPLOAD
@@ -129,164 +169,182 @@ const uploadsRoutes = new Hono()
 	/**
 	 * Direct multipart upload — local dev, and small files (avatars, banners, thumbnails)
 	 * in all modes.
+	 *
+	 * 🚨 **The cap is the deployment's, and it is read before the form is.** A media upload
+	 * in production never reaches this route: `POST /media-upload` answers `presigned` when
+	 * storage is S3/R2, and the file goes straight from the browser to the bucket. This route
+	 * still accepted 500 MB of video in any deployment, which on a one-gigabyte container is
+	 * an out-of-memory restart asked for by one signed-in stranger. Local storage keeps the
+	 * large allowance because a dev checkout has no bucket to presign against.
+	 *
+	 * `bodyLimit` refuses a declared `Content-Length` above the cap without reading a byte,
+	 * and counts a chunked body as it arrives, so nothing is buffered before the check.
 	 */
-	.post("/media-upload/direct", requireAuth, async (c) => {
-		const user = c.get("user");
-		const formData = await c.req.formData();
-		const file = formData.get("file");
-		const mediaType = formData.get("mediaType") as string | null;
-		const entityId = formData.get("entityId") as string | null;
-		// `purpose=source` names the whole picture a framing surface keeps in its `*Source`
-		// column. The source is owner-only, so it is stored private under `sources/`; the
-		// derivative the frame route writes is the public display image.
-		const purpose = formData.get("purpose") as string | null;
+	.post(
+		"/media-upload/direct",
+		requireAuth,
+		(c, next) => uploadLengthGuard(c, next),
+		async (c) => {
+			const user = c.get("user");
+			const formData = await c.req.formData();
+			const file = formData.get("file");
+			const mediaType = formData.get("mediaType") as string | null;
+			const entityId = formData.get("entityId") as string | null;
+			// `purpose=source` names the whole picture a framing surface keeps in its `*Source`
+			// column. The source is owner-only, so it is stored private under `sources/`; the
+			// derivative the frame route writes is the public display image.
+			const purpose = formData.get("purpose") as string | null;
 
-		if (!(file instanceof File)) return c.json({ error: "No file provided" }, 400);
+			if (!(file instanceof File)) return c.json({ error: "No file provided" }, 400);
 
-		const isMedia =
-			mediaType === "video" ||
-			mediaType === "audio" ||
-			mediaType === "asset" ||
-			mediaType === "preview-video";
-		const maxSize = isMedia ? 500 * 1024 * 1024 : 10 * 1024 * 1024;
-		if (file.size > maxSize) {
-			return c.json({ error: `File too large (max ${isMedia ? "500MB" : "10MB"})` }, 413);
-		}
-
-		const isImage = IMAGE_MEDIA_TYPES.has(mediaType ?? "");
-		if (isImage) {
-			const problem = imageUploadProblem(file.type, file.name);
-			if (problem) return c.json({ error: problem, code: "image_type" }, 415);
-		}
-
-		// Every image is re-encoded before it is stored: the client's declared type is not
-		// evidence, an image-named HTML file must never reach a trusted subdomain, and the
-		// bytes that reach a reader carry no EXIF and no unbounded canvas.
-		let contentType = file.type;
-		let body: Buffer = Buffer.from(await file.arrayBuffer());
-		if (isImage) {
-			try {
-				body = await normalizeDisplayImage(body);
-				contentType = "image/webp";
-			} catch {
+			const isMedia =
+				mediaType === "video" ||
+				mediaType === "audio" ||
+				mediaType === "asset" ||
+				mediaType === "preview-video";
+			const maxSize = isMedia ? DIRECT_UPLOAD_MAX : IMAGE_UPLOAD_MAX;
+			if (file.size > maxSize) {
 				return c.json(
-					{ error: "That image could not be read. Try another file.", code: "image_decode" },
-					415,
+					{ error: `File too large (max ${Math.round(maxSize / (1024 * 1024))}MB)` },
+					413,
 				);
 			}
-		}
 
-		const ext = isImage ? "webp" : file.name.includes(".") ? file.name.split(".").pop() : "";
-		const uuid = crypto.randomUUID().replace(/-/g, "");
-		const prefix = `creators/${user.id}`;
-		let key: string;
-		// Which quarantine subject a match on this object would name. `null` means the
-		// object is not scanned here at all — see `scannedObjectKind`.
-		const objectKind = scannedObjectKind(mediaType);
-
-		switch (mediaType) {
-			case "video":
-				key = `${prefix}/videos/originals/${uuid}.${ext}`;
-				break;
-			case "audio":
-				key = `${prefix}/audio/originals/${uuid}.${ext}`;
-				break;
-			case "caption":
-				// A caption upload lands under the entityId'd Work's directory and is
-				// validated as WebVTT at attach (`services/captions.ts`), which is also why
-				// it is not perceptually scanned here: a hash of still frames has nothing to
-				// read in a text file, and anything disguised as a caption dies at that
-				// parse — a refusal that leaves a row never created.
-				key = `${prefix}/captions/${entityId ?? "unknown"}/${uuid}.vtt`;
-				break;
-			case "preview-caption":
-				// The trailer's counterpart: `entityId` is the preview row, so one preview's
-				// tracks share a directory and the purge can name them. Same WebVTT parse at
-				// attach, same reason for no perceptual scan.
-				key = `${prefix}/previews/captions/${entityId ?? "unknown"}/${uuid}.vtt`;
-				break;
-			case "preview-image":
-				// Every preview object sits under one `previews/` prefix. The screenshot's
-				// directory is the Work, so a creator's set is legible on disk as well as in
-				// the table.
-				key = `${prefix}/previews/images/${entityId ?? "unknown"}/${uuid}.${ext}`;
-				break;
-			case "preview-video":
-				key = `${prefix}/previews/videos/${uuid}.${ext}`;
-				break;
-			case "avatar":
-				key = `${prefix}/avatars/${uuid}.${ext}`;
-				break;
-			// ⚠️ `header` and `cover` are the retired words, kept as accepted aliases for a tab
-			// opened before the rename: the media-type allowlist fails closed, so dropping one
-			// would store that tab's upload private. New requests send `banner` and `thumbnail`.
-			case "banner":
-			case "header":
-				key = `${prefix}/banners/${uuid}.${ext}`;
-				break;
-			case "cover":
-				key = `${prefix}/covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
-				break;
-			case "thumbnail":
-				key = `${prefix}/thumbnails/${entityId ?? "unknown"}/${uuid}.${ext}`;
-				break;
-			case "gallery":
-			case "image":
-			case "screenshot":
-				// An image Work's source set IS its gallery, so this is a deliverable rather
-				// than storefront chrome. `source-images/` is not a public prefix.
-				key = `${prefix}/source-images/${entityId ?? "unknown"}/${uuid}.${ext}`;
-				break;
-			case "asset":
-				key = `${prefix}/assets/${entityId ?? "unknown"}/${uuid}.${ext}`;
-				break;
-			case "inline-image":
-				key = `${prefix}/inline-images/${entityId ?? "unknown"}/${uuid}.${ext}`;
-				break;
-			default:
-				key = `${prefix}/uploads/${uuid}.${ext}`;
-		}
-
-		// A framing source is owner-only even when its surface type is public; the derived
-		// image the frame route writes is the one the world sees. Everything else follows
-		// the display-chrome allowlist and fails closed.
-		if (purpose === "source" && isImage) {
-			const folder =
-				mediaType === "banner" || mediaType === "header"
-					? "banners"
-					: mediaType === "avatar"
-						? "avatars"
-						: "thumbnails";
-			key = `${prefix}/sources/${folder}/${uuid}.${ext}`;
-		}
-		const acl = purpose === "source" && isImage ? "private" : aclForMediaType(mediaType);
-		const buffer = body;
-		await storage.upload(key, buffer, contentType, acl);
-		// 🚨 **Scanned inline, and this is the door the child-safety coverage map describes as
-		// the inline path.** The bytes are fully buffered here, so there is nothing to defer to a
-		// job — and unlike a Work there is no release gate behind which a queued scan could
-		// catch up, because an avatar is visible the moment the row points at it.
-		//
-		// ⭐ **A match quarantines the object rather than deleting it**, through
-		// `scanInlineUpload` → `quarantineObject`: the § 2258A(h) hold is placed on the
-		// uploader and the finding reaches the operator queue, which is exactly what a Work's
-		// match gets. Only the video, audio and asset branches are skipped, because a
-		// perceptual image hash has nothing to say about any of them and the file may be
-		// 500 MB. Those go through `QUEUES.SCAN_MEDIA` once they are attached to a Work.
-		if (objectKind) {
-			// The bytes are the ones this request just buffered and PUT — the scan reads
-			// them in hand rather than pulling the object back out of storage, sparing the
-			// save a second full pass of the image across the network.
-			const outcome = await scanInlineUpload(key, { uploaderId: user.id, objectKind }, buffer);
-			if (outcome.quarantine) {
-				return c.json({ error: "That image cannot be used.", code: "refused" }, 422);
+			const isImage = IMAGE_MEDIA_TYPES.has(mediaType ?? "");
+			if (isImage) {
+				const problem = imageUploadProblem(file.type, file.name);
+				if (problem) return c.json({ error: problem, code: "image_type" }, 415);
 			}
-		}
 
-		const url = await storage.getUrl(key);
+			// Every image is re-encoded before it is stored: the client's declared type is not
+			// evidence, an image-named HTML file must never reach a trusted subdomain, and the
+			// bytes that reach a reader carry no EXIF and no unbounded canvas.
+			let contentType = file.type;
+			let body: Buffer = Buffer.from(await file.arrayBuffer());
+			if (isImage) {
+				try {
+					body = await normalizeDisplayImage(body);
+					contentType = "image/webp";
+				} catch {
+					return c.json(
+						{ error: "That image could not be read. Try another file.", code: "image_decode" },
+						415,
+					);
+				}
+			}
 
-		return c.json({ key, url }, 201);
-	})
+			const ext = isImage ? "webp" : file.name.includes(".") ? file.name.split(".").pop() : "";
+			const uuid = crypto.randomUUID().replace(/-/g, "");
+			const prefix = `creators/${user.id}`;
+			let key: string;
+			// Which quarantine subject a match on this object would name. `null` means the
+			// object is not scanned here at all — see `scannedObjectKind`.
+			const objectKind = scannedObjectKind(mediaType);
+
+			switch (mediaType) {
+				case "video":
+					key = `${prefix}/videos/originals/${uuid}.${ext}`;
+					break;
+				case "audio":
+					key = `${prefix}/audio/originals/${uuid}.${ext}`;
+					break;
+				case "caption":
+					// A caption upload lands under the entityId'd Work's directory and is
+					// validated as WebVTT at attach (`services/captions.ts`), which is also why
+					// it is not perceptually scanned here: a hash of still frames has nothing to
+					// read in a text file, and anything disguised as a caption dies at that
+					// parse — a refusal that leaves a row never created.
+					key = `${prefix}/captions/${entityId ?? "unknown"}/${uuid}.vtt`;
+					break;
+				case "preview-caption":
+					// The trailer's counterpart: `entityId` is the preview row, so one preview's
+					// tracks share a directory and the purge can name them. Same WebVTT parse at
+					// attach, same reason for no perceptual scan.
+					key = `${prefix}/previews/captions/${entityId ?? "unknown"}/${uuid}.vtt`;
+					break;
+				case "preview-image":
+					// Every preview object sits under one `previews/` prefix. The screenshot's
+					// directory is the Work, so a creator's set is legible on disk as well as in
+					// the table.
+					key = `${prefix}/previews/images/${entityId ?? "unknown"}/${uuid}.${ext}`;
+					break;
+				case "preview-video":
+					key = `${prefix}/previews/videos/${uuid}.${ext}`;
+					break;
+				case "avatar":
+					key = `${prefix}/avatars/${uuid}.${ext}`;
+					break;
+				// ⚠️ `header` and `cover` are the retired words, kept as accepted aliases for a tab
+				// opened before the rename: the media-type allowlist fails closed, so dropping one
+				// would store that tab's upload private. New requests send `banner` and `thumbnail`.
+				case "banner":
+				case "header":
+					key = `${prefix}/banners/${uuid}.${ext}`;
+					break;
+				case "cover":
+					key = `${prefix}/covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
+					break;
+				case "thumbnail":
+					key = `${prefix}/thumbnails/${entityId ?? "unknown"}/${uuid}.${ext}`;
+					break;
+				case "gallery":
+				case "image":
+				case "screenshot":
+					// An image Work's source set IS its gallery, so this is a deliverable rather
+					// than storefront chrome. `source-images/` is not a public prefix.
+					key = `${prefix}/source-images/${entityId ?? "unknown"}/${uuid}.${ext}`;
+					break;
+				case "asset":
+					key = `${prefix}/assets/${entityId ?? "unknown"}/${uuid}.${ext}`;
+					break;
+				case "inline-image":
+					key = `${prefix}/inline-images/${entityId ?? "unknown"}/${uuid}.${ext}`;
+					break;
+				default:
+					key = `${prefix}/uploads/${uuid}.${ext}`;
+			}
+
+			// A framing source is owner-only even when its surface type is public; the derived
+			// image the frame route writes is the one the world sees. Everything else follows
+			// the display-chrome allowlist and fails closed.
+			if (purpose === "source" && isImage) {
+				const folder =
+					mediaType === "banner" || mediaType === "header"
+						? "banners"
+						: mediaType === "avatar"
+							? "avatars"
+							: "thumbnails";
+				key = `${prefix}/sources/${folder}/${uuid}.${ext}`;
+			}
+			const acl = purpose === "source" && isImage ? "private" : aclForMediaType(mediaType);
+			const buffer = body;
+			await storage.upload(key, buffer, contentType, acl);
+			// 🚨 **Scanned inline, and this is the door the child-safety coverage map describes as
+			// the inline path.** The bytes are fully buffered here, so there is nothing to defer to a
+			// job — and unlike a Work there is no release gate behind which a queued scan could
+			// catch up, because an avatar is visible the moment the row points at it.
+			//
+			// ⭐ **A match quarantines the object rather than deleting it**, through
+			// `scanInlineUpload` → `quarantineObject`: the § 2258A(h) hold is placed on the
+			// uploader and the finding reaches the operator queue, which is exactly what a Work's
+			// match gets. Only the video, audio and asset branches are skipped, because a
+			// perceptual image hash has nothing to say about any of them and the file may be
+			// 500 MB. Those go through `QUEUES.SCAN_MEDIA` once they are attached to a Work.
+			if (objectKind) {
+				// The bytes are the ones this request just buffered and PUT — the scan reads
+				// them in hand rather than pulling the object back out of storage, sparing the
+				// save a second full pass of the image across the network.
+				const outcome = await scanInlineUpload(key, { uploaderId: user.id, objectKind }, buffer);
+				if (outcome.quarantine) {
+					return c.json({ error: "That image cannot be used.", code: "refused" }, 422);
+				}
+			}
+
+			const url = await storage.getUrl(key);
+
+			return c.json({ key, url }, 201);
+		},
+	)
 
 	/**
 	 * Frame a stored display image at the surface's display aspect, nondestructively.

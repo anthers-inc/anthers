@@ -191,6 +191,50 @@ describe("Too many from one caller", () => {
 		const sixth = await send();
 		expect(sixth.status).toBe(429);
 	});
+
+	it("refuses an oversized body before it is parsed, and writes nothing", async () => {
+		const oversized = "x".repeat(20_000);
+		const res = await req("/api/moderation/issue-reports", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Origin: ORIGIN,
+				"x-forwarded-for": "203.0.113.78",
+			},
+			// Valid in shape, past the schema's 4,000-character `details` and past the door's
+			// 16 KB cap. Before the cap existed this was parsed in full to be refused.
+			body: JSON.stringify({
+				summary: `Test fixture: oversized (${id})`,
+				details: oversized,
+			}),
+		});
+		expect(res.status).toBe(413);
+		expect((await res.json()).code).toBe("body_too_large");
+		const rows = await db
+			.select({ id: issueReports.id })
+			.from(issueReports)
+			.where(eq(issueReports.details, oversized));
+		expect(rows).toHaveLength(0);
+	});
+
+	it("counts a malformed body against the window, because the door runs first", async () => {
+		// 🚨 The ordering claim. A body the schema would refuse still spends a guess: the
+		// limiter is middleware now, so an invalid flood is counted rather than being free.
+		const ip = "203.0.113.79";
+		const malformed = () =>
+			req("/api/moderation/issue-reports", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Origin: ORIGIN,
+					"x-forwarded-for": ip,
+				},
+				body: JSON.stringify({ summary: "bad" }),
+			});
+
+		for (let i = 0; i < 5; i++) expect((await malformed()).status).toBe(400);
+		expect((await malformed()).status).toBe(429);
+	});
 });
 
 describe("The open to ingested transition", () => {

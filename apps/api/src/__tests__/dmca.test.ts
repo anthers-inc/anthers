@@ -190,6 +190,17 @@ describe("DMCA notice intake", () => {
 		expect(res.status).toBe(400);
 	});
 
+	it("refuses a description with no bound, rather than storing it whole", async () => {
+		// Every free-text field of the notice was unbounded: shape was validated, length was
+		// not. A statutory intake is a document, so the bound is generous — but it exists.
+		const res = await post(
+			"/api/dmca/notices",
+			undefined,
+			noticeBody(workId, { copyrightedWorkDescription: "x".repeat(20_000) }),
+		);
+		expect(res.status).toBe(400);
+	});
+
 	it("serves the attestation text so the form renders the exact copy", async () => {
 		const res = await req("/api/dmca/attestation");
 		expect(res.status).toBe(200);

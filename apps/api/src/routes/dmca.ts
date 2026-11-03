@@ -71,6 +71,7 @@ function dmcaConfig() {
 	};
 }
 
+import { intakeBodyLimit, intakeLimit } from "../middleware/intake.js";
 import {
 	counterNoticeAttestationText,
 	dmcaSummary,
@@ -80,7 +81,6 @@ import {
 	noticeAttestationText,
 	noticesForCreator,
 } from "../services/dmca.js";
-import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 
 /**
  * The six elements of a § 512(c)(3)(A) notice, as a Zod schema.
@@ -91,27 +91,44 @@ import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
  * the statutory elements — see the comment on `NOTICE_ATTESTATION_TEXT` in
  * `services/dmca.ts` for why the perjury clause attaches only to authorization.
  */
+/**
+ * The longest a free-text field of a statutory notice may be.
+ *
+ * A notice is a legal document and the descriptions can be long, so the bound is generous
+ * rather than tight. What it stops is a field with no bound at all, which is what these had:
+ * the schema validated shape and not length, and the route had no body cap either.
+ */
+const NOTICE_FIELD_MAX = 10_000;
+
 const noticeSchema = z.object({
 	// § 512(c)(3)(A)(iii) — identification of the infringing material, with
 	// information reasonably sufficient to locate it. A Work id or URL.
 	workId: z.number().int().positive(),
 	// § 512(c)(3)(A)(iv) — contact information.
-	complainantName: z.string().min(1, "Your name is required."),
-	complainantEmail: z.string().email("A valid email address is required."),
-	complainantAddress: z.string().min(1, "Your postal address is required."),
-	complainantPhone: z.string().optional(),
+	complainantName: z.string().min(1, "Your name is required.").max(NOTICE_FIELD_MAX),
+	complainantEmail: z.string().email("A valid email address is required.").max(320),
+	complainantAddress: z.string().min(1, "Your postal address is required.").max(NOTICE_FIELD_MAX),
+	complainantPhone: z.string().max(40).optional(),
 	// § 512(c)(3)(A)(ii) — identification of the copyrighted work.
 	copyrightedWorkDescription: z
 		.string()
-		.min(1, "Identify the copyrighted work you claim is infringed."),
+		.min(1, "Identify the copyrighted work you claim is infringed.")
+		.max(NOTICE_FIELD_MAX),
 	// § 512(c)(3)(A)(iii) — identification of the infringing material.
 	infringingMaterialDescription: z
 		.string()
-		.min(1, "Identify the material you claim is infringing."),
+		.min(1, "Identify the material you claim is infringing.")
+		.max(NOTICE_FIELD_MAX),
 	// § 512(c)(3)(A)(v) — good-faith belief.
-	goodFaithStatement: z.string().min(1, "The good-faith belief statement is required."),
+	goodFaithStatement: z
+		.string()
+		.min(1, "The good-faith belief statement is required.")
+		.max(NOTICE_FIELD_MAX),
 	// § 512(c)(3)(A)(vi) — accuracy + authorization under penalty of perjury.
-	authorizationStatement: z.string().min(1, "The authorization statement is required."),
+	authorizationStatement: z
+		.string()
+		.min(1, "The authorization statement is required.")
+		.max(NOTICE_FIELD_MAX),
 	// Lenz v. Universal — fair-use consideration.
 	fairUseConsidered: z.boolean(),
 });
@@ -125,11 +142,17 @@ const noticeSchema = z.object({
  * below) so the creator sees the exposure before filling anything in.
  */
 const counterNoticeSchema = z.object({
-	subscriberName: z.string().min(1, "Your legal name is required."),
-	subscriberAddress: z.string().min(1, "Your postal address is required."),
-	subscriberPhone: z.string().min(1, "Your telephone number is required."),
-	jurisdictionConsent: z.string().min(1, "Consent to jurisdiction is required."),
-	goodFaithStatement: z.string().min(1, "The good-faith statement is required."),
+	subscriberName: z.string().min(1, "Your legal name is required.").max(NOTICE_FIELD_MAX),
+	subscriberAddress: z.string().min(1, "Your postal address is required.").max(NOTICE_FIELD_MAX),
+	subscriberPhone: z.string().min(1, "Your telephone number is required.").max(40),
+	jurisdictionConsent: z
+		.string()
+		.min(1, "Consent to jurisdiction is required.")
+		.max(NOTICE_FIELD_MAX),
+	goodFaithStatement: z
+		.string()
+		.min(1, "The good-faith statement is required.")
+		.max(NOTICE_FIELD_MAX),
 });
 
 const dmcaRoutes = new Hono()
@@ -170,39 +193,53 @@ const dmcaRoutes = new Hono()
 	// Public — no auth required. The complainant may not have an account, and
 	// § 512(c)(3)(A)(i) requires a signature (here, the submitted form data),
 	// not a session.
-	.post("/notices", zValidator("json", noticeSchema), async (c) => {
-		const input = c.req.valid("json");
-
+	.post(
+		"/notices",
 		// 🚨 **A statutory intake is a document a provider relies on, so volume is the
 		// abuse shape to refuse.** This door is public on purpose (no account is a
 		// precondition of an agent's § 512(c)(3) notice), which is exactly why it is
 		// limiter-guarded: a scripted flood of "notices" would drown the operator queue
 		// the law's clocks run through. A notice that was real and got a 429 can be
 		// re-filed after the window — the retry line tells the complainant so.
-		const limited = await checkRate("dmca-notice", clientIp(c.req.raw.headers), 5, 3600);
-		if (!limited.ok) return limitResponse(limited);
+		//
+		// The guards run before the validator so an oversized or malformed body is refused
+		// without being parsed, and still counts against the window.
+		intakeLimit({
+			door: "dmca-notice",
+			max: 5,
+			windowSecs: 3600,
+			refusal: {
+				error: "Too many notices from here in the last hour. Please try again shortly.",
+				code: "rate_limited",
+			},
+		}),
+		intakeBodyLimit(64 * 1024),
+		zValidator("json", noticeSchema),
+		async (c) => {
+			const input = c.req.valid("json");
 
-		// Resolve the Work — a notice naming a Work that doesn't exist would sit
-		// in the queue with nothing to act on. The Work must exist and be released
-		// (a private Work is not publicly accessible, so it cannot be the target
-		// of a copyright claim through this path).
-		const [work] = await db
-			.select({ id: works.id, visibility: works.visibility, title: works.title })
-			.from(works)
-			.where(eq(works.id, input.workId))
-			.limit(1);
-		if (!work) return c.json({ error: "Work not found.", code: "work_not_found" }, 404);
+			// Resolve the Work — a notice naming a Work that doesn't exist would sit
+			// in the queue with nothing to act on. The Work must exist and be released
+			// (a private Work is not publicly accessible, so it cannot be the target
+			// of a copyright claim through this path).
+			const [work] = await db
+				.select({ id: works.id, visibility: works.visibility, title: works.title })
+				.from(works)
+				.where(eq(works.id, input.workId))
+				.limit(1);
+			if (!work) return c.json({ error: "Work not found.", code: "work_not_found" }, 404);
 
-		// The title is snapshotted onto the notice — `workId` is `set null`, so the
-		// join that renders the queue can stop resolving. See the schema comment.
-		const { noticeId } = await fileNotice({ ...input, workTitle: work.title ?? "" });
+			// The title is snapshotted onto the notice — `workId` is `set null`, so the
+			// join that renders the queue can stop resolving. See the schema comment.
+			const { noticeId } = await fileNotice({ ...input, workTitle: work.title ?? "" });
 
-		// Deliberately no signal about what happens next: whether the Work is
-		// already taken down, whether the notice is under review, or whether it
-		// was rejected is operator information. The complainant learns the outcome
-		// when we act on it (acknowledgment) or reject it (reach-back).
-		return c.json({ filed: true, noticeId }, 201);
-	})
+			// Deliberately no signal about what happens next: whether the Work is
+			// already taken down, whether the notice is under review, or whether it
+			// was rejected is operator information. The complainant learns the outcome
+			// when we act on it (acknowledgment) or reject it (reach-back).
+			return c.json({ filed: true, noticeId }, 201);
+		},
+	)
 
 	// ── File a counter-notice (§ 512(g)(3)) ─────────────────────────────────
 	// Requires auth + ownership: the creator is the subscriber, and a stranger
