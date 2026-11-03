@@ -38,7 +38,7 @@
  */
 import { resolve, sep } from "node:path";
 import { robotsTxt, SITEMAP_PATH, sitemapXml } from "./src/lib/crawl.js";
-import { devBuildApiOrigin, devBuildPage } from "./src/lib/dev-build-page.js";
+import { devBuildApiOrigin, devBuildPage, servesDevBuildPage } from "./src/lib/dev-build-page.js";
 import { pageMeta } from "./src/lib/page-meta.js";
 import { previewRoute } from "./src/lib/preview-route.js";
 import { injectShareHead, type LinkCard } from "./src/lib/share-head.js";
@@ -180,7 +180,11 @@ Bun.serve({
 	port: PORT,
 	async fetch(req) {
 		const url = new URL(req.url);
-		if (url.pathname === "/dev/web-build") return devBuildPage(devBuildApiOrigin(req, API_PORT));
+		// A checkout's preview only. A deployed build falls through to the app shell, which is
+		// what the page has always claimed a production build does.
+		if (url.pathname === "/dev/web-build" && servesDevBuildPage()) {
+			return devBuildPage(devBuildApiOrigin(req, API_PORT));
+		}
 		if (url.pathname === "/_health") return new Response("ok");
 		// The two documents a crawler asks for, ahead of the shell it would otherwise get.
 		if (url.pathname === "/robots.txt") {
