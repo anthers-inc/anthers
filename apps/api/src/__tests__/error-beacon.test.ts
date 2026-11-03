@@ -115,9 +115,38 @@ describe("POST /api/errors/browser", () => {
 		expect(last).toBe(429);
 	});
 
+	it("refuses a body over the cap before reading it, and stores nothing", async () => {
+		const message = `beacon-test oversized ${crypto.randomUUID()}`;
+		const res = await beacon(
+			{
+				message,
+				// Past the route's 32 KB cap, and far past the 1,000-character message the route
+				// accepts. The body is refused by the door's middleware, not parsed and rejected.
+				frames: Array.from({ length: 400 }, () => ({
+					fn: "x".repeat(200),
+					loc: "y".repeat(200),
+				})),
+			},
+			ORIGIN_OK,
+			// A door of its own: this file keeps the limiter live, and the shared default
+			// address would spend the budget a later case needs.
+			"10.9.77.7",
+		);
+		expect(res.status).toBe(413);
+		const rows = await db
+			.select({ id: errorEvents.id })
+			.from(errorEvents)
+			.where(like(errorEvents.message, `beacon-test oversized ${message.split(" ").pop()}%`));
+		expect(rows).toHaveLength(0);
+	});
+
 	it("never leaks a token or an email from the message — redaction is the server's job", async () => {
 		const message = `beacon-test redaction ${crypto.randomUUID()}`;
-		await beacon({ message: `${message} mail user@example.com token /s/tok_abc12345xyz` });
+		await beacon(
+			{ message: `${message} mail user@example.com token /s/tok_abc12345xyz` },
+			ORIGIN_OK,
+			"10.9.77.8",
+		);
 		const [row] = await db
 			.select()
 			.from(errorEvents)

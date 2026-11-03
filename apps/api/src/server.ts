@@ -36,6 +36,7 @@ import app from "./index.js";
 import { ensureQueueReady } from "./jobs/queue.js";
 import { assertPortFree } from "./lib/dev-port.js";
 import { startMemoryWatch } from "./services/memory.js";
+import { isLocalStorage } from "./services/storage/index.js";
 
 // Start the job queue. This used to be guarded by `import.meta.main` in index.ts so that
 // importing the app from a test never started a queue; now that index.ts is only ever
@@ -51,8 +52,24 @@ startMemoryWatch();
 
 assertPortFree(Number(process.env.PORT ?? 8000));
 
+/**
+ * The largest request body this process will read.
+ *
+ * 🚨 **Bun's default is 128 MB, which is neither the largest legitimate body nor the
+ * smallest safe one.** Every JSON door is schema-bounded in single-digit kilobytes; the one
+ * route that legitimately carries megabytes is the direct upload, and that route is a
+ * developer's route when storage is local — in a deployed app the browser PUTs to R2 on a
+ * presigned URL and the bytes never reach this process. So the two deployments get different
+ * answers, and a deployed API says no to anything over twelve megabytes at the socket.
+ *
+ * The route-level caps in `middleware/intake.ts` and the upload route still apply; this is
+ * the floor that catches a request nobody remembered to write a cap for.
+ */
+const MAX_REQUEST_BODY_BYTES = isLocalStorage ? 500 * 1024 * 1024 + 64 * 1024 : 12 * 1024 * 1024;
+
 export default {
 	port: Number(process.env.PORT ?? 8000),
+	maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
 	fetch(req: Request): Response | Promise<Response> {
 		return app.fetch(req);
 	},
