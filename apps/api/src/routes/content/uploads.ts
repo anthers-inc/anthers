@@ -177,8 +177,8 @@ const uploadsRoutes = new Hono()
 	 * an out-of-memory restart asked for by one signed-in stranger. Local storage keeps the
 	 * large allowance because a dev checkout has no bucket to presign against.
 	 *
-	 * `bodyLimit` refuses a declared `Content-Length` above the cap without reading a byte,
-	 * and counts a chunked body as it arrives, so nothing is buffered before the check.
+	 * The guard refuses a declared `Content-Length` above the cap without reading a byte;
+	 * Bun's `maxRequestBodySize` is the floor under a chunked request that declares nothing.
 	 */
 	.post(
 		"/media-upload/direct",
