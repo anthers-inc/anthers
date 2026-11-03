@@ -26,6 +26,7 @@ import {
 	serializeAdminAccount,
 } from "../services/admin-accounts.js";
 import { sendAdminSignInCodeEmail } from "../services/email.js";
+import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 
 const startSchema = z.object({
 	email: z.string().email().max(254),
@@ -43,6 +44,11 @@ export const adminAuthRoutes = new Hono<AdminEnv>()
 	// body whether or not the address belongs to anybody.
 	.post("/signin/start", zValidator("json", startSchema, invalidBody), async (c) => {
 		const { email } = c.req.valid("json");
+		// Per-IP limit: the unknown-address branch burns an argon2 hash so the response cannot
+		// be timed, which means an unauthenticated caller could ask this door for CPU by the
+		// armful. Ten an hour is a person mistyping an address; a script is not.
+		const limited = await checkRate("admin-code-send", clientIp(c.req.raw.headers), 10, 3600);
+		if (!limited.ok) return limitResponse(limited);
 		try {
 			const issued = await issueAdminSignInCode(email);
 			if (issued.code) {
@@ -61,17 +67,19 @@ export const adminAuthRoutes = new Hono<AdminEnv>()
 	// Step 2 — spend the code and start a session.
 	.post("/signin/verify", zValidator("json", verifySchema, invalidBody), async (c) => {
 		const { email, code } = c.req.valid("json");
+		// Per-IP limit ahead of the comparison, so a walk across codes and addresses is slow
+		// in a way the per-code attempt cap cannot make it on its own.
+		const limited = await checkRate("admin-code-verify", clientIp(c.req.raw.headers), 20, 3600);
+		if (!limited.ok) return limitResponse(limited);
 		const result = await checkAdminSignInCode(email, code);
 		if (!result.ok || !result.account) {
-			const tooMany = !result.ok && result.reason === "too_many_attempts";
-			return c.json(
-				{
-					error: tooMany
-						? "Too many attempts. Ask for a new code."
-						: "That code didn't work. Check it, or ask for a new one.",
-				},
-				tooMany ? 429 : 400,
-			);
+			// 🚨 **One refusal for every failure, including the exhausted cap.** A distinct
+			// 429 for `too_many_attempts` was a better oracle than the code itself: only an
+			// active admin's address ever has a row to exhaust, so six wrong guesses told an
+			// outsider which addresses are admin accounts — and burned the real admin's code
+			// doing it. The cap still applies inside the service; out here it is the same 400,
+			// the same sentence, and (because a miss spends the same hash) the same cost.
+			return c.json({ error: "That code didn't work. Check it, or ask for a new one." }, 400);
 		}
 
 		const token = await createAdminSession(

@@ -17,7 +17,7 @@
  * closes one out — because that stamp is the only thing standing between "a queue nobody
  * watches" and "an email nobody sent".
  */
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { abuseReports, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -273,9 +273,18 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Too many from one caller", () => {
 	// sail through and this whole describe pass vacuously. Taken out for the run and put
 	// back at process exit — the same discipline the limiter's own suite applies.
 	const knob = process.env.RATE_LIMITS_DISABLED;
-	delete process.env.RATE_LIMITS_DISABLED;
-	process.on("exit", () => {
-		process.env.RATE_LIMITS_DISABLED = knob;
+	// ⚠️ Removed around each case, never for the whole process: a delete at module load is
+	// still in force while every later file runs, which turns another suite's real door limit
+	// into a 429 it never asked for.
+	beforeEach(() => {
+		delete process.env.RATE_LIMITS_DISABLED;
+	});
+	afterEach(() => {
+		if (knob !== undefined) process.env.RATE_LIMITS_DISABLED = knob;
+	});
+	afterAll(() => {
+		if (knob === undefined) delete process.env.RATE_LIMITS_DISABLED;
+		else process.env.RATE_LIMITS_DISABLED = knob;
 	});
 
 	it("declines the sixth in ten minutes, and says where to go instead", async () => {

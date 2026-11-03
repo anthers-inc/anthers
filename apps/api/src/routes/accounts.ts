@@ -89,7 +89,7 @@ import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panel
 import { isUsState } from "@anthers/shared/us-states";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import { deploymentOrigin } from "../lib/deployment.js";
@@ -155,7 +155,7 @@ import {
 } from "../services/parental-controls.js";
 import { postContentExcerpt } from "../services/post-markdown.js";
 import { releasesByWorkId } from "../services/project-releases.js";
-import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
+import { checkRate, clearRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { matchesFields } from "../services/search-query.js";
 import { storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
@@ -624,6 +624,34 @@ function cardImageUrl(requestUrl: string, handle: string, avatar: string | null)
 	}
 	if (!origin) return avatar;
 	return `${origin}/api/accounts/users/${encodeURIComponent(handle)}/card.png`;
+}
+
+/**
+ * The door every parental-pin comparison passes through.
+ *
+ * 🚨 **The pin is four to eight digits, so the pace of guesses is the defense.** Only the
+ * `PATCH` route applied a limiter; `PUT .../pin` and `DELETE .../parental-controls` each
+ * compared the pin with no cap at all, and both answer 403 for a wrong one — two unlimited
+ * oracles for the exact person the feature exists to restrain, holding the session the
+ * feature does not remove.
+ *
+ * **Two keys, because either alone has a hole.** The per-IP window is the shared one every
+ * other door uses; a household or school shares an address, so it is generous. The per-account
+ * window is the one that matters here: the attacker is signed in as the victim, so their IP is
+ * the victim's, and only a counter bound to the account tells one person walking the space
+ * from a guardian typing their own pin.
+ */
+async function pinDoor(c: Context, userId: number): Promise<Response | null> {
+	const byIp = await checkRate("parental-pin", clientIp(c.req.raw.headers), 10, 3600);
+	if (!byIp.ok) return limitResponse(byIp);
+	const byAccount = await checkRate("parental-pin-account", String(userId), 10, 900);
+	if (!byAccount.ok) return limitResponse(byAccount);
+	return null;
+}
+
+/** A right pin clears the account's failure window; a wrong one leaves it spent. */
+async function pinAccepted(userId: number): Promise<void> {
+	await clearRate("parental-pin-account", String(userId));
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -2327,6 +2355,8 @@ const accountRoutes = new Hono()
 		zValidator("json", z.object({ pin: z.string(), currentPin: z.string().optional() })),
 		async (c) => {
 			const sessionUser = c.get("user");
+			const blocked = await pinDoor(c, sessionUser.id);
+			if (blocked) return blocked;
 			const { pin, currentPin } = c.req.valid("json");
 			const result = await setPin(sessionUser.id, pin, currentPin);
 			if ("refusal" in result) {
@@ -2337,6 +2367,7 @@ const accountRoutes = new Hono()
 					result.refusal === "malformed" ? 400 : 403,
 				);
 			}
+			await pinAccepted(sessionUser.id);
 			return c.json(await parentalPolicyFor(sessionUser.id));
 		},
 	)
@@ -2357,14 +2388,14 @@ const accountRoutes = new Hono()
 			const sessionUser = c.get("user");
 			const { pin, ...update } = c.req.valid("json");
 			// The pin's strength is 4-8 digits — services/parental-controls.ts says it plainly —
-			// so the pace of guesses is the load-bearing defense, and it is now capped per IP
-			// in addition to being checked per request (a 4-digit pin at this limit takes
-			// ~7 hours to walk with the whole 10^4 space, against an argon2id hash per try).
-			const limited = await checkRate("parental-pin", clientIp(c.req.raw.headers), 10, 3600);
-			if (!limited.ok) return limitResponse(limited);
+			// so the pace of guesses is the load-bearing defense. At ten per fifteen minutes
+			// against the account, a four-digit space takes days rather than minutes.
+			const blocked = await pinDoor(c, sessionUser.id);
+			if (blocked) return blocked;
 			if (!(await pinMatches(sessionUser.id, pin))) {
 				return c.json({ error: "That isn't the pin.", code: "wrong_pin" }, 403);
 			}
+			await pinAccepted(sessionUser.id);
 			return c.json(await updateParentalControls(sessionUser.id, update));
 		},
 	)
@@ -2376,9 +2407,12 @@ const accountRoutes = new Hono()
 		zValidator("json", z.object({ pin: z.string() })),
 		async (c) => {
 			const sessionUser = c.get("user");
+			const blocked = await pinDoor(c, sessionUser.id);
+			if (blocked) return blocked;
 			if (!(await pinMatches(sessionUser.id, c.req.valid("json").pin))) {
 				return c.json({ error: "That isn't the pin.", code: "wrong_pin" }, 403);
 			}
+			await pinAccepted(sessionUser.id);
 			await clearParentalControls(sessionUser.id);
 			return c.json(NO_PARENTAL_CONTROLS);
 		},

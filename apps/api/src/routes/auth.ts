@@ -611,6 +611,14 @@ const authRoutes = new Hono()
 		async (c) => {
 			const { email, picks, next, hostedHandle, pow } = c.req.valid("json");
 
+			// Per-IP limit, before the proof is spent and before any code is minted. The proof
+			// of work costs the *client* tens of milliseconds, but the row it buys this
+			// process an argon2id hash for the code — so a caller fanning out across fresh
+			// addresses paid one hash per request and the per-address resend delay never saw
+			// it. Ten an hour is far above a person correcting a typo and far below a flood.
+			const limited = await checkRate("auth-signup-begin", clientIp(c.req.raw.headers), 10, 3600);
+			if (!limited.ok) return limitResponse(limited);
+
 			// The gate, before anything below it can reserve or write. A refused proof leaves
 			// no pending signup and holds no handle — and the browser is told to fetch a fresh
 			// challenge, which is all it can usefully do.

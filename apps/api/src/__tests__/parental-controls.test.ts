@@ -604,3 +604,82 @@ describe("Parental controls", () => {
 		await send("/api/accounts/me/parental-controls/pin", "PUT", child, { pin: PIN });
 	});
 });
+
+describe("the pin's pacing", () => {
+	const pacedName = `pc_paced_${id}`;
+	let paced: string;
+
+	beforeAll(async () => {
+		paced = await signUp(pacedName);
+		const set = await send("/api/accounts/me/parental-controls/pin", "PUT", paced, { pin: PIN });
+		expect(set.status).toBe(200);
+	}, DB_SETUP_TIMEOUT);
+
+	afterAll(async () => {
+		await db.execute(sql`DELETE FROM users WHERE email = ${`${pacedName}@example.com`}`);
+		await db.execute(sql`DELETE FROM rate_limits WHERE door LIKE 'parental-pin%'`);
+	});
+
+	/**
+	 * Walk one route until it refuses the pace rather than the pin.
+	 *
+	 * 🚨 **All three routes are the same oracle when they are not all limited.** The pin is
+	 * four to eight digits and the attacker holds the session, so the only thing between them
+	 * and the whole space is how often the comparison runs. `PATCH` had a limiter; `PUT .../pin`
+	 * and `DELETE` compared the pin as fast as anybody could send it.
+	 */
+	async function walk(label: string, path: string, method: string, body: unknown, ip: string) {
+		await db.execute(sql`DELETE FROM rate_limits WHERE door LIKE 'parental-pin%'`);
+		let limitedAt = 0;
+		for (let i = 1; i <= 16; i++) {
+			const res = await req(path, {
+				method,
+				headers: {
+					"Content-Type": "application/json",
+					Origin: ORIGIN,
+					Cookie: paced,
+					"X-Forwarded-For": ip,
+				},
+				body: JSON.stringify(body),
+			});
+			if (res.status === 429) {
+				limitedAt = i;
+				break;
+			}
+			expect(res.status, `${label} attempt ${i}`).toBe(403);
+		}
+		expect(limitedAt, `${label} was never refused for pace`).toBeGreaterThan(0);
+		expect(limitedAt, `${label} allowed too many guesses`).toBeLessThanOrEqual(11);
+	}
+
+	it("refuses a burst on every route that compares it", async () => {
+		const knob = process.env.RATE_LIMITS_DISABLED;
+		delete process.env.RATE_LIMITS_DISABLED;
+		try {
+			await walk(
+				"PATCH /me/parental-controls",
+				"/api/accounts/me/parental-controls",
+				"PATCH",
+				{ pin: "0000", lockMaturity: true },
+				"198.51.100.51",
+			);
+			await walk(
+				"PUT /me/parental-controls/pin",
+				"/api/accounts/me/parental-controls/pin",
+				"PUT",
+				{ pin: "9999", currentPin: "0000" },
+				"198.51.100.52",
+			);
+			await walk(
+				"DELETE /me/parental-controls",
+				"/api/accounts/me/parental-controls",
+				"DELETE",
+				{ pin: "0000" },
+				"198.51.100.53",
+			);
+		} finally {
+			if (knob !== undefined) process.env.RATE_LIMITS_DISABLED = knob;
+			await db.execute(sql`DELETE FROM rate_limits WHERE door LIKE 'parental-pin%'`);
+		}
+	});
+});
