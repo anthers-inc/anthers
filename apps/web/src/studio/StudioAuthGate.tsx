@@ -4,7 +4,7 @@ import { isNative } from "@anthers/web-shared/rpc";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
-import DesktopSignIn from "./DesktopSignIn";
+import AppSignIn from "../components/auth/AppSignIn";
 
 /**
  * The Studio is the creator management surface, so its pages require a signed-in
@@ -16,17 +16,16 @@ import DesktopSignIn from "./DesktopSignIn";
  *   - signed-in creator        → render
  * While auth resolves, show a spinner rather than flashing the page.
  *
- * The desktop shell cannot navigate away: sending the window to anthers.org would
- * abandon the bundled SPA for a page the app can't come back from. There, an
- * unauthenticated creator gets the in-app browser handoff instead, and a non-creator
- * gets a link that opens the consumer settings in their real browser.
+ * Any packaged shell — desktop or phone — cannot navigate away: sending the window to
+ * anthers.org would abandon the bundled SPA for a page the app can't come back from.
+ * There, an unauthenticated creator gets the in-app browser handoff instead, and a
+ * non-creator gets a link that opens the consumer settings in their real browser.
  */
 export default function StudioAuthGate({ children }: { children: ReactNode }) {
 	const { user, isAuthenticated, isLoading } = useAuth();
 	const creatorMode = Boolean(user?.creatorMode);
 	// Any packaged shell carries a bearer token instead of a cookie, so the sign-in
-	// surface is the shell's own on every platform — the desktop's today, the phone's
-	// when its sign-in lands.
+	// surface is the shell's own on every platform — desktop and phone alike.
 	const native = isNative();
 
 	// In a browser these are ordinary in-app routes now — the Studio is a section of this
@@ -40,7 +39,7 @@ export default function StudioAuthGate({ children }: { children: ReactNode }) {
 	if (!native && !isLoading && !creatorMode) return <Navigate to="/settings?creator=1" replace />;
 
 	if (native && !isLoading && !isAuthenticated) {
-		return <DesktopSignIn />;
+		return <AppSignIn />;
 	}
 
 	if (native && !isLoading && !creatorMode) {
