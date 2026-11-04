@@ -19,6 +19,8 @@
  * page, and `StudioAuthGate` bounces a signed-out browser to the consumer login.
  */
 import { useAuth } from "@anthers/web-shared/auth";
+import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
+import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import {
 	beginSignIn,
 	completeSignIn,
@@ -28,6 +30,7 @@ import {
 	takePendingCode,
 } from "@anthers/web-shared/desktop";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
+import Logo from "@anthers/web-shared/ui/Logo";
 import { useEffect, useRef, useState } from "react";
 
 type Phase = "idle" | "waiting" | "completing" | "error";
@@ -97,10 +100,11 @@ export default function AppSignIn() {
 
 	return (
 		<Shell>
-			<h1 className="card-title text-xl">Anthers</h1>
+			<Logo variant="oneline" className="h-10" />
+			<h1 className="card-title justify-center text-2xl">Log In</h1>
 
 			{error && (
-				<div className="alert alert-error text-sm mt-2">
+				<div className="alert alert-error text-sm mt-2 w-full">
 					<span>{error}</span>
 				</div>
 			)}
@@ -134,10 +138,10 @@ export default function AppSignIn() {
 					</button>
 				</>
 			) : (
-				<div className="card-actions mt-4">
+				<div className="mt-4 w-full">
 					<button
 						type="button"
-						className="btn btn-primary btn-sm w-full"
+						className="btn btn-primary w-full"
 						onClick={() => void openBrowser()}
 					>
 						Sign in with your identity server
@@ -150,10 +154,34 @@ export default function AppSignIn() {
 
 function Shell({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="min-h-dvh flex items-center justify-center px-4">
-			<div className="card bg-base-200 w-full max-w-md">
-				<div className="card-body">{children}</div>
-			</div>
+		// The shell's front door is a surface rather than a card on a page: no topbar, no
+		// footer, and the meadow closing the bottom of the screen. The decoration is the
+		// `/login` page's composition, which is why the sprays below are the same glyph in
+		// the same corners; on a phone the card and sprays are sized to the viewport.
+		<div className="relative flex min-h-dvh flex-col overflow-hidden bg-base-100">
+			<main className="safe-top safe-sides flex flex-1 items-center justify-center px-6 py-8">
+				<div className="relative w-full max-w-sm">
+					{[
+						{ corner: "-top-5 -left-5", rot: 0 },
+						{ corner: "-top-5 -right-5", rot: 90 },
+						{ corner: "-bottom-5 -right-5", rot: 180 },
+						{ corner: "-bottom-5 -left-5", rot: 270 },
+					].map(({ corner, rot }) => (
+						<BrandGlyph
+							key={rot}
+							name="corner-leafy"
+							className={`pointer-events-none absolute z-20 h-20 w-20 text-primary/70 ${corner}`}
+							style={{ transform: `rotate(${rot}deg)` }}
+						/>
+					))}
+					<div data-auth-fade className="card relative z-10 bg-base-200/85 shadow-lg">
+						<div className="card-body items-center gap-3 text-center">{children}</div>
+					</div>
+				</div>
+			</main>
+			{/* The floor is the page's bottom edge here, not a band under a footer, so it
+			    sits outside <main> and keeps the last strip of the screen. */}
+			<MeadowFloor heightClass="h-24 shrink-0" />
 		</div>
 	);
 }

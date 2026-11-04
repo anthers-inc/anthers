@@ -3,6 +3,7 @@ import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link, Outlet } from "@anthers/web-shared/router";
+import { isNative } from "@anthers/web-shared/rpc";
 import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeSelect from "@anthers/web-shared/ui/ThemeSelect";
 import { Bars3Icon, GlobeAltIcon } from "@heroicons/react/24/outline";
@@ -96,22 +97,36 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 
 export default function LoggedOutLayout() {
 	const { currentTrack } = useMediaPlayer();
+	const { pathname } = useLocation();
 	// The sign-in page renders stripped down: header and meadow stay (the header keeps
 	// "Sign Up Free" next to the person, and the decor is the card's backdrop), the
 	// footer goes. A signing-in visitor is mid-gesture — Bluesky, Google and
 	// DigitalOcean all drop their chrome on this page for the same reason — and the
 	// footer's Log In link naming the page it sits under is worse than useless here.
-	const hideFooter = useLocation().pathname === "/login";
+	const hideFooter = pathname === "/login";
+
+	/**
+	 * 🚨 **A packaged shell's front door is the app, not the marketing site** (2026-11-03).
+	 * In a shell `/` renders the sign-in handoff, and that screen owns the whole viewport: it
+	 * carries its own botanical frame and meadow, so the topbar, the footer and this shell's
+	 * meadow would be chrome around a surface with nowhere to navigate — and two meadows at
+	 * the bottom of one window. Browsers are untouched: `/` there is the For Users page,
+	 * which is the site and keeps the site's chrome.
+	 */
+	const bareFrontDoor = isNative() && pathname === "/";
 
 	// The marketing surface scrolls the document, so reserve the scrollbar gutter
 	// while this shell is mounted — pages that scroll and pages that don't then stay
 	// the same width (no left/right shift on navigation). Scoped to this shell so the
 	// inner-scrolling app shell / Studio don't get an empty gutter strip. See theme.css.
 	useEffect(() => {
+		if (bareFrontDoor) return;
 		const root = document.documentElement;
 		root.classList.add("gutter-stable");
 		return () => root.classList.remove("gutter-stable");
-	}, []);
+	}, [bareFrontDoor]);
+
+	if (bareFrontDoor) return <Outlet />;
 
 	return (
 		// `relative isolate` scopes the decor z-order: content + footer (z-10) sit
