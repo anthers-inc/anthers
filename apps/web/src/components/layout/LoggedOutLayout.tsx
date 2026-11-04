@@ -3,7 +3,7 @@ import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link, Outlet } from "@anthers/web-shared/router";
-import { isMobile } from "@anthers/web-shared/rpc";
+import { isNative } from "@anthers/web-shared/rpc";
 import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeSelect from "@anthers/web-shared/ui/ThemeSelect";
 import { Bars3Icon, GlobeAltIcon } from "@heroicons/react/24/outline";
@@ -106,14 +106,14 @@ export default function LoggedOutLayout() {
 	const hideFooter = pathname === "/login";
 
 	/**
-	 * 🚨 **A phone's front door is the app, not the marketing site** (2026-11-03). In a
-	 * packaged shell `/` renders the sign-in handoff, and that screen owns the whole
-	 * viewport: it carries its own botanical frame and meadow sized for a phone, so the
-	 * topbar, the footer and this shell's meadow would be chrome around a surface with
-	 * nowhere to navigate. Browsers are untouched: `/` there is the For Users page, which
-	 * is the site and keeps the site's chrome.
+	 * 🚨 **A packaged shell's front door is the app, not the marketing site** (2026-11-03).
+	 * In a shell `/` renders the sign-in handoff, and that screen owns the whole viewport: it
+	 * carries its own botanical frame and meadow, so the topbar, the footer and this shell's
+	 * meadow would be chrome around a surface with nowhere to navigate — and two meadows at
+	 * the bottom of one window. Browsers are untouched: `/` there is the For Users page,
+	 * which is the site and keeps the site's chrome.
 	 */
-	const bareFrontDoor = isMobile() && pathname === "/";
+	const bareFrontDoor = isNative() && pathname === "/";
 
 	// The marketing surface scrolls the document, so reserve the scrollbar gutter
 	// while this shell is mounted — pages that scroll and pages that don't then stay

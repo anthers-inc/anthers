@@ -154,10 +154,10 @@ export default function AppSignIn() {
 
 function Shell({ children }: { children: React.ReactNode }) {
 	return (
-		// The phone's front door is a surface rather than a card on a page: no topbar, no
+		// The shell's front door is a surface rather than a card on a page: no topbar, no
 		// footer, and the meadow closing the bottom of the screen. The decoration is the
-		// `/login` page's composition at phone size, which is why the sprays below are the
-		// same glyph in the same corners, one size down and pulled in with the card.
+		// `/login` page's composition, which is why the sprays below are the same glyph in
+		// the same corners; on a phone the card and sprays are sized to the viewport.
 		<div className="relative flex min-h-dvh flex-col overflow-hidden bg-base-100">
 			<main className="safe-top safe-sides flex flex-1 items-center justify-center px-6 py-8">
 				<div className="relative w-full max-w-sm">
