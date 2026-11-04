@@ -71,6 +71,15 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.5",
+		date: "2026-11-04",
+		lede: "Signing in from the app holds together from the first screen to the last.",
+		entries: [
+			"The app asks its shell for the stored session as it starts, instead of being handed it after it has already asked. A session that was on the device could render as a signed-out app, because the handover arrived after the page had looked.",
+			"The address the browser lands on after an identity server, `/auth/callback`, is a page rather than a missing route. It offers to open the app and tries the app's own link by itself, so the sign-in finishes whether or not the browser hands it over on its own.",
+		],
+	},
+	{
 		version: "2026.11.4",
 		date: "2026-11-04",
 		lede: "A sign-in that finished in the browser now shows up in the app.",
