@@ -22,9 +22,11 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import {
+	awaitSignIn,
 	beginSignIn,
 	completeSignIn,
 	deviceLabel,
+	hasPendingSignIn,
 	onAuthCode,
 	type Persistence,
 	takePendingCode,
@@ -34,7 +36,7 @@ import FormField from "@anthers/web-shared/ui/FormField";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import Logo from "@anthers/web-shared/ui/Logo";
 import { AtSymbolIcon } from "@heroicons/react/24/outline";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Phase = "idle" | "waiting" | "completing" | "error";
 
@@ -101,8 +103,41 @@ export default function AppSignIn() {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 			setPhase("error");
+			return;
 		}
+		// The browser is only where the password is typed. The shell asks the server whether
+		// the enrollment was approved, so the code does not have to find its way back by link.
+		await waitForApproval();
 	};
+
+	const waitForApproval = useCallback(async () => {
+		try {
+			const result = await awaitSignIn();
+			setPersistence(result.persistence);
+			// The token is live in the shell now, so this re-fetch authenticates and flips the
+			// gate through to the app.
+			await refreshUser();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+			setPhase("error");
+		}
+	}, [refreshUser]);
+
+	// A launch with an enrollment still open — the app was reclaimed while the person was in
+	// the browser, or they switched back after finishing — picks the thread up here.
+	useEffect(() => {
+		let live = true;
+		hasPendingSignIn()
+			.then((pending) => {
+				if (!pending || !live) return;
+				setPhase("waiting");
+				void waitForApproval();
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, [waitForApproval]);
 
 	/**
 	 * Whether this shell asks for a handle before handing off.

@@ -1051,6 +1051,26 @@ const authRoutes = new Hono()
 		return c.json({ label: pending.label, expiresAt: pending.expiresAt });
 	})
 
+	/**
+	 * Step 2b — the app asking whether its enrollment has been approved yet.
+	 *
+	 * 🚨 **This is what makes the handoff survive a phone.** The one-time code used to reach
+	 * the app only over its `anthers.org` app link, which means a verified link, a browser
+	 * that hands off, and a process Android has not reclaimed all had to be true at once. Any
+	 * one of them failing left the person signed in on the web and signed out in the app, with
+	 * nothing to retry. The app now polls its own challenge and redeems whatever it finds, so
+	 * the browser only has to be *a browser*.
+	 *
+	 * The code alone opens nothing: redemption still proves the verifier, whose hash is this
+	 * challenge, so learning a challenge from somewhere else gives no session.
+	 */
+	.get("/desktop/poll/:challenge", async (c) => {
+		const pending = await getPendingDesktopAuth(c.req.param("challenge"));
+		if (!pending) return c.json({ error: "This sign-in request has expired" }, 404);
+		if (!pending.code) return c.json({ status: "pending" }, 202);
+		return c.json({ status: "authorized", code: pending.code });
+	})
+
 	// Step 3 — the confirm click, under the browser's normal cookie session. This is
 	// what turns "this browser is signed in" into a separate desktop credential.
 	.post(
