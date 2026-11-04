@@ -71,6 +71,14 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.1",
+		date: "2026-11-03",
+		lede: "The apps' sign-in screen stopped being a card inside the site's chrome.",
+		entries: [
+			"The packaged apps open on a full sign-in surface now, framed like the login page it is: the botanical sprays bracketing a cream card, the Anthers lockup, the heading, and the handoff to the browser, with the meadow closing the bottom of the screen. The marketing topbar and footer are gone from it, because a window with no address bar has nowhere for them to lead.",
+		],
+	},
+	{
 		version: "2026.11.0",
 		date: "2026-11-02",
 		lede: "The Android app opens at its own door and fits a phone, and a creator's page reads by month.",
