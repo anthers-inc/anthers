@@ -71,6 +71,14 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.4",
+		date: "2026-11-04",
+		lede: "A sign-in that finished in the browser now shows up in the app.",
+		entries: [
+			"The app waits until it is on screen before asking the server who is signed in. Finishing the sign-in in a browser leaves the app in the background, where Android freezes its page; the refresh that used to run there could complete on the server and never reach the screen, so the app looked signed out of a session it already held.",
+		],
+	},
+	{
 		version: "2026.11.3",
 		date: "2026-11-04",
 		lede: "Signing in from the app no longer waits for a link to come back.",
