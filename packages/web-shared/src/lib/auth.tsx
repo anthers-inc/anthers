@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
-import { client } from "./rpc";
+import { client, nativeRuntime } from "./rpc";
 import { applyTheme, storeTheme, type Theme } from "./theme";
 
 /**
@@ -215,7 +215,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	}, []);
 
 	useEffect(() => {
-		refreshUser().finally(() => setIsLoading(false));
+		// 🚨 **Ask the shell for its stored session, rather than waiting to be told.**
+		//
+		// A packaged shell reads its token from the platform keystore on a worker thread,
+		// because the read blocks, and it used to push the answer into the page when it landed —
+		// which lands in whichever document exists at that moment, often the blank one the
+		// app's real page replaces. The token went with it, the page asked "who am I" without
+		// one, and a perfectly good session rendered as a signed-out app. Pulling on boot
+		// cannot be mistimed: this page is the one that exists.
+		void (async () => {
+			const native = nativeRuntime();
+			if (native?.platform === "android") {
+				try {
+					const { invoke } = await import("@tauri-apps/api/core");
+					const token = await invoke<string | null>("session_token");
+					native.setToken?.(token ?? null);
+				} catch {}
+			}
+			await refreshUser();
+			setIsLoading(false);
+		})();
 	}, [refreshUser]);
 
 	// The account's saved theme (once we know who's signed in) overrides the device

@@ -126,6 +126,7 @@ const SignupPage = lazy(() => import("./pages/SignupPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
 const SharedWorkPage = lazy(() => import("./pages/SharedWorkPage"));
+const AuthCallbackPage = lazy(() => import("./pages/AuthCallbackPage"));
 const EmbedWorkPage = lazy(() => import("./pages/EmbedWorkPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
@@ -189,6 +190,12 @@ export default function App() {
 				this route never interprets the token itself.
 			*/}
 				<Route path="/embed/:token" element={<EmbedWorkPage />} />
+
+				{/* The phone's sign-in callback. A packaged shell asked the system browser for this
+				    URL and the browser comes back to it; when app-link verification does not take
+				    the person straight into the app, this page hands the code over the app's own
+				    scheme. It sits outside every shell because it is a door with no site around it. */}
+				<Route path="/auth/callback" element={<AuthCallbackPage />} />
 
 				{/*
 				Marketing / logged-out layout
