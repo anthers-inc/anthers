@@ -144,7 +144,11 @@ interface AuthContextValue {
 	 * Every identity goes this way, Anthers-hosted included: the server holds the credential, so
 	 * it is the one that authenticates and the one that shows what is being granted.
 	 */
-	signInWithIdentity: (handle: string, next?: string | null) => Promise<void>;
+	signInWithIdentity: (
+		handle: string,
+		next?: string | null,
+		deviceChallenge?: string,
+	) => Promise<void>;
 	/**
 	 * Sign up with an ATProto identity.
 	 *
@@ -260,7 +264,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	 */
 	const beginAtprotoAuth = useCallback(
 		async (
-			json: { handle?: string; intent: "login" | "signup" | "publish"; next?: string },
+			json: {
+				handle?: string;
+				intent: "login" | "signup" | "publish";
+				next?: string;
+				/** A packaged shell's enrollment challenge: the API mints its code at the callback. */
+				deviceChallenge?: string;
+			},
 			fallback: string,
 		) => {
 			const res = await client.api.atproto.auth.$post({ json });
@@ -274,9 +284,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	);
 
 	const signInWithIdentity = useCallback(
-		async (handle: string, next?: string | null) => {
+		async (handle: string, next?: string | null, deviceChallenge?: string) => {
 			await beginAtprotoAuth(
-				{ handle, intent: "login", ...(next ? { next } : {}) },
+				{
+					handle,
+					intent: "login",
+					...(next ? { next } : {}),
+					...(deviceChallenge ? { deviceChallenge } : {}),
+				},
 				"Couldn't reach your identity server.",
 			);
 		},

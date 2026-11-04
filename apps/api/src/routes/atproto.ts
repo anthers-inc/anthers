@@ -70,7 +70,7 @@ import {
 	scopeFor,
 	sweepExpiredOauthState,
 } from "../services/atproto-client.js";
-import { createSession, validateSession } from "../services/auth.js";
+import { authorizeDesktopAuth, createSession, validateSession } from "../services/auth.js";
 import {
 	checkHandleAvailability,
 	hostedHandleFor,
@@ -148,6 +148,13 @@ const authInitSchema = z.object({
 	 * than trusted because it came from our own page.
 	 */
 	next: z.string().optional(),
+	/**
+	 * The app's desktop-enrollment challenge, when the round trip was started by a packaged
+	 * shell. Carried through the OAuth state so the callback can mint the app's one-time code
+	 * itself, which is what keeps the browser from coming back to a page and asking somebody to
+	 * approve a device their identity server has already approved.
+	 */
+	deviceChallenge: z.string().min(1).max(128).optional(),
 });
 
 /**
@@ -165,6 +172,8 @@ interface AppState {
 	intent: "login" | "signup" | "publish";
 	userId?: number;
 	next?: string;
+	/** The packaged shell's enrollment challenge, minted into a code at the callback. */
+	deviceChallenge?: string;
 	/** The browser nonce, set as a cookie at `/auth` and required at `/callback`. */
 	nonce?: string;
 }
@@ -307,7 +316,7 @@ const atprotoRoutes = new Hono()
 
 	// ── Auth Init ────────────────────────────────────────────────────────────
 	.post("/auth", zValidator("json", authInitSchema), async (c) => {
-		const { handle, intent, next } = c.req.valid("json");
+		const { handle, intent, next, deviceChallenge } = c.req.valid("json");
 
 		let userId: number | undefined;
 		if (intent === "publish") {
@@ -370,6 +379,7 @@ const atprotoRoutes = new Hono()
 				intent,
 				userId,
 				next: sanitizeNextPath(next) ?? undefined,
+				deviceChallenge,
 				nonce,
 			};
 			const url = await getAtprotoClient().authorize(subject, {
@@ -567,6 +577,24 @@ const atprotoRoutes = new Hono()
 				c.req.header("User-Agent"),
 			);
 			setSessionCookie(c, sessionToken);
+
+			// 🚨 **A packaged shell gets its credential here, not from a second page.** The app
+			// opened this round trip with an enrollment challenge, and the person has just
+			// proved themselves at their identity server — which is the grant. Minting the code
+			// now and sending the browser to the app's landing page is what keeps them from
+			// being asked to approve a device they already approved, on a page whose copy still
+			// called it the Studio.
+			if (appState.deviceChallenge) {
+				const code = await authorizeDesktopAuth(
+					appState.deviceChallenge,
+					user.id,
+					c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP") ?? null,
+					c.req.header("User-Agent") ?? null,
+				);
+				if (code) {
+					return c.redirect(`${getFrontendUrl(c)}/auth/callback?code=${encodeURIComponent(code)}`);
+				}
+			}
 
 			// The onboarding flag that used to ride this response is gone: identity and
 			// account are created together now, so there is no signed-in account still

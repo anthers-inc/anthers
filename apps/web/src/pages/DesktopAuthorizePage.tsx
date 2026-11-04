@@ -122,11 +122,21 @@ export default function DesktopAuthorizePage() {
 	useEffect(() => {
 		if (isLoading || isAuthenticated || !handle || started.current) return;
 		started.current = true;
-		signInWithIdentity(handle, `${location.pathname}${location.search}`).catch((err) => {
+		// The challenge rides along as the enrollment this round trip is for, so the callback
+		// mints the app's code itself and the browser never comes back to this page.
+		signInWithIdentity(handle, `${location.pathname}${location.search}`, challenge).catch((err) => {
 			setError(err instanceof Error ? err.message : "Couldn't reach your identity server.");
 			setPhase("error");
 		});
-	}, [isLoading, isAuthenticated, handle, signInWithIdentity, location.pathname, location.search]);
+	}, [
+		isLoading,
+		isAuthenticated,
+		handle,
+		challenge,
+		signInWithIdentity,
+		location.pathname,
+		location.search,
+	]);
 
 	if (isLoading) {
 		return (
@@ -199,7 +209,7 @@ export default function DesktopAuthorizePage() {
 								{label ? (
 									<span className="font-medium text-base-content">{label}</span>
 								) : (
-									"the Studio app on your computer"
+									"the Anthers app on your computer"
 								)}{" "}
 								use your account. You can revoke it any time from{" "}
 								<span className="font-medium text-base-content">Settings → Devices</span>.
