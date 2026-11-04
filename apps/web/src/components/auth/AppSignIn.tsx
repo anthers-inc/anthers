@@ -29,11 +29,24 @@ import {
 	type Persistence,
 	takePendingCode,
 } from "@anthers/web-shared/desktop";
+import { isMobile } from "@anthers/web-shared/rpc";
+import FormField from "@anthers/web-shared/ui/FormField";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import Logo from "@anthers/web-shared/ui/Logo";
+import { AtSymbolIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 
 type Phase = "idle" | "waiting" | "completing" | "error";
+
+/**
+ * Whether what was typed is shaped like a handle at all.
+ *
+ * The same loose test `/login` uses, and deliberately the same one: this is a routing
+ * question, not a validation one, and the server that holds the handle is the authority on
+ * whether it exists. Two different spellings of "looks like a handle" between the web login
+ * and the app's would be two answers to one question.
+ */
+const LOOKS_LIKE_HANDLE = /^@?[a-z0-9.-]+\.[a-z0-9-]+$/i;
 
 export default function AppSignIn() {
 	const { refreshUser } = useAuth();
@@ -41,6 +54,10 @@ export default function AppSignIn() {
 	const [error, setError] = useState<string | null>(null);
 	const [openedUrl, setOpenedUrl] = useState<string | null>(null);
 	const [persistence, setPersistence] = useState<Persistence | null>(null);
+	/** What was typed, exactly as `/login` collects it. */
+	const [identifier, setIdentifier] = useState("");
+	/** The handle the last handoff used, so "Open it again" repeats the same request. */
+	const [submittedHandle, setSubmittedHandle] = useState<string | null>(null);
 	// Guards against a code arriving twice (cold-start pull racing the live event) —
 	// the second redemption would fail, since codes are strictly single-use.
 	const redeeming = useRef(false);
@@ -75,15 +92,44 @@ export default function AppSignIn() {
 		return onAuthCode(redeem);
 	}, [refreshUser]);
 
-	const openBrowser = async () => {
+	const openBrowser = async (handle: string) => {
 		setPhase("waiting");
 		setError(null);
+		setSubmittedHandle(handle);
 		try {
-			setOpenedUrl(await beginSignIn(deviceLabel()));
+			setOpenedUrl(await beginSignIn(handle, deviceLabel()));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
 			setPhase("error");
 		}
+	};
+
+	/**
+	 * Whether this shell asks for a handle before handing off.
+	 *
+	 * ⚠️ **The phone does; the desktop does not, yet.** The desktop's command still ignores a
+	 * handle, so showing the field there would collect an answer nothing uses. When its shell
+	 * learns the same parameter, this flag becomes true for both.
+	 */
+	const handleRequired = isMobile();
+
+	/**
+	 * The Continue press: the same check `/login` runs, then the handoff with the handle the
+	 * person typed.
+	 */
+	const submit = (e: React.FormEvent) => {
+		e.preventDefault();
+		const typed = identifier.trim();
+		const bare = typed.replace(/^@/, "").toLocaleLowerCase();
+		if (!LOOKS_LIKE_HANDLE.test(typed)) {
+			setError(
+				typed.includes("@") && typed.includes(".")
+					? "Sign in with your handle rather than your email address."
+					: "Type your whole handle, like alice.anthers.social.",
+			);
+			return;
+		}
+		void openBrowser(bare);
 	};
 
 	if (phase === "completing") {
@@ -109,18 +155,13 @@ export default function AppSignIn() {
 				</div>
 			)}
 
-			<p className="text-sm text-base-content/60">
-				Sign in through your browser, at the server that holds your identity. This device can be
-				revoked any time from Settings → Devices on anthers.org.
-			</p>
-
 			{phase === "waiting" ? (
 				<>
 					<p className="text-sm text-base-content/60 mt-4">
 						Finish signing in in your browser{openedUrl ? "" : " — waiting…"}
 					</p>
 					{openedUrl && (
-						<div className="mt-2">
+						<div className="mt-2 w-full">
 							<p className="text-xs text-base-content/50">
 								Browser didn't open? Paste this in yourself:
 							</p>
@@ -131,18 +172,48 @@ export default function AppSignIn() {
 					)}
 					<button
 						type="button"
-						className="btn btn-ghost btn-xs mt-3"
-						onClick={() => void openBrowser()}
+						className="btn btn-ghost btn-sm mt-3"
+						onClick={() => void openBrowser(submittedHandle ?? "")}
 					>
 						Open it again
 					</button>
 				</>
+			) : handleRequired ? (
+				<form onSubmit={submit} className="mt-2 flex w-full flex-col gap-2 text-left" noValidate>
+					<FormField
+						spaced
+						label="Your handle"
+						icon={<AtSymbolIcon className="h-5 w-5" />}
+						iconName="handle"
+						hint={
+							<span className="block min-h-[2.875rem]">
+								Your identity server confirms it's you, then brings you back here.
+							</span>
+						}
+					>
+						<input
+							type="text"
+							inputMode={identifier.startsWith("@") ? "url" : "email"}
+							className="input w-full pl-10"
+							autoComplete="username"
+							value={identifier}
+							onChange={(e) => {
+								setIdentifier(e.target.value);
+								setError(null);
+							}}
+							required
+						/>
+					</FormField>
+					<button type="submit" className="btn btn-primary w-full mt-3">
+						Continue with your identity server
+					</button>
+				</form>
 			) : (
 				<div className="mt-4 w-full">
 					<button
 						type="button"
 						className="btn btn-primary w-full"
-						onClick={() => void openBrowser()}
+						onClick={() => void openBrowser("")}
 					>
 						Sign in with your identity server
 					</button>
