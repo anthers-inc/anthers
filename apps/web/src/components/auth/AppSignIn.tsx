@@ -114,8 +114,13 @@ export default function AppSignIn() {
 		try {
 			const result = await awaitSignIn();
 			setPersistence(result.persistence);
-			// The token is live in the shell now, so this re-fetch authenticates and flips the
-			// gate through to the app.
+			// 🚨 **Refresh only when this app is on screen.** The exchange happens in the shell
+			// while the browser is still in front, and Android freezes a backgrounded webview —
+			// a request started then is dropped mid-flight, so the sign-in succeeded on the
+			// server and the screen never followed. Waiting for the app to be visible puts the
+			// re-fetch where it cannot be frozen, which is also where the person can see it
+			// happen.
+			await waitUntilVisible();
 			await refreshUser();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
@@ -256,6 +261,30 @@ export default function AppSignIn() {
 			)}
 		</Shell>
 	);
+}
+
+/**
+ * Resolve once this document is visible, immediately if it already is.
+ *
+ * 🚨 **Android freezes a backgrounded WebView, and a fetch started in one is dropped rather
+ * than failed** — the sign-in exchange runs in the shell while the browser is still in front,
+ * so a refresh started then died mid-flight and the screen never followed a sign-in that had
+ * succeeded. Waiting for the app to come forward is the same moment the person can see it.
+ */
+function waitUntilVisible(): Promise<void> {
+	if (typeof document === "undefined" || document.visibilityState === "visible") {
+		return Promise.resolve();
+	}
+	return new Promise((resolve) => {
+		const settle = () => {
+			if (document.visibilityState !== "visible") return;
+			document.removeEventListener("visibilitychange", settle);
+			window.removeEventListener("focus", settle);
+			resolve();
+		};
+		document.addEventListener("visibilitychange", settle);
+		window.addEventListener("focus", settle);
+	});
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
