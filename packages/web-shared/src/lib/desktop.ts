@@ -85,9 +85,14 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
  * and opens the authorize page in the SYSTEM browser. Returns the opened URL so the UI
  * can offer it as copyable text — on a machine with no default browser handler, a
  * button that silently does nothing is a dead end.
+ *
+ * ⭐ **The handle is the app's own field, not the browser's.** A phone browser usually has
+ * no Anthers session, so the authorize page has to be able to start the OAuth at the
+ * person's own identity server; it cannot ask for the handle itself without becoming a
+ * second login page. The app collects it exactly as `/login` does and passes it through.
  */
-export function beginSignIn(label: string): Promise<string> {
-	return invoke<string>("begin_sign_in", { label });
+export function beginSignIn(handle: string, label: string): Promise<string> {
+	return invoke<string>("begin_sign_in", { handle, label });
 }
 
 /**

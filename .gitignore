@@ -29,6 +29,12 @@ data/*
 # the main checkout's `bun test` and root tsconfig never wander into a worktree.
 .worktrees/
 
+# ─── Working files ───
+# The scratch a task makes for itself — screenshots, generated previews, downloaded
+# artifacts, the throwaway script that produced them — one directory per tree, ignored so
+# `git status` stays honest and `git worktree remove` does not refuse a finished task.
+.working/
+
 # ─── IDE ───
 .vscode/
 .idea/

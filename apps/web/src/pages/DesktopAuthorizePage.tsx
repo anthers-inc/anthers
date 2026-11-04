@@ -18,21 +18,36 @@
 import { useAuth } from "@anthers/web-shared/auth";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 
 type Phase = "loading" | "expired" | "ready" | "authorizing" | "done" | "error";
 
 export default function DesktopAuthorizePage() {
-	const { isAuthenticated, isLoading } = useAuth();
+	const { isAuthenticated, isLoading, signInWithIdentity } = useAuth();
 	const location = useLocation();
 	const [params] = useSearchParams();
 	const challenge = params.get("challenge") ?? "";
 	const mobile = params.get("redirect") === "mobile";
+	/**
+	 * The handle, when the app asked for this sign-in from a field of its own.
+	 *
+	 * 🚨 **A phone browser usually has no Anthers session**, so this page used to be a dead
+	 * end for the app: it bounced to `/login`, the person signed in there, and came back to
+	 * a page whose challenge the login round trip had lost. The app now asks for the handle
+	 * first and passes it here, so the first thing this page does is hand the person to the
+	 * server that holds their identity, exactly as `/login` does, and come back with the
+	 * challenge intact.
+	 */
+	const handle = params.get("handle") ?? "";
 
 	const [phase, setPhase] = useState<Phase>("loading");
 	const [label, setLabel] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	// One start and one auto-confirm per visit: React StrictMode runs effects twice in
+	// development, and a second OAuth start would spend a second pending challenge.
+	const started = useRef(false);
+	const confirmed = useRef(false);
 
 	useEffect(() => {
 		if (!challenge) {
@@ -59,7 +74,7 @@ export default function DesktopAuthorizePage() {
 		};
 	}, [challenge]);
 
-	const confirm = async () => {
+	const confirm = useCallback(async () => {
 		setPhase("authorizing");
 		setError(null);
 		try {
@@ -84,7 +99,34 @@ export default function DesktopAuthorizePage() {
 			setError(err instanceof Error ? err.message : "Could not complete sign-in.");
 			setPhase("error");
 		}
-	};
+	}, [challenge, mobile]);
+
+	/**
+	 * Back from the identity server, with a session and a handle to account for: mint the
+	 * code and hand it to the app without a second question.
+	 *
+	 * The confirm screen remains for the desktop's flow, which opens this page with no
+	 * handle, so nothing there proves the person asked for *this* sign-in. Here the request
+	 * began at the app's own handle field and the identity server has already shown what is
+	 * being granted, which is the same evidence the confirm screen was asking for.
+	 */
+	useEffect(() => {
+		if (!handle || !isAuthenticated || phase !== "ready" || confirmed.current) return;
+		confirmed.current = true;
+		void confirm();
+	}, [handle, isAuthenticated, phase, confirm]);
+
+	// The app's own sign-in screen asked for the handle, so the browser leg starts from it:
+	// the same OAuth start `/login` performs, carrying this page (challenge and all) as the
+	// place to come back to.
+	useEffect(() => {
+		if (isLoading || isAuthenticated || !handle || started.current) return;
+		started.current = true;
+		signInWithIdentity(handle, `${location.pathname}${location.search}`).catch((err) => {
+			setError(err instanceof Error ? err.message : "Couldn't reach your identity server.");
+			setPhase("error");
+		});
+	}, [isLoading, isAuthenticated, handle, signInWithIdentity, location.pathname, location.search]);
 
 	if (isLoading) {
 		return (
@@ -94,9 +136,39 @@ export default function DesktopAuthorizePage() {
 		);
 	}
 
-	// Signing in returns here, so the confirm click is the only step left.
+	// No session in this browser yet.
 	if (!isAuthenticated) {
-		return <Navigate to="/login" state={{ from: location }} replace />;
+		// Without a handle there is nothing to start: the person needs the login page, and
+		// its `from` carries this whole URL so the challenge survives the detour.
+		if (!handle) {
+			return <Navigate to="/login" state={{ from: location }} replace />;
+		}
+		return (
+			<div className="max-w-md mx-auto px-4 py-12">
+				<div className="card bg-base-200">
+					<div className="card-body items-center text-center gap-3">
+						{error ? (
+							<>
+								<h1 className="card-title text-lg">Could not start sign-in</h1>
+								<div className="alert alert-error text-sm w-full">
+									<span>{error}</span>
+								</div>
+								<p className="text-sm text-base-content/60">
+									Go back to the app and try again, or check the handle.
+								</p>
+							</>
+						) : (
+							<>
+								<LoadingSpinner size="lg" />
+								<p className="text-sm text-base-content/60">
+									Taking you to the server that holds {handle}…
+								</p>
+							</>
+						)}
+					</div>
+				</div>
+			</div>
+		);
 	}
 
 	return (

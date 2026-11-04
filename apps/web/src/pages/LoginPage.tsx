@@ -85,8 +85,9 @@ export default function LoginPage() {
 	// for `location.assign()`; `state.from` is set by our own router and is checked anyway,
 	// because "this one is ours" is the assumption that stops being true first.
 	const nextParam = sanitizeNextPath(new URLSearchParams(location.search).get("next"));
+	const fromLocation = (location.state as { from?: { pathname: string; search?: string } })?.from;
 	const from = sanitizeNextPath(
-		(location.state as { from?: { pathname: string } })?.from?.pathname,
+		fromLocation ? `${fromLocation.pathname}${fromLocation.search ?? ""}` : null,
 	);
 	const redirectTo = nextParam || from || "/library";
 
