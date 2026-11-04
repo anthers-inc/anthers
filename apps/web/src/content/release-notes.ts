@@ -71,6 +71,14 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.3",
+		date: "2026-11-04",
+		lede: "Signing in from the app no longer waits for a link to come back.",
+		entries: [
+			"The app asks the server whether its sign-in has been approved, instead of waiting for a one-time code to arrive over a link. The browser is still where the identity server asks for the password, but a browser that does not hand off, or a phone that closed the app while it was there, no longer leaves the sign-in half finished: opening the app picks it up and completes it.",
+		],
+	},
+	{
 		version: "2026.11.2",
 		date: "2026-11-04",
 		lede: "Signing in from the app starts at the person's own identity server again.",
