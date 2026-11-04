@@ -71,6 +71,14 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.6",
+		date: "2026-11-04",
+		lede: "Signing in from the app finishes where it started, with nothing left to approve.",
+		entries: [
+			"The round trip through an identity server now produces the app's sign-in code itself, at the point the server sends the browser back. Until now that return landed on a page asking the person to approve the device a second time, in wording that still called the desktop app the Studio. The identity server's own consent screen is the grant, so the extra step is gone.",
+		],
+	},
+	{
 		version: "2026.11.5",
 		date: "2026-11-04",
 		lede: "Signing in from the app holds together from the first screen to the last.",
