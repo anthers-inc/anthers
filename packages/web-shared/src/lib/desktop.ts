@@ -96,6 +96,27 @@ export function beginSignIn(handle: string, label: string): Promise<string> {
 }
 
 /**
+ * Wait for the enrollment to be approved, then redeem it.
+ *
+ * 🚨 **The shell asks the server, rather than waiting to be tapped on the shoulder.** The
+ * handoff used to depend on a verified app link handing the one-time code back, which needs a
+ * browser that hands off and a process Android has not reclaimed. Polling the challenge the
+ * shell itself registered makes the browser just a place to type a password: whenever the app
+ * is running, it finds the approval on its own.
+ */
+export function awaitSignIn(): Promise<{ token: string; persistence: Persistence }> {
+	return invoke<{ token: string; persistence: Persistence }>("await_sign_in").then((result) => {
+		bridge()?.setToken?.(result.token);
+		return result;
+	});
+}
+
+/** Whether an enrollment is still waiting to be redeemed, so a launch can resume it. */
+export function hasPendingSignIn(): Promise<boolean> {
+	return invoke<boolean>("has_pending_sign_in");
+}
+
+/**
  * Redeem a callback code for the session token and hand it to the running app, so the
  * next API call is authenticated without a reload.
  */
