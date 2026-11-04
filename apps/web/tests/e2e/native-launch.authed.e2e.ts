@@ -36,7 +36,8 @@ async function injectAndroidRuntime(page: Page, token: string | null) {
 }
 
 const signInButton = (page: Page) =>
-	page.getByRole("button", { name: /sign in with your identity server/i });
+	page.getByRole("button", { name: /continue with your identity server/i });
+const handleField = (page: Page) => page.getByLabel(/your handle/i);
 const marketingHeading = (page: Page) => page.getByRole("heading", { name: /creative garden/i });
 
 test.describe("the app's launch destination", () => {
@@ -51,7 +52,11 @@ test.describe("the app's launch destination", () => {
 		await page.goto("/");
 
 		await expect(signInButton(page)).toBeVisible();
-		await expect(page.getByText(/sign in through your browser/i)).toBeVisible();
+		// The app asks for the handle itself, exactly as `/login` does: the browser leg starts
+		// at the person's own identity server, so nothing about the flow depends on this phone
+		// already holding a session in its browser.
+		await expect(handleField(page)).toBeVisible();
+		await expect(page.getByText(/your identity server confirms it's you/i)).toBeVisible();
 		// The pitch is the thing being replaced, so its hero is the assertion that it did
 		// not render. It would also be visible on a shell that ignored `isNative()`.
 		await expect(marketingHeading(page)).toHaveCount(0);
