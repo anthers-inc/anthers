@@ -71,6 +71,14 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.2",
+		date: "2026-11-04",
+		lede: "Signing in from the app starts at the person's own identity server again.",
+		entries: [
+			"The app's sign-in asks for a handle and hands the browser to the server that holds it, then comes back to the app once that server has confirmed who the person is. Until now the browser leg expected an Anthers session the phone's browser did not have, so it landed on the web login page and the sign-in never returned.",
+		],
+	},
+	{
 		version: "2026.11.1",
 		date: "2026-11-03",
 		lede: "The apps' sign-in screen stopped being a card inside the site's chrome.",
