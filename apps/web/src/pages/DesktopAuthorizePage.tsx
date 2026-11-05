@@ -14,6 +14,14 @@
  * code comes back through one. The value is an enum rather than a URL on purpose — a
  * caller-supplied address here would be an open redirect on a page that just minted a
  * credential.
+ *
+ * ⭐ **This page is deliberately kept, not a leftover interstitial.** It is the browser-side
+ * branch point: a browser already holding an Anthers session mints the app's code directly
+ * and never visits an identity server; one without starts the OAuth at the handle's server.
+ * It is also the only surface that can explain a refused handle or an unreachable identity
+ * server, because by then the app is behind the browser. A redirect endpoint that skipped the
+ * page would have to reproduce both jobs, so it would move the happy path to the API and
+ * leave the page as the error path rather than remove it.
  */
 import { useAuth } from "@anthers/web-shared/auth";
 import { apiFetch } from "@anthers/web-shared/rpc";
@@ -195,8 +203,10 @@ export default function DesktopAuthorizePage() {
 						<>
 							<h1 className="card-title text-lg">This sign-in request has expired</h1>
 							<p className="text-sm text-base-content/60">
-								Sign-in requests are only valid for a few minutes. Start again from Anthers Desktop
-								on your computer.
+								Sign-in requests are only valid for a few minutes.{" "}
+								{mobile
+									? "Start again from the Anthers app on your phone."
+									: "Start again from Anthers Desktop on your computer."}
 							</p>
 						</>
 					)}
@@ -238,8 +248,9 @@ export default function DesktopAuthorizePage() {
 						<>
 							<h1 className="card-title text-lg">You're signed in</h1>
 							<p className="text-sm text-base-content/60">
-								Return to Anthers on your computer — it should be signed in already. You can close
-								this tab.
+								{mobile
+									? "Return to the Anthers app on your phone — it should be signed in already. You can close this tab."
+									: "Return to Anthers on your computer — it should be signed in already. You can close this tab."}
 							</p>
 						</>
 					)}
