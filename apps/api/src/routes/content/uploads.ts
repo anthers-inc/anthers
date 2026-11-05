@@ -445,7 +445,7 @@ const uploadsRoutes = new Hono()
 				kind: data.kind,
 			});
 			return c.json(
-				{ caption: serializeCaptionRow(row, item.id, deliveryCtx() ?? localDelivery) },
+				{ caption: serializeCaptionRow(row, item.id, deliveryCtx(c) ?? localDelivery) },
 				201,
 			);
 		} catch (err) {
@@ -472,7 +472,7 @@ const uploadsRoutes = new Hono()
 		const remaining = await listCaptionTracks(item.id);
 		return c.json({
 			captions: remaining.map((t) =>
-				serializeCaptionRow(t, item.id, deliveryCtx() ?? localDelivery),
+				serializeCaptionRow(t, item.id, deliveryCtx(c) ?? localDelivery),
 			),
 		});
 	})
@@ -543,7 +543,10 @@ const uploadsRoutes = new Hono()
 				key: data.key,
 				alt: data.alt,
 			});
-			return c.json({ previewMedia: await previewMediaPayload(work) }, 201);
+			return c.json(
+				{ previewMedia: await previewMediaPayload(work, deliveryCtx(c) ?? localDelivery) },
+				201,
+			);
 		} catch (err) {
 			if (err instanceof PreviewMediaRefusal) {
 				return c.json({ error: err.message, code: "preview_refused" }, 400);
@@ -562,7 +565,9 @@ const uploadsRoutes = new Hono()
 			if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
 			try {
 				await reorderPreviewMedia(work, c.req.valid("json").previewIds);
-				return c.json({ previewMedia: await previewMediaPayload(work) });
+				return c.json({
+					previewMedia: await previewMediaPayload(work, deliveryCtx(c) ?? localDelivery),
+				});
 			} catch (err) {
 				if (err instanceof PreviewMediaRefusal) {
 					return c.json({ error: err.message, code: "preview_refused" }, 400);
@@ -586,7 +591,9 @@ const uploadsRoutes = new Hono()
 			}
 			const updated = await updatePreviewMedia(work, previewId, c.req.valid("json"));
 			if (!updated) return c.json({ error: "Not found" }, 404);
-			return c.json({ previewMedia: await previewMediaPayload(work) });
+			return c.json({
+				previewMedia: await previewMediaPayload(work, deliveryCtx(c) ?? localDelivery),
+			});
 		},
 	)
 
@@ -603,7 +610,9 @@ const uploadsRoutes = new Hono()
 		const removalRefusal = await mediaMutabilityRefusal(work);
 		if (removalRefusal) return c.json(removalRefusal.body, removalRefusal.status);
 		await removePreviewMedia(work, previewId);
-		return c.json({ previewMedia: await previewMediaPayload(work) });
+		return c.json({
+			previewMedia: await previewMediaPayload(work, deliveryCtx(c) ?? localDelivery),
+		});
 	})
 
 	.post(
@@ -637,7 +646,7 @@ const uploadsRoutes = new Hono()
 							row,
 							work.id,
 							preview.id,
-							deliveryCtx() ?? localDelivery,
+							deliveryCtx(c) ?? localDelivery,
 						),
 					},
 					201,
@@ -674,7 +683,7 @@ const uploadsRoutes = new Hono()
 		if (captionRefusal) return c.json(captionRefusal.body, captionRefusal.status);
 		await deletePreviewCaptionTrack(track, work.creatorId ?? -1);
 		const remaining = await listPreviewCaptionTracks(previewId);
-		const ctx = deliveryCtx() ?? localDelivery;
+		const ctx = deliveryCtx(c) ?? localDelivery;
 		return c.json({
 			captions: remaining.map((t) => serializePreviewCaptionRow(t, work.id, previewId, ctx)),
 		});
@@ -788,10 +797,9 @@ export function serializeCaptionRow(row: CaptionTrackRow, workId: number, ctx: D
 }
 
 /** The owner's preview set as the Manage tab reads it — every mutation answers the same shape. */
-export async function previewMediaPayload(work: typeof works.$inferSelect) {
+export async function previewMediaPayload(work: typeof works.$inferSelect, ctx: DeliveryCtx) {
 	const previews = await listPreviewMedia(work.id);
 	const captions = await listPreviewCaptionTracksForWork(work.id);
-	const ctx = deliveryCtx() ?? localDelivery;
 	return previews.map((p) => serializePreviewMedia(p, work.id, ctx, captions.get(p.id) ?? []));
 }
 

@@ -57,12 +57,14 @@ import {
 	type VoteTally,
 } from "@anthers/shared/votes";
 import { and, desc, eq, inArray, ne, or, type SQL, sql } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { JOB_OPTIONS, QUEUE_BY_MEDIA_TYPE, QUEUES, queue } from "../jobs/queue.js";
 import { refreshQueuePositions } from "../jobs/queue-position.js";
 import { routePagedIngest } from "../lib/paged-ingest.js";
 import { pgWorkEmbedPattern } from "../lib/post-work-links.js";
+import { MEDIA_TOKEN_TTL_SECONDS, mintMediaToken } from "../lib/web-build.js";
 import { getOptionalUserId } from "../middleware/auth.js";
+import { bearerToken } from "../middleware/bearer.js";
 import {
 	type AccessContext,
 	type AccessibleWork,
@@ -643,7 +645,11 @@ export async function serializeWork(
 		originalUrl:
 			(item.type === "video" || isListened(item.type)) && item.sourceKey
 				? delivery
-					? withShare(`${delivery.origin}/api/content/works/${item.id}/original`, delivery)
+					? withPlayback(
+							`${delivery.origin}/api/content/works/${item.id}/original`,
+							delivery,
+							item.id,
+						)
 					: item.sourceKey
 				: null,
 		// The owner's own shape is also what the Work page renders for them, so a stored address the
@@ -823,11 +829,46 @@ export interface DeliveryCtx {
 	 * following the link did not already grant.
 	 */
 	share?: string | null;
+	/**
+	 * The account a bearer-authenticated request runs as, when the request came from a
+	 * packaged shell.
+	 *
+	 * ⚠️ **A shell cannot present its session to a media element.** The session cookie is
+	 * cross-site and never sent, and an `<audio>`/hls.js request cannot carry the bearer
+	 * header the rest of the app does. The URL therefore has to carry a Work-scoped media
+	 * token, and this is the account it is minted for. Null in a browser (the cookie is
+	 * enough) and on a signed-out request.
+	 */
+	mediaUser?: number | null;
+	/**
+	 * A media token already present on this request, propagated rather than re-minted.
+	 *
+	 * A media token is what authenticated the HLS master request; every variant URL the
+	 * playlist rewrite builds has to carry the same token, exactly as a share token does.
+	 */
+	mediaToken?: string | null;
 }
 
 /** Appends the share token, when the request rode one in. */
 export function withShare(url: string, ctx: DeliveryCtx): string {
 	return ctx.share ? `${url}?share=${encodeURIComponent(ctx.share)}` : url;
+}
+
+/**
+ * Appends whichever URL credential this request can use to a media address.
+ *
+ * 🚨 **Share wins over a media token, and the two are never sent together.** A share link is
+ * a locator meant to be passed on; carrying the sharer's account token beside it would turn
+ * a forwarded URL into a credential for that account's other Works. A media token names one
+ * Work, so it is safe on a URL, but it still does not belong on a link someone else will
+ * open.
+ */
+export function withPlayback(url: string, ctx: DeliveryCtx, workId: number): string {
+	if (ctx.share) return `${url}?share=${encodeURIComponent(ctx.share)}`;
+	const token =
+		ctx.mediaToken ??
+		(ctx.mediaUser != null ? mintMediaToken(workId, ctx.mediaUser, MEDIA_TOKEN_TTL_SECONDS) : null);
+	return token ? `${url}?media=${encodeURIComponent(token)}` : url;
 }
 
 /** URL of the access-checked HLS master for a video Work. */
@@ -836,12 +877,12 @@ export function buildHlsManifestUrl(
 	workId: number,
 	file = "master.m3u8",
 ): string {
-	return withShare(`${ctx.origin}/api/content/works/${workId}/hls/${file}`, ctx);
+	return withPlayback(`${ctx.origin}/api/content/works/${workId}/hls/${file}`, ctx, workId);
 }
 
 /** URL of the access-checked audio endpoint for an audio Work. */
 export function buildAudioUrl(ctx: DeliveryCtx, workId: number): string {
-	return withShare(`${ctx.origin}/api/content/works/${workId}/audio`, ctx);
+	return withPlayback(`${ctx.origin}/api/content/works/${workId}/audio`, ctx, workId);
 }
 
 /**
@@ -873,7 +914,11 @@ export const localDelivery: DeliveryCtx = {
  * URL may stand in for it.
  */
 export function buildPreviewUrl(ctx: DeliveryCtx, workId: number, previewId: number): string {
-	return withShare(`${ctx.origin}/api/content/works/${workId}/previews/${previewId}`, ctx);
+	return withPlayback(
+		`${ctx.origin}/api/content/works/${workId}/previews/${previewId}`,
+		ctx,
+		workId,
+	);
 }
 
 /** URL of a trailer's caption route, reachability-checked with the preview it belongs to. */
@@ -883,9 +928,10 @@ export function buildPreviewCaptionUrl(
 	previewId: number,
 	trackId: number,
 ): string {
-	return withShare(
+	return withPlayback(
 		`${ctx.origin}/api/content/works/${workId}/previews/${previewId}/captions/${trackId}`,
 		ctx,
+		workId,
 	);
 }
 
@@ -1476,7 +1522,11 @@ export async function serializeWorkForUser(
 		originalUrl:
 			canAccess && (work.type === "video" || isListened(work.type)) && work.sourceKey
 				? delivery
-					? withShare(`${delivery.origin}/api/content/works/${work.id}/original`, delivery)
+					? withPlayback(
+							`${delivery.origin}/api/content/works/${work.id}/original`,
+							delivery,
+							work.id,
+						)
 					: work.sourceKey
 				: null,
 		transcoding: await userTranscoding(job, canAccess, delivery),
@@ -1719,10 +1769,22 @@ export function embedUrl(token: string): string {
  * rather than the jobs trying to bake an ACL. Local dev serves media directly (the
  * /content route serves everything, unsigned) — which is why a delivery leak cannot be
  * reproduced locally, and why the tests assert URLs rather than access reasons.
+ *
+ * ⚠️ **The request is passed because a shell response has to carry a media token.** A
+ * packaged webview authenticates every `apiFetch` with a bearer header, but its `<audio>`
+ * and hls.js requests cannot; when the request arrived that way, every media URL this
+ * context builds names the account so the delivery door can admit the media element. In a
+ * browser the session cookie is already sent, so no token is minted.
  */
-export function deliveryCtx(share: string | null = null): DeliveryCtx | null {
+export function deliveryCtx(
+	c: Context | null,
+	share: string | null = null,
+	mediaUser: number | null = null,
+): DeliveryCtx | null {
 	if (isLocalStorage) return null;
-	return { origin: publicOrigin(), share };
+	const user = c ? (c as Context<{ Variables: { user?: { id: number } } }>).get("user") : undefined;
+	const shellUser = c && bearerToken(c) ? (mediaUser ?? user?.id ?? null) : null;
+	return { origin: publicOrigin(), share, mediaUser: shellUser };
 }
 
 /**

@@ -233,7 +233,7 @@ const libraryRoutes = new Hono()
 										assetsByWork.get(w.id) ?? [],
 										jobByWork.get(w.id) ?? null,
 										resolveAccessSync(w as AccessibleWork, ctx),
-										deliveryCtx(),
+										deliveryCtx(c),
 										spent,
 										user.id,
 										pagesByWork.get(w.id) ?? 0,

@@ -366,10 +366,12 @@ const workMediaRoutes = new Hono()
 		// this route is a second way to reach the same rows, so anything Work detail
 		// withholds has to be withheld here too or the poller becomes the side channel
 		// around it. Status still flows to a denied user; only the payload URLs don't.
-		const access = await workAccessFor(c, work);
+		const access = await workAccessRequestFor(c, work);
 		return c.json({
 			jobs: await Promise.all(
-				jobs.map((job) => userTranscoding(job, access.canAccess, deliveryCtx())),
+				jobs.map((job) =>
+					userTranscoding(job, access.access.canAccess, deliveryCtx(c, null, access.userId)),
+				),
 			),
 		});
 	})
@@ -414,7 +416,7 @@ const workMediaRoutes = new Hono()
 			return c.json({ error: "This job already failed — replace the media or remove it." }, 409);
 		}
 		if (job.status === "canceled") {
-			return c.json({ work: await serializeWork(work, [], null, [], deliveryCtx()) }, 200);
+			return c.json({ work: await serializeWork(work, [], null, [], deliveryCtx(c)) }, 200);
 		}
 
 		await db
@@ -429,7 +431,7 @@ const workMediaRoutes = new Hono()
 			.from(workTranscodingJobs)
 			.where(eq(workTranscodingJobs.id, jobId));
 		return c.json(
-			{ work: await serializeWork(work, [], jobRow, [], deliveryCtx()), job: jobRow },
+			{ work: await serializeWork(work, [], jobRow, [], deliveryCtx(c)), job: jobRow },
 			200,
 		);
 	})
@@ -496,7 +498,7 @@ const workMediaRoutes = new Hono()
 		await sweepCollected(collected);
 
 		const [row] = await db.select().from(works).where(eq(works.id, work.id));
-		return c.json({ work: await serializeWork(row, [], null, [], deliveryCtx()) }, 200);
+		return c.json({ work: await serializeWork(row, [], null, [], deliveryCtx(c)) }, 200);
 	})
 
 	// ── Audio delivery (access-checked, signed) ──────────────────────────────────
@@ -1121,6 +1123,10 @@ const workMediaRoutes = new Hono()
 			ctx: {
 				origin: publicOrigin(),
 				share: sharedBy != null ? (c.req.query("share") ?? null) : null,
+				// The shell's media token authenticated this master request; the variant
+				// playlists hls.js asks for next must present the same token, or the
+				// ladder dies one rung below a master that looked fine.
+				mediaToken: c.req.query("media") ?? null,
 			},
 			workId,
 			creatorId: work.creatorId,

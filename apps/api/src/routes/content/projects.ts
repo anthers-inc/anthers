@@ -566,7 +566,7 @@ const projectsRoutes = new Hono()
 						m.work as AccessibleWork,
 						contextFor(m.work, userId, workCtx, previewRequest(c)),
 					),
-					deliveryCtx(),
+					deliveryCtx(c, null, userId),
 					projectSpent,
 					userId,
 					pagesByWork.get(m.work.id) ?? 0,
