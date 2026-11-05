@@ -71,6 +71,16 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.7",
+		date: "2026-11-05",
+		lede: "A Work's video and audio play in the packaged apps again, and the app's sign-in handoff no longer shows its form before it has checked.",
+		entries: [
+			"A Work's video and audio play in the packaged apps now. A media element cannot send the session header the rest of the app uses, so delivery refused it before play began. The URLs a Work's payload hands back now carry a signed, Work-scoped media token, and the delivery route still runs the access, Public Access meter, and household gates a session runs.",
+			"The app's sign-in screen starts in a checking state when it opens, rather than on the handle form. A return from the browser with a sign-in still open used to show the form for the half second before the shell answered, which read as a sign-in that had failed. It moves to the waiting state when the shell reports a pending enrollment, and falls back to the form when there is none.",
+			"The page between the app and its identity server names the Anthers app on a phone now, where its copy used to say Anthers Desktop.",
+		],
+	},
+	{
 		version: "2026.11.6",
 		date: "2026-11-04",
 		lede: "Signing in from the app finishes where it started, with nothing left to approve.",
