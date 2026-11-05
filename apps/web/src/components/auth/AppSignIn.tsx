@@ -38,7 +38,7 @@ import Logo from "@anthers/web-shared/ui/Logo";
 import { AtSymbolIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Phase = "idle" | "waiting" | "completing" | "error";
+type Phase = "checking" | "idle" | "waiting" | "completing" | "error";
 
 /**
  * Whether what was typed is shaped like a handle at all.
@@ -52,7 +52,7 @@ const LOOKS_LIKE_HANDLE = /^@?[a-z0-9.-]+\.[a-z0-9-]+$/i;
 
 export default function AppSignIn() {
 	const { refreshUser } = useAuth();
-	const [phase, setPhase] = useState<Phase>("idle");
+	const [phase, setPhase] = useState<Phase>(isMobile() ? "checking" : "idle");
 	const [error, setError] = useState<string | null>(null);
 	const [openedUrl, setOpenedUrl] = useState<string | null>(null);
 	const [persistence, setPersistence] = useState<Persistence | null>(null);
@@ -130,15 +130,28 @@ export default function AppSignIn() {
 
 	// A launch with an enrollment still open — the app was reclaimed while the person was in
 	// the browser, or they switched back after finishing — picks the thread up here.
+	//
+	// 🚨 **The phone starts in `checking`, not `idle`, because this answer is a shell command
+	// and the first paint cannot know it yet.** Starting idle put the handle form on screen for
+	// the length of the invoke, which is exactly the half second after the person returns from
+	// the browser and most wants to see that the sign-in worked. The desktop starts idle and
+	// has no such command; the check is a mobile question, and a failed or unsupported invoke
+	// falls back to the form rather than stranding a signed-out shell.
 	useEffect(() => {
 		let live = true;
 		hasPendingSignIn()
 			.then((pending) => {
-				if (!pending || !live) return;
+				if (!live) return;
+				if (!pending) {
+					setPhase("idle");
+					return;
+				}
 				setPhase("waiting");
 				void waitForApproval();
 			})
-			.catch(() => {});
+			.catch(() => {
+				if (live) setPhase("idle");
+			});
 		return () => {
 			live = false;
 		};
@@ -172,14 +185,17 @@ export default function AppSignIn() {
 		void openBrowser(bare);
 	};
 
-	if (phase === "completing") {
+	if (phase === "checking" || phase === "completing") {
+		const completing = phase === "completing";
 		return (
 			<Shell>
-				<p className="text-sm text-base-content/60">Finishing sign-in…</p>
+				<p className="text-sm text-base-content/60">
+					{completing ? "Finishing sign-in…" : "Checking sign-in…"}
+				</p>
 				<div className="flex justify-center py-4">
 					<LoadingSpinner size="lg" />
 				</div>
-				{persistence === "memoryOnly" && <KeychainNote />}
+				{completing && persistence === "memoryOnly" && <KeychainNote />}
 			</Shell>
 		);
 	}
