@@ -40,6 +40,35 @@ const signInButton = (page: Page) =>
 const handleField = (page: Page) => page.getByLabel(/your handle/i);
 const marketingHeading = (page: Page) => page.getByRole("heading", { name: /creative garden/i });
 
+/**
+ * A shell that has an enrollment waiting to be redeemed, with the answer deliberately late.
+ *
+ * The mobile shell's `has_pending_sign_in` is an invoke, so the sign-in screen cannot know
+ * its answer on the first paint. This reproduces that window: the command answers after
+ * enough of a delay to see what the screen shows while it is in flight, and `await_sign_in`
+ * never resolves so the waiting state stays put. `__TAURI_INTERNALS__` is the seam the
+ * Tauri API reads; the component never knows it is in a browser.
+ */
+async function injectPendingSignInRuntime(page: Page) {
+	await injectAndroidRuntime(page, null);
+	await page.addInitScript(() => {
+		(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
+			invoke: (cmd: string) => {
+				if (cmd === "has_pending_sign_in") {
+					return new Promise((resolve) => setTimeout(() => resolve(true), 1_000));
+				}
+				if (cmd === "await_sign_in") return new Promise(() => {});
+				if (cmd === "session_token" || cmd === "take_pending_code") {
+					return Promise.resolve(null);
+				}
+				return Promise.resolve(null);
+			},
+			transformCallback: () => 1,
+			unregisterCallback: () => {},
+		};
+	});
+}
+
 test.describe("the app's launch destination", () => {
 	test("a signed-out shell opens at the sign-in handoff, not the marketing page", async ({
 		browser,
@@ -61,6 +90,30 @@ test.describe("the app's launch destination", () => {
 		// not render. It would also be visible on a shell that ignored `isNative()`.
 		await expect(marketingHeading(page)).toHaveCount(0);
 		await expect(page).toHaveURL(/\/$/);
+
+		await context.close();
+	});
+
+	test("a launch with a pending sign-in never paints the handle form", async ({ browser }) => {
+		const context = await browser.newContext({
+			storageState: { cookies: [], origins: [] },
+		});
+		const page = await context.newPage();
+		await injectPendingSignInRuntime(page);
+		await page.goto("/");
+
+		// 🚨 The shell has not answered `has_pending_sign_in` yet. The handle form used to be
+		// the first paint here, which is the half second after coming back from the browser
+		// that read as a failed sign-in. The check is the only thing on screen until the
+		// command answers.
+		await expect(handleField(page)).toHaveCount(0);
+		await expect(signInButton(page)).toHaveCount(0);
+		await expect(page.getByText(/checking sign-in/i)).toBeVisible();
+
+		// The answer was yes: the screen moves to the waiting state, still without the form.
+		await expect(page.getByText(/finish signing in in your browser/i)).toBeVisible();
+		await expect(handleField(page)).toHaveCount(0);
+		await expect(signInButton(page)).toHaveCount(0);
 
 		await context.close();
 	});
