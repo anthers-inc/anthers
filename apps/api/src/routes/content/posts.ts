@@ -448,7 +448,7 @@ const postsRoutes = new Hono()
 		// would put the publishability rule in two places, and they would drift.
 		void queueRecordSync("post", post.id);
 
-		const linkedWorks = await loadPostWorksFromBody(body, user.id, deliveryCtx());
+		const linkedWorks = await loadPostWorksFromBody(body, user.id, deliveryCtx(c));
 		// The row no longer carries `body_html`; the stored body is markdown in `body`,
 		// which the spread ships as it is.
 		return c.json({ post: { ...post, linkedWorks, displayTitle: visiblePostTitle(title) } }, 201);
@@ -509,7 +509,11 @@ const postsRoutes = new Hono()
 		// the audience. Each Work its body embeds resolves on its OWN gates, so this page can
 		// show a readable post alongside a Work the user cannot open — which is exactly the
 		// separation the model is for, and why there is no post-level `access` any more.
-		const linkedWorks = await loadPostWorksFromBody(post.body, userId, deliveryCtx());
+		const linkedWorks = await loadPostWorksFromBody(
+			post.body,
+			userId,
+			deliveryCtx(c, null, userId),
+		);
 
 		// The title's `@` mentions: one resolved name for the card's text, and the Works
 		// themselves so the heading can link each name to its Work.
@@ -663,7 +667,7 @@ const postsRoutes = new Hono()
 		// it is what takes the record back down.
 		void queueRecordSync("post", updated.id);
 
-		const linkedWorks = await loadPostWorksFromBody(updated.body, user.id, deliveryCtx());
+		const linkedWorks = await loadPostWorksFromBody(updated.body, user.id, deliveryCtx(c));
 		return c.json({
 			post: {
 				...updated,

@@ -178,6 +178,24 @@ export async function validateSession(token: string) {
 	};
 }
 
+/**
+ * The active account a media token names, or null.
+ *
+ * 🚨 **Suspension is checked here for the same reason `validateSession` checks it.** A media
+ * token is minted while an account is active and can outlive the action that suspends it;
+ * the delivery route must not keep serving bytes to an account the session store has
+ * already disowned. The token names a user id rather than a session row, so there is no
+ * session lifetime left to consult — this predicate is the whole guard.
+ */
+export async function activeUserById(userId: number) {
+	const [user] = await db
+		.select()
+		.from(users)
+		.where(and(eq(users.id, userId), isNull(users.suspendedAt)))
+		.limit(1);
+	return user ?? null;
+}
+
 /** Delete a session (sign out) */
 export async function deleteSession(token: string): Promise<void> {
 	// Both spellings: the hashed row and, on a database that has not finished the lazy

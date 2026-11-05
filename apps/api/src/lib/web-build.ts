@@ -85,6 +85,14 @@ type Env = Record<string, string | undefined>;
 export interface PlayTokenPayload {
 	/** The Work the token plays. The delivery route re-resolves the Work row, so a deleted Work invalidates every outstanding token for it. */
 	w: number;
+	/** The account the token was minted for. Present on a media token, absent on a build play token. */
+	u?: number;
+	/**
+	 * Which door this token opens: `play` for a hosted build, `media` for the access-checked
+	 * delivery routes. A token is never accepted at the other door, so a leaked build URL
+	 * cannot be replayed as a media credential and vice versa.
+	 */
+	typ?: "play" | "media";
 	iat: number;
 	exp: number;
 }
@@ -110,18 +118,15 @@ function b64url(bytes: Buffer): string {
 	return bytes.toString("base64url");
 }
 
-export function mintPlayToken(workId: number, ttlSeconds: number, env: Env = process.env): string {
+function signToken(payload: PlayTokenPayload, env: Env): string {
 	const secret = webBuildSigningSecret(env);
-	if (!secret) throw new Error("a play token cannot be minted without a signing key");
-	const now = Math.floor(Date.now() / 1000);
-	const payload: PlayTokenPayload = { w: workId, iat: now, exp: now + ttlSeconds };
+	if (!secret) throw new Error("a playback token cannot be minted without a signing key");
 	const body = b64url(Buffer.from(JSON.stringify(payload), "utf8"));
 	const mac = b64url(createHmac("sha256", secret).update(body).digest());
 	return `${body}.${mac}`;
 }
 
-/** Verify a presented token, returning its payload — or null for anything else. */
-export function verifyPlayToken(token: string, env: Env = process.env): PlayTokenPayload | null {
+function verifyToken(token: string, env: Env): PlayTokenPayload | null {
 	const secret = webBuildSigningSecret(env);
 	if (!secret) return null;
 	const dot = token.lastIndexOf(".");
@@ -141,6 +146,61 @@ export function verifyPlayToken(token: string, env: Env = process.env): PlayToke
 		return null;
 	}
 }
+
+export function mintPlayToken(workId: number, ttlSeconds: number, env: Env = process.env): string {
+	const now = Math.floor(Date.now() / 1000);
+	return signToken({ w: workId, typ: "play", iat: now, exp: now + ttlSeconds }, env);
+}
+
+/**
+ * Mint a Work-scoped media token for an account.
+ *
+ * ⚠️ **This is the shell's missing credential, not a second session.** A packaged webview
+ * serves from `tauri.localhost`, where the `.anthers.org` session cookie is never sent, and
+ * a `<video>`, `<audio>` or hls.js request cannot carry the bearer header the rest of the
+ * app uses. The token rides the media URL instead: it names the account and the Work, is
+ * signed, expires with the play session, and is accepted only by the delivery door — where
+ * every access, meter and household gate still runs exactly as it does for a session.
+ */
+export function mintMediaToken(
+	workId: number,
+	userId: number,
+	ttlSeconds: number,
+	env: Env = process.env,
+): string | null {
+	const now = Math.floor(Date.now() / 1000);
+	try {
+		return signToken({ w: workId, u: userId, typ: "media", iat: now, exp: now + ttlSeconds }, env);
+	} catch {
+		// A deployment whose signing key is absent cannot mint a media token. Omit it rather
+		// than failing the Work payload: a browser does not need one, and a shell degrades to
+		// the delivery route's ordinary refusal instead of the whole page 500ing.
+		return null;
+	}
+}
+
+/** Verify a media token, returning its payload — or null for anything else. */
+export function verifyMediaToken(token: string, env: Env = process.env): PlayTokenPayload | null {
+	const payload = verifyToken(token, env);
+	if (payload?.typ !== "media" || typeof payload.u !== "number") return null;
+	return payload;
+}
+
+/** Verify a build play token, returning its payload — or null for anything else. */
+export function verifyPlayToken(token: string, env: Env = process.env): PlayTokenPayload | null {
+	const payload = verifyToken(token, env);
+	// Tokens minted before the purpose field existed are build tokens; a media token is
+	// never allowed through this door.
+	if (!payload || (payload.typ != null && payload.typ !== "play")) return null;
+	return payload;
+}
+
+/**
+ * How long a shell media token lives. Matches the signed-media URL lifetime — the token
+ * rides the Work payload's delivery URLs, which are used for a whole watch or listen, so
+ * it must outlive a session the way the signed address it stands in for does.
+ */
+export const MEDIA_TOKEN_TTL_SECONDS = 6 * 60 * 60;
 
 /**
  * How long one play token lives. Deliberately shorter than the signed-media TTL (six

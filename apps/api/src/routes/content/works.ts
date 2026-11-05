@@ -250,7 +250,7 @@ const worksRoutes = new Hono()
 		await queueWorkListingSync(work.id);
 		// No credit notification here: a Work is born private, and the notification is owed
 		// when the Work is public — see the PATCH route and `notifyCreditedAccounts`.
-		return c.json({ work: await serializeWork(work, [], job, [], deliveryCtx()) }, 201);
+		return c.json({ work: await serializeWork(work, [], job, [], deliveryCtx(c)) }, 201);
 	})
 
 	/** The caller's own Catalog — every Work, private and released, with processing state. */
@@ -390,7 +390,7 @@ const worksRoutes = new Hono()
 						assetsByWork.get(i.id) ?? [],
 						jobByWork.get(i.id) ?? null,
 						buildsByWork.get(i.id) ?? [],
-						deliveryCtx(),
+						deliveryCtx(c),
 						[],
 						reviewCountsByWork.get(i.id),
 					),
@@ -618,9 +618,9 @@ const worksRoutes = new Hono()
 			// applies: the row's raw URL points at the private bucket, where the HLS
 			// manifest 404s in the browser's player — and carries no CORS headers even
 			// where it exists. Access is asserted unconditionally, because a creator may
-			// always see their own media; `deliveryCtx()` with no share token is the
+			// always see their own media; `deliveryCtx(c)` with no share token is the
 			// owner's own session, exactly what this branch serves.
-			const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
+			const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx(c));
 			// 🚨 **The owner's shape needs the counts the reader branches on.** This branch
 			// does not go through `loadWorkBundles` or `serializeWorkForUser`, and
 			// `serializeWork` has never carried `pageCount`/`sectionCount` — so without
@@ -643,7 +643,7 @@ const worksRoutes = new Hono()
 						assetRows,
 						playableJob,
 						webBuildsList,
-						deliveryCtx(),
+						deliveryCtx(c, null, userId),
 						captionRows,
 						undefined,
 						previewRows,
@@ -727,7 +727,7 @@ const worksRoutes = new Hono()
 						work as AccessibleWork,
 						contextFor(work, userId, ctx, previewRequest(c)),
 					),
-					deliveryCtx(sharedBy != null ? (c.req.query("share") ?? null) : null),
+					deliveryCtx(c, sharedBy != null ? (c.req.query("share") ?? null) : null, userId),
 					await allowanceSpent(userId, sharedBy),
 					userId,
 					pageRow?.count ?? 0,
@@ -1027,7 +1027,7 @@ const worksRoutes = new Hono()
 						assetsByWork.get(w.id) ?? [],
 						jobByWork.get(w.id) ?? null,
 						resolveAccessSync(w as AccessibleWork, contextFor(w, userId, ctx, preview)),
-						deliveryCtx(),
+						deliveryCtx(c, null, userId),
 						catalogSpent,
 						userId,
 						pagesByWork.get(w.id) ?? 0,

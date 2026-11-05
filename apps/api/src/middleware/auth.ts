@@ -15,12 +15,44 @@ type SessionUser = {
 	emailVerified: boolean | null;
 };
 
+/** The columns a session user is built from, on both the session and media-token paths. */
+type SessionUserSource = {
+	id: number;
+	atprotoHandle: string;
+	email: string;
+	displayName: string | null;
+	creatorMode: boolean | null;
+	emailVerified: boolean | null;
+};
+
 type AuthEnv = {
 	Variables: {
 		user: SessionUser;
 		sessionToken: string;
 	};
 };
+
+/**
+ * Write the authenticated user onto the request context.
+ *
+ * 🚨 **One writer, because the delivery door now has two authenticators.** A cookie or
+ * bearer session sets these five fields, and so does the media token that lets a packaged
+ * webview's `<video>` and `<audio>` elements reach the delivery routes. Two copies of the
+ * mapping is how they stop agreeing about which account a request runs as — the exact
+ * failure `getOptionalUserId`'s docblock records for the bearer/cookie split.
+ */
+export function setSessionUser(c: Context, user: SessionUserSource, sessionToken: string): void {
+	const authed = c as Context<AuthEnv>;
+	authed.set("user", {
+		id: user.id,
+		handle: user.atprotoHandle,
+		email: user.email,
+		displayName: user.displayName,
+		creatorMode: user.creatorMode,
+		emailVerified: user.emailVerified,
+	});
+	authed.set("sessionToken", sessionToken);
+}
 
 /**
  * Middleware that requires a valid session.
@@ -54,15 +86,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
 	// request should wait on (or fail because of) that bookkeeping write.
 	void touchSession(result.session).catch(() => {});
 
-	c.set("user", {
-		id: result.user.id,
-		handle: result.user.atprotoHandle,
-		email: result.user.email,
-		displayName: result.user.displayName,
-		creatorMode: result.user.creatorMode,
-		emailVerified: result.user.emailVerified,
-	});
-	c.set("sessionToken", token);
+	setSessionUser(c, result.user, token);
 
 	await next();
 });
