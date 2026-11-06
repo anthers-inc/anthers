@@ -7,6 +7,10 @@
 // `ThemePicker`, the same component the account settings card renders, so the two
 // surfaces cannot drift apart.
 //
+// ⭐ **A palette pick does not dismiss the panel** (Parker, 2026-11-06): the point is to
+// compare palettes in place, so the swatches and the page behind update while the menu
+// stays open. An outside click closes it.
+//
 // ⚠️ **The signed-in site does not use this.** Its theme choice moved into the account
 // settings page's card (Parker, 2026-10-26) — a preference that belongs to the account
 // belongs with the account's other preferences, and the signed-in header's corner is for

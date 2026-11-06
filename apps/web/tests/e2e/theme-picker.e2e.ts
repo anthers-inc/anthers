@@ -38,20 +38,34 @@ test("the marketing theme picker leads with the variant, then swatches the palet
 		"true",
 	);
 
-	// A palette pick keeps the chosen variant and closes the menu.
+	// A palette pick keeps the chosen variant and leaves the menu open, so several
+	// palettes can be compared without reopening it.
 	await palette.getByRole("button", { name: "Reef" }).click();
 	await expect(html).toHaveAttribute("data-theme", "reef-dark");
-	await expect(palette).toBeHidden();
+	await expect(palette.getByRole("button", { name: "Reef" })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
+	await expect(palette).toBeVisible();
 
-	// Reopening keeps both choices; moving the variant keeps the family, and a palette
-	// pick then keeps the new variant.
-	await page.getByRole("button", { name: "Color theme" }).click();
-	await page.getByRole("group", { name: "Variant" }).getByRole("button", { name: "Light" }).click();
-	await expect(html).toHaveAttribute("data-theme", "reef-light");
+	await palette.getByRole("button", { name: "Ember" }).click();
+	await expect(html).toHaveAttribute("data-theme", "ember-dark");
+	await expect(palette).toBeVisible();
 
-	await page
-		.getByRole("group", { name: "Palette" })
-		.getByRole("button", { name: "Meadow" })
-		.click();
+	await palette.getByRole("button", { name: "Heather" }).click();
+	await expect(html).toHaveAttribute("data-theme", "heather-dark");
+	await expect(palette).toBeVisible();
+
+	// The variant still keeps the family and the menu, and a palette pick then keeps
+	// the new variant.
+	await variant.getByRole("button", { name: "Light" }).click();
+	await expect(html).toHaveAttribute("data-theme", "heather-light");
+
+	await palette.getByRole("button", { name: "Meadow" }).click();
 	await expect(html).toHaveAttribute("data-theme", "light");
+	await expect(palette).toBeVisible();
+
+	// Closing the menu is still an outside click.
+	await page.locator("h1").click();
+	await expect(palette).toBeHidden();
 });

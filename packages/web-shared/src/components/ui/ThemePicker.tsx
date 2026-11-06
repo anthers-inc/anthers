@@ -93,10 +93,7 @@ export default function ThemePicker({
 									<button
 										type="button"
 										aria-pressed={active}
-										onClick={(event) => {
-											choose(value);
-											if (layout === "menu") event.currentTarget.blur();
-										}}
+										onClick={() => choose(value)}
 										className={itemClass}
 									>
 										<ThemeSwatch value={value} />
