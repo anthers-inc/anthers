@@ -29,6 +29,13 @@ data/*
 # the main checkout's `bun test` and root tsconfig never wander into a worktree.
 .worktrees/
 
+# ─── Scratch ───
+# A task's working files — logs, screenshots, generated previews, throwaway scripts —
+# live beside the work instead of in /tmp, which a reboot can take. Ignoring the
+# directory keeps `git status` honest and lets `git worktree remove` clean up after a
+# finished task rather than refusing on untracked scratch.
+.tmp/
+
 # ─── Working files ───
 # The scratch a task makes for itself — screenshots, generated previews, downloaded
 # artifacts, the throwaway script that produced them — one directory per tree, ignored so

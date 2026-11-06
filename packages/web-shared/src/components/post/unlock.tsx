@@ -19,6 +19,7 @@
  */
 import { ANTHERS_BADGES, type BadgeKey, badgeLabel } from "@anthers/shared/constants";
 import { LockClosedIcon } from "@heroicons/react/24/solid";
+import type { ReactNode } from "react";
 import type { AccessResult, UnlockRoute } from "../../lib/types";
 
 /**
@@ -109,30 +110,43 @@ const ANTHERS_BADGE_KEYS = new Set<string>(ANTHERS_BADGES.map((b) => b.name));
  * The chip carries the *identity* of the gate (the Badge, when the gate sits on one);
  * the imperative — what to do about it — belongs to the copy underneath, so the two
  * don't compete. Falls back to a bare "Locked" when no Badge sits at the threshold.
+ *
+ * ⭐ **The cover is washed as well as blurred** (Parker, 2026-11-06): a medium-strength
+ * desaturation on the picture, so a locked card settles back beside its unlocked
+ * neighbors at a glance. A badge alone was too easy to read past on a busy grid, and
+ * the wash is the part of the signal a reader sees before reading anything.
  */
 export function LockedCover({
 	thumbnail,
 	className = "",
 	lockedBy,
+	children,
 }: {
 	thumbnail?: string | null;
 	className?: string;
 	/** Badge label the gate sits on, if any — e.g. "Petal". */
 	lockedBy?: string | null;
+	/** Chips under the lock badge — what the gate asks for (a price, "Members"). */
+	children?: ReactNode;
 }) {
 	return (
 		<div className={`relative overflow-hidden bg-base-300 ${className}`}>
 			{thumbnail ? (
 				// Blur + scale so the blurred edges don't reveal the frame border.
-				<img src={thumbnail} alt="" className="w-full h-full object-cover blur-xl scale-110" />
+				<img
+					src={thumbnail}
+					alt=""
+					className="w-full h-full object-cover blur-xl scale-110 saturate-50"
+				/>
 			) : (
-				<div className="w-full h-full bg-gradient-to-br from-base-300 to-base-200" />
+				<div className="w-full h-full bg-gradient-to-br from-base-300 to-base-200 saturate-50" />
 			)}
-			<div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+			<div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-2">
 				<span className="badge badge-neutral gap-1 font-medium">
 					<LockClosedIcon className="w-3.5 h-3.5" />
 					{lockedBy ? `Locked · ${lockedBy}` : "Locked"}
 				</span>
+				{children}
 			</div>
 		</div>
 	);
