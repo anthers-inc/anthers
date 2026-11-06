@@ -5,48 +5,81 @@
 // things that act on the page in front of you, and a preference that belongs to the account
 // belongs with the account's other preferences.
 //
+// ⭐ **A theme and a variant are chosen separately** (Parker, 2026-11-06). A palette family
+// and its light/dark variant are two independent choices, and the old card rendered them as
+// one list under `Light` / `Dark` headings — which read as two themes rather than one theme
+// in two variants. The family radio picks a name, the variant radio picks which of that
+// family's entries to apply.
+//
 // The catalog is `THEMES` from lib/theme, the same table the marketing shell's dropdown
-// renders, so a new theme joins both surfaces by editing that table and nothing here. The
-// group headings stay because a theme is a palette family and `Light`/`Dark` are its
-// variants — the table sorts them that way rather than treating a whole palette as a mode.
+// renders, so a new theme family joins both surfaces by editing that table and nothing here.
 
-import { THEMES, type ThemeGroup } from "../../lib/theme";
+import { THEMES } from "../../lib/theme";
 import { useThemeChoice } from "../../lib/theme-choice";
 
-/** Group order as the picker shows it — the default (light) family's group first. */
-const THEME_GROUPS: readonly ThemeGroup[] = ["Light", "Dark"];
+/** Variant order as the picker shows it — the default (light) variant first. */
+const VARIANTS = ["Light", "Dark"] as const;
 
 export default function ThemeCard({ className = "" }: { className?: string }) {
 	const { theme, choose } = useThemeChoice();
+
+	// A theme family is the set of entries sharing a label; the variant is its group. The
+	// catalog is the authority, so a family with only one variant renders one radio and a
+	// family that gains a variant needs no change here.
+	const families = [...new Set(THEMES.map((option) => option.label))].map((label) => ({
+		label,
+		variants: THEMES.filter((option) => option.label === label),
+	}));
+
+	const current = THEMES.find((option) => option.value === theme) ?? THEMES[0];
+	const family = families.find((option) => option.label === current.label) ?? families[0];
 
 	return (
 		<div className={`card bg-base-200 ${className}`}>
 			<div className="card-body">
 				<h3 className="card-title text-lg">Color Theme</h3>
-				<p className="text-sm text-base-content/60">
-					Applies right away and saves to your account, so every device opens the same way.
-				</p>
 
-				{THEME_GROUPS.map((group) => (
-					<fieldset key={group} className="form-control mt-2 gap-1">
-						<legend className="text-xs font-medium text-base-content/50">{group}</legend>
-						{THEMES.filter((option) => option.group === group).map((option) => (
+				<fieldset className="form-control mt-2 gap-1" aria-label="Theme">
+					<legend className="text-xs font-medium text-base-content/50">Theme</legend>
+					{families.map((option) => (
+						<label
+							key={option.label}
+							className="label flex w-full whitespace-normal cursor-pointer justify-start gap-3 py-1"
+						>
+							<input
+								type="radio"
+								name="color-theme-family"
+								className="radio radio-sm"
+								checked={family.label === option.label}
+								onChange={() => choose(option.variants[0].value)}
+							/>
+							<span className="label-text">{option.label}</span>
+						</label>
+					))}
+				</fieldset>
+
+				<fieldset className="form-control mt-2 gap-1" aria-label="Variant">
+					<legend className="text-xs font-medium text-base-content/50">Variant</legend>
+					{VARIANTS.map((variant) => {
+						const option = family.variants.find((entry) => entry.group === variant);
+						if (!option) return null;
+						return (
 							<label
-								key={option.value}
-								className="label whitespace-normal cursor-pointer justify-start gap-3 py-1"
+								key={variant}
+								className="label flex w-full whitespace-normal cursor-pointer justify-start gap-3 py-1"
 							>
 								<input
 									type="radio"
-									name="color-theme"
+									name="color-theme-variant"
 									className="radio radio-sm"
-									checked={option.value === theme}
+									checked={current.group === variant}
 									onChange={() => choose(option.value)}
 								/>
-								<span className="label-text">{option.label}</span>
+								<span className="label-text">{variant}</span>
 							</label>
-						))}
-					</fieldset>
-				))}
+						);
+					})}
+				</fieldset>
 			</div>
 		</div>
 	);

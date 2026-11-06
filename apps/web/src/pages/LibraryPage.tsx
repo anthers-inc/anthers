@@ -60,8 +60,8 @@ import BookshelfLens from "../components/library/BookshelfLens";
 import ChannelGuideLens, {
 	channelGuideChannelsFromLibrary,
 } from "../components/library/ChannelGuideLens";
-import MusicDial from "../components/library/MusicDial";
 import MusicLens, { type LensItem, type LensProject } from "../components/library/MusicLens";
+import { readIncludeSpoken } from "../lib/lens-preferences";
 import { removeItem, setHidden } from "../lib/library";
 
 /*
@@ -74,8 +74,9 @@ import { removeItem, setHidden } from "../lib/library";
  * retired Video lens is the cautionary example: the plain video grid is just the Video
  * type filter).
  *
- * The Music Player's dial rides the lens it is a control on, rendered beneath its row
- * (the shared section's `extras` slot) only while that lens is active.
+ * The Music Player's spoken-word scope is set in Settings → Experience since 2026-11-06,
+ * and this page reads the same remembered answer; the lens no longer carries a control of
+ * its own on the sidebar row.
  */
 
 /** The Library's view of a saved Project — the album card's whole data source. */
@@ -302,7 +303,8 @@ export default function LibraryPage() {
 	const activeType = searchParams.get("type") ?? "";
 	const showHidden = searchParams.get("hidden") === "1";
 	const lens = searchParams.get("lens") ?? "";
-	const includeSpoken = searchParams.get("spoken") === "1";
+	/** The Music Player's scope, remembered in Settings → Experience — never in the URL. */
+	const includeSpoken = readIncludeSpoken();
 	/** The selected tags as the comma list the shared Tags section carries. */
 	const tagsParam = searchParams.get("tags") ?? "";
 	/** The Access filter's value — "" any, "unlocked", "locked" — the shared section's control. */
@@ -435,24 +437,12 @@ export default function LibraryPage() {
 		return set;
 	}, [lens, includeSpoken, items]);
 
-	// Register the sidebar's two pieces: the tab-shared LENSES, with the Library's live
-	// set and the Music Player's dial, and the shared filters with the Access control
-	// this page consumes — each adapter writing this page's own params.
+	// Register the sidebar's two pieces: the tab-shared LENSES with the Library's live
+	// set, and the shared filters with the Access control this page consumes — each
+	// adapter writing this page's own params.
 	useEffect(() => {
 		setPageContent(
-			<SharedLensesSection
-				lens={lens}
-				onLens={(id) => setParam("lens", id)}
-				live={ALL_LENS_IDS}
-				extras={{
-					music: (
-						<MusicDial
-							includeSpoken={includeSpoken}
-							onIncludeSpoken={(on) => setParam("spoken", on ? "1" : "")}
-						/>
-					),
-				}}
-			/>,
+			<SharedLensesSection lens={lens} onLens={(id) => setParam("lens", id)} live={ALL_LENS_IDS} />,
 		);
 		setSharedContent(
 			<SharedFilterSections
@@ -473,7 +463,6 @@ export default function LibraryPage() {
 		setSharedContent,
 		setParam,
 		lens,
-		includeSpoken,
 		activeType,
 		tagsParam,
 		accessParam,
