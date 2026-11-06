@@ -71,6 +71,18 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.8",
+		date: "2026-11-06",
+		lede: "The account's settings moved into the sidebar, the content tile leads with its title, and the site gained three more palettes.",
+		entries: [
+			"Settings moved into the sidebar's page area, ordered Account, Experience, Badges & Purchases, Identity & Devices, Content & Safety, Activity & Data, and Parents, replacing the row of tabs across the top. Experience gathers the theme, the starting tab, media and miniplayer preferences, keyboard shortcuts, and the Music Player's spoken-word control, which left the lens's sidebar row.",
+			"Content & Safety holds Rating Controls and Content Controls as two cards now. Mature and Adult each carry their own Hide, Blur, or Show control, and Adult is one of those rather than an on-off switch with a paragraph; it stays dimmed until Adult access is on, and the information icon explains the card check that turning it on runs, including that a debit or prepaid card cannot answer it.",
+			"Anthers offers four palette families now, Meadow, Reef, Ember, and Heather, each in a light and a dark variant. The public picker and the settings card share one control: a variant toggle, then the families under a swatch of each one's primary color. The public menu stays open after a palette pick and closes on an outside click, and each family carries its own palette through the botanical decor.",
+			"The content tile reads title first, its three-dot menu on that row, the creator, kind, and date beneath. A locked Work carries its price or Members chip on the thumbnail, and the picture and the card behind it lose half their saturation while the text keeps its color. The Library's Hide, Show, and Remove sit in the menu, and Discovery's holds two Don't Show rows, disabled until their lists exist.",
+			"A creator who set a kind of content to Hide met their own Work behind a blur instead of not at all; the veil leaves a user's own Works alone now, for the Rating and for a kind of content alike, and the Content Controls card says so. A post that linked a Work the user had hidden by kind no longer draws a veiled card for it, though the body link stays.",
+		],
+	},
+	{
 		version: "2026.11.7",
 		date: "2026-11-05",
 		lede: "A Work's video and audio play in the packaged apps again, and the app's sign-in handoff no longer shows its form before it has checked.",
