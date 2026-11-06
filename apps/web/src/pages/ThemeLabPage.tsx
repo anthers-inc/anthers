@@ -484,7 +484,7 @@ export default function ThemeLabPage() {
 						Meadow, the palette the site uses today, is in that switcher for comparison.
 					</p>
 					<p className="mt-2 max-w-3xl text-sm leading-relaxed text-base-content/50">
-						Every text-on-color pair on this page was checked at WCAG AA before it landed. These
+						Every palette's text-on-color roles were checked at WCAG AA before they landed. These
 						palettes are candidates only: the site's pickers still offer Meadow until one is chosen.
 					</p>
 				</div>
