@@ -1990,7 +1990,7 @@ interface ActivitySummary {
 	totals: { seconds: number; creators: number };
 }
 
-/** One hue per creator, cycled by the creator's rank in the period; the palette sits inside both themes. */
+/** One hue per creator, cycled by the creator's rank in the period; the palette sits inside the light and dark variants. */
 const CREATOR_COLORS = [
 	"var(--color-primary)",
 	"var(--color-accent)",

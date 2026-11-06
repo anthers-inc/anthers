@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import { client, nativeRuntime } from "./rpc";
-import { applyTheme, storeTheme, type Theme } from "./theme";
+import { applyTheme, storeTheme, type Theme, themeForValue } from "./theme";
 
 /**
  * The tabs of the signed-in site, in the sidebar's fixed order (Library, Discovery).
@@ -245,7 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	// choice the pre-paint script already applied. Mirror it into localStorage too, so
 	// this device's next pre-paint matches and there's no flash on the following load.
 	useEffect(() => {
-		const pref = user?.themePreference;
+		const pref = themeForValue(user?.themePreference);
 		if (pref) {
 			applyTheme(pref);
 			storeTheme(pref);

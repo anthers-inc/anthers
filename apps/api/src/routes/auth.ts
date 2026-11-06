@@ -6,6 +6,7 @@ import { userPreferences, users } from "@anthers/db/schema";
 // the names, so a rung added to the ladder is pickable the moment it exists.
 import { BADGE_ORDER, MAX_BASKET_ITEMS } from "@anthers/shared/constants";
 import { MAX_PICKED_CREATORS } from "@anthers/shared/signup";
+import type { ThemeValue } from "@anthers/shared/theme";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
@@ -334,7 +335,7 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		websiteUrl: user.websiteUrl,
 		location: user.location,
 		emailVerified: user.emailVerified,
-		themePreference: (prefs?.themePreference as "light" | "dark" | null) ?? null,
+		themePreference: (prefs?.themePreference as ThemeValue | null) ?? null,
 		// The tab a signed-in session opens on — read at boot like the theme, so the landing
 		// redirect needs no second call. Null means never answered, and the client reads
 		// that as Discovery. An id this build's nav no longer has (a stored `"network"` from
