@@ -117,18 +117,30 @@ export function displayFor(prefs: ContentPreferences, maturity?: string | null):
  * `byRung` is the user's setting for the Work's rating; `byNotes` is every kind of content they
  * asked to cover that the Work may contain, in the matrix's order, which is what the veil names.
  *
- * 🚨 **A kind of content the user HIDES covers the Work wherever it still appears.** The server
- * keeps it out of every listing, so a card only meets one where no listing filtered it, such as
- * the user's own Work, and a user who asked never to see a kind of content is not shown it
- * uncovered there. A hidden rung keeps its own behavior, which `displayFor` decides.
+ * 🚨 **A creator's own Work is never covered, for either reason.** The settings filter what a
+ * person browses, not their own Catalog: a creator who hides a kind of content is not asking to
+ * be protected from the thing they made. The server already keeps a creator's own Works in the
+ * response (`maturityHiddenFrom`'s creator branch); this is the client half of that same rule,
+ * and without it a Hide is applied only after the server has deliberately exempted the Work,
+ * which reads to the creator as a Blur that will not go away.
+ *
+ * ⚠️ **A kind of content the user HIDES still covers somebody else's Work wherever it appears**,
+ * which is the case a post embed or a direct link can produce. A hidden rung keeps its own
+ * behavior, which `displayFor` decides.
  *
  * ⚠️ **A row nobody answered counts as present** (`mayContain`), the same rule the listings use, so
  * a Work released before the matrix existed is covered for a user who blurs any kind of content.
  */
 export function coverFor(
 	prefs: ContentPreferences,
-	work: { maturity?: string | null; maturityRows?: MaturityRows | null },
+	work: {
+		maturity?: string | null;
+		maturityRows?: MaturityRows | null;
+		creatorId?: number | null;
+	},
+	viewerId: number | null = null,
 ): { byRung: boolean; byNotes: ContentNote[] } | null {
+	if (viewerId != null && work.creatorId === viewerId) return null;
 	const byRung = displayFor(prefs, work.maturity) === "blur";
 	const byNotes = RATING_ROWS.filter(
 		(row) => prefs.notes[row.note] !== "show" && mayContain(work.maturityRows, row.note),

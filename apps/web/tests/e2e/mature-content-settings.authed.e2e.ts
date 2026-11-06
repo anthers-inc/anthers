@@ -105,6 +105,12 @@ test("Content Controls carries the flags as their own card", async ({ page }) =>
 
 	// The rows are the shared rating vocabulary, not a hand-typed list.
 	await expect(controls).toContainText("Hide or blur work that contains any of these");
+	// The own-Work exemption is part of the setting's meaning, not a footnote a later copy
+	// edit may drop: the server keeps a creator's own Works out of the filter, and the
+	// browser must not veil them either.
+	await expect(controls).toContainText(
+		"If you're a creator, this won't apply to how you see your own works around the site.",
+	);
 
 	// Scoped to one flag's group: the page has several rows, all with the same three words.
 	const violence = controls.getByRole("group", { name: "Violence", exact: true });

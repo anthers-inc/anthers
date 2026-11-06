@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { contentNoteLabel } from "@anthers/shared/content-rating";
+import { useAuth } from "@anthers/web-shared/auth";
 import WorkPoster from "@anthers/web-shared/content/work-poster";
 import {
 	coverFor,
@@ -82,8 +83,9 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 	// in one click. The two treatments never stack — a locked cover is already blurred, and
 	// covering it twice would say the same thing twice while implying the rating is what shut
 	// them out.
+	const { user } = useAuth();
 	const { prefs } = useContentPreferences();
-	const cover = locked ? null : coverFor(prefs, post);
+	const cover = locked ? null : coverFor(prefs, post, user?.id ?? null);
 
 	const content = (
 		<>

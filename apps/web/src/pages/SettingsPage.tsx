@@ -716,6 +716,9 @@ function ContentControlsSection() {
 						one for every Work, and work counts as containing it unless its creator marked it Not in
 						It.
 					</p>
+					<p className="text-sm text-base-content/60">
+						If you're a creator, this won't apply to how you see your own works around the site.
+					</p>
 				</div>
 
 				<div className="flex flex-col gap-2">

@@ -67,6 +67,18 @@ describe("coverFor", () => {
 		expect(cover).toEqual({ byRung: false, byNotes: ["horror"] });
 	});
 
+	it("covers nothing of the viewer's own, whatever they asked for", () => {
+		const ownHorror = {
+			maturity: "mature",
+			maturityRows: { ...rowsRatedAs("general"), horror: "mature" as const },
+			creatorId: 7,
+		};
+		const prefs = asking({ horror: "hide" });
+		// The creator's own Work is theirs to see; the same Work is another reader's to hide.
+		expect(coverFor(prefs, ownHorror, 7)).toBeNull();
+		expect(coverFor(prefs, ownHorror, 8)).toEqual({ byRung: true, byNotes: ["horror"] });
+	});
+
 	it("names every kind of content that covered it, in the matrix's order", () => {
 		const rows = { ...rowsRatedAs("general"), language: "general", violence: "general" } as const;
 		expect(

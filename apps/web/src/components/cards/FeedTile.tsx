@@ -46,6 +46,7 @@
 import { isListened } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import { isDiscoveryReason } from "@anthers/shared/discovery";
+import { useAuth } from "@anthers/web-shared/auth";
 import WorkPoster from "@anthers/web-shared/content/work-poster";
 import {
 	coverFor,
@@ -281,6 +282,7 @@ function ReleaseBand({
 	/** The preview's finished-for-good callback, passed only where the band is actually visible. */
 	onDone: () => void;
 }) {
+	const { user } = useAuth();
 	const { prefs } = useContentPreferences();
 	// Locked-to-the-user and veiled handling match WorkCard's, including the
 	// signed-out visitor rule (`presentsAsLocked`) and the
@@ -299,7 +301,7 @@ function ReleaseBand({
 			</LockedCover>
 		);
 	}
-	const veil = coverFor(prefs, work);
+	const veil = coverFor(prefs, work, user?.id ?? null);
 	if (veil) {
 		// No preview under a veil: the band is blurred behind an opaque reveal
 		// overlay, so anything mounted inside would stream bytes and register
