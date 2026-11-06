@@ -95,10 +95,10 @@ import BookshelfLens from "../components/library/BookshelfLens";
 import ChannelGuideLens, {
 	channelGuideChannelsFromLibrary,
 } from "../components/library/ChannelGuideLens";
-import MusicDial from "../components/library/MusicDial";
 import MusicLens from "../components/library/MusicLens";
 import { feedLensItems } from "../lib/feed-lenses";
 import { useKeyboardShortcuts } from "../lib/keyboard-shortcuts";
+import { readIncludeSpoken } from "../lib/lens-preferences";
 import { isApplePlatform } from "../lib/platform";
 
 /** One entry of the feed's stream, as `?scope=global` sends it. */
@@ -375,8 +375,8 @@ export default function DiscoverPage() {
 	const tags = searchParams.get("tags") ?? "";
 	/** The lens is an organizing metaphor over the stream, never a mode. */
 	const lens = searchParams.get("lens") ?? "";
-	/** The Music Player's dial, carried the way the tabs carry it. */
-	const includeSpoken = searchParams.get("spoken") === "1";
+	/** The Music Player's scope, remembered in Settings → Experience — never in the URL. */
+	const includeSpoken = readIncludeSpoken();
 
 	/**
 	 * The recipe this account opens on. Every stage is parsed, so a stored value this
@@ -757,22 +757,13 @@ export default function DiscoverPage() {
 
 	// Sidebar: the lens is the page's own section, and the shared filters sit below the
 	// divider the layout draws. The URL carries the lens, so a link to "the stream under
-	// the Music Player" survives. Every row is live: a lens is a view over this stream,
-	// and the Music Player's dial rides its row.
+	// the Music Player" survives. Every row is live: a lens is a view over this stream.
 	useEffect(() => {
 		setPageContent(
 			<SharedLensesSection
 				lens={lens}
 				onLens={(id) => updateParams({ lens: id })}
 				live={ALL_LENS_IDS}
-				extras={{
-					music: (
-						<MusicDial
-							includeSpoken={includeSpoken}
-							onIncludeSpoken={(on) => updateParams({ spoken: on ? "1" : "" })}
-						/>
-					),
-				}}
 			/>,
 		);
 		setSharedContent(
@@ -797,7 +788,6 @@ export default function DiscoverPage() {
 		access,
 		tags,
 		lens,
-		includeSpoken,
 		updateParams,
 	]);
 

@@ -38,14 +38,15 @@ import {
 	isDesktop,
 	setDesktopHome,
 } from "@anthers/web-shared/desktop";
-import { profileUrl } from "@anthers/web-shared/profile";
 import { usePublishingState } from "@anthers/web-shared/publishing";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
+import { useSidebar } from "@anthers/web-shared/sidebar";
 import type { NotificationDeliveryMode } from "@anthers/web-shared/types";
 import ThemeCard from "@anthers/web-shared/ui/ThemeCard";
+import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
 	Bar,
 	BarChart,
@@ -59,13 +60,14 @@ import {
 import BadgesSection from "../components/account/BadgesSection";
 import PurchasesSection from "../components/account/PurchasesSection";
 import BlueskyMark from "../components/auth/BlueskyMark";
+import { sidebarRowClass } from "../components/layout/sidebar-row-class";
 import BillingAddressSection from "../components/settings/BillingAddressSection";
+import MusicPlayerSection from "../components/settings/MusicPlayerSection";
 import ParentalControlsSection from "../components/settings/ParentalControlsSection";
 import { isApplePlatform } from "../lib/platform";
 import { generateRecoveryKey, type RecoveryKeypair } from "../lib/recovery-key";
 import { getStripe } from "../lib/stripe";
 import { cardElementStyle } from "../lib/stripeCard";
-import { studioUrl } from "../lib/studio";
 import {
 	setPreviewAudio,
 	setPreviewsEnabled,
@@ -535,54 +537,30 @@ function AdultVerificationCard({ onVerified }: { onVerified: () => Promise<void>
 }
 
 /**
- * What the user meets at each rung, and the door to the Adult rung.
+ * Rating Controls — the two rungs, each with the same Hide / Blur / Show control.
  *
  * 🚨 **The two rungs get separate controls, and that separation is the design rather than
  * layout.** A user who wants difficult work unblurred has said nothing about whether they
- * want explicit work at all, and one control covering both would make them say it (wiki
- * The wiki's *Content Standards*).
+ * want explicit work at all, and one control covering both would make them say it (the
+ * wiki's *Content Standards*).
  *
- * **Each kind of content gets a control too, whatever the rating** (Parker, 2026-09-18), for a
- * user who does not mind rated work but wants to avoid one thing. Show by default, because a note
- * may drive a user's own filter and never a platform default. A guardian's lock covers these
- * with the rungs, since they are written by the same writer.
+ * ⭐ **Adult is a normal three-way control now** (Parker, 2026-11-06), not the long
+ * explanation it used to carry. It is locked until the account has a payment method to
+ * read, and the one sentence beside it names what that method is for; the (i) carries the
+ * rest for anybody who wants it.
  *
  * 🚨 **Nothing here may describe paying as an age check.** A payment proves nothing about
  * age — debit and prepaid cards have no age floor. What carries the signal is the card's
  * funding TYPE, because issuers require the primary accountholder of a credit line to be 18.
- * The copy says that plainly, including the part where an adult with only a debit card
+ * The hoverable says that plainly, including the part where an adult with only a debit card
  * cannot get in and nothing routes around it.
  */
-function MatureContentSection() {
+function RatingControlsSection() {
 	const { prefs, refresh } = useContentPreferences();
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const { busy, error, setDisplay, setBusy, setError } = useContentDisplayWriter();
 	// True once the server has said there is no card to read — the ordinary case for
 	// somebody who has never paid, which is most of the audience for free Adult work.
 	const [needsCard, setNeedsCard] = useState(false);
-
-	const setDisplay = async (
-		change:
-			| { mature: MaturityDisplay }
-			| { adult: MaturityDisplay }
-			| { notes: Partial<Record<ContentNote, MaturityDisplay>> },
-	) => {
-		setBusy(true);
-		setError(null);
-		try {
-			const res = await apiFetch("/api/accounts/me/content-preferences", {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(change),
-			});
-			if (!res.ok) throw new Error();
-			await refresh();
-		} catch {
-			setError("That preference couldn't be saved.");
-		} finally {
-			setBusy(false);
-		}
-	};
 
 	const setAdultAccess = async (on: boolean) => {
 		setBusy(true);
@@ -619,37 +597,13 @@ function MatureContentSection() {
 		}
 	};
 
-	const displayControl = (
-		name: string,
-		current: MaturityDisplay,
-		choose: (value: MaturityDisplay) => void,
-	) => (
-		<fieldset className="join" aria-label={name}>
-			{MATURITY_DISPLAY_CHOICES.map((choice) => (
-				<button
-					key={choice.value}
-					type="button"
-					className={`btn btn-sm join-item ${current === choice.value ? "btn-primary" : "btn-outline"}`}
-					aria-pressed={current === choice.value}
-					disabled={busy}
-					title={choice.hint}
-					onClick={() => choose(choice.value)}
-				>
-					{choice.label}
-				</button>
-			))}
-		</fieldset>
-	);
-	const rungControl = (rung: "mature" | "adult", current: MaturityDisplay) =>
-		displayControl(rung === "mature" ? "Mature" : "Adult", current, (value) =>
-			setDisplay(rung === "mature" ? { mature: value } : { adult: value }),
-		);
+	const locked = !prefs.adultAccess.canReach;
 
 	return (
 		<div className="card bg-base-200 mb-6">
 			<div className="card-body gap-4">
 				<div>
-					<h3 className="card-title text-lg">Mature Content</h3>
+					<h3 className="card-title text-lg">Rating Controls</h3>
 					<p className="text-sm text-base-content/60">
 						What you meet before you choose. Nothing here changes what a creator earns or whether
 						anyone else can find their work.
@@ -665,44 +619,41 @@ function MatureContentSection() {
 							default.
 						</p>
 					</div>
-					{rungControl("mature", prefs.mature)}
+					<DisplayChoice
+						name="Mature"
+						current={prefs.mature}
+						disabled={busy}
+						choose={(value) => setDisplay({ mature: value })}
+					/>
 				</div>
 
 				<div className="border-t border-base-300 pt-4">
-					<p className="font-medium text-sm">Adult</p>
-					<p className="text-xs text-base-content/60">
-						Explicit sexual content, or, in visual work such as video and games, extreme violence or
-						drug use that is the work's focus. You will not see it anywhere on Anthers unless you
-						turn this on. Creators set their own price for it, or leave it free, exactly as they
-						would for anything else.
-					</p>
-
-					{prefs.adultAccess.canReach ? (
-						<div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-							{rungControl("adult", prefs.adult)}
-							<button
-								type="button"
-								className="btn btn-sm btn-ghost"
-								disabled={busy}
-								onClick={() => setAdultAccess(false)}
-							>
-								Turn Adult content off
-							</button>
-						</div>
-					) : (
-						<div className="mt-3">
+					<div className="flex flex-wrap items-center justify-between gap-3">
+						<div>
+							<p className="font-medium text-sm">Adult</p>
 							<p className="text-xs text-base-content/60">
-								Turning this on checks that you are an adult by looking at whether the card on your
-								account is a <strong>credit</strong> card, because card issuers require the primary
-								accountholder to be 18. Paying for something is not the check — debit and prepaid
-								cards have no age requirement at all, so they cannot answer it, and{" "}
-								<strong>you are not charged anything</strong> either way. We keep only that the
-								check happened and when; we never see or store your date of birth, and we never ask
-								for ID.
+								Explicit sexual content, or, in visual work such as video and games, extreme
+								violence or drug use that is the work's focus. Invisible on Anthers until you turn
+								this on.
 							</p>
-							<p className="mt-2 text-xs text-base-content/60">
-								If your only card is a debit or prepaid card, this will not let you in and we do not
-								have another way to do it. We would rather say so than pretend otherwise.
+						</div>
+						<DisplayChoice
+							name="Adult"
+							current={prefs.adult}
+							disabled={busy}
+							locked={locked}
+							onLocked={() => void setAdultAccess(true)}
+							choose={(value) => setDisplay({ adult: value })}
+						/>
+					</div>
+
+					{locked ? (
+						<div className="mt-2">
+							<p className="flex flex-wrap items-center gap-1 text-xs text-base-content/60">
+								<span>
+									Adult content requires a payment method for non-intrusive age verification.
+								</span>
+								<InfoHint text="Anthers reads whether the card on your account is a credit card, because card issuers require the primary accountholder of a credit line to be 18. Nothing is charged and nothing appears on your statement, and we keep only that the check happened and when — we never see or store your date of birth, and we never ask for ID. Debit and prepaid cards have no age requirement, so they cannot answer it; if that is your only card, there is no other way to do this today." />
 							</p>
 							{needsCard ? (
 								<Elements stripe={getStripe()}>
@@ -719,36 +670,189 @@ function MatureContentSection() {
 									disabled={busy}
 									onClick={() => setAdultAccess(true)}
 								>
-									Turn Adult content on
+									Turn on Adult content
 								</button>
 							)}
 						</div>
+					) : (
+						<div className="mt-2">
+							<button
+								type="button"
+								className="btn btn-ghost btn-xs"
+								disabled={busy}
+								onClick={() => setAdultAccess(false)}
+							>
+								Turn Adult access off
+							</button>
+						</div>
 					)}
-				</div>
-
-				<div className="border-t border-base-300 pt-4">
-					<p className="font-medium text-sm">Kinds of Content</p>
-					<p className="text-xs text-base-content/60">
-						Hide or blur work that contains any of these, whatever it's rated. Creators mark each
-						one for every Work, and work counts as containing it unless its creator marked it Not in
-						It.
-					</p>
-					<div className="mt-3 flex flex-col gap-2">
-						{RATING_ROWS.map((row) => (
-							<div key={row.note} className="flex flex-wrap items-center justify-between gap-3">
-								<span className="text-sm">{row.label}</span>
-								{displayControl(row.label, prefs.notes[row.note], (value) =>
-									setDisplay({ notes: { [row.note]: value } }),
-								)}
-							</div>
-						))}
-					</div>
 				</div>
 
 				{error && <p className="text-sm text-error">{error}</p>}
 			</div>
 		</div>
 	);
+}
+
+/**
+ * Content Controls — the flags a Work may carry, whatever its rating.
+ *
+ * **Each kind of content gets a control** (Parker, 2026-09-18), for a user who does not mind
+ * rated work but wants to avoid one thing. Show by default, because a note may drive a
+ * user's own filter and never a platform default. A guardian's lock covers these with the
+ * rungs, since they are written by the same writer.
+ */
+function ContentControlsSection() {
+	const { prefs } = useContentPreferences();
+	const { busy, error, setDisplay } = useContentDisplayWriter();
+
+	return (
+		<div className="card bg-base-200 mb-6">
+			<div className="card-body gap-4">
+				<div>
+					<h3 className="card-title text-lg">Content Controls</h3>
+					<p className="text-sm text-base-content/60">
+						Hide or blur work that contains any of these, whatever it's rated. Creators mark each
+						one for every Work, and work counts as containing it unless its creator marked it Not in
+						It.
+					</p>
+				</div>
+
+				<div className="flex flex-col gap-2">
+					{RATING_ROWS.map((row) => (
+						<div key={row.note} className="flex flex-wrap items-center justify-between gap-3">
+							<span className="text-sm">{row.label}</span>
+							<DisplayChoice
+								name={row.label}
+								current={prefs.notes[row.note]}
+								disabled={busy}
+								choose={(value) => setDisplay({ notes: { [row.note]: value } })}
+							/>
+						</div>
+					))}
+				</div>
+
+				{error && <p className="text-sm text-error">{error}</p>}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * The one Hide / Blur / Show control, shared by both rungs and every content flag.
+ *
+ * A `fieldset` with `aria-label` gives each row the group name the browser walk reads
+ * (`getByRole("group", { name: "Mature" })`), so the controls cannot drift apart between
+ * the ratings card and the flags card.
+ */
+function DisplayChoice({
+	name,
+	current,
+	disabled,
+	locked = false,
+	onLocked,
+	choose,
+}: {
+	name: string;
+	current: MaturityDisplay;
+	disabled: boolean;
+	/** The rung cannot be changed until something outside this control changes. The
+	 *  buttons keep their selected fill — a dimmed fieldset that erases which value is
+	 *  chosen tells the reader less than one that shows it — and a click opens the door
+	 *  that unlocks them rather than silently doing nothing. */
+	locked?: boolean;
+	onLocked?: () => void;
+	choose: (value: MaturityDisplay) => void;
+}) {
+	return (
+		<fieldset className="join" aria-label={name} aria-disabled={locked || undefined}>
+			{MATURITY_DISPLAY_CHOICES.map((choice) => (
+				<button
+					key={choice.value}
+					type="button"
+					className={`btn btn-sm join-item ${current === choice.value ? "btn-primary" : "btn-outline"} ${locked ? "opacity-50" : ""}`}
+					aria-pressed={current === choice.value}
+					aria-disabled={locked || undefined}
+					disabled={disabled}
+					title={locked ? "Add a payment method to unlock Adult content" : choice.hint}
+					onClick={() => {
+						if (locked) {
+							onLocked?.();
+							return;
+						}
+						choose(choice.value);
+					}}
+				>
+					{choice.label}
+				</button>
+			))}
+		</fieldset>
+	);
+}
+
+/**
+ * The (i) beside the Adult warning: a hoverable and focusable explanation.
+ *
+ * ⚠️ **The text is in the DOM rather than only in a `title`**, so a keyboard or screen
+ * reader reaches the same sentences a mouse does, and the copy can be selected instead of
+ * vanishing the moment the pointer moves.
+ */
+function InfoHint({ text }: { text: string }) {
+	const id = useId();
+	return (
+		<span className="group relative inline-flex">
+			<button
+				type="button"
+				aria-label="About age verification"
+				aria-describedby={id}
+				className="inline-flex rounded-full text-base-content/50 hover:text-base-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+			>
+				<InformationCircleIcon className="h-4 w-4" />
+			</button>
+			<span
+				id={id}
+				role="tooltip"
+				className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-80 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-box border border-base-300 bg-base-100 p-3 text-left text-xs leading-relaxed text-base-content/70 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+			>
+				{text}
+			</span>
+		</span>
+	);
+}
+
+/**
+ * The shared save for the content-preference controls: one PATCH, then a refresh of the
+ * context every cover and listing reads.
+ */
+function useContentDisplayWriter() {
+	const { refresh } = useContentPreferences();
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const setDisplay = async (
+		change:
+			| { mature: MaturityDisplay }
+			| { adult: MaturityDisplay }
+			| { notes: Partial<Record<ContentNote, MaturityDisplay>> },
+	) => {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me/content-preferences", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(change),
+			});
+			if (!res.ok) throw new Error();
+			await refresh();
+		} catch {
+			setError("That preference couldn't be saved.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return { busy, error, setDisplay, setBusy, setError };
 }
 
 /**
@@ -2858,25 +2962,38 @@ function DataSection() {
 }
 
 /**
- * The account settings are grouped into five tabs by subject, replacing a single
- * scroll of eleven sections. The tab is carried in the URL as `?tab=` so a link can
- * point somebody at the right one.
+ * The account settings are grouped into tabs by subject, navigated from the sidebar
+ * since 2026-11-06. The tab is carried in the URL as `?tab=` so a link can point somebody
+ * at the right one.
  *
  * ⭐ **Badges & Purchases joined as a tab on 2026-10-23**, rather than staying a page of its
  * own at `/purchases`. Both halves answer what the account has given, which is a settings
  * question, and the account had two doors for one subject: a menu item for the money and a
- * menu item for everything else. It sits second, between the account's switches and its
- * identity, because a person reviewing what they hold is closer to Settings' own subject
- * than the identity record is.
+ * menu item for everything else. It sits between Experience and Identity.
+ *
+ * ⭐ **Experience is the appearance-and-playback tab** (Parker, 2026-11-06): the theme, the
+ * starting tab, the per-browser media preferences, the miniplayer and the keyboard chords
+ * are all "how the app feels to use", not facts about the account. **Parents** is its own
+ * tab at the end because a guardian's controls are written by somebody other than the
+ * account holder and deserve to be findable without reading the safety filters first.
  */
-type SettingsTab = "account" | "purchases" | "identity" | "content" | "activity";
+type SettingsTab =
+	| "account"
+	| "experience"
+	| "purchases"
+	| "identity"
+	| "content"
+	| "activity"
+	| "parents";
 
 const TAB_LABELS: { id: SettingsTab; label: string }[] = [
 	{ id: "account", label: "Account" },
+	{ id: "experience", label: "Experience" },
 	{ id: "purchases", label: "Badges & Purchases" },
 	{ id: "identity", label: "Identity & Devices" },
 	{ id: "content", label: "Content & Safety" },
 	{ id: "activity", label: "Activity & Data" },
+	{ id: "parents", label: "Parents" },
 ];
 
 function isSettingsTab(value: string | null): value is SettingsTab {
@@ -2885,6 +3002,7 @@ function isSettingsTab(value: string | null): value is SettingsTab {
 
 export default function SettingsPage() {
 	const { user, refreshUser, grantPublishing } = useAuth();
+	const { setPageContent } = useSidebar();
 	const [settingsParams, setSettingsParams] = useSearchParams();
 
 	/**
@@ -2946,6 +3064,31 @@ export default function SettingsPage() {
 	useEffect(() => {
 		setVisitedTabs((prev) => (prev.has(activeTab) ? prev : new Set([...prev, activeTab])));
 	}, [activeTab]);
+
+	const selectTab = useCallback(
+		(id: SettingsTab) => {
+			setSettingsParams(
+				(prev) => {
+					const next = new URLSearchParams(prev);
+					next.set("tab", id);
+					return next;
+				},
+				{ replace: true },
+			);
+		},
+		[setSettingsParams],
+	);
+
+	/**
+	 * The section list is the sidebar's middle content, the same slot the Library gives its
+	 * Lenses (Parker, 2026-11-06). Registering it here rather than rendering a tab row in the
+	 * page keeps one navigation vocabulary for the whole signed-in shell, and the page's
+	 * content column stays for the settings themselves.
+	 */
+	useEffect(() => {
+		setPageContent(<SettingsSidebar active={activeTab} onSelect={selectTab} />);
+		return () => setPageContent(null);
+	}, [activeTab, selectTab, setPageContent]);
 
 	const handleCreatorToggle = async (checked: boolean) => {
 		setIsCreator(checked);
@@ -3050,48 +3193,12 @@ export default function SettingsPage() {
 				</div>
 			)}
 
-			{/* `tabs-box`, not the retired v4 `tabs-boxed` — the same convention the
-			    Library page uses. The row scrolls on a narrow screen now that it carries five
-			    labels, the longest of which names two objects. */}
-			<div
-				role="tablist"
-				aria-label="Settings"
-				className="tabs tabs-box mb-6 w-fit max-w-full overflow-x-auto"
-			>
-				{TAB_LABELS.map((t) => (
-					<button
-						key={t.id}
-						type="button"
-						role="tab"
-						aria-selected={activeTab === t.id}
-						className={`tab ${activeTab === t.id ? "tab-active" : ""}`}
-						onClick={() =>
-							setSettingsParams(
-								(prev) => {
-									const next = new URLSearchParams(prev);
-									next.set("tab", t.id);
-									return next;
-								},
-								{ replace: true },
-							)
-						}
-					>
-						{t.label}
-					</button>
-				))}
-			</div>
-
 			{visitedTabs.has("account") && (
 				<div hidden={activeTab !== "account"}>
 					{/* Who this browser is signed in as, and the button that ends it. The header
 					    no longer carries an account menu; the sidebar is the door to Settings and
 					    both settings pages carry the end of the session. */}
 					<SignedInAccountCard className="mb-6" />
-
-					{/* The account's color theme — moved off the signed-in header on 2026-10-26,
-					    because a preference that belongs to the account belongs with the rest of
-					    them rather than in the corner of every page. */}
-					<ThemeCard className="mb-6" />
 
 					{/* The Discord connection, under the card that says who this is — the two
 					    answer "who am I here" and "where else am I known". */}
@@ -3124,16 +3231,25 @@ export default function SettingsPage() {
 						</div>
 					</div>
 
-					{/* Where a session starts: one tab, chosen here rather than by the nav's
-					    arrangement, which is fixed. */}
-					<StartingTabSection />
-
 					{/* The one setting that decides whether a person's name appears in public. */}
 					<SupporterListingSection />
 
 					{/* The saved billing address — the account's one opt-in payment-side record,
 					    read-only everywhere except this page. */}
 					<BillingAddressSection />
+				</div>
+			)}
+
+			{visitedTabs.has("experience") && (
+				<div hidden={activeTab !== "experience"}>
+					{/* How the app looks and behaves: the account's theme and starting tab, the
+					    per-browser playback preferences, where audio lives, the chords, and the
+					    Music Player lens's own scope. */}
+					<ThemeCard className="mb-6" />
+
+					{/* Where a session starts: one tab, chosen here rather than by the nav's
+					    arrangement, which is fixed. */}
+					<StartingTabSection />
 
 					{/* The per-install playback preferences — the feed-tile preview stop *Your
 					    Feed* promises, among the other remembered-by-browser settings. */}
@@ -3143,35 +3259,11 @@ export default function SettingsPage() {
 					    persistent footer bar or the page's own player. */}
 					<MiniPlayerSection />
 
+					{/* The Music Player lens's scope, moved off the lens's sidebar row. */}
+					<MusicPlayerSection />
+
 					{/* The topbar's two chords. Defaults for everybody, rebindable per account. */}
 					<KeyboardShortcutsSection />
-
-					{/* Creator Tools live in the Studio (payouts, connections); Badges are edited
-					    on the creator's own profile, beside the ladder supporters meet. */}
-					{creatorMode && (
-						<div className="card bg-base-200 mt-6">
-							<div className="card-body">
-								<h3 className="card-title text-lg">Creator Tools</h3>
-								<p className="text-sm text-base-content/60">
-									Manage payouts and platform connections in your Studio. Your Badges are on your
-									profile, beside the ladder supporters see.
-								</p>
-								<div className="flex flex-wrap gap-2">
-									<a href={studioUrl("/settings")} className="btn btn-primary btn-sm w-fit">
-										Open Studio settings
-									</a>
-									{user?.handle && (
-										<Link
-											to={`${profileUrl(user.handle)}?tab=badges`}
-											className="btn btn-ghost btn-sm w-fit"
-										>
-											Edit your Badges
-										</Link>
-									)}
-								</div>
-							</div>
-						</div>
-					)}
 				</div>
 			)}
 
@@ -3198,17 +3290,21 @@ export default function SettingsPage() {
 
 			{visitedTabs.has("content") && (
 				<div hidden={activeTab !== "content"}>
-					{/* What the user meets at each rung, and the door to the Adult rung. */}
-					<MatureContentSection />
-
-					{/* Directly under it, because the first thing the pin protects is the section
-					    above — and a guardian who has just set those switches is exactly who wants
-					    to lock them. */}
-					<ParentalControlsSection />
+					{/* What the user meets at each rung, as two cards: the ratings and the flags. */}
+					<RatingControlsSection />
+					<ContentControlsSection />
 
 					{/* Blocked Accounts — the only place a block can be lifted, since a blocked
 					    profile no longer resolves. */}
 					<BlockedSection />
+				</div>
+			)}
+
+			{visitedTabs.has("parents") && (
+				<div hidden={activeTab !== "parents"}>
+					{/* The guardian's pin and the five things it protects. A tab of its own because
+					    it is written by somebody other than the account holder (Parker, 2026-11-06). */}
+					<ParentalControlsSection />
 				</div>
 			)}
 
@@ -3226,6 +3322,45 @@ export default function SettingsPage() {
 					<DataSection />
 				</div>
 			)}
+		</div>
+	);
+}
+
+/**
+ * The settings sections, in the sidebar's middle slot.
+ *
+ * ⭐ **This replaced the row of tabs at the top of the page** (Parker, 2026-11-06): the rest
+ * of the signed-in shell navigates from the sidebar, and a settings page whose sections were
+ * a second horizontal nav read as a different application. The list is the page's to
+ * register through `useSidebar`, so it exists only while Settings is mounted — the layout
+ * owns the divider and the scroll region, exactly as it does for the Library's Lenses.
+ */
+function SettingsSidebar({
+	active,
+	onSelect,
+}: {
+	active: SettingsTab;
+	onSelect: (id: SettingsTab) => void;
+}) {
+	return (
+		<div
+			role="tablist"
+			aria-label="Settings sections"
+			aria-orientation="vertical"
+			className="flex flex-col gap-0.5"
+		>
+			{TAB_LABELS.map((tab) => (
+				<button
+					key={tab.id}
+					type="button"
+					role="tab"
+					aria-selected={active === tab.id}
+					className={sidebarRowClass(active === tab.id)}
+					onClick={() => onSelect(tab.id)}
+				>
+					{tab.label}
+				</button>
+			))}
 		</div>
 	);
 }

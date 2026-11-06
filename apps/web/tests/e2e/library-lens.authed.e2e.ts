@@ -244,44 +244,35 @@ test("an album plays straight from the Library", async ({ page }) => {
 	await expect(bar.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
 });
 
-test("the music lens's spoken-word dial re-scopes the view without touching the Library", async ({
+test("the Music Player's spoken-word scope is set in Settings and leaves the Library alone", async ({
 	page,
 }) => {
 	await page.goto("/library");
 	await saveFixtures(page);
 
 	// A view change, not a container change — the same invariant the lens itself is
-	// held to: toggling the dial off and on must leave the Library holding exactly what
-	// it held. The dial is the lens's control, rendered beneath the Music Player row
-	// only while that lens is active.
+	// held to: turning the scope off and on must leave the Library holding exactly what
+	// it held. The control moved off the lens's sidebar row and into Settings → Experience
+	// on 2026-11-06, so the walk starts there.
 	const before = await libraryCount(page);
-	await page.goto("/library?lens=music");
+	await page.goto("/settings?tab=experience");
 
 	const dial = page.getByRole("checkbox", { name: /include spoken word/i });
 	await expect(dial).toBeVisible();
 	await expect(dial).not.toBeChecked(); // music by default
-	// Click through the wrapping <label> text rather than `.check()` on the input: the
-	// daisyUI toggle re-skins the control, and the accessible surface a finger or a
-	// user lands on is the labeled row, which is what the assertion is about.
 	await page.getByText("Include spoken word", { exact: true }).click();
-	await expect(page).toHaveURL(/spoken=1/);
-	// 🚨 **Wait for the control to reflect the click before clicking it again.** The URL
-	// updates with the navigation, but the checkbox is controlled by the rendered state,
-	// and a second click that lands in the gap between the two arrives while the box still
-	// reads unchecked: the label toggles it back ON, the URL never drops the parameter, and
-	// the assertion below reads a lost click that no user could have made. Asserting the
-	// state closes the window instead of widening the timeout around it.
 	await expect(dial).toBeChecked();
-	await page.getByText("Include spoken word", { exact: true }).click();
-	await expect(page).toHaveURL(/^(?!.*spoken=1).*$/);
-	await expect(dial).not.toBeChecked();
 
-	expectNothingLost(before, await libraryCount(page), "the dial changed what is IN the Library");
+	await page.goto("/library");
+	expectNothingLost(before, await libraryCount(page), "the setting changed what is IN the Library");
 });
 
-test("the dial's widening ungrays the audio Type row", async ({ page }) => {
+test("turning spoken word on ungrays the audio Type row in the lens", async ({ page }) => {
 	await page.goto("/library?lens=music");
 	await saveFixtures(page);
+	// The control moved off the lens's sidebar row (Parker, 2026-11-06), so the sidebar
+	// no longer carries a Music Player dial at all.
+	await expect(page.locator("aside")).not.toContainText("Include spoken word");
 	// Spoken word needs an episode in the Library: without stock, the Audio row would
 	// stay grayed by absence (the graying is by supply, and the fixture's episode is
 	// the spoken-word stock).
@@ -301,9 +292,31 @@ test("the dial's widening ungrays the audio Type row", async ({ page }) => {
 	});
 
 	await expect(page.getByRole("button", { name: "Audio", exact: true })).toBeDisabled();
+
+	await page.goto("/settings?tab=experience");
 	await page.getByText("Include spoken word", { exact: true }).click();
-	await expect(page).toHaveURL(/spoken=1/);
+	await page.goto("/library?lens=music");
 	await expect(page.getByRole("button", { name: "Audio", exact: true })).toBeEnabled();
+});
+
+test("the chosen lens survives a switch between Library and Discovery", async ({ page }) => {
+	await page.goto("/library?lens=music");
+
+	// The lens is a view over both corpora, so the nav carries it from one tab to the
+	// other rather than resetting the reader to No Lens on arrival (Parker, 2026-11-06).
+	const nav = page.getByRole("navigation", { name: "Anthers" });
+	await nav.getByRole("link", { name: "Discovery" }).click();
+	await expect(page).toHaveURL(/\/discovery\?lens=music/);
+	await expect(
+		page.getByRole("button", { name: "Music Player", exact: true }),
+		"Discovery did not arrive under the chosen lens",
+	).toHaveClass(/text-primary/);
+
+	await nav.getByRole("link", { name: "Library" }).click();
+	await expect(page).toHaveURL(/\/library\?lens=music/);
+	await expect(page.getByRole("button", { name: "Music Player", exact: true })).toHaveClass(
+		/text-primary/,
+	);
 });
 
 test("an Access filter reads the resolved verdict the cards already carry", async ({ page }) => {

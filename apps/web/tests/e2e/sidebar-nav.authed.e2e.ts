@@ -137,7 +137,7 @@ test("the account's starting tab decides where / lands, and the order never move
 
 	// Choosing a tab in Settings is the only control, and it takes effect on the next
 	// visit to `/` without a fresh sign-in.
-	await page.goto(`${WEB_ORIGIN}/settings?tab=account`);
+	await page.goto(`${WEB_ORIGIN}/settings?tab=experience`);
 	await expect(page.getByRole("heading", { name: "Where You Start" })).toBeVisible();
 	await chooseTab(page, "Library");
 
@@ -148,7 +148,7 @@ test("the account's starting tab decides where / lands, and the order never move
 		.toEqual(ORDER);
 
 	// Back at the default: Discovery is where a session lands when nothing else is chosen.
-	await page.goto(`${WEB_ORIGIN}/settings?tab=account`);
+	await page.goto(`${WEB_ORIGIN}/settings?tab=experience`);
 	await chooseTab(page, "Discovery");
 	await page.goto(`${WEB_ORIGIN}/`);
 	await expect(page).toHaveURL(/\/discovery$/);
