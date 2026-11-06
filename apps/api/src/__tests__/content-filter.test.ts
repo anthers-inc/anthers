@@ -15,14 +15,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { follows, projectItems, projects, users, works } from "@anthers/db/schema";
+import { follows, posts, projectItems, projects, users, works } from "@anthers/db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
-import { insertWork } from "./work-fixtures.js";
+import { insertWork, testPublicId } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
 
@@ -59,7 +59,8 @@ let userCookie: string;
 let creatorId: number;
 let userId: number;
 const madeWorkIds: number[] = [];
-const workByTitle = new Map<string, { id: number; publicId: number }>();
+const workByTitle = new Map<string, { id: number; publicId: number; slug: string }>();
+let postSlug = "";
 
 async function signUp(username: string): Promise<{ cookie: string; id: number }> {
 	const account = await createAccount(username);
@@ -97,6 +98,16 @@ async function said(path: string, cookie?: string): Promise<string> {
 let creatorHandle = "";
 const catalog = (cookie?: string) => said(`/api/content/catalog/${creatorHandle}`, cookie);
 
+async function postDetail(cookie?: string) {
+	const headers: Record<string, string> = { Origin: ORIGIN };
+	if (cookie) headers.Cookie = cookie;
+	const res = await req(`/api/content/posts/${postSlug}`, { headers });
+	expect(res.status).toBe(200);
+	return (await res.json()) as {
+		post: { linkedWorks: Array<{ work: { title: string } }> };
+	};
+}
+
 describe("a user's filter by kind of content", () => {
 	beforeAll(async () => {
 		await db.execute(
@@ -114,8 +125,26 @@ describe("a user's filter by kind of content", () => {
 		for (const f of fixtures) {
 			const row = await insertWork({ creatorId, type: "text", ...f });
 			madeWorkIds.push(row.id);
-			workByTitle.set(f.title, { id: row.id, publicId: row.publicId });
+			workByTitle.set(f.title, { id: row.id, publicId: row.publicId, slug: row.slug });
 		}
+		// A post embedding both a Work the reader will hide and one they will not, with
+		// neutral link text so an assertion on the embedded card cannot be satisfied or
+		// defeated by the body's own words.
+		const cartoon = workByTitle.get(CARTOON)!;
+		const gentle = workByTitle.get(GENTLE)!;
+		const [post] = await db
+			.insert(posts)
+			.values({
+				creatorId,
+				publicId: testPublicId(),
+				slug: `cfilt-embed-${run}`,
+				title: `Embedded works ${run}`,
+				body: `Two links: [one](/works/${cartoon.slug}-${cartoon.publicId}) and [two](/works/${gentle.slug}-${gentle.publicId}).`,
+				isPublished: true,
+				publishedAt: new Date(),
+			})
+			.returning({ slug: posts.slug });
+		postSlug = post!.slug;
 		await db.insert(follows).values({ followerId: userId, creatorId });
 		const [project] = await db
 			.insert(projects)
@@ -216,6 +245,24 @@ describe("a user's filter by kind of content", () => {
 			const feed = await said("/api/accounts/me/feed", userCookie);
 			expect(feed).not.toContain(CARTOON);
 			expect(feed).toContain(GENTLE);
+		});
+
+		it("drops a hidden Work's card from a post that embeds it", async () => {
+			// A post body's Work link renders as a card, and that card is a listing like
+			// any other: the hidden Work is absent while the Work the reader kept is shown.
+			const detail = await postDetail(userCookie);
+			const titles = detail.post.linkedWorks.map((row) => row.work.title);
+			expect(titles).toContain(GENTLE);
+			expect(titles).not.toContain(CARTOON);
+			// And the body still carries both links, because hiding is not an access rule.
+			expect(await said(`/api/content/posts/${postSlug}`, userCookie)).toContain(
+				`/works/${workByTitle.get(CARTOON)!.slug}-${workByTitle.get(CARTOON)!.publicId}`,
+			);
+		});
+
+		it("keeps both embedded cards for a reader who did not ask", async () => {
+			const detail = await postDetail();
+			expect(detail.post.linkedWorks.map((row) => row.work.title)).toEqual([CARTOON, GENTLE]);
 		});
 
 		it("leaves out a project holding only Works the user hid", async () => {

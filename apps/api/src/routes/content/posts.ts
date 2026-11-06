@@ -27,7 +27,6 @@ import {
 	recommendedPercent,
 	reviewWindowSince,
 } from "@anthers/shared/content";
-import { requiresAdultVerification } from "@anthers/shared/content-rating";
 import { visiblePostTitle } from "@anthers/shared/post-title";
 import { commentScore, isCollapsed } from "@anthers/shared/votes";
 import { zValidator } from "@hono/zod-validator";
@@ -80,6 +79,7 @@ import {
 	shapeThread,
 	threadCommentIds,
 } from "../../services/comment-thread.js";
+import { adultVisibility } from "../../services/content-preferences.js";
 import { canBePaid } from "../../services/payouts.js";
 import {
 	normalizeStoredMarkdown,
@@ -1558,6 +1558,13 @@ export async function unpinOtherPosts(creatorId: number, keepPostId: number): Pr
  * contributes nothing to access. Each Work is resolved on its own gates, so one post can
  * carry a free Work and a locked one side by side, and a post the user can read may
  * embed a Work they cannot open.
+ *
+ * 🚨 **The cards are a listing of Works, so `maturityHiddenFrom` belongs in the query.**
+ * A reader who set a kind of content to Hide meets no card for a Work carrying it, and an
+ * Adult Work is absent to a reader who has not opted in and verified — the same rule every
+ * other listing composes. Without it the browser's veil was the only thing left applying
+ * the preference, which turns a Hide into a Blur. The body still carries the link, because
+ * hiding is not an access rule and a direct link still opens the Work.
  */
 export async function loadPostWorksFromBody(
 	body: string | null,
@@ -1569,7 +1576,8 @@ export async function loadPostWorksFromBody(
 
 	// Resolved by publicId — the part of the address that identifies the Work — and
 	// ordered by first appearance in the body, which is the display order the refs
-	// table's `position` used to carry.
+	// table's `position` used to carry. The listing condition travels with it.
+	const { hidden } = await adultVisibility(userId);
 	const rows = await db
 		.select({
 			id: works.id,
@@ -1578,7 +1586,7 @@ export async function loadPostWorksFromBody(
 			creatorId: works.creatorId,
 		})
 		.from(works)
-		.where(inArray(works.publicId, publicIds));
+		.where(and(inArray(works.publicId, publicIds), hidden));
 	if (rows.length === 0) return [];
 	const byPublicId = new Map(rows.map((r) => [r.publicId, r]));
 
@@ -1594,19 +1602,6 @@ export async function loadPostWorksFromBody(
 			const found = byPublicId.get(publicId);
 			const work = found ? worksById.get(found.id) : undefined;
 			if (!work) return null;
-			// 🚨 A post embedding an Adult Work does not embed it to somebody who has
-			// not opted in. The reference is dropped rather than serialized as locked,
-			// because the invisibility rule covers the title and cover art and a locked
-			// card is made of both. `ctx` already carries the user's adult access, so
-			// this costs no extra query — and reading it from the same context the access
-			// verdict comes from is what keeps the two from disagreeing.
-			if (
-				requiresAdultVerification(work.maturity) &&
-				!ctx.adultAccess &&
-				ctx.userId !== work.creatorId
-			) {
-				return null;
-			}
 			return {
 				position,
 				work: await serializeWorkForUser(
