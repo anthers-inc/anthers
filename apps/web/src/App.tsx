@@ -129,13 +129,6 @@ const SharedWorkPage = lazy(() => import("./pages/SharedWorkPage"));
 const AuthCallbackPage = lazy(() => import("./pages/AuthCallbackPage"));
 const EmbedWorkPage = lazy(() => import("./pages/EmbedWorkPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
-/**
- * The theme study at /themes — a bare, shell-free page so six candidate palettes can be
- * read against the site's own without the shell (which is itself a themed surface)
- * deciding the frame. It renders only previews; the real palette and pickers are
- * untouched until one is chosen. See the page's header.
- */
-const ThemeLabPage = lazy(() => import("./pages/ThemeLabPage"));
 
 /**
  * The one place that decides whether a root path segment names a person.
@@ -203,11 +196,6 @@ export default function App() {
 				    the person straight into the app, this page hands the code over the app's own
 				    scheme. It sits outside every shell because it is a door with no site around it. */}
 				<Route path="/auth/callback" element={<AuthCallbackPage />} />
-
-				{/* The theme study. Bare like an embed: the marketing shell's nav, theme
-				    picker and botanical decor are themselves being judged, so a preview
-				    must not be framed by the thing it might replace. */}
-				<Route path="/themes" element={<ThemeLabPage />} />
 
 				{/*
 				Marketing / logged-out layout

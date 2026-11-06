@@ -14,11 +14,19 @@
  * `aside`, it carries the seven labels in order, and the page column no longer carries a
  * tab row of its own. The third test is the Experience tab's own behavior: a theme pick
  * reaches the document's `data-theme`, the attribute the whole palette keys on, rather than
- * only the radio.
+ * only the radio. It also proves the catalog reaches the card as four families, and that
+ * choosing one lands on that family's light variant before a variant pick moves it.
  */
 import { expect, type Page, test } from "@playwright/test";
 
 const header = (page: Page) => page.getByRole("banner");
+
+/** The family a stored value names, for restoring the fixture account's own choice. */
+function familyOf(value: string): string {
+	if (value === "light" || value === "dark") return "Meadow";
+	const prefix = value.split("-")[0];
+	return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+}
 
 test("the signed-in header has neither an account menu nor a theme picker", async ({ page }) => {
 	await page.goto("/discovery");
@@ -84,28 +92,40 @@ test("the Experience tab carries the theme card, and a pick changes the document
 	// ⭐ A theme and a variant are separate choices now (Parker, 2026-11-06), and the
 	// old one-line explanation is gone rather than reworded: the controls say what they do.
 	await expect(card).not.toContainText("Applies right away");
-	await expect(card.getByRole("group", { name: "Theme" })).toBeVisible();
-	await expect(
-		card.getByRole("group", { name: "Theme" }).getByRole("radio", { name: "Meadow" }),
-	).toBeChecked();
-	await expect(card.getByRole("group", { name: "Variant" })).toBeVisible();
+	const themeGroup = card.getByRole("group", { name: "Theme" });
+	const variantGroup = card.getByRole("group", { name: "Variant" });
+	await expect(themeGroup).toBeVisible();
+	await expect(variantGroup).toBeVisible();
+
+	// The catalog reaches the card as families, not as a Light/Dark list.
+	await expect(themeGroup.getByRole("radio")).toHaveCount(4);
+	await expect(themeGroup.getByRole("radio", { name: "Meadow" })).toBeVisible();
+	await expect(themeGroup.getByRole("radio", { name: "Reef" })).toBeVisible();
+	await expect(themeGroup.getByRole("radio", { name: "Ember" })).toBeVisible();
+	await expect(themeGroup.getByRole("radio", { name: "Heather" })).toBeVisible();
+	await expect(variantGroup.getByRole("radio")).toHaveCount(2);
 
 	const html = page.locator("html");
-	const before = await html.getAttribute("data-theme");
-	const other = before === "dark" ? "Light" : "Dark";
+	const before = (await html.getAttribute("data-theme")) ?? "light";
 
-	await card.getByRole("group", { name: "Variant" }).getByRole("radio", { name: other }).check();
-	await expect(html, `choosing ${other} did not reach the document`).toHaveAttribute(
+	// A family pick lands on that family's light variant, and the variant pick moves it
+	// without changing family.
+	await themeGroup.getByRole("radio", { name: "Reef" }).check();
+	await expect(html, "choosing Reef did not reach the document").toHaveAttribute(
 		"data-theme",
-		other.toLowerCase(),
+		"reef-light",
 	);
-	await expect(
-		card.getByRole("group", { name: "Variant" }).getByRole("radio", { name: other }),
-	).toBeChecked();
+	await expect(variantGroup.getByRole("radio", { name: "Light" })).toBeChecked();
+
+	await variantGroup.getByRole("radio", { name: "Dark" }).check();
+	await expect(html).toHaveAttribute("data-theme", "reef-dark");
+	await expect(themeGroup.getByRole("radio", { name: "Reef" })).toBeChecked();
 
 	// Put the account back where it started: this fixture account is shared with every
 	// other spec in the authed project, and the choice also saves to the account.
-	const original = before === "dark" ? "Dark" : "Light";
-	await card.getByRole("group", { name: "Variant" }).getByRole("radio", { name: original }).check();
-	await expect(html).toHaveAttribute("data-theme", original.toLowerCase());
+	await themeGroup.getByRole("radio", { name: familyOf(before) }).check();
+	if (before.endsWith("dark")) {
+		await variantGroup.getByRole("radio", { name: "Dark" }).check();
+	}
+	await expect(html).toHaveAttribute("data-theme", before);
 });

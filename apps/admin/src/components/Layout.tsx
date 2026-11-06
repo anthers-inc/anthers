@@ -6,7 +6,13 @@
  * capability is one check per section. Accounts is the only one with a check today, because it is
  * super-admin only; the API refuses it too, so hiding the link is courtesy rather than the gate.
  */
-import { applyTheme, storeTheme, useTheme } from "@anthers/web-shared/theme";
+import {
+	applyTheme,
+	isDarkTheme,
+	storeTheme,
+	useTheme,
+	withVariant,
+} from "@anthers/web-shared/theme";
 import { MoonIcon, SunIcon } from "@heroicons/react/24/outline";
 import { NavLink, Outlet } from "react-router-dom";
 import { useSession } from "../lib/session";
@@ -78,9 +84,10 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 export default function Layout() {
 	const { account, signOut } = useSession();
 	const theme = useTheme();
+	const dark = isDarkTheme(theme);
 
 	function toggleTheme() {
-		const next = theme === "dark" ? "light" : "dark";
+		const next = withVariant(theme, dark ? "Light" : "Dark");
 		applyTheme(next);
 		storeTheme(next);
 	}
@@ -128,9 +135,9 @@ export default function Layout() {
 						type="button"
 						className="btn btn-ghost btn-sm btn-square"
 						onClick={toggleTheme}
-						aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+						aria-label={`Switch to ${dark ? "light" : "dark"} mode`}
 					>
-						{theme === "dark" ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
+						{dark ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
 					</button>
 					<button type="button" className="btn btn-ghost btn-sm" onClick={() => void signOut()}>
 						Sign Out

@@ -3,13 +3,13 @@
 // <MeadowFloor> — the grassy/flowery floor band with a few bees drifting above it.
 // A `h-56` strip meant to sit at the very bottom of a page: inside <MeadowDecor>
 // (where the side vines spring from it), or on its own under the site footer so
-// every marketing page ends on the same meadow. Colors are baked per mode (see
-// meadowColors); the tile is nudged down 6px so the blade bases sit just below the
+// every marketing page ends on the same meadow. Colors are baked per family and variant
+// (see meadowColors); the tile is nudged down 6px so the blade bases sit just below the
 // clip edge (no gap).
 
 import { grassFloorDataUri } from "@anthers/brand";
 import { BrandGlyph } from "./BrandGlyph";
-import { decorColors } from "./meadowColors";
+import { decorColors, decorVariant } from "./meadowColors";
 import { useDecorMode } from "./useDecorMode";
 
 export function MeadowFloor({
@@ -17,7 +17,7 @@ export function MeadowFloor({
 	className = "",
 	heightClass = "h-56",
 }: {
-	/** force a mode; omit to track the live `data-theme` (light/dark toggle) */
+	/** force a variant (the family still follows the live theme); omit to track both */
 	mode?: "light" | "dark";
 	className?: string;
 	/**
@@ -29,7 +29,7 @@ export function MeadowFloor({
 	heightClass?: string;
 }) {
 	const observed = useDecorMode();
-	const c = decorColors(mode ?? observed);
+	const c = decorColors(observed, decorVariant(mode));
 	const floorStyle: React.CSSProperties = {
 		backgroundImage: `url("${grassFloorDataUri({
 			grass: c.grass,

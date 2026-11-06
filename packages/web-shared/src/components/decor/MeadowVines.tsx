@@ -7,8 +7,8 @@
 // AND the footer below it — instead of only the page's content area. Drop it inside
 // a `relative` container: it fills that container's height (`inset-y-0`/`inset-0`)
 // at z-20, so keep content/footer below it (z < 20) and the grass floor above it
-// (z > 20). Vine colors are baked per `mode`; the bees ride `text-accent`, so they
-// track the theme token directly (and match the grass bees in <MeadowFloor>).
+// (z > 20). Vine colors are baked per family and variant; the bees ride `text-accent`, so
+// they track the theme token directly (and match the grass bees in <MeadowFloor>).
 
 import {
 	VINE_WAVES,
@@ -18,7 +18,7 @@ import {
 	wovenVineTileDataUri,
 } from "@anthers/brand";
 import { BrandGlyph } from "./BrandGlyph";
-import { decorColors } from "./meadowColors";
+import { decorColors, decorVariant } from "./meadowColors";
 import { useDecorMode } from "./useDecorMode";
 
 // Deterministic little PRNG (mulberry32) so bee placement is fixed — stable across
@@ -80,7 +80,7 @@ export function MeadowVines({
 	vine = "triple",
 	from = "xl",
 }: {
-	/** force a mode; omit to track the live `data-theme` (light/dark toggle) */
+	/** force a variant (the family still follows the live theme); omit to track both */
 	mode?: "light" | "dark";
 	/** single meandering strand, or a woven preset (braid/helix/triple/twin) */
 	vine?: VineStyle;
@@ -96,7 +96,7 @@ export function MeadowVines({
 	// scanner won't generate the variant.
 	const show = from === "lg" ? "lg:block" : "xl:block";
 	const observed = useDecorMode();
-	const c = decorColors(mode ?? observed);
+	const c = decorColors(observed, decorVariant(mode));
 	const vineColors = { stem: c.stem, flower: c.flower };
 	const vineUri =
 		vine === "single"

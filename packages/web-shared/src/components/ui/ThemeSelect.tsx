@@ -16,7 +16,7 @@ import { Fragment } from "react";
 import { THEMES, type ThemeGroup } from "../../lib/theme";
 import { useThemeChoice } from "../../lib/theme-choice";
 
-/** Group order as the picker shows it — the default (light) family's group first. */
+/** Variant order as the picker shows it — light first, each group listing the families. */
 const THEME_GROUPS: readonly ThemeGroup[] = ["Light", "Dark"];
 
 export default function ThemeSelect({ className = "" }: { className?: string }) {

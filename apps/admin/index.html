@@ -6,12 +6,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <title>Anthers Admin</title>
-    <!-- The saved light/dark choice, before first paint. Key and default mirror
-         packages/web-shared/src/lib/theme.ts, which the site uses too. -->
+    <!-- The saved theme, before first paint. Key and default mirror
+         packages/web-shared/src/lib/theme.ts, and the list mirrors THEME_VALUES in
+         packages/shared/src/theme.ts — keep all three in sync. -->
     <script>
       try {
-        if (localStorage.getItem("anthers_theme") === "dark")
-          document.documentElement.setAttribute("data-theme", "dark");
+        const themes = [
+          "light",
+          "dark",
+          "reef-light",
+          "reef-dark",
+          "ember-light",
+          "ember-dark",
+          "heather-light",
+          "heather-dark",
+        ];
+        const saved = localStorage.getItem("anthers_theme");
+        if (saved && themes.indexOf(saved) !== -1)
+          document.documentElement.setAttribute("data-theme", saved);
       } catch {}
     </script>
     <link rel="icon" type="image/png" sizes="32x32" href="../../packages/brand/logo/web/icon-32.png" />
