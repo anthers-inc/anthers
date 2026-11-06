@@ -12,6 +12,7 @@ import {
 	isDarkTheme,
 	THEMES,
 	themeDefinition,
+	themeFamilies,
 	themeFamily,
 	themeForValue,
 	themeVariant,
@@ -52,16 +53,14 @@ describe("theme catalog", () => {
 		expect(THEMES.map((option) => option.value).sort()).toEqual([...THEME_VALUES].sort());
 	});
 
-	test("every family has exactly one light and one dark variant", () => {
-		const families = new Map<string, string[]>();
-		for (const option of THEMES) {
-			families.set(option.label, [...(families.get(option.label) ?? []), option.group]);
-		}
-		for (const [label, groups] of families) {
-			expect(groups.sort(), `${label} does not have one variant of each`).toEqual([
-				"Dark",
-				"Light",
-			]);
+	test("themeFamilies groups every variant under its family, light first", () => {
+		const families = themeFamilies();
+		expect(families.map((family) => family.label)).toEqual(["Meadow", "Reef", "Ember", "Heather"]);
+		for (const family of families) {
+			expect(
+				family.variants.map((option) => option.group),
+				`${family.label} does not have one variant of each`,
+			).toEqual(["Light", "Dark"]);
 		}
 	});
 

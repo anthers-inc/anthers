@@ -45,6 +45,12 @@ export interface ThemeDefinition {
 	group: ThemeGroup;
 }
 
+/** A palette family and the catalog's entries for its variants, in catalog order. */
+export interface ThemeFamily {
+	label: string;
+	variants: readonly ThemeDefinition[];
+}
+
 /**
  * Every available theme, in picker order: each family's light variant before its dark
  * one, and the families in the order they should appear. A new theme joins by adding a
@@ -61,6 +67,18 @@ export const THEMES: readonly ThemeDefinition[] = [
 	{ value: "heather-light", label: "Heather", group: "Light" },
 	{ value: "heather-dark", label: "Heather", group: "Dark" },
 ];
+
+/**
+ * The catalog grouped into families, in first-appearance order. Every variant of a family
+ * shares the label; the variants keep the catalog's order, so the light entry is first.
+ */
+export function themeFamilies(): ThemeFamily[] {
+	const labels = [...new Set(THEMES.map((option) => option.label))];
+	return labels.map((label) => ({
+		label,
+		variants: THEMES.filter((option) => option.label === label),
+	}));
+}
 
 /** The catalog entry for a value, or null when this build does not know it. */
 export function themeDefinition(value: string | null | undefined): ThemeDefinition | null {

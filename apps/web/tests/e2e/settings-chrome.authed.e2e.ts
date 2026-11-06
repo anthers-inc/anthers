@@ -14,8 +14,8 @@
  * `aside`, it carries the seven labels in order, and the page column no longer carries a
  * tab row of its own. The third test is the Experience tab's own behavior: a theme pick
  * reaches the document's `data-theme`, the attribute the whole palette keys on, rather than
- * only the radio. It also proves the catalog reaches the card as four families, and that
- * choosing one lands on that family's light variant before a variant pick moves it.
+ * only the control. It also proves the catalog reaches the card as four families, that the
+ * variant toggle comes first, and that a palette pick keeps the variant it was made under.
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -89,43 +89,53 @@ test("the Experience tab carries the theme card, and a pick changes the document
 		.filter({ has: page.getByRole("heading", { name: "Color Theme" }) });
 	await expect(card, "the Experience tab has no theme card").toBeVisible();
 
-	// ⭐ A theme and a variant are separate choices now (Parker, 2026-11-06), and the
-	// old one-line explanation is gone rather than reworded: the controls say what they do.
+	// ⭐ The card leads with the variant and lists the palettes under it (Parker,
+	// 2026-11-06), the same order the marketing dropdown uses, and each palette carries
+	// its primary-color swatch.
 	await expect(card).not.toContainText("Applies right away");
-	const themeGroup = card.getByRole("group", { name: "Theme" });
 	const variantGroup = card.getByRole("group", { name: "Variant" });
-	await expect(themeGroup).toBeVisible();
+	const paletteGroup = card.getByRole("group", { name: "Palette" });
 	await expect(variantGroup).toBeVisible();
+	await expect(paletteGroup).toBeVisible();
 
-	// The catalog reaches the card as families, not as a Light/Dark list.
-	await expect(themeGroup.getByRole("radio")).toHaveCount(4);
-	await expect(themeGroup.getByRole("radio", { name: "Meadow" })).toBeVisible();
-	await expect(themeGroup.getByRole("radio", { name: "Reef" })).toBeVisible();
-	await expect(themeGroup.getByRole("radio", { name: "Ember" })).toBeVisible();
-	await expect(themeGroup.getByRole("radio", { name: "Heather" })).toBeVisible();
-	await expect(variantGroup.getByRole("radio")).toHaveCount(2);
+	await expect(variantGroup.getByRole("button")).toHaveCount(2);
+	await expect(paletteGroup.getByRole("button")).toHaveCount(4);
+	await expect(paletteGroup.getByRole("button", { name: "Meadow" })).toBeVisible();
+	await expect(paletteGroup.getByRole("button", { name: "Reef" })).toBeVisible();
+	await expect(paletteGroup.getByRole("button", { name: "Ember" })).toBeVisible();
+	await expect(paletteGroup.getByRole("button", { name: "Heather" })).toBeVisible();
+	await expect(
+		paletteGroup.getByRole("button", { name: "Reef" }).locator("[data-theme]"),
+		"the palette row has no color swatch",
+	).toBeVisible();
 
 	const html = page.locator("html");
 	const before = (await html.getAttribute("data-theme")) ?? "light";
+	const initialVariant = before.endsWith("dark") ? "Dark" : "Light";
+	const otherVariant = initialVariant === "Dark" ? "Light" : "Dark";
 
-	// A family pick lands on that family's light variant, and the variant pick moves it
-	// without changing family.
-	await themeGroup.getByRole("radio", { name: "Reef" }).check();
+	// A palette pick keeps the variant it was made under, and the variant toggle moves
+	// the document without changing family.
+	await paletteGroup.getByRole("button", { name: "Reef" }).click();
 	await expect(html, "choosing Reef did not reach the document").toHaveAttribute(
 		"data-theme",
-		"reef-light",
+		`reef-${initialVariant.toLowerCase()}`,
 	);
-	await expect(variantGroup.getByRole("radio", { name: "Light" })).toBeChecked();
+	await expect(variantGroup.getByRole("button", { name: initialVariant })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
 
-	await variantGroup.getByRole("radio", { name: "Dark" }).check();
-	await expect(html).toHaveAttribute("data-theme", "reef-dark");
-	await expect(themeGroup.getByRole("radio", { name: "Reef" })).toBeChecked();
+	await variantGroup.getByRole("button", { name: otherVariant }).click();
+	await expect(html).toHaveAttribute("data-theme", `reef-${otherVariant.toLowerCase()}`);
+	await expect(paletteGroup.getByRole("button", { name: "Reef" })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
 
 	// Put the account back where it started: this fixture account is shared with every
 	// other spec in the authed project, and the choice also saves to the account.
-	await themeGroup.getByRole("radio", { name: familyOf(before) }).check();
-	if (before.endsWith("dark")) {
-		await variantGroup.getByRole("radio", { name: "Dark" }).check();
-	}
+	await paletteGroup.getByRole("button", { name: familyOf(before) }).click();
+	await variantGroup.getByRole("button", { name: initialVariant }).click();
 	await expect(html).toHaveAttribute("data-theme", before);
 });
