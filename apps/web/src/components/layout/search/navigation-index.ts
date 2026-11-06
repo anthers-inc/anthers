@@ -82,12 +82,28 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		kind: "mode",
 	},
 
-	// ── Settings' five tabs ──────────────────────────────────────────────────
+	// ── Settings' seven tabs ─────────────────────────────────────────────────
 	{
 		id: "setting-account",
 		label: "Account Settings",
 		keywords: ["settings", "account", "creator mode", "profile"],
 		href: "/settings?tab=account",
+		kind: "setting",
+	},
+	{
+		id: "setting-experience",
+		label: "Experience",
+		keywords: [
+			"settings",
+			"experience",
+			"appearance",
+			"theme",
+			"playback",
+			"player",
+			"shortcuts",
+			"starting tab",
+		],
+		href: "/settings?tab=experience",
 		kind: "setting",
 	},
 	{
@@ -107,7 +123,7 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 	{
 		id: "setting-content",
 		label: "Content & Safety",
-		keywords: ["settings", "mature", "adult", "parental", "blocked", "safety"],
+		keywords: ["settings", "mature", "adult", "content controls", "blocked", "safety"],
 		href: "/settings?tab=content",
 		kind: "setting",
 	},
@@ -118,8 +134,29 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		href: "/settings?tab=activity",
 		kind: "setting",
 	},
+	{
+		id: "setting-parents",
+		label: "Parents",
+		keywords: ["settings", "parental", "controls", "children", "pin", "family", "guardian"],
+		href: "/settings?tab=parents",
+		kind: "setting",
+	},
 
 	// ── Settings' cards, each pointing at its tab ───────────────────────────
+	{
+		id: "setting-color-theme",
+		label: "Color Theme",
+		keywords: ["settings", "theme", "light", "dark", "meadow", "color", "appearance"],
+		href: "/settings?tab=experience",
+		kind: "setting",
+	},
+	{
+		id: "setting-where-you-start",
+		label: "Where You Start",
+		keywords: ["settings", "starting tab", "library", "discovery", "home"],
+		href: "/settings?tab=experience",
+		kind: "setting",
+	},
 	{
 		id: "setting-keyboard-shortcuts",
 		label: "Keyboard Shortcuts",
@@ -133,7 +170,7 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 			"fullscreen",
 			"theater",
 		],
-		href: "/settings?tab=account",
+		href: "/settings?tab=experience",
 		kind: "setting",
 	},
 	{
@@ -154,14 +191,21 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		id: "setting-media-play",
 		label: "Media & Play",
 		keywords: ["settings", "previews", "audio", "playback", "volume", "browser"],
-		href: "/settings?tab=account",
+		href: "/settings?tab=experience",
 		kind: "setting",
 	},
 	{
 		id: "setting-miniplayer",
 		label: "The Miniplayer",
 		keywords: ["settings", "player", "audio", "footer", "playback"],
-		href: "/settings?tab=account",
+		href: "/settings?tab=experience",
+		kind: "setting",
+	},
+	{
+		id: "setting-include-spoken",
+		label: "Include Spoken Word",
+		keywords: ["settings", "music player", "spoken", "audio", "lens", "episodes"],
+		href: "/settings?tab=experience",
 		kind: "setting",
 	},
 	{
@@ -172,9 +216,16 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		kind: "setting",
 	},
 	{
-		id: "setting-mature-content",
-		label: "Mature Content",
+		id: "setting-rating-controls",
+		label: "Rating Controls",
 		keywords: ["settings", "mature", "adult", "blur", "hide", "rating"],
+		href: "/settings?tab=content",
+		kind: "setting",
+	},
+	{
+		id: "setting-content-controls",
+		label: "Content Controls",
+		keywords: ["settings", "violence", "language", "drugs", "content", "flags"],
 		href: "/settings?tab=content",
 		kind: "setting",
 	},
@@ -182,7 +233,7 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		id: "setting-parental-controls",
 		label: "Parental Controls",
 		keywords: ["settings", "parental", "children", "pin", "family"],
-		href: "/settings?tab=content",
+		href: "/settings?tab=parents",
 		kind: "setting",
 	},
 	{

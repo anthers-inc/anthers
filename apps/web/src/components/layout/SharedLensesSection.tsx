@@ -48,17 +48,12 @@ export default function SharedLensesSection({
 	lens,
 	onLens,
 	live = new Set([""]),
-	/** Content rendered beneath a selected row's, keyed by the row's id — the
-	 *  Music Player's include-spoken dial is the first rider (a control ON the
-	 *  lens, beside the view it re-scopes). */
-	extras = {},
 }: {
 	lens: string;
 	onLens: (id: string) => void;
 	/** The ids this tab has built. Every user tab passes {@link ALL_LENS_IDS} today;
 	 *  the default is for a surface that has built no lens yet, and keeps No Lens. */
 	live?: ReadonlySet<string>;
-	extras?: Partial<Record<(typeof LENSES)[number]["id"], React.ReactNode>>;
 }) {
 	return (
 		<section>
@@ -85,7 +80,6 @@ export default function SharedLensesSection({
 									</span>
 								)}
 							</button>
-							{built && lens === lensItem.id && extras[lensItem.id]}
 						</div>
 					);
 				})}

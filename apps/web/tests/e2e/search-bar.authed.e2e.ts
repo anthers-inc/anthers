@@ -145,7 +145,7 @@ test("Ctrl+/ toggles the sidebar, even with a text field focused", async ({ page
 	await expect.poll(asideWidth, { message: "Ctrl+/ did not open it again" }).toBe(256);
 
 	// The account's card offers the chord, which is where a person rebinds it.
-	await page.goto("/settings?tab=account");
+	await page.goto("/settings?tab=experience");
 	const row = page
 		.locator(".card", { has: page.getByRole("heading", { name: "Keyboard Shortcuts" }) })
 		.locator(".flex-wrap")
@@ -155,7 +155,7 @@ test("Ctrl+/ toggles the sidebar, even with a text field focused", async ({ page
 });
 
 test("a rebound Search shortcut is the one the bar listens for", async ({ page }) => {
-	await page.goto("/settings?tab=account");
+	await page.goto("/settings?tab=experience");
 	const card = page.locator(".card", {
 		has: page.getByRole("heading", { name: "Keyboard Shortcuts" }),
 	});
@@ -187,7 +187,7 @@ test("a rebound Search shortcut is the one the bar listens for", async ({ page }
 
 	// Put the fixture account back where it started; the shortcut is account state and
 	// the rest of this session shares the account.
-	await page.goto("/settings?tab=account");
+	await page.goto("/settings?tab=experience");
 	const again = page.locator(".card", {
 		has: page.getByRole("heading", { name: "Keyboard Shortcuts" }),
 	});
@@ -216,7 +216,7 @@ test("a rebound sidebar shortcut is the one the layout listens for", async ({ pa
 			Math.round(document.querySelector("aside")?.getBoundingClientRect().width ?? -1),
 		);
 
-	await page.goto("/settings?tab=account");
+	await page.goto("/settings?tab=experience");
 	await expect(row()).toBeVisible();
 	await expect(row().locator("kbd")).toHaveText(/Ctrl\+\/|⌃\//);
 
@@ -247,7 +247,7 @@ test("a rebound sidebar shortcut is the one the layout listens for", async ({ pa
 
 	// Put the fixture account back where it started; the shortcut is account state and
 	// the rest of this session shares the account.
-	await page.goto("/settings?tab=account");
+	await page.goto("/settings?tab=experience");
 	const restored = page.waitForResponse(
 		(response) =>
 			response.url().endsWith("/api/accounts/me") && response.request().method() === "PATCH",

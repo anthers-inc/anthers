@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { matchesChord, resolveKeyboardShortcuts } from "@anthers/shared/keybindings";
-import { APP_VERSION } from "@anthers/shared/version";
 import { useAuth } from "@anthers/web-shared/auth";
 import { MeadowBackdrop } from "@anthers/web-shared/decor/MeadowBackdrop";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
@@ -24,20 +23,6 @@ import PublishingPermissionBanner from "./PublishingPermissionBanner";
 import RouteSuspense from "./RouteSuspense";
 import SearchBar from "./SearchBar";
 import { ViewFilterProvider } from "./search/filter-context";
-
-/**
- * Where the signed-in site-map footer renders: the account page. Every other
- * signed-in page ends at its own content, since the sidebar already carries the reader's
- * navigation. Studio mode omits the footer separately.
- *
- * Badges & Purchases is a tab on Settings since 2026-10-23, so the address that carries
- * the account's own pages is one path again.
- */
-const SITE_FOOTER_PATHS = new Set(["/settings"]);
-
-/** Treat `/settings/` and `/settings` as the same destination. */
-const showsSiteFooter = (pathname: string) =>
-	SITE_FOOTER_PATHS.has(pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname);
 
 /**
  * A sidebar row. `dense` is for the one row that carries two lines — the creator's profile,
@@ -180,10 +165,21 @@ function ProfileRow({ rail, active }: { rail: boolean; active: boolean }) {
  * itself; `main` reserves `.phone-tabs-space` above it (see globals.css).
  */
 function PhoneTabs({ hidden }: { hidden: boolean }) {
-	const { pathname } = useLocation();
+	const { pathname, search } = useLocation();
+	/**
+	 * The lens rides across the two content tabs on a phone as it does on the desktop nav
+	 * (Parker, 2026-11-06). Settings is left plain — a lens means nothing there.
+	 */
+	const lens = new URLSearchParams(search).get("lens") ?? "";
+	const tabTo = (to: string) => (lens ? `${to}?lens=${encodeURIComponent(lens)}` : to);
 	const items = [
-		...USER_TABS.map(({ to, label, icon: Icon }) => ({ to, label, Icon })),
-		{ to: "/settings", label: "Settings", Icon: Cog6ToothIcon },
+		...USER_TABS.map(({ to, label, icon: Icon }) => ({
+			to: tabTo(to),
+			path: to,
+			label,
+			Icon,
+		})),
+		{ to: "/settings", path: "/settings", label: "Settings", Icon: Cog6ToothIcon },
 	];
 	return (
 		<nav
@@ -194,8 +190,8 @@ function PhoneTabs({ hidden }: { hidden: boolean }) {
 			}`}
 		>
 			<div className="flex h-16 items-stretch">
-				{items.map(({ to, label, Icon }) => {
-					const active = pathname === to || pathname.startsWith(`${to}/`);
+				{items.map(({ to, path, label, Icon }) => {
+					const active = pathname === path || pathname.startsWith(`${path}/`);
 					return (
 						<NavLink
 							key={to}
@@ -219,7 +215,7 @@ function LoggedInLayoutInner() {
 	const { user } = useAuth();
 	const { currentTrack } = useMediaPlayer();
 	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent, sharedContent } = useSidebar();
-	const { pathname } = useLocation();
+	const { pathname, search } = useLocation();
 	const { count: basketCount } = useBasket();
 	const creatorMode = Boolean(user?.creatorMode);
 	const mode = useAppMode(creatorMode);
@@ -231,6 +227,18 @@ function LoggedInLayoutInner() {
 	 * the only thing that decides where a session lands.
 	 */
 	const userHome = userTabPath(user?.homeDefaultTab);
+
+	/**
+	 * The lens survives a switch between the two content tabs (Parker, 2026-11-06).
+	 *
+	 * ⭐ **Every Library/Discovery link carries the lens the reader is under**, so moving
+	 * from "my Library under the Music Player" to Discovery lands on "the stream under the
+	 * Music Player" rather than resetting to No Lens. The lens remains the page's URL
+	 * parameter — this only carries it across the nav, which is what makes it feel like a
+	 * view of both corpora rather than a setting of one page.
+	 */
+	const lens = new URLSearchParams(search).get("lens") ?? "";
+	const tabTo = (to: string) => (lens ? `${to}?lens=${encodeURIComponent(lens)}` : to);
 
 	/**
 	 * Where creator mode begins: `/studio`, which forwards to the creator's own profile with
@@ -446,7 +454,7 @@ function LoggedInLayoutInner() {
 									{USER_TABS.map((link) => (
 										<NavLink
 											key={link.id}
-											to={link.to}
+											to={tabTo(link.to)}
 											title={rail ? link.label : undefined}
 											className={navLinkClass}
 										>
@@ -548,105 +556,6 @@ function LoggedInLayoutInner() {
 							<RouteSuspense>
 								<Outlet />
 							</RouteSuspense>
-
-							{/* Footer, on the account pages only: Badges & Purchases and Settings are where
-					    a person is managing their own account, and the site map's reference and legal
-					    columns belong there. Every other signed-in page ends at its own content.
-					    Studio mode leaves it out entirely; a working tool has no use for a site map. */}
-							{!studio && showsSiteFooter(pathname) && (
-								<footer
-									data-site-footer
-									// `mt-auto` pins the footer to the bottom of `<main>`'s scroll area:
-									// this flex column is taller than the viewport whenever a page's
-									// content runs short, and without the push the footer hugs the content
-									// and leaves the height below it empty (Settings, in the extreme).
-									// With content taller than the viewport there is no free space and
-									// the margin is zero, leaving the footer directly under the content.
-									className={`mt-auto bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 transition-[margin-bottom] duration-base ease-settle ${currentTrack ? "mb-16" : ""}`}
-								>
-									<div className="max-w-7xl mx-auto">
-										<div className="join join-horizontal w-full">
-											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-												<h6 className="footer-title text-xs">Discovery</h6>
-												<Link to="/discovery" className="link link-hover">
-													Find something new
-												</Link>
-											</nav>
-											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-												<h6 className="footer-title text-xs">Your Stuff</h6>
-												<Link to="/library" className="link link-hover">
-													Library
-												</Link>
-												<Link to="/settings?tab=purchases" className="link link-hover">
-													Badges &amp; Purchases
-												</Link>
-											</nav>
-											{/* Release Notes in its own column, matching the logged-out footer's
-									    Development column (Parker, 2026-10-03). The Roadmap link came out
-									    of both footers on 2026-10-20 — the canonical roadmap is the
-									    wiki's, and a footer is not where a reader is sent off-site. */}
-											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-												<h6 className="footer-title text-xs">Development</h6>
-												<Link to="/release-notes" className="link link-hover">
-													Release Notes
-												</Link>
-												<Link to="/status" className="link link-hover">
-													Status
-												</Link>
-												<Link to="/issues" className="link link-hover">
-													Report an Issue
-												</Link>
-											</nav>
-											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-												<h6 className="footer-title text-xs">About</h6>
-												<Link to="/about" className="link link-hover">
-													About Us
-												</Link>
-												<Link to="/faq" className="link link-hover">
-													FAQ
-												</Link>
-												<Link to="/supporters" className="link link-hover">
-													Supporters
-												</Link>
-												<Link to="/resources" className="link link-hover">
-													Resources
-												</Link>
-												{/* Under Support rather than Legal — see the note in LoggedOutLayout. */}
-												<Link to="/parents" className="link link-hover">
-													For Parents
-												</Link>
-											</nav>
-											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-												<h6 className="footer-title text-xs">Legal</h6>
-												<Link to="/privacy" className="link link-hover">
-													Privacy
-												</Link>
-												<Link to="/terms" className="link link-hover">
-													Terms
-												</Link>
-												<Link to="/copyright" className="link link-hover">
-													Copyright
-												</Link>
-												{/* Matches the URL and the mailbox — see the note in
-										    LoggedOutLayout. */}
-												<Link to="/abuse" className="link link-hover">
-													Abuse
-												</Link>
-											</nav>
-										</div>
-
-										{/* The running version, quiet at the bottom of the page. A support
-								    question or a bug report names the build it saw, and the footer is
-								    where a person looks for it. Logged-in view only (Parker, 2026-10-01):
-								    a logged-out visitor is being pitched to, not debugging. The value
-								    is a committed calver constant — `@anthers/shared/version`'s docblock
-								    carries why it is not computed from git at build time. */}
-										<p className="mt-8 text-center text-[10px] opacity-40 select-none">
-											Anthers {APP_VERSION}
-										</p>
-									</div>
-								</footer>
-							)}
 						</main>
 					</div>
 				</div>
