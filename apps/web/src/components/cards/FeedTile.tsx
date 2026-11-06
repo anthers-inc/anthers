@@ -6,6 +6,12 @@
 // YouTube home-grid shape but carrying posts and eleven Work types rather
 // than video alone.
 //
+// **The body reads title first** (Parker, 2026-11-06): the title and the
+// surface's three-dot menu share the first row, and the creator, the kind's
+// chip and the release date share the second. The menu's items belong to the
+// surface — the Library's tidy the entry, Discovery's shape the feed — so the
+// tile supplies only the trigger and the slot (`TileMenu`).
+//
 // The band is where the types differ, deliberately: an entry with artwork
 // (a Work's thumbnail, or a physical Work's store mockup) shows it; a text
 // post renders its content's opening in the slot; a Work with no thumbnail
@@ -13,6 +19,12 @@
 // foot drawn for the medium), so the band never reads as a missing picture.
 // The body carries the title for every entry, because the band is the poster
 // and the title is what the card is.
+//
+// A locked Work reads as washed as well as blurred: the cover's picture keeps
+// its blur and loses half its color, and the card's own background behind the
+// body is desaturated with it, so the tile settles back beside its unlocked
+// neighbors at a glance. The text and chips keep their color — the card is
+// quieter, never unreadable.
 //
 // A goods Work (physical) is never locked presentation while buyable — the
 // purchase gates receiving it, never seeing it — so its tile shows the art
@@ -46,6 +58,7 @@ import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { creatorProjectUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import {
+	type AccessResult,
 	isAccessResult,
 	type PostListItem,
 	type Project,
@@ -109,16 +122,16 @@ type FeedPost = PostListItem & { excerpt?: string | null };
 
 /**
  * What a surface adds to a shared tile without changing what the tile is — the Library's
- * purchased and hidden chips, its withdrawn and back-in-drafts notices, and the
- * Hide/Remove controls that belong to the Library rather than to the thing in it.
+ * purchased and hidden chips, its withdrawn and back-in-drafts notices, and the three-dot
+ * menu each surface fills with its own items.
  */
 export interface FeedTileExtras {
-	/** Extra chips for the badge row, after the tile's own. */
+	/** Extra chips under the meta row — the Library's own facts about the entry. */
 	badges?: ReactNode;
-	/** A line under the badge row — a state the surface states in words rather than a chip. */
+	/** A line under the meta row — a state the surface states in words rather than a chip. */
 	note?: ReactNode;
-	/** Surface controls, rendered in a raised row under the body, above the tile's overlay. */
-	actions?: ReactNode;
+	/** The surface's three-dot menu (`TileMenu`), in the title row's right corner. */
+	menu?: ReactNode;
 	/** Extra classes on the tile root — the Library dims a hidden entry with `opacity-60`. */
 	className?: string;
 }
@@ -232,12 +245,37 @@ function ContentBand({ text }: { text: string }) {
 	);
 }
 
+/**
+ * What a locked Work asks for, carried on its cover under the lock badge: the
+ * price a purchase needs, or the word for a gate with no price. It belongs to
+ * the cover rather than the card body because it describes the lock — a body
+ * that repeated the same ask read as a second gate.
+ *
+ * A takedown or a quarantine is locked to the reader too, but it asks nothing,
+ * so it gets no chip: naming a price there would offer what cannot be bought.
+ */
+function LockAskChip({ access }: { access: AccessResult | null }) {
+	if (!access || access.canAccess) return null;
+	if (access.requiresPurchase && access.price) {
+		return <span className="badge badge-sm badge-secondary">${access.price}</span>;
+	}
+	if (access.reason === "gated") {
+		return <span className="badge badge-sm badge-neutral">Members</span>;
+	}
+	return null;
+}
+
 function ReleaseBand({
 	work,
+	access,
+	locked,
 	previewing = false,
 	onDone,
 }: {
 	work: FeedWork;
+	access: AccessResult | null;
+	/** The Work presents as gated to this reader — the tile computes it once. */
+	locked: boolean;
 	/** The tile's hover preview is playing — the band hosts the in-place player. */
 	previewing?: boolean;
 	/** The preview's finished-for-good callback, passed only where the band is actually visible. */
@@ -248,17 +286,7 @@ function ReleaseBand({
 	// signed-out visitor rule (`presentsAsLocked`) and the
 	// two-treatments-never-stack rule — a locked cover is already blurred, so a
 	// veiled Work reaches here only when not locked.
-	//
-	// 🚨 The goods exception is the rule the resolver's goods branch states
-	// (`services/access.ts`, Parker 2026-10-09): a physical Work is never *locked
-	// presentation* while it is simply buyable — the purchase gates RECEIVING the
-	// shirt, never SEEING it, so the lock chip never stands in for a store. Only a
-	// still-standing gate presents as locked (which `presentsAsLocked` already
-	// answers everywhere but `payment_required`), exactly like a digital Work's.
-	const access = isAccessResult(work.access) ? work.access : null;
-	const isGoods = work.type === "physical";
 	const artwork = work.thumbnail;
-	const locked = presentsAsLocked(access) && !(isGoods && access?.reason === "payment_required");
 
 	if (locked) {
 		return (
@@ -266,7 +294,9 @@ function ReleaseBand({
 				thumbnail={artwork}
 				className="aspect-video"
 				lockedBy={access ? lockedByBadge(access, creatorName(work)) : null}
-			/>
+			>
+				<LockAskChip access={access} />
+			</LockedCover>
 		);
 	}
 	const veil = coverFor(prefs, work);
@@ -359,22 +389,53 @@ function ProjectBand({ project }: { project: FeedProject }) {
 	);
 }
 
+/**
+ * The first body row: the title, and the surface's menu in the right corner.
+ *
+ * A post whose band is its title has no `h3` of its own — the band already says
+ * it — so the row renders as the menu alone when a surface supplied one.
+ */
+function TitleRow({ title, menu }: { title?: string | null; menu?: ReactNode }) {
+	if (!title && !menu) return null;
+	return (
+		<div className="flex items-start gap-2">
+			{title ? (
+				<h3 className="min-w-0 flex-1 font-semibold text-sm leading-snug line-clamp-2">{title}</h3>
+			) : (
+				<span className="flex-1" />
+			)}
+			{menu && <div className="-mt-0.5 -mr-1 shrink-0">{menu}</div>}
+		</div>
+	);
+}
+
+/**
+ * The second body row, in the order the design settled on (Parker, 2026-11-06):
+ * who made it, what it is, when it came out — then anything the kind owes the
+ * reader, which trails the date rather than competing with the three.
+ */
 function MetaRow({
 	avatar,
 	handle,
 	name,
-	date,
 	own,
+	badge,
+	date,
+	trailing,
 }: {
 	avatar: string | null | undefined;
 	handle: string | null | undefined;
 	name: string;
 	date: string;
+	/** The kind's own chip — a Work's type, "Post", "Project". */
+	badge: ReactNode;
+	/** A muted fact after the date — a text Work's read time, or a good's price. */
+	trailing?: ReactNode;
 	/** The viewer made this tile's entry — the feed's own-content source. */
 	own?: boolean;
 }) {
 	return (
-		<div className="flex items-center gap-2 min-w-0">
+		<div className="flex items-center gap-1.5 min-w-0">
 			{avatar ? (
 				<img src={avatar} alt={name} className="w-6 h-6 rounded-full object-cover shrink-0" />
 			) : handle ? (
@@ -390,22 +451,26 @@ function MetaRow({
 				</div>
 			)}
 			{/* The name is the creator's way out of the tile: it rises past the tile's
-			    stretched overlay (CreatorLink), so the date stays the tile's. An own
-			    entry reads "You": the tile says why it is there (the viewer made it)
-			    while the link still leads to the viewer's own page. */}
+			    stretched overlay (CreatorLink), so the menu and the chips stay the tile's.
+			    An own entry reads "You": the tile says why it is there (the viewer made it)
+			    while the link still leads to the viewer's own page. A long name truncates
+			    rather than pushing the kind chip off the row. */}
 			<CreatorLink
 				handle={handle}
 				name={own ? "You" : name}
-				className="text-xs text-base-content/70 truncate hover:underline"
+				className="min-w-0 truncate text-xs text-base-content/70 hover:underline"
 			/>
-			{date && <span className="text-[11px] text-base-content/40 ml-auto shrink-0">{date}</span>}
+			<span className="shrink-0">{badge}</span>
+			{date && <span className="shrink-0 text-[11px] text-base-content/40">{date}</span>}
+			{trailing}
 		</div>
 	);
 }
 
 function TileBody({ children }: { children: ReactNode }) {
-	// The body's grid row stretches to the row's height, and the badge row
-	// pins to its bottom: bodies of different line counts still read as even.
+	// The body's grid row stretches to the row's height, and the tile pins its
+	// meta block to the bottom: a body of two title lines and one of a single
+	// line still put the creator and chips in the same place across the grid.
 	// The tile's own padding frames the body, so this is the card area's spacing.
 	return <div className="p-2.5 gap-1.5 flex-1 flex flex-col">{children}</div>;
 }
@@ -460,6 +525,16 @@ function ReleaseTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtr
 	const reason = isDiscoveryReason(entry.reason) ? entry.reason.label : null;
 	const { Icon, label } = contentTypeMeta(work.type);
 
+	// 🚨 The goods exception is the rule the resolver's goods branch states
+	// (`services/access.ts`, Parker 2026-10-09): a physical Work is never *locked
+	// presentation* while it is simply buyable — the purchase gates RECEIVING the
+	// shirt, never SEEING it, so the lock chip never stands in for a store. Only a
+	// still-standing gate presents as locked (which `presentsAsLocked` already
+	// answers everywhere but `payment_required`), exactly like a digital Work's.
+	const access = isAccessResult(work.access) ? work.access : null;
+	const isGoods = work.type === "physical";
+	const locked = presentsAsLocked(access) && !(isGoods && access?.reason === "payment_required");
+
 	// ── The hover preview's state ───────────────────────────────────────────────
 	//
 	// The gate reads this render's access verdict and the meter store; the store
@@ -473,10 +548,10 @@ function ReleaseTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtr
 			tilePreviewPlayable({
 				previewsEnabled,
 				type: work.type,
-				access: isAccessResult(work.access) ? work.access : null,
+				access,
 				budget,
 			}),
-		[previewsEnabled, work.type, work.access, budget],
+		[previewsEnabled, work.type, access, budget],
 	);
 	// Hover preview is a cursor affordance: a deliberate pointer hover, which
 	// touch never produces (a tap enters and immediately navigates anyway).
@@ -521,7 +596,10 @@ function ReleaseTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtr
 		endPreview();
 	};
 
-	const tileClass = `group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden${extras.className ? ` ${extras.className}` : ""}`;
+	// No `overflow-hidden` on the root: the three-dot menu's panel has to escape the
+	// card, and the cover wrapper already clips its own rounded corners. `isolate`
+	// keeps a locked tile's wash behind its own content rather than the page's.
+	const tileClass = `group relative isolate flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150${extras.className ? ` ${extras.className}` : ""}`;
 	return (
 		<div
 			className={tileClass}
@@ -529,44 +607,64 @@ function ReleaseTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtr
 			onPointerEnter={onPointerEnter}
 			onPointerLeave={onPointerLeave}
 		>
+			{locked && (
+				// A locked card's ground settles back with its picture: the wash sits
+				// behind the content (-z-10, inside the root's stacking context), so the
+				// title, chips and menu keep full color while the card behind them loses
+				// half its saturation.
+				<span
+					aria-hidden
+					className="pointer-events-none absolute inset-0 -z-10 rounded-2xl bg-base-200 saturate-50"
+				/>
+			)}
 			<div className="rounded-lg overflow-hidden">
-				<ReleaseBand work={work} previewing={previewing} onDone={endPreview} />
+				<ReleaseBand
+					work={work}
+					access={access}
+					locked={locked}
+					previewing={previewing}
+					onDone={endPreview}
+				/>
 			</div>
 			<TileBody>
-				<MetaRow
-					avatar={work.creator?.avatar}
-					handle={work.creator?.handle}
-					name={creatorLabel(work.creator ?? {})}
-					own={entryIsOwn(entry)}
-					date={compactDate(work.originallyReleased ?? work.releasedAt)}
-				/>
-				{work.title && (
-					<h3 className="font-semibold text-sm leading-snug line-clamp-2">{work.title}</h3>
-				)}
-				<div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
-					<span className="badge badge-sm gap-1">
-						<Icon className="w-3 h-3" />
-						{label}
-					</span>
-					<PricingBadge access={isAccessResult(work.access) ? work.access : null} />
-					{/* The goods store's own ask, standing where a digital Work's price badge
-					    stands: the purchase gates receiving the thing, not seeing it, so the
-					    badge says buy rather than lock. The store's list prices are the source;
-					    the tile shows only the cheapest, since no color is picked here. */}
-					{work.type === "text" && work.estimatedReadMinutes ? (
-						<span className="text-xs text-base-content/40">
-							{work.estimatedReadMinutes} min read
-						</span>
-					) : null}
-					{extras.badges}
+				<TitleRow title={work.title} menu={extras.menu} />
+				<div className="mt-auto flex flex-col gap-1.5 pt-1">
+					<MetaRow
+						avatar={work.creator?.avatar}
+						handle={work.creator?.handle}
+						name={creatorLabel(work.creator ?? {})}
+						own={entryIsOwn(entry)}
+						badge={
+							<span className="badge badge-sm gap-1">
+								<Icon className="w-3 h-3" />
+								{label}
+							</span>
+						}
+						date={compactDate(work.originallyReleased ?? work.releasedAt)}
+						trailing={
+							<>
+								{/* The goods store's own ask, standing where a digital Work's price
+								    badge stands: the purchase gates receiving the thing, not seeing
+								    it, so the badge says buy rather than lock. A locked Work's ask
+								    rides its cover instead. The store's list prices are the source;
+								    the tile shows only the cheapest, since no color is picked here. */}
+								{isGoods && !locked && (
+									<span className="shrink-0">
+										<PricingBadge access={access} />
+									</span>
+								)}
+								{work.type === "text" && work.estimatedReadMinutes ? (
+									<span className="shrink-0 text-xs text-base-content/40">
+										{work.estimatedReadMinutes} min read
+									</span>
+								) : null}
+							</>
+						}
+					/>
+					<div className="flex flex-wrap items-center gap-1.5 empty:hidden">{extras.badges}</div>
+					{extras.note}
 				</div>
-				{extras.note}
 			</TileBody>
-			{extras.actions && (
-				<div className="relative z-10 flex items-center justify-end gap-1 px-1.5 pb-1">
-					{extras.actions}
-				</div>
-			)}
 			{/* The tile's own target, stretched over it: painted last (an absolute layer
 			    above every z-auto sibling), it takes a click anywhere on the tile, while
 			    the parts that are links or controls of their own — CreatorLink, an
@@ -600,54 +698,54 @@ function PostTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtras 
 	// overlay that its content cannot answer. The band sits inset from the tile's
 	// rounded edge by the tile's own padding, so the tint reads AROUND the preview
 	// the way YouTube's tinted frame reads around a thumbnail.
-	const tileClass = `group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden${extras.className ? ` ${extras.className}` : ""}`;
+	const tileClass = `group relative isolate flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150${extras.className ? ` ${extras.className}` : ""}`;
 	return (
 		<div className={tileClass} data-testid="feed-tile">
 			<div className="rounded-lg overflow-hidden">
 				<PostBand post={post} />
 			</div>
 			<TileBody>
-				<MetaRow
-					avatar={post.creator?.avatar}
-					handle={post.creator?.handle}
-					name={creatorLabel(post.creator ?? {})}
-					own={entryIsOwn(entry)}
-					date={compactDate(post.publishedAt ?? post.createdAt)}
+				<TitleRow
+					title={!bandIsTitle ? (post.displayTitle ?? post.title) : null}
+					menu={extras.menu}
 				/>
-				{!bandIsTitle && post.title && (
-					<h3 className="font-semibold text-sm leading-snug line-clamp-2">
-						{post.displayTitle ?? post.title}
-					</h3>
-				)}
 				{!bandCarriesContent && post.excerpt && (
 					<p className="text-xs leading-relaxed text-base-content/60 line-clamp-2">
 						{post.excerpt}
 					</p>
 				)}
-				<div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
-					{/* The kind chip every other tile carries. A post's band is its words or
-					    its linked Work's art, so without this a post reads as a Work with an
-					    odd thumbnail — on the feed where it sits beside releases and in the
-					    Library where it sits beside everything kept. */}
-					<span className="badge badge-sm gap-1">
-						<DocumentTextIcon className="w-3 h-3" />
-						Post
-					</span>
-					{post.linkedWorkCount > 0 && (
-						<span className="badge badge-sm badge-ghost gap-1">
-							<LinkIcon className="w-3 h-3" />
-							{post.linkedWorkCount} {post.linkedWorkCount === 1 ? "work" : "works"}
-						</span>
-					)}
-					{extras.badges}
+				<div className="mt-auto flex flex-col gap-1.5 pt-1">
+					<MetaRow
+						avatar={post.creator?.avatar}
+						handle={post.creator?.handle}
+						name={creatorLabel(post.creator ?? {})}
+						own={entryIsOwn(entry)}
+						badge={
+							/* The kind chip every other tile carries. A post's band is its words or
+							   its linked Work's art, so without this a post reads as a Work with an
+							   odd thumbnail — on the feed where it sits beside releases and in the
+							   Library where it sits beside everything kept. */
+							<span className="badge badge-sm gap-1">
+								<DocumentTextIcon className="w-3 h-3" />
+								Post
+							</span>
+						}
+						date={compactDate(post.publishedAt ?? post.createdAt)}
+						trailing={
+							<>
+								{post.linkedWorkCount > 0 && (
+									<span className="badge badge-sm badge-ghost gap-1 shrink-0">
+										<LinkIcon className="w-3 h-3" />
+										{post.linkedWorkCount} {post.linkedWorkCount === 1 ? "work" : "works"}
+									</span>
+								)}
+							</>
+						}
+					/>
+					<div className="flex flex-wrap items-center gap-1.5 empty:hidden">{extras.badges}</div>
+					{extras.note}
 				</div>
-				{extras.note}
 			</TileBody>
-			{extras.actions && (
-				<div className="relative z-10 flex items-center justify-end gap-1 px-1.5 pb-1">
-					{extras.actions}
-				</div>
-			)}
 			{/* The tile's own target, stretched over it — see the release tile's overlay. */}
 			<Link
 				to={postUrl(post)}
@@ -667,39 +765,40 @@ function ProjectTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtr
 	const project = entry as unknown as FeedProject;
 	const creator = projectCreator(project);
 	const trackCount = project.trackCount ?? 0;
-	const tileClass = `group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden${extras.className ? ` ${extras.className}` : ""}`;
+	const tileClass = `group relative isolate flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150${extras.className ? ` ${extras.className}` : ""}`;
 	return (
 		<div className={tileClass} data-testid="feed-tile">
 			<div className="rounded-lg overflow-hidden">
 				<ProjectBand project={project} />
 			</div>
 			<TileBody>
-				<MetaRow
-					avatar={project.creator?.avatar}
-					handle={creator?.handle}
-					name={creatorLabel(creator ?? {})}
-					date={compactDate(project.createdAt)}
-				/>
-				<h3 className="font-semibold text-sm leading-snug line-clamp-2">{project.title}</h3>
-				<div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
-					<span className="badge badge-sm gap-1">
-						<RectangleStackIcon className="w-3 h-3" />
-						Project
-					</span>
-					{trackCount > 0 && (
-						<span className="text-xs text-base-content/40">
-							{trackCount} {trackCount === 1 ? "track" : "tracks"}
-						</span>
-					)}
-					{extras.badges}
+				<TitleRow title={project.title} menu={extras.menu} />
+				<div className="mt-auto flex flex-col gap-1.5 pt-1">
+					<MetaRow
+						avatar={project.creator?.avatar}
+						handle={creator?.handle}
+						name={creatorLabel(creator ?? {})}
+						badge={
+							<span className="badge badge-sm gap-1">
+								<RectangleStackIcon className="w-3 h-3" />
+								Project
+							</span>
+						}
+						date={compactDate(project.createdAt)}
+						trailing={
+							<>
+								{trackCount > 0 && (
+									<span className="shrink-0 text-xs text-base-content/40">
+										{trackCount} {trackCount === 1 ? "track" : "tracks"}
+									</span>
+								)}
+							</>
+						}
+					/>
+					<div className="flex flex-wrap items-center gap-1.5 empty:hidden">{extras.badges}</div>
+					{extras.note}
 				</div>
-				{extras.note}
 			</TileBody>
-			{extras.actions && (
-				<div className="relative z-10 flex items-center justify-end gap-1 px-1.5 pb-1">
-					{extras.actions}
-				</div>
-			)}
 			{/* The tile's own target, stretched over it — see the release tile's overlay.
 			    A Project whose creator row is gone keeps the link shape the profile page
 			    has always used; the server resolves the slug. */}

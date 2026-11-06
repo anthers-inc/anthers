@@ -25,6 +25,7 @@ const library = read("LibraryPage.tsx");
 const creator = read("CreatorProfilePage.tsx");
 const contentMonths = read("../components/creator/ContentMonths.tsx");
 const tile = read("../components/cards/FeedTile.tsx");
+const unlock = read("../../../../packages/web-shared/src/components/post/unlock.tsx");
 
 /** The auto-fill grid every listing surface shares. */
 const SHARED_GRID = "grid-cols-[repeat(auto-fill,minmax(280px,1fr))]";
@@ -64,7 +65,7 @@ describe("every listing surface renders the shared tile", () => {
 		// The Library's own facts ride the tile's slots rather than a second widget.
 		expect(library).toContain("<LibraryTile");
 		expect(library).toContain("badges={");
-		expect(library).toContain("actions={");
+		expect(library).toContain("menu={");
 	});
 
 	it("gives the creator page's Projects the tile instead of a second card", () => {
@@ -89,5 +90,35 @@ describe("the shared tile carries all three kinds", () => {
 		// words rather than the "?" the old card family rendered wherever a join was absent.
 		expect(tile).toContain("Unknown creator");
 		expect(tile).not.toContain('{ handle: "?" }');
+	});
+});
+
+describe("the three-dot menu belongs to the surface", () => {
+	it("gives the Library its tidy controls inside the menu", () => {
+		expect(library, "the Library lost its tile menu").toContain("<TileMenu");
+		expect(library).toContain('"Show" : "Hide"');
+		expect(library).toContain("removeItem(item.id)");
+	});
+
+	it("offers Discovery's two feed controls, waiting on the lists that store them", () => {
+		expect(discovery).toContain("<DiscoveryMenu");
+		expect(discovery).toContain("Don't Show this Work");
+		expect(discovery).toContain("Don't Show this Creator");
+		// A wiring point, not a claim: each row stays disabled until the lists task
+		// gives it somewhere to write.
+		expect(discovery).toMatch(/disabled[\s\S]{0,160}Don't Show this Work/);
+	});
+});
+
+describe("a locked tile reads as washed, and asks on its cover", () => {
+	it("carries the price or Badge chip under the lock chip", () => {
+		expect(tile).toContain("<LockAskChip access={access} />");
+		// The body's price chip survives only for goods, which are never locked presentation.
+		expect(tile).toContain("isGoods && !locked");
+	});
+
+	it("desaturates the cover and the card ground", () => {
+		expect(tile, "the locked card's ground lost its wash").toContain("saturate-50");
+		expect(unlock, "the locked cover's picture lost its wash").toContain("saturate-50");
 	});
 });
