@@ -6,6 +6,10 @@
    @import-position rule). The consumer-only wiki `.prose` styling below stays here —
    the Studio has no wiki. */
 @import "../../../../packages/web-shared/src/styles/theme.css";
+/* Candidate palettes for the theme study at /themes. They are scoped by `data-theme`
+   onto the study's preview surfaces and are not part of the real catalog yet — see the
+   file's header. Imported here because the app has one global stylesheet. */
+@import "../../../../packages/web-shared/src/styles/theme-candidates.css";
 @plugin "@tailwindcss/typography";
 @plugin "daisyui" {
 	themes:
