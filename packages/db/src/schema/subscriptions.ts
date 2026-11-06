@@ -178,8 +178,9 @@ export const userPreferences = pgTable("user_preferences", {
 	noteDisplay: jsonb("note_display").$type<Record<string, string>>(),
 
 	/**
-	 * UI light/dark preference ("light" | "dark"); null = no account-level choice, so
-	 * the client falls back to the device (localStorage) setting / default.
+	 * Theme preference, one of `THEME_VALUES` from `@anthers/shared/theme` — a palette
+	 * family and a variant in one string; null = no account-level choice, so the client
+	 * falls back to the device (localStorage) setting / default.
 	 *
 	 * Moved here from `users` (2026-10-03) — the Studio Dashboard layout set the precedent:
 	 * which way the org's own UI paints is not part of a person's portable identity, it

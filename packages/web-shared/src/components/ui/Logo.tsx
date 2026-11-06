@@ -5,7 +5,7 @@ import stackedDark from "@anthers/brand/logo/web/lockup-stacked-dark.png";
 import stackedLight from "@anthers/brand/logo/web/lockup-stacked-light.png";
 import taglineDark from "@anthers/brand/logo/web/lockup-tagline-dark.png";
 import taglineLight from "@anthers/brand/logo/web/lockup-tagline-light.png";
-import { useTheme } from "../../lib/theme";
+import { isDarkTheme, useTheme } from "../../lib/theme";
 
 type Variant = "full" | "oneline" | "stacked";
 
@@ -24,8 +24,9 @@ const SOURCES: Record<Variant, Record<"light" | "dark", string>> = {
  *   • "stacked" — the orchids arched over the wordmark and tagline; the footer, and roomy
  *                 single-purpose surfaces such as a sign-in or onboarding page.
  *
- * useTheme() tracks the live `data-theme` on <html>, so flipping the topbar toggle swaps
- * the light/dark artwork instantly (no reload, no flash).
+ * useTheme() tracks the live `data-theme` on <html>, so flipping the theme swaps
+ * the light/dark artwork instantly (no reload, no flash). The artwork follows the
+ * variant only: a family's palette does not recolor the brand mark.
  *
  * The files are `packages/brand/logo/web/`, made from the logo's own exports by
  * `bun run brand:logo` and trimmed to the artwork, so a height utility sizes the logo
@@ -42,7 +43,7 @@ export default function Logo({
 	const theme = useTheme();
 	return (
 		<img
-			src={SOURCES[variant][theme]}
+			src={SOURCES[variant][isDarkTheme(theme) ? "dark" : "light"]}
 			alt="Anthers"
 			className={`w-auto object-contain ${className}`}
 		/>

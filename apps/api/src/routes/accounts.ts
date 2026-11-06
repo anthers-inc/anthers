@@ -86,6 +86,7 @@ import {
 } from "@anthers/shared/rights";
 import { searchTerms } from "@anthers/shared/search";
 import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
+import { THEME_VALUES } from "@anthers/shared/theme";
 import { isUsState } from "@anthers/shared/us-states";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
@@ -519,7 +520,7 @@ const updateProfileSchema = z.object({
 	bannerImageCrop: imageCropSchema.nullable().optional(),
 	websiteUrl: z.string().max(500).optional(),
 	location: z.string().max(100).optional(),
-	themePreference: z.enum(["light", "dark"]).optional(),
+	themePreference: z.enum(THEME_VALUES).optional(),
 	/**
 	 * The tab a signed-in session opens on, one of the nav's ids. Null (never answered)
 	 * reads as Discovery on the client, so the default lives there rather than in a

@@ -9,6 +9,7 @@
 		"./fees": "./src/fees.ts",
 		"./scenarios": "./src/scenarios.ts",
 		"./constants": "./src/constants.ts",
+		"./theme": "./src/theme.ts",
 		"./attention": "./src/attention.ts",
 		"./traffic": "./src/traffic.ts",
 		"./billing-cycle": "./src/billing-cycle.ts",

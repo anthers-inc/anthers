@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// <MeadowBackdrop> — the signed-in site's Meadow layer: the pollen-textured base
+// <MeadowBackdrop> — the signed-in site's botanical layer: the pollen-textured base
 // surface, the woven climbing side vines with their bees, and the grassy floor at
-// the bottom of the viewport, in ONE absolutely-positioned element. It is the app
+// the bottom of the viewport, in ONE absolutely-positioned element. The baked colors
+// follow the live family and variant, so the layer recolors with the rest of the UI. It is the app
 // shell's counterpart to the logged-out composition in LoggedOutLayout, with the
 // z-order inverted for the different surface: signed-in pages are a working app
 // whose content is dense and often only marginally offset, so **the decor always
@@ -21,20 +22,19 @@
 import { pollenDataUri } from "@anthers/brand";
 import { MeadowFloor } from "./MeadowFloor";
 import { MeadowVines } from "./MeadowVines";
-import { decorColors } from "./meadowColors";
+import { decorColors, decorVariant } from "./meadowColors";
 import { useDecorMode } from "./useDecorMode";
 
 export function MeadowBackdrop({
 	mode,
 	className = "",
 }: {
-	/** force a mode; omit to track the live `data-theme` (light/dark toggle) */
+	/** force a variant (the family still follows the live theme); omit to track both */
 	mode?: "light" | "dark";
 	className?: string;
 }) {
 	const observed = useDecorMode();
-	const resolvedMode = mode ?? observed;
-	const c = decorColors(resolvedMode);
+	const c = decorColors(observed, decorVariant(mode));
 
 	// "Pollen in the air" over the base surface, exactly as <MeadowDecor> paints it.
 	const pollen = `url("${pollenDataUri(c.pollen, c.pollenScale)}") repeat, var(--color-base-100)`;
@@ -63,9 +63,9 @@ export function MeadowBackdrop({
 				filter: `blur(${QUIET_BLUR_PX}px)`,
 			}}
 		>
-			<MeadowVines mode={resolvedMode} />
+			<MeadowVines mode={mode} />
 			<div className="absolute inset-x-0 bottom-0">
-				<MeadowFloor mode={resolvedMode} />
+				<MeadowFloor mode={mode} />
 			</div>
 		</div>
 	);
