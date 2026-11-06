@@ -78,13 +78,16 @@ import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	ArrowPathIcon,
 	CheckIcon,
+	EyeSlashIcon,
 	MagnifyingGlassIcon,
 	PencilSquareIcon,
 	PlusIcon,
+	UserMinusIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import FeedTile from "../components/cards/FeedTile";
+import TileMenu from "../components/cards/TileMenu";
 import SharedFilterSections, {
 	SHARED_FILTER_TYPES,
 } from "../components/layout/SharedFilterSections";
@@ -354,6 +357,36 @@ function RecipeBar({
 				</div>
 			</div>
 		</div>
+	);
+}
+
+/**
+ * Discovery's three-dot menu on a released Work.
+ *
+ * ⭐ **Both rows wait on the lists that store them** (Parker, 2026-11-06): *Don't
+ * Show this Work* and *Don't Show this Creator* become real once the task *Let
+ * readers hide a Work or a Creator from Discovery, with both lists in Content and
+ * Safety settings* lands, and that task wires its actions here rather than
+ * inventing a second menu. Until then the rows are present and disabled — this is
+ * the slot the wiring goes in, and a disabled row is the honest state of a control
+ * whose list does not exist yet.
+ */
+function DiscoveryMenu({ title }: { title: string }) {
+	return (
+		<TileMenu label={`More options for ${title || "this work"}`}>
+			<li>
+				<button type="button" disabled>
+					<EyeSlashIcon className="size-4" />
+					Don't Show this Work
+				</button>
+			</li>
+			<li>
+				<button type="button" disabled>
+					<UserMinusIcon className="size-4" />
+					Don't Show this Creator
+				</button>
+			</li>
+		</TileMenu>
 	);
 }
 
@@ -871,7 +904,15 @@ export default function DiscoverPage() {
 					// shared size rather than a narrower one.
 					<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 						{visibleEntries.map((entry) => (
-							<FeedTile key={`${entry.kind}-${entry.id}`} entry={entry} />
+							<FeedTile
+								key={`${entry.kind}-${entry.id}`}
+								entry={entry}
+								menu={
+									entry.kind === "release" ? (
+										<DiscoveryMenu title={entry.title ?? "this work"} />
+									) : undefined
+								}
+							/>
 						))}
 					</div>
 				)}

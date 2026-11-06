@@ -37,7 +37,8 @@
  * Every entry renders `FeedTile`, the widget Network, Discovery and a creator's page
  * already share (2026-10-24). What the Library contributes to a tile is only what the Library
  * means — the Purchased and Hidden chips, a withdrawn or re-drafted notice, and its Hide
- * and Remove controls — so the same Work reads the same way on every surface that lists it.
+ * and Remove controls in the tile's three-dot menu (2026-11-06) — so the same Work reads
+ * the same way on every surface that lists it.
  */
 
 import { BOOKSHELF_WORK_TYPES } from "@anthers/shared/content";
@@ -47,9 +48,10 @@ import { useSidebar } from "@anthers/web-shared/sidebar";
 import { isAccessResult, type Work } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { EyeIcon, EyeSlashIcon, RectangleStackIcon } from "@heroicons/react/24/outline";
+import { EyeIcon, EyeSlashIcon, RectangleStackIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import FeedTile, { type FeedEntry } from "../components/cards/FeedTile";
+import TileMenu from "../components/cards/TileMenu";
 import SharedFilterSections, {
 	SHARED_FILTER_TYPES,
 } from "../components/layout/SharedFilterSections";
@@ -150,15 +152,18 @@ function libraryEntry(item: LibraryItem): FeedEntry | null {
  *
  * The tile is the shared widget Network, Discovery and a creator's page render; what the
  * Library adds is only what the Library means — the Purchased and Hidden chips, the sentence
- * a withdrawn Work or a re-drafted post needs, and the Hide/Remove controls. Those ride
- * the tile's slots rather than a second card family, because a tile that drew a
- * different card for the same Work made the Library look like a different product.
+ * a withdrawn Work or a re-drafted post needs, and the Hide/Remove controls inside the tile's
+ * three-dot menu. Those ride the tile's slots rather than a second card family, because a
+ * tile that drew a different card for the same Work made the Library look like a different
+ * product.
  */
 function LibraryTile({ item, onChanged }: { item: LibraryItem; onChanged: () => void }) {
 	const [busy, setBusy] = useState(false);
 	const entry = libraryEntry(item);
 	const work = item.work;
 	const post = item.post;
+	const title =
+		work?.title ?? post?.displayTitle ?? post?.title ?? item.project?.title ?? "this entry";
 
 	const act = async (fn: () => Promise<unknown>) => {
 		setBusy(true);
@@ -196,31 +201,30 @@ function LibraryTile({ item, onChanged }: { item: LibraryItem; onChanged: () => 
 					</p>
 				) : null
 			}
-			actions={
-				<>
-					<button
-						type="button"
-						className="btn btn-ghost btn-xs gap-1"
-						disabled={busy}
-						onClick={() => act(() => setHidden(item.id, !item.hidden))}
-					>
-						{item.hidden ? <EyeIcon className="size-3.5" /> : <EyeSlashIcon className="size-3.5" />}
-						{item.hidden ? "Show" : "Hide"}
-					</button>
+			menu={
+				<TileMenu label={`More options for ${title}`}>
+					<li>
+						<button
+							type="button"
+							disabled={busy}
+							onClick={() => act(() => setHidden(item.id, !item.hidden))}
+						>
+							{item.hidden ? <EyeIcon className="size-4" /> : <EyeSlashIcon className="size-4" />}
+							{item.hidden ? "Show" : "Hide"}
+						</button>
+					</li>
 					{/* Absent entirely on a purchase, rather than present-and-refusing. A control
 					    that exists to say no is worse than one that was never offered — and the
 					    server refuses regardless, so this is presentation, not enforcement. */}
 					{!item.purchased && (
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs"
-							disabled={busy}
-							onClick={() => act(() => removeItem(item.id))}
-						>
-							Remove
-						</button>
+						<li>
+							<button type="button" disabled={busy} onClick={() => act(() => removeItem(item.id))}>
+								<TrashIcon className="size-4" />
+								Remove
+							</button>
+						</li>
 					)}
-				</>
+				</TileMenu>
 			}
 		/>
 	);
