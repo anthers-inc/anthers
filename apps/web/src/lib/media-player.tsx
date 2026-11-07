@@ -269,9 +269,9 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 		}
 
 		/*
-		 * An HLS source — today, a video listened to as a podcast — needs hls.js where a
-		 * plain endpoint does not. Lazy-imported so the bar's base bundle stays unchanged
-		 * for music, which only ever carries the progressive URL. The instance's lifecycle
+		 * An HLS source — an adaptive stream rather than a progressive endpoint — needs
+		 * hls.js where a plain endpoint does not. Lazy-imported so the bar's base bundle
+		 * stays unchanged for music, which only ever carries the progressive URL. The instance's lifecycle
 		 * is this effect's: created on a manifest src, destroyed on a change away or on
 		 * unmount below. Mirrors the pattern in VideoPlayer.tsx, including the 402
 		 * backstop — the element itself cannot report the status that emptied allowance.

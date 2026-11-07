@@ -5,13 +5,11 @@
  * Publish-early (2026-10-18) made the ORDER load-bearing, not just the membership: the
  * rungs encode smallest-first and the release gate opens at the first one, so an
  * ascending slip here is a creator publishing on the hour-long rung again. The master's
- * lines are pinned because its progressive rewrites are how the tree plays early — the
- * audio group must name a rendition that exists, and nothing else on the row guarantees
- * that.
+ * lines are pinned because its progressive rewrites are how the tree plays early.
  *
- * The shared pass's command is pinned here too: it is the shape that makes two rungs and
- * the rendition cost one decode instead of three, and the smallest rung's absence from it
- * is what keeps the first rung publishing early.
+ * The shared pass's command is pinned here too: it is the shape that makes two rungs cost
+ * one decode instead of two, and the smallest rung's absence from it is what keeps the
+ * first rung publishing early.
  */
 import { afterAll, describe, expect, it } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
@@ -65,7 +63,7 @@ describe("the rungs' rate control", () => {
 	});
 
 	it("carries the same rate control into the shared pass", () => {
-		const outputs = sharedPassOutputs(planLadderFor(1080, 1920).slice(1), "/out", true);
+		const outputs = sharedPassOutputs(planLadderFor(1080, 1920).slice(1), "/out");
 		expect(outputs.join(" ")).toContain(`-crf ${LADDER_CRF}`);
 		expect(outputs.join(" ")).not.toContain("-b:v");
 		// Each tall rung names its own ceiling, so a 1080p branch is not bounded at 720p's.
@@ -130,33 +128,25 @@ describe("sharedPassOutputs", () => {
 	const tall = planLadderFor(1080, 1920).slice(1);
 
 	it("scales every tall rung from one decode, in one filtergraph", () => {
-		const outputs = sharedPassOutputs(tall, "/out", true);
+		const outputs = sharedPassOutputs(tall, "/out");
 		expect(outputs[0]).toBe("-filter_complex");
 		expect(outputs[1]).toBe(
-			"[0:v]split=2[vsrc0][vsrc1];[vsrc0]scale=-2:720[v0];[vsrc1]scale=-2:1080[v1];[0:a]asplit=3[a0][a1][a2]",
+			"[0:v]split=2[vsrc0][vsrc1];[vsrc0]scale=-2:720[v0];[vsrc1]scale=-2:1080[v1]",
 		);
 		// The split has as many branches as rungs, in the order the ladder planned them.
 		expect(outputs[1]).not.toContain("480");
 	});
 
-	it("gives each rung its own muxer and the rendition its own playlist", () => {
-		const outputs = sharedPassOutputs(tall, "/out", true);
+	it("gives each rung its own muxer, and nothing else", () => {
+		const outputs = sharedPassOutputs(tall, "/out");
 		for (const name of ["720p", "1080p"]) {
 			expect(outputs).toContain(join("/out", `${name}.m3u8`));
 			expect(outputs).toContain(join("/out", `${name}_%03d.ts`));
 		}
-		// The audio-only rendition rides the same pass, so its decode is the shared one.
-		expect(outputs).toContain(join("/out", "audio.m3u8"));
-		expect(outputs).toContain(join("/out", "audio-%03d.ts"));
-		expect(outputs.join(" ")).toContain("-hls_playlist_type vod");
-	});
-
-	it("drops the audio branches and the rendition for a silent source", () => {
-		const outputs = sharedPassOutputs(tall, "/out", false);
-		const filter = outputs[1] ?? "";
-		expect(filter).not.toContain("[0:a]");
-		expect(filter).not.toContain("asplit");
+		// The audio-only rendition was retired on 2026-11-07; the rungs carry their
+		// own muxed audio and there is no second playlist.
 		expect(outputs).not.toContain(join("/out", "audio.m3u8"));
+		expect(outputs.join(" ")).not.toContain("asplit");
 	});
 });
 
@@ -164,7 +154,7 @@ describe("masterPlaylistLines", () => {
 	const ladder = planLadderFor(2160, 3840);
 
 	it("names the rungs it was given, and nothing that is not on the tree yet", () => {
-		const lines = masterPlaylistLines(ladder.slice(0, 1), true, false);
+		const lines = masterPlaylistLines(ladder.slice(0, 1));
 		expect(lines).toEqual([
 			"#EXTM3U",
 			"#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480",
@@ -172,12 +162,9 @@ describe("masterPlaylistLines", () => {
 		]);
 	});
 
-	it("carries the audio group only when a rendition exists to resolve it", () => {
-		const withRendition = masterPlaylistLines(ladder, true, true);
-		expect(withRendition[1]).toContain("EXT-X-MEDIA:TYPE=AUDIO");
-		expect(withRendition[2]).toContain('AUDIO="aud"');
-		// The progressive rewrites (rungs alone) name no unreached group.
-		const progressive = masterPlaylistLines(ladder.slice(0, 2), true, false);
-		expect(progressive).not.toContain("EXT-X-MEDIA");
+	it("carries no audio group", () => {
+		const lines = masterPlaylistLines(ladder);
+		expect(lines.join("\n")).not.toContain("EXT-X-MEDIA");
+		expect(lines.join("\n")).not.toContain('AUDIO="aud"');
 	});
 });

@@ -26,8 +26,6 @@ import { PlayIcon } from "@heroicons/react/24/solid";
 import type HlsInstance from "hls.js";
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
-import { useMediaPlayer } from "../../lib/media-player";
-import type { QueueTrack } from "../../lib/music-queue";
 import { useExclusivePlayback } from "../../lib/playback";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { useBindPlayerSeek } from "../../lib/work-player";
@@ -104,15 +102,6 @@ interface VideoPlayerProps {
 	 */
 	elementRef?: MutableRefObject<HTMLVideoElement | null>;
 	/**
-	 * The Podcast-This hand-off: everything needed to put this video's audio rendition
-	 * into the listening queue as spoken word. Absent when the Work carries no audio
-	 * rendition — the settings panel then renders no such row.
-	 */
-	podcast?: {
-		audioManifestUrl: string;
-		track: Omit<QueueTrack, "src" | "kind">;
-	};
-	/**
 	 * "Original Media": the Work's original file at its access-checked route, offered in
 	 * the quality menu as an opted-into alternative to the ladder. Absent for a user the
 	 * serialization refused (the gate already bit) and for a video before its ladder —
@@ -150,7 +139,6 @@ export default function VideoPlayer({
 	attention,
 	publicAccess = false,
 	elementRef,
-	podcast,
 	originalUrl,
 	captions,
 	chapters,
@@ -201,7 +189,6 @@ export default function VideoPlayer({
 	 */
 	const [refused, setRefused] = useState(false);
 	const budget = useMeteredBudget();
-	const { playTracks } = useMediaPlayer();
 
 	/**
 	 * The caption track showing right now, or null for none. Initialized from the shared
@@ -283,24 +270,6 @@ export default function VideoPlayer({
 		};
 	}, [activeCaptionId, playedSrc, trackBlobUrls]);
 
-	/**
-	 * Hand this video's audio rendition to the persistent bar, as spoken word.
-	 *
-	 * The video is fully unloaded — its hls instance destroyed and its src released — so
-	 * a silent picture stops drawing bandwidth while the episode plays underneath it; two
-	 * elements on the same Work are also two attention claims on one listener, and the
-	 * hand-off is a switch, not a doubling.
-	 */
-	const podcastThis = useCallback(() => {
-		if (!podcast) return;
-		const video = videoRef.current;
-		video?.pause();
-		hlsRef.current?.destroy();
-		hlsRef.current = null;
-		video?.removeAttribute("src");
-		video?.load();
-		playTracks([{ ...podcast.track, src: podcast.audioManifestUrl, kind: "audio" }]);
-	}, [podcast, playTracks]);
 	const { volume, effective: effectiveVolume, setLevel: setVolumeLevel, toggleMuted } = useVolume();
 
 	/*
@@ -798,7 +767,6 @@ export default function VideoPlayer({
 						onOriginal={selectOriginal}
 						onCaption={selectCaption}
 						onToggleFullscreen={toggleFullscreen}
-						onPodcastThis={podcast ? podcastThis : undefined}
 					/>
 				</div>
 

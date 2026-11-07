@@ -85,7 +85,7 @@ import {
 } from "../services/parental-controls.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { resolveShareToken } from "../services/share-links.js";
-import { isLocalStorage, storage } from "../services/storage/index.js";
+import { isLocalStorage } from "../services/storage/index.js";
 import { urlToKey } from "../services/storage/keys.js";
 import { resolveThumbnailUrl } from "../services/thumbnails.js";
 import type { PreviewMediaRow } from "../services/work-preview-media.js";
@@ -988,11 +988,9 @@ export function userTranscoding(
 	canAccess: boolean,
 	delivery: DeliveryCtx | null,
 ): Promise<TranscodingJobRow | null> {
-	// See the async boundary below: the rendition check is the only lookup in here.
 	return (async () => {
 		if (!job) return null;
-		if (!canAccess)
-			return { ...job, hlsManifestUrl: null, audioManifestUrl: null, outputFileUrl: null };
+		if (!canAccess) return { ...job, hlsManifestUrl: null, outputFileUrl: null };
 		// ⭐ Whether the tree plays: a completed row always has (its completion write
 		// named the master), and — publish-early, 2026-10-18 — so does a row whose
 		// ladder's first rung is up (`playableAt` written at that rung's upload) even
@@ -1005,39 +1003,14 @@ export function userTranscoding(
 			// nothing, and the player state reads that.
 			return job;
 		}
-		if (!delivery) {
-			// No delivery context means local storage, where every object is served
-			// unsigned — the row's URLs are already the playable ones. The audio
-			// rendition still has to be reported, or the Podcast-This row never renders
-			// in a dev browser at all; its URL is the manifest's sibling, same shape as
-			// the raw storage URL the row already carries.
-			if (job.mediaType === "video" && job.hlsManifestUrl) {
-				const prefixKey = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
-				const hasAudioRendition = await storage.exists(`${prefixKey}/audio.m3u8`);
-				if (hasAudioRendition) {
-					return {
-						...job,
-						audioManifestUrl: job.hlsManifestUrl.replace(/[^/]+$/, "audio.m3u8"),
-					};
-				}
-			}
-			return job;
-		}
+		// No delivery context means local storage, where every object is served unsigned —
+		// the row's URLs are already the playable ones.
+		if (!delivery) return job;
 
 		if (job.mediaType === "video" && job.hlsManifestUrl) {
-			// The audio-only rendition rides the same access-checked route. Its URL is
-			// serialized only when the rendition genuinely exists — a video transcoded
-			// before the job produced one has an `audio.m3u8` that 404s, and reporting it
-			// anyway would draw a Podcast-This affordance that plays nothing. (A ladder
-			// still filling in has no rendition yet, and the same null is right.)
-			const prefixKey = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
-			const hasAudioRendition = await storage.exists(`${prefixKey}/audio.m3u8`);
 			return {
 				...job,
 				hlsManifestUrl: buildHlsManifestUrl(delivery, job.workId),
-				audioManifestUrl: hasAudioRendition
-					? buildHlsManifestUrl(delivery, job.workId, "audio.m3u8")
-					: null,
 			};
 		}
 		if (job.mediaType === "audio" && job.outputFileUrl) {

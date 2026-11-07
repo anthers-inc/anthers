@@ -61,7 +61,6 @@ import { attachCaptionTrack } from "../services/captions.js";
 import { syncProjectRecord } from "../services/creator-record-listing.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { storage } from "../services/storage/index.js";
-import { urlToKey } from "../services/storage/keys.js";
 import { syncWorkListing } from "../services/work-listing.js";
 import { createLocalAccount, localHandleName } from "./local-accounts.js";
 import { seedVideoThumbnail } from "./seed-thumbnail.js";
@@ -601,13 +600,6 @@ async function alreadyPlayable(workId: number, reflow: boolean): Promise<boolean
 			.where(eq(workSections.workId, workId))
 			.limit(1);
 		return row != null;
-	}
-	// A completed-from-before-the-rendition video is not playable in the sense the browser
-	// suite needs — the Podcast-This row is gated on `audio.m3u8` existing in storage,
-	// and a fixture seeded on an older branch has no such object. Re-encode it.
-	if (job.mediaType === "video" && job.hlsManifestUrl) {
-		const prefix = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
-		return await storage.exists(`${prefix}/audio.m3u8`);
 	}
 	// A comic/ebook whose rasterize ran before the panel detector shipped has pages but
 	// no panel regions, which is exactly the case the reader spec exercises — and

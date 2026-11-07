@@ -212,15 +212,13 @@ describe("a transcode's temp residency", () => {
 			}
 			expect(rung.bandwidth).toBe(Math.ceil(peak / 1000) * 1000);
 		}
-		expect(await storage.exists(`${prefix}/audio.m3u8`)).toBe(true);
-		expect(await storage.exists(`${prefix}/audio-000.ts`)).toBe(true);
 		expect(await storage.exists(`${prefix}/720p.m3u8`)).toBe(true);
 		expect(await storage.exists(`${prefix}/1080p.m3u8`)).toBe(true);
 		expect(await storage.exists(`${prefix}/480p.m3u8`)).toBe(true);
 
 		const hls = uploads.filter((u) => u.key.includes("/videos/hls/"));
-		// A playlist and a segment per variant, a playlist and a segment for the rendition,
-		// and the master — more than five is what "all of it landed" looks like from storage.
+		// A playlist and a segment per variant, and the master — more than five is what
+		// "all of it landed" looks like from storage.
 		expect(hls.length).toBeGreaterThan(5);
 		// The first upload happened while the encode-phase spans were still being walked —
 		// before the 80 that only the step after the encodes writes. Under an end-of-job

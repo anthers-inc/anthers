@@ -13,8 +13,7 @@
  * 2. Determine variants based on source height (480p, 720p, 1080p)
  * 3. Transcode the ladder in two passes, uploading and freeing each pass's files the
  *    moment it finishes: the smallest rung alone (the publish-early gate opens on it),
- *    then every taller rung plus the audio-only rendition sharing one decode
- *    (`ffmpegSharedHls`). A one-rung source keeps the rendition in a pass of its own.
+ *    then every taller rung sharing one decode (`ffmpegSharedHls`).
  * 4. Generate master playlist — each rung's BANDWIDTH is its own measured rate
  * 5. Upload the master playlist (the rest is uploaded per step 3)
  * 6. Update TranscodingJob status throughout
@@ -384,8 +383,8 @@ async function ffmpegHls(
 }
 
 /**
- * The shared pass's filtergraph and output arguments: **one decode, every tall rung and
- * the audio rendition fed from it** (`-filter_complex` split/scale, one HLS muxer each).
+ * The shared pass's filtergraph and output arguments: **one decode, every tall rung fed
+ * from it** (`-filter_complex` split/scale, one HLS muxer each).
  *
  * Pure and exported because the command is the contract a test can read — every branch
  * scales the same decoded frame, so each rung's picture is identical to what its isolated
@@ -393,22 +392,10 @@ async function ffmpegHls(
  * 2026-10-19). The smallest rung is deliberately absent: it is encoded alone, before this
  * pass, because the release gate opens on it.
  */
-export function sharedPassOutputs(
-	variants: Variant[],
-	outputDir: string,
-	hasAudio: boolean,
-): string[] {
+export function sharedPassOutputs(variants: Variant[], outputDir: string): string[] {
 	const filter = [
 		`[0:v]split=${variants.length}${variants.map((_, i) => `[vsrc${i}]`).join("")}`,
 		...variants.map((v, i) => `[vsrc${i}]scale=-2:${v.height}[v${i}]`),
-		...(hasAudio
-			? [
-					`[0:a]asplit=${variants.length + 1}${Array.from(
-						{ length: variants.length + 1 },
-						(_, i) => `[a${i}]`,
-					).join("")}`,
-				]
-			: []),
 	].join(";");
 
 	const outputs: string[] = ["-filter_complex", filter];
@@ -416,7 +403,6 @@ export function sharedPassOutputs(
 		outputs.push(
 			"-map",
 			`[v${i}]`,
-			...(hasAudio ? ["-map", `[a${i}]`] : []),
 			// Each output carries its own pin: `-threads` is an output option, so the
 			// helper's post-input one covers the first muxer only.
 			"-threads",
@@ -441,32 +427,11 @@ export function sharedPassOutputs(
 			join(outputDir, `${v.name}.m3u8`),
 		);
 	}
-	if (hasAudio) {
-		outputs.push(
-			"-map",
-			`[a${variants.length}]`,
-			"-threads",
-			String(FFMPEG_THREADS),
-			"-c:a",
-			"aac",
-			"-b:a",
-			"128k",
-			"-hls_time",
-			"6",
-			"-hls_playlist_type",
-			"vod",
-			"-hls_segment_filename",
-			join(outputDir, "audio-%03d.ts"),
-			"-f",
-			"hls",
-			join(outputDir, AUDIO_RENDITION_PLAYLIST),
-		);
-	}
 	return outputs;
 }
 
 /**
- * Run the shared pass: one ffmpeg, one decode, every tall rung and the audio rendition.
+ * Run the shared pass: one ffmpeg, one decode, every tall rung.
  *
  * `-progress` in a multi-output invocation reports one timeline for the whole graph (the
  * outputs consume the same frames), which is exactly what the pass's estimate needs.
@@ -475,12 +440,11 @@ async function ffmpegSharedHls(
 	inputPath: string,
 	outputDir: string,
 	variants: Variant[],
-	hasAudio: boolean,
 	onTick?: (outTimeSec: number, speed: number) => void,
 ): Promise<void> {
 	const proc = Bun.spawn(
 		ffmpegCommand(inputPath, [
-			...sharedPassOutputs(variants, outputDir, hasAudio),
+			...sharedPassOutputs(variants, outputDir),
 			"-progress",
 			"pipe:1",
 			"-nostats",
@@ -496,9 +460,6 @@ async function ffmpegSharedHls(
 		throw new Error(`ffmpeg shared HLS pass failed: ${stderr.slice(0, 500)}`);
 	}
 }
-
-/** The filename of a Work's audio-only rendition, within the same HLS directory. */
-export const AUDIO_RENDITION_PLAYLIST = "audio.m3u8";
 
 /**
  * The remux: the deliverable pair copied into its native container, `-c copy`, nothing
@@ -535,40 +496,6 @@ async function ffmpegRemux(
 		const stderr = await new Response(proc.stderr).text();
 		throw new Error(`the remux failed: ${stderr.slice(0, 500)}`);
 	}
-}
-
-/** Transcode an audio-only HLS rendition — the same audio the variants carry, demuxed
- *  into its own playlist. One variant, at the bitrate the muxed ones carry, so a Work
- *  can be listened to as a podcast without paying for video bandwidth it cannot see. */
-async function ffmpegAudioHls(inputPath: string, outputDir: string) {
-	const playlist = join(outputDir, AUDIO_RENDITION_PLAYLIST);
-	const segmentPattern = join(outputDir, "audio-%03d.ts");
-	const proc = Bun.spawn(
-		ffmpegCommand(inputPath, [
-			"-vn",
-			"-c:a",
-			"aac",
-			"-b:a",
-			"128k",
-			"-hls_time",
-			"6",
-			"-hls_playlist_type",
-			"vod",
-			"-hls_segment_filename",
-			segmentPattern,
-			"-f",
-			"hls",
-			playlist,
-			"-y",
-		]),
-		{ stdout: "ignore", stderr: "pipe" },
-	);
-	const exitCode = await proc.exited;
-	if (exitCode !== 0) {
-		const stderr = await new Response(proc.stderr).text();
-		throw new Error(`ffmpeg audio-only HLS failed: ${stderr.slice(0, 500)}`);
-	}
-	return playlist;
 }
 
 /**
@@ -623,53 +550,23 @@ export async function measurePassBandwidths(dir: string, variants: Variant[]): P
 }
 
 /**
- * Generate an HLS master playlist.
- *
- * Tags every variant with the `AUDIO` group the rendition below provides. Per RFC 8216
- * a stream-inf naming an audio group plays ITS audio from the named rendition rather
- * than its own muxed stream when a player honors it (every one hls.js drives does),
- * which is what makes the rendition one copy of the audio rather than a second encode.
- */
-/**
  * The master playlist's lines; pure, so a test can read the tree a run would deliver.
- * The audio group rides it only when a rendition EXISTS to resolve (`withAudioGroup`) —
- * a group naming a file that isn't there yet is a dangling reference the player
- * refuses — which is why the ladder's progressive rewrites name rungs alone.
+ *
+ * ⚠️ **No audio group and no separate rendition.** The variants carry their own muxed
+ * audio and that is the only copy; the audio-only playlist and the `AUDIO="aud"`
+ * attribute were retired with Podcast This on 2026-11-07.
  */
-export function masterPlaylistLines(
-	variants: Variant[],
-	hasAudio: boolean,
-	withAudioGroup: boolean,
-): string[] {
+export function masterPlaylistLines(variants: Variant[]): string[] {
 	const lines = ["#EXTM3U"];
-	// Only when a rendition actually ships: a source with no audio track is a video
-	// nobody can listen to, and an unresolvable media group is a dangling reference.
-	if (hasAudio && withAudioGroup) {
-		lines.push(
-			'#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Spoken",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8"',
-		);
-	}
 	for (const v of variants) {
-		lines.push(
-			`#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidth},RESOLUTION=${v.width}x${v.height}${
-				hasAudio && withAudioGroup ? ',AUDIO="aud"' : ""
-			}`,
-		);
+		lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidth},RESOLUTION=${v.width}x${v.height}`);
 		lines.push(`${v.name}.m3u8`);
 	}
 	return lines;
 }
 
-async function generateMasterPlaylist(
-	outputDir: string,
-	variants: Variant[],
-	hasAudio: boolean,
-	withAudioGroup: boolean,
-) {
-	await Bun.write(
-		join(outputDir, "master.m3u8"),
-		`${masterPlaylistLines(variants, hasAudio, withAudioGroup).join("\n")}\n`,
-	);
+async function generateMasterPlaylist(outputDir: string, variants: Variant[]) {
+	await Bun.write(join(outputDir, "master.m3u8"), `${masterPlaylistLines(variants).join("\n")}\n`);
 }
 async function updateJobProgress(jobId: number, progress: number) {
 	await db.update(workTranscodingJobs).set({ progress }).where(eq(workTranscodingJobs.id, jobId));
@@ -919,11 +816,6 @@ async function runTranscode(
 		// gate opens at the first rung; see the loop below and `planLadderFor`).
 		const variants = planLadderFor(sourceHeight, sourceWidth);
 
-		// Whether the source carries an audio track, from the same probe the variants
-		// came from: the rendition (below) and the master's audio group are written
-		// only when a stream exists to demux.
-		const hasAudio = probe.streams?.some((s: { codec_type: string }) => s.codec_type === "audio");
-
 		// 3. Transcode the ladder in its two passes.
 
 		/**
@@ -1046,12 +938,9 @@ async function runTranscode(
 		/**
 		 * ⭐ The master is written as the ladder grows, not once at the end: after this
 		 * rung's upload, a playlist naming it is uploaded at the tree's master key — the
-		 * tree PLAYS from the first rung. The tall rungs join on a later rewrite, and the
-		 * audio group (with the rendition it names) joins only on the final one, once the
-		 * rendition actually exists; a group naming a file that isn't there yet is a
-		 * dangling reference the player refuses.
+		 * tree PLAYS from the first rung, and the tall rungs join on a later rewrite.
 		 */
-		await generateMasterPlaylist(outputDir, [first], hasAudio, false);
+		await generateMasterPlaylist(outputDir, [first]);
 		if (!(await ensureStillOurs())) return;
 		const masterKey = `${storagePrefix}/master.m3u8`;
 		await storage.upload(
@@ -1072,10 +961,7 @@ async function runTranscode(
 
 		if (superseded) return;
 
-		// ── Pass 2: one decode for every tall rung and the rendition ─────────────
-		// The audio-only rendition rides this pass when one exists, so a video can be
-		// listened to as a podcast without its picture and without a second decode.
-		let audioShared = false;
+		// ── Pass 2: one decode for every tall rung ──────────────────────────────
 		if (shared.length > 0) {
 			const sharedTicks = reportTicks(
 				spanStart + perRung,
@@ -1088,36 +974,20 @@ async function runTranscode(
 				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
 				outputDir,
 				shared,
-				hasAudio,
 				sharedTicks.tick,
 			);
 			sharedTicks.stop();
 			for (const v of shared) timing.mark(`v${v.height}End`);
-			if (hasAudio) {
-				timing.mark("audioStart");
-				timing.mark("audioEnd");
-			}
-			audioShared = hasAudio;
 			timing.mark("sharedEnd");
 			// Every tall rung's BANDWIDTH, from the segments this pass just wrote.
 			await measurePassBandwidths(outputDir, shared);
 			await updateJobProgress(jobId, spanEnd);
 			await uploadAndFree(outputDir);
-		} else if (hasAudio) {
-			// A one-rung source has no tall rung to share the rendition's pass with; its
-			// decode is audio alone (`-vn`), which is a few seconds and not a video decode.
-			timing.mark("audioStart");
-			await ffmpegAudioHls(
-				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
-				outputDir,
-			);
-			timing.mark("audioEnd");
-			await uploadAndFree(outputDir);
 		}
 
-		// 4. The master's final rewrite, WITH the audio group — the rendition exists
-		// under it now; pass 1's rewrite named the first rung alone.
-		await generateMasterPlaylist(outputDir, variants, hasAudio, hasAudio);
+		// 4. The master's final rewrite, now naming every rung. Pass 1's rewrite named the
+		// first rung alone so the tree could play before the tall ones existed.
+		await generateMasterPlaylist(outputDir, variants);
 		// Re-check before the estimate-clear and the 80 write: this run has now seen
 		// every upload's check, but the row is what the whole tail below is written on.
 		if (!(await ensureStillOurs())) return;
@@ -1145,10 +1015,6 @@ async function runTranscode(
 						sharedPassMs: Math.round(marks.sharedEnd - marks.sharedStart),
 						sharedHeights: shared.map((v) => v.height),
 					}
-				: {}),
-			...(hasAudio && audioShared ? { audioSharedPass: true } : {}),
-			...(hasAudio && !audioShared
-				? { audioPassMs: Math.round(marks.audioEnd - marks.audioStart) }
 				: {}),
 			// The source's own length, beside the costs — the queue's pricing reads RATE
 			// medians (cost per second of source), and the rate needs the denominator.
