@@ -231,7 +231,7 @@ test("the locked page carries the carousel, its strip, its chevrons and a traile
 	expect(image.id).toBeGreaterThan(0);
 });
 
-test("the Manage tab adds, reorders and removes a preview image", async ({ page, context }) => {
+test("the media manager adds, reorders and removes a preview image", async ({ page, context }) => {
 	session = await signInAsMediaFixture(context);
 	const work = await createWork(`${STEM} manage`);
 	await attach(
@@ -248,6 +248,9 @@ test("the Manage tab adds, reorders and removes a preview image", async ({ page,
 
 	await page.goto(`/works/${work.publicId}`);
 	await expect(page.locator("h1")).toBeVisible({ timeout: 15_000 });
+	// Preview media lives with the thumbnail in the media manager now, not on the Manage tab.
+	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("tab", { name: "Thumbnail & Preview Media" }).click();
 	const section = page.getByTestId("preview-media-section");
 	await expect(section).toBeVisible();
 	await expect(section.getByTestId(/preview-item-/)).toHaveCount(1);
