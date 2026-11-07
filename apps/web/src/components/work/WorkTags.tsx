@@ -174,8 +174,8 @@ export function WorkTagPicker({
 				/>
 			</label>
 			<p className="text-xs text-base-content/50">
-				Tags help people find this Work. {MAX_WORK_TAGS} at most; you can change them whenever
-				you like.
+				Tags help people find this Work. Add up to {MAX_WORK_TAGS}, and change them whenever you
+				like.
 			</p>
 			{note && <p className="text-xs text-error">{note}</p>}
 			{shapeProblem && <p className="text-xs text-error">{shapeProblem}</p>}
