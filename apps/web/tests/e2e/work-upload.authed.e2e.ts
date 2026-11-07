@@ -420,7 +420,7 @@ for (const source of [
  * job again while it runs and says what it says — the wiring a unit test of the wording cannot
  * reach — so the walk moves the job itself and watches the page catch up.
  */
-test("a Work's page and the Dashboard follow its processing", async ({ page, context }) => {
+test("a Work's page and the Works list follow its processing", async ({ page, context }) => {
 	session = await signInAsMediaFixture(context);
 
 	const created = await fetch(`${API_URL}/api/content/works`, {
@@ -483,14 +483,4 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 		.set({ status: "completed", progress: 100, updatedAt: new Date() })
 		.where(eq(workTranscodingJobs.workId, work.id));
 	await expect(page.getByText("Processing…")).toHaveCount(0, { timeout: 15_000 });
-
-	// And the Dashboard keeps it for the day, as ready. It is a tab on the creator's own
-	// profile since 2026-10-23, and `/studio` forwards there with that tab open.
-	await page.goto("/studio");
-	const panel = page
-		.locator("section")
-		.filter({ has: page.getByRole("heading", { name: "Processing" }) });
-	await expect(panel.getByRole("listitem").filter({ hasText: `${STEM} processing` })).toContainText(
-		"Ready",
-	);
 });

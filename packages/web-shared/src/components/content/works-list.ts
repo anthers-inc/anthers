@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Filtering and sorting for the Studio's Works table, extracted from the page for the same
- * reason `studio-worklist.ts` is: **the failure mode is an empty table rather than an
- * error.** A filter whose predicate silently stops matching, or a sort that misorders on
- * an absent date, renders exactly what an empty Catalog renders — nothing on the screen
- * can tell the two apart, so a suite has to.
+ * Filtering and sorting for the Studio's Works table, extracted from the page because
+ * **the failure mode is an empty table rather than an error.** A filter whose predicate
+ * silently stops matching, or a sort that misorders on an absent date, renders exactly what
+ * an empty Catalog renders — nothing on the screen can tell the two apart, so a suite has to.
  */
 import type { Work } from "../../lib/types";
 

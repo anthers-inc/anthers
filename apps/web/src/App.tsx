@@ -478,8 +478,8 @@ export default function App() {
 					route test still passed. A creator named "studio" is no longer a hazard either,
 					since they live at `/@studio`. */}
 					<Route path="/studio" element={<StudioLayout />}>
-						{/* The Dashboard is a tab on the creator's profile now, so the Studio's root
-						has no page: it sends a creator there with that tab open. */}
+						{/* The Studio's root lands on Works: the Dashboard that used to live
+						here is gone, and its widgets have their own pages. */}
 						<Route index element={<StudioHomeRedirect />} />
 						{/* One object, one place (2026-10-10): the old `catalog` page held Projects
 						and Works on one surface and its two halves are pages and tabs of their own
