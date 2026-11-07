@@ -9,7 +9,7 @@
  * player sees: one title, one Downloads table, and one row per platform.
  */
 import { db } from "@anthers/db/client";
-import { workAssets, works } from "@anthers/db/schema";
+import { workAssets, workPreviewMedia, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import {
 	API_URL,
@@ -52,6 +52,15 @@ test("a game with three platform builds is one Work with three downloads", async
 				isPrimary: build.isPrimary,
 			})),
 		);
+		// One preview item makes the media area a carousel, whose first slide is the
+		// download card rather than the purchase card.
+		await db.insert(workPreviewMedia).values({
+			workId: draft.id,
+			kind: "image",
+			file: `creators/${owner}/previews/walk.png`,
+			alt: "A screenshot",
+			position: 0,
+		});
 		// Released directly: the release route would also ask for a rating and a credit,
 		// which are other walks' subjects.
 		await db
@@ -71,13 +80,21 @@ test("a game with three platform builds is one Work with three downloads", async
 		// The downloads are the buyer's part of the record, so they read in the user's
 		// view rather than in the editor.
 		await page.getByRole("button", { name: "User (Unlocked)" }).click();
-		await expect(page.getByRole("heading", { name: "Downloads", exact: true })).toBeVisible();
+
+		// The files are the media area now: slide zero of the carousel, above the byline,
+		// in the purchase card's place. The Details tab no longer repeats them.
+		const stage = page.locator("[data-media-stage]");
+		await expect(stage.getByRole("heading", { name: "Downloads", exact: true })).toBeVisible();
+		await expect(
+			page.getByRole("tabpanel").getByRole("heading", { name: "Downloads" }),
+		).toHaveCount(0);
+		await expect(page.getByRole("button", { name: "Preview 1: screenshot" })).toBeVisible();
 		for (const [platform, filename] of [
 			["Windows", "game-windows.zip"],
 			["macOS", "game-mac.zip"],
 			["Linux", "game-linux.zip"],
 		] as const) {
-			await expect(page.locator("tbody tr").filter({ hasText: filename })).toContainText(platform);
+			await expect(stage.locator("tbody tr").filter({ hasText: filename })).toContainText(platform);
 		}
 	} finally {
 		await fetch(`${API_URL}/api/content/works/${draft.id}?force=1`, {

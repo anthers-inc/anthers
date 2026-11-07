@@ -20,9 +20,9 @@ import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attentio
 import { deliverableIsEmpty, isListened, supportsPreviewMedia } from "@anthers/shared/content";
 import { gridFor, normalizeMaturityRows } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
+import { isBuildType } from "@anthers/web-shared/content/works";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { usePageTitle } from "@anthers/web-shared/page-title";
-
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -72,6 +72,38 @@ import { useMeteredBudget } from "../lib/public-access";
 import { useShareToken, withShareToken } from "../lib/share-link";
 import { useWorkVersionHistory } from "../lib/version-history";
 import { RatingMatrixReadOnly } from "../studio/RatingMatrix";
+
+/**
+ * The first slide of a downloadable Work's media area — the purchase card's place, with the
+ * files where the price would be.
+ *
+ * ⭐ **It reuses the Downloads row rather than drawing a second list** (Parker, 2026-11-06):
+ * the same table, the same grant-then-download buttons, the same platform grouping. What
+ * changes is where it lives — above the byline, inside the page's one media card — so a Work
+ * that cannot play in the browser still has a media area rather than an empty stage.
+ */
+function DownloadCard({
+	work,
+	creatorName,
+	canAccess,
+}: {
+	work: WorkDetail;
+	creatorName: string;
+	canAccess: boolean;
+}) {
+	return (
+		<div className="mx-auto w-full max-w-xl rounded-lg border border-base-300 bg-base-100 p-4 shadow-lg">
+			<p className="text-sm text-base-content/60">{creatorName}</p>
+			<h2 className="text-lg font-semibold">{work.title ?? "Untitled"}</h2>
+			<ProjectDownloads
+				assets={work.assets}
+				contentType={work.type}
+				workId={work.id}
+				canAccess={canAccess}
+			/>
+		</div>
+	);
+}
 
 export default function WorkPage() {
 	const { slug } = useParams<{ slug: string }>();
@@ -273,6 +305,21 @@ export default function WorkPage() {
 	const canAccess = access ? access.canAccess : isOwner;
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
 	/**
+	 * A Work whose deliverable IS its files: a build kind with downloads on, no hosted build
+	 * and no embed. That Work gets the files in its media area, where a playable one gets
+	 * its player, instead of an empty stage and a Downloads row buried in Details.
+	 *
+	 * A Work that plays in the browser keeps its player and its Details downloads row: its
+	 * media area is already saying what it is, and the files are the second thing a buyer
+	 * reaches for rather than the only thing.
+	 */
+	const downloadsInMedia =
+		isBuildType(work.type) &&
+		work.downloadEnabled === true &&
+		!work.webPlayable &&
+		!work.embedUrl &&
+		work.assets.length > 0;
+	/**
 	 * Every kind's editing surface is the Work's own page now (the kinds pass,
 	 * 2026-10-14 — the video surface propagated): its owner edits right here, and the
 	 * View As row's modes are exactly that — when one is active the page is the user's
@@ -416,6 +463,26 @@ export default function WorkPage() {
 							}
 						/>
 					</WorkMediaFrame>
+				) : downloadsInMedia ? (
+					// A download-only Work has no browser deliverable, but it is not an empty
+					// Work: its media area carries the files, with the preview media behind
+					// them, exactly where a playable Work carries its player.
+					supportsPreviewMedia(work.type) && (work.previewMedia?.length ?? 0) > 0 ? (
+						<PreviewCarousel
+							workTitle={work.title}
+							thumbnail={work.thumbnail}
+							previews={work.previewMedia ?? []}
+							slideZeroFill={false}
+							slideZeroLabel="Downloads"
+							slideZero={
+								<DownloadCard work={work} creatorName={creatorName} canAccess={canAccess} />
+							}
+						/>
+					) : (
+						<WorkMediaFrame overlay={shareNotice}>
+							<DownloadCard work={work} creatorName={creatorName} canAccess={canAccess} />
+						</WorkMediaFrame>
+					)
 				) : deliverableIsEmpty(work) ? (
 					// A draft the owner is previewing: the record renders the same silhouette
 					// the editor's deliverable draws — the page keeps its proportions and the
@@ -483,6 +550,7 @@ export default function WorkPage() {
 				refetch={refetch}
 				access={access}
 				canAccess={canAccess}
+				downloadsInMedia={downloadsInMedia}
 				versions={versionHistory}
 				ownerManage={isOwner ? <WorkViewAsSection /> : undefined}
 			/>
@@ -503,6 +571,7 @@ function VisitorRecord({
 	refetch,
 	access,
 	canAccess,
+	downloadsInMedia,
 	versions,
 	ownerManage,
 }: {
@@ -512,6 +581,8 @@ function VisitorRecord({
 	access: AccessResult | null | undefined;
 	/** Whether this user may open the Work — the buyer files' own gate. */
 	canAccess: boolean;
+	/** Whether the media area already carries the files, so Details does not repeat them. */
+	downloadsInMedia: boolean;
 	/** Versions added after release, oldest first; the Details tab lists them all. */
 	versions: WorkVersionEntry[];
 	/**
@@ -599,7 +670,7 @@ function VisitorRecord({
 								    owning this opens, and a record column had them wedged under a
 								    store panel before. No section heading of its own —
 								    `ProjectDownloads` names itself. */}
-										{work.assets.length > 0 && (
+										{work.assets.length > 0 && !downloadsInMedia && (
 											<ProjectDownloads
 												assets={work.assets}
 												contentType={work.type}
