@@ -111,10 +111,9 @@ test("the creator's own profile leads with a create tile", async ({ page }) => {
 	// other walks, so both shapes are legitimate here.
 	const grid = page.locator("[data-testid='content-month'] .grid").first();
 	if ((await grid.count()) > 0) {
-		await expect(grid.locator(":scope > *").first()).toHaveAttribute(
-			"data-testid",
-			"profile-create-tile",
-		);
+		await expect(
+			grid.locator(":scope > *").first().getByTestId("profile-create-tile"),
+		).toBeVisible();
 	}
 
 	await tile.click();
