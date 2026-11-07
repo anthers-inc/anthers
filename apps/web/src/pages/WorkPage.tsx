@@ -42,18 +42,13 @@ import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectPricing from "../components/project/ProjectPricing";
 import WorkReviews from "../components/project/WorkReviews";
 import LockedWorkComposition from "../components/work/LockedWorkComposition";
-import OwnerWorkEditor, {
-	CaptionsSummary,
-	DateValueLine,
-	ReleaseSummary,
-} from "../components/work/OwnerWorkEditor";
+import OwnerWorkEditor, { CaptionsSummary } from "../components/work/OwnerWorkEditor";
 import PreviewCarousel from "../components/work/PreviewCarousel";
 import SharedWorkNotice from "../components/work/SharedWorkNotice";
 import ShareLinkButton from "../components/work/ShareLinkButton";
 import { WorkViewAsSection } from "../components/work/ViewAs";
 import WorkInfoTabs from "../components/work/WorkInfoTabs";
 import {
-	formatOriginallyReleased,
 	formatVersionDate,
 	isGoods,
 	isWriting,
@@ -563,18 +558,6 @@ function VisitorRecord({
 												<WorkTagChips tags={work.tags ?? []} />
 											</section>
 										)}
-										<section className="flex flex-col gap-2">
-											<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>
-											<div className="flex flex-col gap-2">
-												<ReleaseSummary work={work} scheduled={work.scheduledReleaseAt ?? null} />
-												{work.originallyReleased && (
-													<DateValueLine
-														label="Original Release"
-														value={formatOriginallyReleased(work.originallyReleased) ?? "—"}
-													/>
-												)}
-											</div>
-										</section>
 										{versions.length > 0 && (
 											// Every version added since release, by name and date — the byline
 											// carries the newest, and this is the record. Nothing here opens a

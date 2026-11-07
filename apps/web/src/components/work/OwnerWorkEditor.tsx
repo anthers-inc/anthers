@@ -135,7 +135,7 @@ import {
 	TrashIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useExclusivePlayback } from "../../lib/playback";
 import CreditsSection from "../../studio/CreditsSection";
 import PanelEditor from "../../studio/PanelEditor";
@@ -154,7 +154,6 @@ import { WorkViewAsSection } from "./ViewAs";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
 import {
 	DescriptionBody,
-	formatOriginallyReleased,
 	isGoods,
 	isWriting,
 	WORK_DESCRIPTION_CLASS,
@@ -163,6 +162,7 @@ import {
 	WorkByline,
 	WorkColumn,
 	WorkCredits,
+	WorkDateLine,
 	WorkDeliverable,
 	WorkDescription,
 	type WorkDetail,
@@ -1030,34 +1030,31 @@ export default function OwnerWorkEditor({
 		/>
 	);
 
-	const releaseField = (
-		<InlineField<string>
+	/**
+	 * The release and original-release dates, edited together in the byline (Parker,
+	 * 2026-11-06). The release input still carries all three states — out, scheduled,
+	 * neither — so the save reads the draft to decide which act it is; the original date
+	 * rides the same commit.
+	 */
+	const datesField = (
+		<InlineField<{ release: string; original: string }>
 			label="Release"
-			saved={releaseSaved}
+			saved={{ release: releaseSaved, original: originalDate }}
+			pencilPlacement="corner"
 			disabledSave={(draft) => {
-				const iso = localInputToIso(draft);
-				// Only a release-now waits on readiness; a future time is a schedule, which is
-				// offered while those stand.
+				if (draft.release === releaseSaved) return undefined;
+				const iso = localInputToIso(draft.release);
 				return iso && Date.parse(iso) <= Date.now() ? releaseNowRefusal : undefined;
 			}}
 			renderRead={() => (
-				<div className="flex flex-col gap-2">
-					{/* The record link's globe moved to the byline's Released line
-					    (Parker, 2026-10-19); this line only says when there is no
-					    listing on the network yet. */}
-					<ReleaseSummary work={current} scheduled={current.scheduledReleaseAt ?? null} />
-					{current.visibility === "released" && !current.recordUrl && (
-						<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
-					)}
-				</div>
+				<WorkDateLine work={current} scheduled={current.scheduledReleaseAt ?? null} />
 			)}
 			renderEdit={(draft, setDraft) => {
-				const draftIso = localInputToIso(draft);
-				// A time that has already passed is the release-now act, so every note that
-				// qualifies a release answers from the draft rather than from the saved row.
-				const releasingNow = draftIso !== null && Date.parse(draftIso) <= Date.now();
+				const draftIso = localInputToIso(draft.release);
+				const releasingNow =
+					draft.release !== releaseSaved && draftIso !== null && Date.parse(draftIso) <= Date.now();
 				return (
-					<div className="flex flex-col gap-3">
+					<div className="flex flex-col gap-3 text-left">
 						<div className="flex flex-col gap-2">
 							<div className="flex items-center gap-1.5">
 								<label className="text-sm" htmlFor="owner-anthers-release">
@@ -1071,173 +1068,168 @@ export default function OwnerWorkEditor({
 									type="datetime-local"
 									aria-label="Anthers Release Date"
 									className="input input-bordered w-full max-w-56"
-									value={draft}
-									onChange={(e) => setDraft(e.target.value)}
+									value={draft.release}
+									onChange={(e) => setDraft({ ...draft, release: e.target.value })}
 								/>
 								<button
 									type="button"
 									className="btn btn-sm"
 									title="Set the release date to right now"
-									onClick={() => setDraft(nowLocalInput())}
+									onClick={() => setDraft({ ...draft, release: nowLocalInput() })}
 								>
 									Now
 								</button>
-								{draft && (
-									// Empty is "not released": this is how a creator takes the Work back out
-									// or drops a schedule, where the checkbox's unticking used to say it.
+								{draft.release && (
 									<button
 										type="button"
 										className="btn btn-ghost btn-sm"
-										onClick={() => setDraft("")}
+										onClick={() => setDraft({ ...draft, release: "" })}
 									>
 										Clear
 									</button>
 								)}
 							</div>
+							{current.visibility === "released" && !current.recordUrl && (
+								<p className="text-xs text-base-content/50">
+									Its listing isn't on the network yet.
+								</p>
+							)}
+							{releasingNow && !anyoneAllowed && (
+								<div className="alert alert-warning text-sm">
+									<span>
+										Nobody can open this. Released puts it in your Catalog; the Access tab is what
+										lets anyone in — allow <strong>Everyone</strong> at $0 to make it Public Access.
+									</span>
+								</div>
+							)}
+							{releasingNow && publicAccessNow && (
+								<p className="text-xs text-success">
+									Public Access — free to everyone, and earning from the Time Pool.
+								</p>
+							)}
+							{showsRatedPublicAccessNotice({
+								released: releasingNow,
+								publicAccess: publicAccessNow,
+								maturity,
+							}) && (
+								<div className="alert alert-info text-sm">
+									<span>
+										Heads up: Mature and Adult Works aren't shown to everyone. Users (or parents)
+										can choose to hide Mature Works, and Adult work is shown only to users who are
+										18+ and have opted in.{" "}
+										<Link to={RATED_PUBLIC_ACCESS_HELP} className="link">
+											How Ratings Affect Who Sees a Work
+										</Link>
+									</span>
+								</div>
+							)}
+							{fileMissing && !releasingNow && (
+								<p className="text-xs text-warning">
+									{fileUploading
+										? "This can be released once its file has finished uploading and processing."
+										: "Add the Work's file first. There's nothing to release until it arrives."}
+								</p>
+							)}
+							{creditsMissing && !releasingNow && (
+								<p className="text-xs text-warning">
+									A Work isn't released until at least one credit has its Created box ticked.
+								</p>
+							)}
+							{!fromRows && !releasingNow && (
+								<p className="text-xs text-warning">
+									Answer every row of the Rating first — every row, no exceptions.
+								</p>
+							)}
+							{serverDown && !releasingNow && (
+								<div className="alert alert-info text-sm">
+									<span>
+										The server holding your identity isn't answering right now. You can still
+										release this: it goes out on Anthers straight away, and its listing reaches the
+										network once the server is back.
+									</span>
+								</div>
+							)}
+							{permissionMissing === true && !releasingNow && (
+								<div className="alert alert-warning text-sm">
+									<span>
+										<strong>Give Anthers permission to publish before releasing.</strong> A release
+										writes this Work's listing into your own repository.{" "}
+										<Link to={studioUrl("/settings")} className="link">
+											Give it in Studio settings
+										</Link>
+										.
+									</span>
+								</div>
+							)}
+							{payoutsReady === false && (
+								<div className="alert alert-warning text-sm">
+									<span>
+										<strong>Set up payouts before releasing.</strong> It is how you get paid, and it
+										is also what lets us say every creator here is an adult — Stripe checks identity
+										so Anthers never has to ask you for an ID. Anthers takes no cut, so all of it
+										comes to you.{" "}
+										<Link to={studioUrl("/payments")} className="link">
+											Set it up in the Studio's Payments tab
+										</Link>
+										.
+									</span>
+								</div>
+							)}
 						</div>
-						{current.visibility === "released" && !current.recordUrl && (
-							<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
-						)}
-						{releasingNow && !anyoneAllowed && (
-							<div className="alert alert-warning text-sm">
-								<span>
-									Nobody can open this. Released puts it in your Catalog; the Access tab is what
-									lets anyone in — allow <strong>Everyone</strong> at $0 to make it Public Access.
-								</span>
+						<div className="flex flex-col gap-2">
+							<div className="flex items-center gap-1.5">
+								<label className="text-sm" htmlFor="owner-original-release">
+									Original Release Date
+								</label>
+								<InfoTip text={ORIGINAL_RELEASE_HINT} />
 							</div>
-						)}
-						{releasingNow && publicAccessNow && (
-							<p className="text-xs text-success">
-								Public Access — free to everyone, and earning from the Time Pool.
-							</p>
-						)}
-						{showsRatedPublicAccessNotice({
-							released: releasingNow,
-							publicAccess: publicAccessNow,
-							maturity,
-						}) && (
-							// Info rather than warning: nothing is wrong, and the note must not read as a
-							// reason to rate lower or leave Public Access.
-							<div className="alert alert-info text-sm">
-								<span>
-									Heads up: Mature and Adult Works aren't shown to everyone. Users (or parents) can
-									choose to hide Mature Works, and Adult work is shown only to users who are 18+ and
-									have opted in.{" "}
-									<Link to={RATED_PUBLIC_ACCESS_HELP} className="link">
-										How Ratings Affect Who Sees a Work
-									</Link>
-								</span>
-							</div>
-						)}
-						{/* The waiting states a creator can act on, gathered from the batch editor. */}
-						{fileMissing && !releasingNow && (
-							<p className="text-xs text-warning">
-								{fileUploading
-									? "This can be released once its file has finished uploading and processing."
-									: "Add the Work's file first. There's nothing to release until it arrives."}
-							</p>
-						)}
-						{creditsMissing && !releasingNow && (
-							<p className="text-xs text-warning">
-								A Work isn't released until at least one credit has its Created box ticked.
-							</p>
-						)}
-						{!fromRows && !releasingNow && (
-							<p className="text-xs text-warning">
-								Answer every row of the Rating first — every row, no exceptions.
-							</p>
-						)}
-						{serverDown && !releasingNow && (
-							<div className="alert alert-info text-sm">
-								<span>
-									The server holding your identity isn't answering right now. You can still release
-									this: it goes out on Anthers straight away, and its listing reaches the network
-									once the server is back.
-								</span>
-							</div>
-						)}
-						{permissionMissing === true && !releasingNow && (
-							<div className="alert alert-warning text-sm">
-								<span>
-									<strong>Give Anthers permission to publish before releasing.</strong> A release
-									writes this Work's listing into your own repository.{" "}
-									<Link to={studioUrl("/settings")} className="link">
-										Give it in Studio settings
-									</Link>
-									.
-								</span>
-							</div>
-						)}
-						{payoutsReady === false && (
-							<div className="alert alert-warning text-sm">
-								<span>
-									<strong>Set up payouts before releasing.</strong> It is how you get paid, and it
-									is also what lets us say every creator here is an adult — Stripe checks identity
-									so Anthers never has to ask you for an ID. Anthers takes no cut, so all of it
-									comes to you.{" "}
-									<Link to={studioUrl("/payments")} className="link">
-										Set it up in the Studio's Payments tab
-									</Link>
-									.
-								</span>
-							</div>
-						)}
+							<input
+								id="owner-original-release"
+								type="date"
+								aria-label="Original release date"
+								className="input input-bordered w-full max-w-56"
+								value={draft.original}
+								onChange={(e) => setDraft({ ...draft, original: e.target.value })}
+							/>
+						</div>
 					</div>
 				);
 			}}
 			save={async (draft) => {
-				const iso = localInputToIso(draft);
+				const originalIso = draft.original ? `${draft.original}T00:00:00.000Z` : null;
+				const originalChanged = originalIso !== (current.originallyReleased ?? null);
+				if (draft.release === releaseSaved) {
+					if (originalChanged) {
+						setOriginalDate(draft.original);
+						await saveFields({ originallyReleased: originalIso });
+					}
+					return;
+				}
+				setOriginalDate(draft.original);
+				const iso = localInputToIso(draft.release);
 				if (!iso) {
-					// Empty is "not released": it takes a released Work back out of the Catalog and
-					// clears a schedule, and does nothing to a Work that is neither.
-					if (current.visibility === "released") await saveFields({ visibility: "private" });
-					else if (current.scheduledReleaseAt) await saveFields({ scheduledReleaseAt: null });
+					if (current.visibility === "released") {
+						await saveFields({ visibility: "private", originallyReleased: originalIso });
+					} else if (current.scheduledReleaseAt) {
+						await saveFields({ scheduledReleaseAt: null, originallyReleased: originalIso });
+					} else if (originalChanged) {
+						await saveFields({ originallyReleased: originalIso });
+					}
 					return;
 				}
 				if (Date.parse(iso) <= Date.now()) {
-					// A passed time is the release-now act. The server refuses a past schedule, and a
-					// creator who picks today's date — or presses Now — means "out now".
-					await saveFields({ visibility: "released", scheduledReleaseAt: null });
+					await saveFields({
+						visibility: "released",
+						scheduledReleaseAt: null,
+						originallyReleased: originalIso,
+					});
 					return;
 				}
-				// A future time is a schedule, and a schedule is a private Work's: on a released
-				// one, this takes it back out and lines it up for the new date.
-				await saveFields({ visibility: "private", scheduledReleaseAt: iso });
-			}}
-		/>
-	);
-
-	const originalDateField = (
-		<InlineField<string>
-			label="Original release date"
-			saved={originalDate}
-			renderRead={() => (
-				<DateValueLine
-					label="Original Release"
-					value={originalDate ? formatOriginallyReleased(`${originalDate}T00:00:00.000Z`) : "—"}
-				/>
-			)}
-			renderEdit={(draft, setDraft) => (
-				<div className="flex flex-col gap-2">
-					<div className="flex items-center gap-1.5">
-						<label className="text-sm" htmlFor="owner-original-release">
-							Original Release Date
-						</label>
-						<InfoTip text={ORIGINAL_RELEASE_HINT} />
-					</div>
-					<input
-						id="owner-original-release"
-						type="date"
-						aria-label="Original release date"
-						className="input input-bordered w-full max-w-56"
-						value={draft}
-						onChange={(e) => setDraft(e.target.value)}
-					/>
-				</div>
-			)}
-			save={(draft) => {
-				setOriginalDate(draft);
-				return saveFields({ originallyReleased: draft ? `${draft}T00:00:00.000Z` : null });
+				await saveFields({
+					visibility: "private",
+					scheduledReleaseAt: iso,
+					originallyReleased: originalIso,
+				});
 			}}
 		/>
 	);
@@ -1483,11 +1475,6 @@ export default function OwnerWorkEditor({
 			<section className="flex flex-col gap-2">
 				<h3 className={WORK_DETAILS_HEADING_CLASS}>Tags</h3>
 				{tagsField}
-			</section>
-			<section className="flex flex-col gap-2">
-				<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>
-				{releaseField}
-				{originalDateField}
 			</section>
 			{/* The Access section is gone (Parker, 2026-10-13): the chip in the byline strip
 			    below the video names who may open this, and for the creator that chip is the
@@ -1823,6 +1810,7 @@ export default function OwnerWorkEditor({
 			    name it (Parker's third pass, 2026-10-13). ── */}
 			<WorkByline
 				work={asRead}
+				dates={datesField}
 				// Share and Save ride the maker's line for the creator too (Parker, 2026-10-13):
 				// the centered strip fans out symmetrically, and a creator's line with an empty
 				// right half would sit lopsided. The verbs are a user's; they are what the strip
@@ -2019,67 +2007,6 @@ function ThumbFramePicker({
 				{error && <p className="mt-2 text-xs text-warning">{error}</p>}
 			</div>
 		</Modal>
-	);
-}
-
-/** The release read view: the row's status, said as a status rather than a control. */
-/**
- * One labeled date line, shared by both of the Release section's lines (Parker's fourth
- * pass, 2026-10-13): the label in its fixed column, the value starting at the same x on
- * every line — the tab stop a text editor would give — with the same type per line and
- * the dash where the Work carries no value. The record link's globe lives on the
- * byline's Released line rather than here (Parker, 2026-10-19).
- */
-export function DateValueLine({
-	label,
-	value,
-	hint,
-}: {
-	label: string;
-	value: ReactNode;
-	/** A qualifier after the value, for a scheduled release. */
-	hint?: string;
-}) {
-	return (
-		<div className="grid grid-cols-[8rem_1fr] items-baseline text-sm">
-			<span className="text-base-content/50">{label}</span>
-			<span className="flex flex-wrap items-center gap-x-2">
-				{value}
-				{hint && <span className="text-base-content/60"> — {hint}</span>}
-			</span>
-		</div>
-	);
-}
-
-export function ReleaseSummary({
-	work,
-	scheduled,
-}: {
-	work: WorkDetail;
-	scheduled: string | null;
-}) {
-	const released = work.releasedAt
-		? new Date(work.releasedAt).toLocaleDateString("en-US", {
-				month: "long",
-				day: "numeric",
-				year: "numeric",
-			})
-		: null;
-	const scheduledAt = scheduled
-		? new Date(scheduled).toLocaleString("en-US", {
-				month: "long",
-				day: "numeric",
-				year: "numeric",
-				hour: "numeric",
-				minute: "2-digit",
-			})
-		: null;
-	return (
-		<DateValueLine
-			label="Anthers Release"
-			value={released ?? "—"}
-			hint={scheduledAt ? `scheduled for ${scheduledAt}` : undefined}
-		/>
 	);
 }
 

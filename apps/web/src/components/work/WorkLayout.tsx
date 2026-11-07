@@ -294,6 +294,56 @@ export function formatVersionDate(iso: string): string {
 }
 
 /**
+ * The release dates, the byline's one line (Parker, 2026-11-06): the date this Work went
+ * out or "Unreleased", a hairline, then the date it first came out anywhere when the
+ * creator gave one. The listing's globe rides the release date, where a reader looks for
+ * it; a scheduled Work says when it is due under the line.
+ */
+export function WorkDateLine({
+	work,
+	scheduled,
+}: {
+	work: WorkDetail;
+	/** The Work's queued release instant, when it has one. */
+	scheduled?: string | null;
+}) {
+	const released = work.releasedAt
+		? new Date(work.releasedAt).toLocaleDateString("en-US", {
+				month: "long",
+				day: "numeric",
+				year: "numeric",
+			})
+		: null;
+	const originally = formatOriginallyReleased(work.originallyReleased);
+	const scheduledAt = scheduled
+		? new Date(scheduled).toLocaleString("en-US", {
+				month: "long",
+				day: "numeric",
+				year: "numeric",
+				hour: "numeric",
+				minute: "2-digit",
+			})
+		: null;
+	return (
+		<div className="flex flex-col items-center gap-1">
+			<div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+				<span className="flex items-center gap-1">
+					{released ? `Released ${released}` : "Unreleased"}
+					<RecordLinkButton recordUrl={work.recordUrl} />
+				</span>
+				{originally && (
+					<>
+						<span aria-hidden className="h-3 w-px bg-base-300" />
+						<span>Originally released {originally}</span>
+					</>
+				)}
+			</div>
+			{scheduledAt && <p className="text-xs text-base-content/45">Scheduled for {scheduledAt}</p>}
+		</div>
+	);
+}
+
+/**
  * Media whose METER the page owns, rather than the component.
  *
  * `VideoPlayer` and `AudioPlayer` each subscribe to the budget and render their own
@@ -527,6 +577,11 @@ export interface WorkBylineProps {
 	 */
 	kindChip?: ReactNode;
 	/**
+	 * The release dates, in place of the read-only line — the owner's editable field
+	 * (Parker, 2026-11-06). A reader's page sends nothing and gets `WorkDateLine`.
+	 */
+	dates?: ReactNode;
+	/**
 	 * Versions added after release, oldest first. The newest rides the date line; the
 	 * Details tab lists every one. Empty or absent means the Work has not changed since
 	 * it went public.
@@ -562,16 +617,10 @@ export function WorkByline({
 	actions,
 	chips,
 	kindChip,
+	dates,
 	versions = [],
 }: WorkBylineProps) {
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
-	const releasedDate = work.releasedAt
-		? new Date(work.releasedAt).toLocaleDateString("en-US", {
-				month: "long",
-				day: "numeric",
-				year: "numeric",
-			})
-		: null;
 	// The newest version added after release. History before the release is the creator's
 	// and the release build is the baseline, so an empty list means nothing has changed
 	// since the Work went public. The count is stated because one date on its own reads as
@@ -629,20 +678,10 @@ export function WorkByline({
 					{actions}
 				</div>
 			</div>
-			{(releasedDate || versionSummary) && (
-				<div className="flex flex-col items-center gap-0.5 text-sm text-base-content/60">
-					{releasedDate && (
-						// The listing's globe rides the Released line (Parker, 2026-10-19): it is
-						// the page's own statement that the Work exists on the network, and it sits
-						// where a reader looks for the date rather than inside the Details tab.
-						<p className="flex items-center justify-center gap-1">
-							Released {releasedDate}
-							<RecordLinkButton recordUrl={work.recordUrl} />
-						</p>
-					)}
-					{versionSummary && <p>{versionSummary}</p>}
-				</div>
-			)}
+			<div className="flex flex-col items-center gap-0.5 text-sm text-base-content/60">
+				{dates ?? <WorkDateLine work={work} scheduled={work.scheduledReleaseAt} />}
+				{versionSummary && <p>{versionSummary}</p>}
+			</div>
 		</header>
 	);
 }
