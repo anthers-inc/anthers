@@ -62,16 +62,14 @@ test("Rating Controls separates the two rungs, and Mature blurs by default", asy
 	}
 });
 
-test("the Adult warning names the payment method, and the (i) explains the check", async ({
-	page,
-}) => {
+test("the Adult warning names both proofs, and the (i) explains the check", async ({ page }) => {
 	await page.goto("/settings?tab=content");
 	const ratings = page
 		.locator(".card")
 		.filter({ has: page.getByRole("heading", { name: "Rating Controls" }) });
 
 	await expect(ratings).toContainText(
-		"Adult content requires a payment method for non-intrusive age verification",
+		"Adult content needs a credit card on file or a completed creator payout account — either one is a non-intrusive age check.",
 	);
 
 	const info = ratings.getByRole("button", { name: "About age verification" });
@@ -83,6 +81,7 @@ test("the Adult warning names the payment method, and the (i) explains the check
 	// describing a check Anthers does not perform.
 	const explanation = page.getByRole("tooltip");
 	await expect(explanation).toContainText(/credit card/i);
+	await expect(explanation).toContainText(/payout onboarding/i);
 	await expect(explanation).toContainText(/Nothing is charged/i);
 
 	// ⚠️ And the exclusion is stated plainly rather than gestured past. The wiki's *Content

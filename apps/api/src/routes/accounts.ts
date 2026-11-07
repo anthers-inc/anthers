@@ -2179,7 +2179,7 @@ const accountRoutes = new Hono()
 				// price of refusing to verify everybody. Gesturing at a path that does not
 				// exist would be worse than the exclusion.
 				funding_not_credit:
-					"This needs a credit card. Debit and prepaid cards have no age requirement, so they can't tell us what this check is asking. We don't have another way to do this, and if that shuts you out, we'd like to hear from you.",
+					"This needs a credit card, or a completed creator payout account — either one carries the age check. Debit and prepaid cards have no age requirement, so they can't answer the card check. If neither applies, we'd like to hear from you.",
 			};
 			return c.json({ error: said[result], code: result }, 409);
 		}
