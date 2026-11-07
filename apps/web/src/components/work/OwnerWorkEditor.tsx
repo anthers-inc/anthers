@@ -187,6 +187,12 @@ const IN_PLACE_EMPTY =
 const GROWS = "resize-none [field-sizing:content]";
 
 /**
+ * What every release-warning marker in the editor says on hover (Parker, 2026-11-06): the
+ * thing it marks is not a suggestion, and a scheduled release refuses without it.
+ */
+const RELEASE_WARNING = "This is mandatory for release. Fill it in before the scheduled date.";
+
+/**
  * The Original Release Date explainer, on the (i) beside its label (Parker, 2026-10-23).
  * It was printed under the input until the field's own control needed the room.
  */
@@ -1487,8 +1493,18 @@ export default function OwnerWorkEditor({
 
 	const infoTabs: InfoTab[] = [
 		{ key: "details", label: "Details", content: detailsSection },
-		{ key: "credits", label: "Credits", content: creditsField },
-		{ key: "rating", label: "Rating", content: ratingField },
+		{
+			key: "credits",
+			label: "Credits",
+			content: creditsField,
+			warning: creditsMissing ? RELEASE_WARNING : undefined,
+		},
+		{
+			key: "rating",
+			label: "Rating",
+			content: ratingField,
+			warning: !fromRows ? RELEASE_WARNING : undefined,
+		},
 		{ key: "accessibility", label: "Accessibility", content: accessibilityField },
 	];
 
@@ -1680,6 +1696,17 @@ export default function OwnerWorkEditor({
 			    card; a good's deliverable is the store panel, exactly where every user
 			    meets it. ── */}
 			<section className="relative">
+				{!writing && !isGoods(current.type) && !mediaManaging && fileMissing && (
+					// The same warning the refusal reads: no file, no release — and it sits
+					// beside the media it is about, not in a checklist elsewhere on the page.
+					<span
+						className="absolute right-14 top-4 z-10 flex size-8 items-center justify-center rounded-full bg-base-100/80 text-warning backdrop-blur"
+						title={RELEASE_WARNING}
+					>
+						<ExclamationTriangleIcon aria-hidden="true" className="size-4" />
+						<span className="sr-only">{RELEASE_WARNING}</span>
+					</span>
+				)}
 				{!writing && !isGoods(current.type) && !mediaManaging && (
 					<button
 						type="button"

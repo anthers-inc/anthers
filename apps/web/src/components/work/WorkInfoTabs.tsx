@@ -20,6 +20,7 @@
  * and `Editing.tsx`'s keeper covers that.
  */
 
+import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { type ReactNode, useState } from "react";
 import TabPanels from "./TabPanels";
 
@@ -27,6 +28,12 @@ export interface InfoTab {
 	key: string;
 	label: string;
 	content: ReactNode;
+	/**
+	 * What release still needs from this tab, when it needs something — rendered as the
+	 * warning triangle beside the label and carried as the button's tooltip. The caller
+	 * derives it from the same predicate as the release refusal, never a second rule.
+	 */
+	warning?: string;
 }
 
 export default function WorkInfoTabs({
@@ -64,12 +71,21 @@ export default function WorkInfoTabs({
 						aria-controls={`work-tab-${tab.key}`}
 						id={`work-tab-button-${tab.key}`}
 						className={`btn btn-xs sm:btn-sm join-item flex-1 ${tab.key === current.key ? "btn-active" : ""}`}
+						title={tab.warning}
 						onClick={() => {
 							setActive(tab.key);
 							onActiveChange?.(tab.key);
 						}}
 					>
-						{tab.label}
+						<span className="inline-flex items-center gap-1">
+							{tab.label}
+							{tab.warning && (
+								<>
+									<ExclamationTriangleIcon aria-hidden="true" className="size-3.5 text-warning" />
+									<span className="sr-only">Warning: {tab.warning}</span>
+								</>
+							)}
+						</span>
 					</button>
 				))}
 			</div>
