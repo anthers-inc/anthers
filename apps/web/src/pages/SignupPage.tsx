@@ -644,7 +644,7 @@ const PERK_ROWS: PerkRow[] = [
 			info:
 				amount > 0
 					? undefined
-					: "A free account's Time Pool is paid by the Time Pool Fund, out of the charitable share of what supporters give. Its slice is published monthly and moves with each cycle. This page carries the Fund's published figure when it has one, and says Varies before it does.",
+					: "A free account's Time Pool is paid by the Time Pool Fund, out of Anthers' undirected revenue and budgeted each month. Its slice is published and capped at a Root supporter's Time Pool. This page carries the Fund's published figure when it has one, and says Varies before it does.",
 		}),
 	},
 	{

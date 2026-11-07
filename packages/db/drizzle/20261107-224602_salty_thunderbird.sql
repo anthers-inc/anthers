@@ -1,0 +1,2 @@
+ALTER TABLE "pool_fund_ledger" ADD COLUMN "rate_per_account" numeric DEFAULT '0.00' NOT NULL;--> statement-breakpoint
+ALTER TABLE "pool_fund_ledger" ADD COLUMN "cap_per_account" numeric DEFAULT '0.00' NOT NULL;

@@ -2,17 +2,20 @@
 /**
  * The Time Pool Fund's ledger — the mechanism's own suite.
  *
- * The rules under test (the pool mechanism task's settled shapes):
- * - **One arithmetic**: the pool is the Fund's share of the remainder after the admin
- *   budget, capped by the parity ceiling; the slice divides it floored to the cent.
- * - **The count freezes**: raw attention rows prune, so a past cycle's active-free
- *   count is taken once and never recomputed, while its revenue still restates up.
- * - **A commitment freezes**: the next month is published once from the recurring
- *   base and never restated while future; arriving, it restates from its own
- *   holdings — the only restate a commitment may see.
- * - **A $0-revenue month funds a $0 pool** — the doctrine working.
+ * The rules under test (the budget-line model settled 2026-11-07):
+ * - **The Fund is a choice, not a share**: the pool is the chosen rate per eligible free
+ *   account times the accounts, capped at a Root supporter's Time Pool; the slice is
+ *   floored to the cent. Revenue is published beside it as context and never becomes
+ *   the pool's basis.
+ * - **The count and the rate freeze**: raw attention rows prune, so a past cycle's
+ *   eligible count and the rate it was funded at are taken once and never recomputed.
+ * - **The platform is not a beneficiary**: @anthers.org holds no Anthers Badge, so
+ *   without an explicit exclusion it would count itself free and dilute every real
+ *   account's slice.
+ * - **A commitment freezes**: the next month is published once from the rate and the
+ *   newest known count, and never restated while future.
  *
- * ⭐ The expected slices are computed from the shared core (`timePoolFundPool`), the
+ * ⭐ The expected slices are computed from the shared core (`timePoolFundActual`), the
  * same call the service makes — never a copied formula.
  */
 import { afterAll, afterEach, describe, expect, it } from "bun:test";
@@ -20,8 +23,8 @@ import { db } from "@anthers/db/client";
 import { badges, poolFundLedger, userBadges, userCycles } from "@anthers/db/schema";
 import type { CycleKey } from "@anthers/shared/billing-cycle";
 import { currentCycleKey, cycleEnd, cycleStart, nextCycleKey } from "@anthers/shared/billing-cycle";
-import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
-import { timePoolFundPool } from "@anthers/shared/time-pool-fund";
+import { PUBLIC_ACCESS_PRICE, timePoolByTimeFor } from "@anthers/shared/constants";
+import { timePoolFundActual } from "@anthers/shared/time-pool-fund";
 import { and, eq } from "drizzle-orm";
 import { createAccount } from "../__tests__/account-fixture.js";
 import { ensureAnthersLadder } from "../__tests__/anthers-ladder-fixture.js";
@@ -128,13 +131,11 @@ const rowFor = async (cycle: CycleKey) =>
 		await db.select().from(poolFundLedger).where(eq(poolFundLedger.billingCycle, cycle)).limit(1)
 	)[0];
 
-const expected = (revenue: string | number, active: number) =>
-	timePoolFundPool({
-		charitableRevenue: revenue,
-		adminBudgetShare: 0.3,
-		freeAccessShare: 0.1,
+const expected = (active: number) =>
+	timePoolFundActual({
+		ratePerAccount: timePoolByTimeFor(PUBLIC_ACCESS_PRICE),
 		activeFreeAccounts: active,
-		rootPool: timePoolFor(PUBLIC_ACCESS_PRICE),
+		capPerAccount: timePoolByTimeFor(PUBLIC_ACCESS_PRICE),
 	});
 
 describe("the slice the funding path reads", () => {
@@ -147,54 +148,76 @@ describe("the slice the funding path reads", () => {
 		expect(row?.actualizedAt).toBeNull(); // in flight — the count still restates
 	});
 
-	it("pools the settled books' revenue and divides the slice floored to the cent", async () => {
+	it("funds every eligible free account at the service level — a budget line, not a revenue share", async () => {
 		const cycle = aCycle();
-		// $20 booked: the uncapped share is $1.40 — under the ceiling for these two
-		// accounts (a Root pool × 2 = $3.00).
+		// Revenue is published context. Under the budget-line model it never becomes
+		// the pool's basis: two eligible accounts are funded at the chosen rate each.
 		await bookCycle(cycle, 20);
 		await makeWatcher(cycle);
 		await makeWatcher(cycle);
 		expect(await activeFreeAccountsForCycle(cycle)).toBe(2);
 
 		const fund = await freeSliceForCycle(cycle);
-		expect(fund.pool.toFixed(2)).toBe("1.40");
-		expect(fund.slice.toFixed(2)).toBe(expected(20, 2).slice.toFixed(2));
-		expect(fund.slice.toFixed(2)).toBe("0.70");
+		expect(fund.pool.toFixed(2)).toBe(expected(2).pool.toFixed(2));
+		expect(fund.slice.toFixed(2)).toBe(expected(2).slice.toFixed(2));
+		expect(fund.pool.toFixed(2)).toBe("2.00");
+		expect(fund.slice.toFixed(2)).toBe("1.00");
 	});
 
-	it("the parity ceiling binds: the excess routes to the remainder by construction", async () => {
+	it("publishes the rate and the cap it was funded at", async () => {
 		const cycle = aCycle();
-		await bookCycle(cycle, 100);
 		await makeWatcher(cycle);
-		// The uncapped share is $7.00; the ceiling is a Root supporter's pool × 1.
 		const fund = await freeSliceForCycle(cycle);
-		expect(fund.pool.toFixed(2)).toBe(timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2));
-		expect(fund.slice.toFixed(2)).toBe("1.50");
+		expect(fund.pool.toFixed(2)).toBe("1.00");
+		expect(fund.slice.toFixed(2)).toBe("1.00");
+		const row = await rowFor(cycle);
+		expect(row?.ratePerAccount).toBe("1.00");
+		expect(row?.capPerAccount).toBe("1.00");
 	});
 
-	it("the count freezes after the cycle ends, while revenue still restates up", async () => {
+	it("freezes the count and the rate after the cycle ends, while revenue still restates up", async () => {
 		const cycle = aCycle();
-		// Books small enough that the parity ceiling does not bind at one account: the
-		// restatement has to be visible as the pool's own move, not the ceiling's.
 		await bookCycle(cycle, 20);
 		await makeWatcher(cycle);
-		// The cycle long ended: the day after its end is when the count freezes.
+		// The cycle long ended: the day after its end is when the count and rate freeze.
 		const after = new Date(cycleEnd(cycle).getTime() + 86_400_000);
 		const fund = await freeSliceForCycle(cycle, after);
 		expect(fund.activeFreeAccounts).toBe(1);
 		const row = await rowFor(cycle);
 		expect(row?.actualizedAt).not.toBeNull();
+		expect(row?.charitableRevenue).toBe("20.00");
 
-		// The books restated upward (a late invoice settled); the count must not move.
+		// The books restated upward (a late invoice settled); the revenue column follows,
+		// but the count, the rate and the pool it funded must not move.
 		await bookCycle(cycle, 20);
 		// And a second account going active after the freeze must not appear either —
 		// this is the test that catches an unfrozen count.
 		await makeWatcher(cycle);
 		const restated = await freeSliceForCycle(cycle, after);
 		expect(restated.activeFreeAccounts).toBe(1);
-		expect(restated.pool.toFixed(2)).toBe(expected(40, 1).pool.toFixed(2));
+		expect(restated.pool.toFixed(2)).toBe(expected(1).pool.toFixed(2));
 		const still = await rowFor(cycle);
 		expect(still?.actualizedAt?.getTime()).toBe(row?.actualizedAt?.getTime());
+		expect(still?.ratePerAccount).toBe(row.ratePerAccount);
+		expect(still?.charitableRevenue).toBe("40.00");
+	});
+
+	it("never counts the platform's own account as an eligible free account", async () => {
+		const cycle = aCycle();
+		const anthersId = await ensureAnthersLadder();
+		// The platform watches the commons just like anybody; it must not be paid from
+		// its own Fund, and it must not dilute a real free account's slice.
+		await insertAttentionRange({
+			userId: anthersId,
+			creatorId: anthersId,
+			eventType: "watch",
+			seconds: 60,
+			publicAccess: true,
+			viaShareLink: false,
+			endsAt: new Date(`${cycle.slice(0, 10).replace("-01", "-15")}T00:00:00Z`),
+		});
+		await makeWatcher(cycle);
+		expect(await activeFreeAccountsForCycle(cycle)).toBe(1);
 	});
 });
 
@@ -231,15 +254,14 @@ describe("publication", () => {
 		await publishFundLedger(cycleStart(cycle));
 		expect((await rowFor(arrived))?.status).toBe("committed");
 
-		// The month arrives and renewals land (a $100 book with one active free
-		// account): the row recomputes to actual, and the parity ceiling — not the
-		// uncapped share — is what the slice pays.
+		// The month arrives and one account is active: the row recomputes to actual and
+		// pays the service level, not the revenue share.
 		await bookCycle(arrived, 100);
 		await makeWatcher(arrived);
 		const fund = await freeSliceForCycle(arrived);
 		expect((await rowFor(arrived))?.status).toBe("actual");
-		expect(fund.pool.toFixed(2)).toBe(timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2));
-		expect(fund.slice.toFixed(2)).toBe("1.50");
+		expect(fund.pool.toFixed(2)).toBe(expected(1).pool.toFixed(2));
+		expect(fund.slice.toFixed(2)).toBe("1.00");
 	});
 });
 

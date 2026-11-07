@@ -114,12 +114,12 @@ function FundPoolLine() {
 	const fund = useTimePoolFund();
 	return (
 		<p className="mt-3 text-base leading-relaxed text-base-content/70">
-			And your time still pays: the Time Pool Fund (the charitable share of what supporters give
-			Anthers) funds a pool of{" "}
+			And your time still pays: the Time Pool Fund, Anthers' own money budgeted each month, funds a
+			pool of{" "}
 			<strong>
 				{fund
 					? `$${fund.slicePerAccount.toFixed(2)} a month (varies — published monthly)`
-					: "a monthly published share"}
+					: "a monthly published amount"}
 			</strong>{" "}
 			for every free account, split between the creators you actually spend time with.
 		</p>

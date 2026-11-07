@@ -19,11 +19,13 @@ import {
 	stripeCustomers,
 	userBadges,
 } from "@anthers/db/schema";
+import { type CycleKey, currentCycleKey, cycleStart } from "@anthers/shared/billing-cycle";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit, supportBreakdown } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
 import { distributePool } from "../jobs/distribute-pool";
+import { freeSliceForCycle } from "../services/time-pool-fund";
 import { createAccount } from "./account-fixture";
 import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
@@ -180,6 +182,90 @@ async function poolPaid(userId: number) {
 	const rows = await ledger(userId);
 	return new Map([...rows].map(([id, r]) => [id, new Decimal(r.poolAmount)]));
 }
+
+describe("distributePool — the Fund's population", () => {
+	beforeAll(async () => {
+		await db.execute("SELECT 1");
+	}, DB_SETUP_TIMEOUT);
+
+	it("pays a free account that has never bought anything — no customer row", async () => {
+		// The Fund exists for card-free free accounts; iterating `stripe_customers` would
+		// count them in the denominator and never pay them.
+		const creator = await makeUser("creator");
+		const freeUserId = await makeUser("free");
+		const cycle = currentCycleKey();
+		const start = new Date(cycleStart(cycle).getTime() + 60 * 60_000);
+		await insertAttentionRange({
+			userId: freeUserId,
+			creatorId: creator,
+			eventType: "watch",
+			seconds: 600,
+			publicAccess: true,
+			viaShareLink: false,
+			endsAt: new Date(start.getTime() + 600_000),
+		});
+
+		await distributePool({ userId: freeUserId });
+
+		const [row] = await db
+			.select()
+			.from(poolDistributions)
+			.where(
+				and(
+					eq(poolDistributions.subscriberId, freeUserId),
+					eq(poolDistributions.creatorId, creator),
+					eq(poolDistributions.billingCycle, cycle),
+				),
+			);
+		expect(row).toBeDefined();
+		// The same published slice the mechanism's own read answers — never a literal.
+		const { slice } = await freeSliceForCycle(cycle as CycleKey);
+		expect(new Decimal(row.poolAmount).toFixed(2)).toBe(new Decimal(slice).toFixed(2));
+		expect(row.attentionSeconds).toBe(600);
+	});
+
+	it("writes whole seconds when the range split is fractional", async () => {
+		// Two overlapping ranges, one per creator: each receives 7.5 credited seconds. The
+		// money must split on the exact fractions, while `attention_seconds` is an integer
+		// column — a fractional value used to abort the whole row's insert.
+		const a = await makeUser("creator");
+		const b = await makeUser("creator");
+		const { userId, accountId } = await seedCycle(0, []);
+		const endA = Date.parse("2031-03-15T12:00:00Z");
+		await insertAttentionRange({
+			userId,
+			creatorId: a,
+			eventType: "watch",
+			seconds: 10,
+			publicAccess: true,
+			viaShareLink: false,
+			endsAt: new Date(endA),
+		});
+		await insertAttentionRange({
+			userId,
+			creatorId: b,
+			eventType: "watch",
+			seconds: 10,
+			publicAccess: true,
+			viaShareLink: false,
+			endsAt: new Date(endA + 5_000),
+		});
+
+		await distributePool({ accountId });
+
+		const rows = await ledger(userId);
+		expect(rows.get(a)?.attentionSeconds).toBe(8);
+		expect(rows.get(b)?.attentionSeconds).toBe(8);
+		// The pool still splits 50/50 on the exact 7.5s — rounding is display only, and the
+		// pot is conserved to the cent.
+		const { slice } = await freeSliceForCycle("2031-03-01" as CycleKey);
+		const total = [a, b].reduce(
+			(sum, id) => sum.plus(rows.get(id)?.poolAmount ?? 0),
+			new Decimal(0),
+		);
+		expect(total.toFixed(2)).toBe(new Decimal(slice).toFixed(2));
+	});
+});
 
 describe("distributePool — directed Badge thresholds are paid NET of the card fee", () => {
 	beforeAll(async () => {

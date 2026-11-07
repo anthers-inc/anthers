@@ -35,6 +35,7 @@ import { useAdminData } from "../lib/load";
 interface Settings {
 	adminBudgetShare: number;
 	freeAccessShare: number;
+	timePoolRatePerUser: number;
 }
 
 /** One phase's editable inputs — what the operator edits and what saves. */
@@ -748,6 +749,7 @@ function SettingsEditor({
 }) {
 	const [admin, setAdmin] = useState(settings.adminBudgetShare);
 	const [access, setAccess] = useState(settings.freeAccessShare);
+	const [rate, setRate] = useState(settings.timePoolRatePerUser);
 	return (
 		<div className="mb-6 flex flex-wrap items-end gap-4 rounded-box border border-base-300 bg-base-100 p-4">
 			<label className="text-sm" htmlFor="fp-admin-share">
@@ -776,18 +778,34 @@ function SettingsEditor({
 					onChange={(e) => setAccess(Number(e.target.value))}
 				/>
 			</label>
+			<label className="text-sm" htmlFor="fp-fund-rate">
+				<div>Time Pool Fund ($ per eligible free account)</div>
+				<input
+					className="input input-bordered input-sm mt-1 w-28 tabular-nums"
+					type="number"
+					step="0.01"
+					min="0"
+					max="10"
+					id="fp-fund-rate"
+					value={rate}
+					onChange={(e) => setRate(Number(e.target.value))}
+				/>
+			</label>
 			<button
 				type="button"
 				className="btn btn-primary btn-sm"
 				disabled={busy}
-				onClick={() => onSave({ adminBudgetShare: admin, freeAccessShare: access })}
+				onClick={() =>
+					onSave({ adminBudgetShare: admin, freeAccessShare: access, timePoolRatePerUser: rate })
+				}
 			>
 				Save settings
 			</button>
 			<span className="text-xs text-base-content/60">
 				Locked 30% is the plan: budgeted at the ceiling, so reality can only be more charitable than
-				this and the programs never fall below 70% of revenue. A phase's Admin % / Free Access %
-				cells override these for that phase alone.
+				this and the programs never fall below 70% of revenue. The Fund's rate is capped at a Root
+				supporter's Time Pool, so the subsidy never pays a free account more than the cheapest
+				Badge. A phase's Admin % / Free Access % cells override the shares for that phase alone.
 			</span>
 		</div>
 	);

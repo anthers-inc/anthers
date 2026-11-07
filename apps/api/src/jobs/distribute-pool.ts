@@ -61,11 +61,13 @@ import Decimal from "decimal.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { anthersUserId } from "../services/anthers-badges.js";
 import { creditedSecondsByCreator } from "../services/attention-ranges.js";
-import { freeSliceForCycle } from "../services/time-pool-fund.js";
+import { activeFreeAccountIdsForCycle, freeSliceForCycle } from "../services/time-pool-fund.js";
 
 export interface DistributePoolData {
-	/** If set, distribute for a single account. Otherwise all active accounts. */
+	/** If set, distribute for a single Stripe-customer account. Otherwise every active account and every eligible free one. */
 	accountId?: number;
+	/** If set, distribute for one user by id — an operator re-run, including a free account with no customer row. */
+	userId?: number;
 }
 
 /** Round to cents the same way `fees.ts` does, so the two never disagree by a penny. */
@@ -390,7 +392,12 @@ export async function computeMonth(input: {
 	// pool dollars would render a slice with no money beside it. Total time with a
 	// creator is a different question, answered by `GET /attention/summary`.
 	for (const [creatorId, seconds] of attentionByCreator) {
-		ensure(creatorId).attentionSeconds = seconds;
+		// `pool_distributions.attention_seconds` is an INTEGER column, while the split
+		// returns fractional seconds by design (it divides overlaps evenly). Round here,
+		// at the one place the value becomes a stored count; the money above was computed
+		// from the exact fractions and is untouched. A fractional value used to abort the
+		// whole row's insert, silently skipping the account's distribution.
+		ensure(creatorId).attentionSeconds = Math.round(seconds);
 	}
 
 	return { distributions, timePool, distributedByTime, stickerTotal };
@@ -407,7 +414,7 @@ function newDist(): Dist {
 
 async function distributeForAccount(
 	acct: {
-		id: number;
+		id: number | null;
 		userId: number;
 		currentPeriodStart: Date | null;
 		currentPeriodEnd: Date | null;
@@ -532,26 +539,63 @@ function correctDrift(
 }
 
 export async function distributePool(data: DistributePoolData) {
-	const accts = data.accountId
-		? await db
-				.select()
-				.from(stripeCustomers)
-				.where(and(eq(stripeCustomers.id, data.accountId), eq(stripeCustomers.isActive, true)))
-		: await db.select().from(stripeCustomers).where(eq(stripeCustomers.isActive, true));
+	// 🚨 **The population is the Fund's denominator, not the customers table.** A free
+	// account that has never bought anything holds no `stripe_customers` row, and it is
+	// exactly who the Fund exists for. The eligible free ids come from the one predicate
+	// `activeFreeAccountsForCycle` counts, so a cycle cannot divide by an account it
+	// never pays.
+	const customers = await db
+		.select({
+			id: stripeCustomers.id,
+			userId: stripeCustomers.userId,
+			currentPeriodStart: stripeCustomers.currentPeriodStart,
+			currentPeriodEnd: stripeCustomers.currentPeriodEnd,
+		})
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.isActive, true));
 
-	// The Fund's slice for the cycle, read once per run — what every zero-Anthers
-	// account's `computeMonth` draws. The same read that restates the current cycle's
-	// published row from its booked holdings, so the estimate and the ledger cannot
-	// come apart.
-	const { start: firstStart } = accts[0]
-		? getBillingCycle(accts[0])
-		: { start: cycleStart(currentCycleKey()) };
-	const slice = await freeSliceForCycle(cycleKeyFor(firstStart));
+	type Account = {
+		id: number | null;
+		userId: number;
+		currentPeriodStart: Date | null;
+		currentPeriodEnd: Date | null;
+	};
+	let accts: Account[];
+	if (data.accountId != null) {
+		accts = customers.filter((c) => c.id === data.accountId);
+	} else if (data.userId != null) {
+		const found = customers.find((c) => c.userId === data.userId);
+		accts = [
+			found ?? { id: null, userId: data.userId, currentPeriodStart: null, currentPeriodEnd: null },
+		];
+	} else {
+		accts = [...customers];
+		const paid = new Set(customers.map((c) => c.userId));
+		const cycle = currentCycleKey();
+		for (const userId of await activeFreeAccountIdsForCycle(cycle)) {
+			if (paid.has(userId)) continue;
+			// No stored period: a free account's cycle is the calendar month, which is
+			// what `getBillingCycle` falls back to.
+			accts.push({ id: null, userId, currentPeriodStart: null, currentPeriodEnd: null });
+		}
+	}
 
+	// The Fund's slice is per cycle: read it once per cycle present in the run, so an
+	// account whose period lags into last month is paid that month's published slice.
+	// The same read restates the cycle's row from its booked revenue, so the estimate
+	// and the ledger cannot come apart.
+	const slices = new Map<string, number>();
 	let processed = 0;
 	for (const acct of accts) {
 		try {
-			await distributeForAccount(acct, slice.slice);
+			const { start } = getBillingCycle(acct);
+			const cycle = cycleKeyFor(start);
+			let slice = slices.get(cycle);
+			if (slice === undefined) {
+				slice = (await freeSliceForCycle(cycle)).slice;
+				slices.set(cycle, slice);
+			}
+			await distributeForAccount(acct, slice);
 			processed++;
 		} catch (error) {
 			console.error(`Pool distribution failed for user ${acct.userId}:`, error);

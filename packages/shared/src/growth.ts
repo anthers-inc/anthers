@@ -39,10 +39,10 @@ import {
 	PUBLIC_ACCESS_PRICE,
 	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
-	timePoolFor,
+	timePoolByTimeFor,
 } from "./constants.js";
 import { anthersSupportBreakdown, paymentsSplit } from "./fees.js";
-import { timePoolFundPool } from "./time-pool-fund.js";
+import { timePoolFundProjection } from "./time-pool-fund.js";
 
 export interface Staffing {
 	/** Salaries and stipends. */
@@ -58,6 +58,15 @@ export interface Staffing {
  * default shared the other way would be a cycle).
  */
 export const FREE_ACCESS_SHARE_DEFAULT = 0.1;
+
+/**
+ * The Time Pool Fund's default service level: dollars per eligible free account per
+ * cycle. The runtime's actual is the plan settings' `timePoolRatePerUser` (Parker's
+ * budget choice), clamped to the smallest paid Time Pool — a Root supporter's $1.00 at
+ * the seeded ladder. One dollar is the default because the general disposition is as
+ * much as the discretionary budget allows, and today the cap is what it affords.
+ */
+export const TIME_POOL_RATE_DEFAULT = 1;
 
 /**
  * What each rung PLANS to spend, which is deliberately **not** what it can afford.
@@ -251,14 +260,18 @@ export interface GrowthInputs {
 	payingShare: number;
 	staffing: Staffing;
 	/**
-	 * Free Access's share of the programs — the **Fund's dial** (the plan settings'
-	 * shape, defaulted to the ruled plan default of 0.10). The free pool derives
-	 * inside `modelAt` from it and the admin share through
-	 * `timePoolFundPool`, so the model, the plan tool and the runtime service
-	 * compose from one arithmetic; the per-head `freeTimePool` dollar input this
-	 * parameter replaced retired with the constant it defaulted to.
+	 * Free Access's share of the programs — the plan's modeling dial (default 0.10).
+	 * The projection derives inside `modelAt` from it, the admin share and the service
+	 * level through `timePoolFundProjection`, so the plan asks whether user revenue
+	 * alone could carry the chosen rate. The runtime's actual is the rate itself, not
+	 * this share.
 	 */
 	freeAccessShare?: number;
+	/**
+	 * The Time Pool Fund's service level — dollars per eligible free account. The
+	 * plan's cap and the runtime's actual input; the model uses the same figure.
+	 */
+	timePoolRatePerUser?: number;
 	/** The admin budget's share of charitable revenue; defaults to the locked ceiling. */
 	adminBudgetShare?: number;
 	mix?: Record<number, number>;
@@ -381,6 +394,7 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		payingShare,
 		staffing,
 		freeAccessShare = FREE_ACCESS_SHARE_DEFAULT,
+		timePoolRatePerUser = TIME_POOL_RATE_DEFAULT,
 		adminBudgetShare = ADMIN_CEILING,
 		mix = payingBadgeMix(),
 		preservedGiB = 0,
@@ -407,18 +421,22 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		payingTimePool += bd.timePool.toNumber() * count;
 	});
 
-	// The free pools are the **Fund's** now, not a per-head constant: the pot derives
-	// from the shares through the one arithmetic the runtime and the plan share
-	// (`timePoolFundPool`), at the model's own revenue. The count here is every free
-	// account rather than just the Public-Access-active ones — the model does not
-	// model watch behavior, and the ceiling (a Root supporter's pool × the count)
-	// is never the binding term at any modeled scale, so the difference is nil.
-	const fund = timePoolFundPool({
+	// The free pools are the **Fund's** now, not a per-head constant, and the plan models
+	// a self-sufficient revenue share capped by the chosen service level
+	// (`timePoolFundProjection`). The runtime's actual is the organization's rate
+	// (`timePoolFundActual`); the model asks whether user revenue alone could carry that
+	// service level, and the cap — a Root supporter's Time Pool, $1.00 — is what the
+	// model and the ledger can never disagree about. The count here is every free account
+	// rather than just the Public-Access-active ones, because the model does not model
+	// watch behavior.
+	const fund = timePoolFundProjection({
 		charitableRevenue: charitableFromUsers,
 		adminBudgetShare,
 		freeAccessShare,
 		activeFreeAccounts: freeAccounts,
-		rootPool: timePoolFor(PUBLIC_ACCESS_PRICE),
+		// The plan may not model a rate above the Badge ladder's floor: the cap is the
+		// smallest paid Time Pool, whatever the settings ask for.
+		ratePerAccount: Math.min(timePoolRatePerUser, timePoolByTimeFor(PUBLIC_ACCESS_PRICE)),
 	});
 	const freeAccessTimePool = fund.pool.toNumber();
 	const timePoolToCreators = freeAccessTimePool + payingTimePool;

@@ -1063,20 +1063,21 @@ export const poolDistributions = pgTable(
 // accounts' Time Pools), so the ledger is org money, per published cycle.
 //
 // ⭐ **One row per billing cycle is the published record** (the pool mechanism
-// task, 2026-10-10): free accounts' Time Pools are not a per-head constant; they are
-// the Fund — a stated share of the charitable remainder after the admin budget,
-// published monthly, divided across the cycle's active free accounts, each slice
-// flowing through `computeMonth` unchanged. This table is what makes the pool a
-// fact somebody can read back years later, and `services/time-pool-fund.ts` is its
-// only writer.
+// task, 2026-10-10). Free accounts' Time Pools are not a per-head constant and are
+// not a percentage of revenue: the Fund is a **budget line** the organization
+// chooses each cycle, funded from undirected revenue (support remainders,
+// contributions, and whatever else is not already spoken for), divided across the
+// cycle's eligible free accounts, each slice flowing through `computeMonth`
+// unchanged. This table is what makes the choice a fact somebody can read back
+// years later, and `services/time-pool-fund.ts` is its only writer.
 //
 // 🚨 **The row freezes at first actualization; restatements never rewrite the active
-// count.** The count is taken from raw `attention_events`, which prune after
-// `ATTENTION_RAW_RETENTION_DAYS` (the daily rollup is identity-free), so the first
-// actualization is the only moment a cycle's real count exists and the row is where
-// it survives — the same point-in-time discipline as `attention_events.publicAccess`.
-// Revenue, pool and slice restate (upward while the future is concerned; to actuals
-// at cycle start); the count never does.
+// count or the rate.** The count is taken from raw `attention_events`, which prune
+// after `ATTENTION_RAW_RETENTION_DAYS` (the daily rollup is identity-free), so the
+// first actualization is the only moment a cycle's real count exists and the row is
+// where it survives — the same point-in-time discipline as
+// `attention_events.publicAccess`. Revenue and the pool's restatement follow the
+// count; the rate a past cycle was funded at never moves.
 export const poolFundLedger = pgTable(
 	"pool_fund_ledger",
 	{
@@ -1087,34 +1088,57 @@ export const poolFundLedger = pgTable(
 		 * Where the cycle sits in the publication timeline:
 		 *
 		 * - `actual` — the cycle ended or is in flight, computed from its own booked
-		 *   holdings (an ended cycle's holdings may still grow through Stripe's payment
-		 *   retries, so the row restates upward with them, and the parity ceiling is
-		 *   recomputed against the frozen count each time).
-		 * - `committed` — the next month, published in advance from the recurring base
-		 *   (the current holdings, which renew) and frozen: restated only by revenue
-		 *   overshooting.
-		 * - `estimate` — one cycle past the commitment, from the same recurring base.
+		 *   holdings and the service level in force (an ended cycle's holdings may still
+		 *   grow through Stripe's payment retries, so the row restates upward with them).
+		 * - `committed` — the next month, published in advance from the standing service
+		 *   level and the newest active count, and frozen thereafter.
+		 * - `estimate` — one cycle past the commitment, from the same rate and count.
 		 */
 		status: text("status").notNull().default("actual"),
 		/**
-		 * The booked charitable revenue the pool derives from — the settled holdings
+		 * The cycle's booked undirected revenue from user support — the settled holdings
 		 * basis: the sum over Anthers-ladder holdings for the cycle of the breakdown's
-		 * remainder line (`anthersSupportBreakdown`, at the model's fee split). A
-		 * committed or estimate row records the recurring base it projects from, which
-		 * is the current cycle's holdings, not the future cycle's.
+		 * remainder line (`anthersSupportBreakdown`, at the model's fee split).
+		 *
+		 * ⚠️ **Context, not the Fund's basis.** The Fund is a budget line spent from all
+		 * undirected revenue, contributions included; it is not a share of this figure.
+		 * The column stays because a published pool is auditable against what the
+		 * platform took in that month, and a committed or estimate row records the
+		 * recurring base it projects from.
 		 */
 		charitableRevenue: numeric("charitable_revenue").notNull().default("0.00"),
-		/** The shares that produced this row, as the plan tool's settings held them. Stored beside the money because a published figure is auditable against the policy that produced it, and a later settings move must not silently restate it. */
+		/** The plan tool's shares as they stood when the row was written — the projection's context, never the actual's input. Stored beside the money so a later settings move cannot silently restate a published figure. */
 		adminBudgetShare: real("admin_budget_share").notNull(),
 		freeAccessShare: real("free_access_share").notNull(),
-		/** The Fund's pot for the cycle, after the parity ceiling. */
+		/**
+		 * The service level the cycle was funded at: dollars each eligible free account's
+		 * Time Pool receives. The organization chooses it per budget (Parker, 2026-11-07),
+		 * and the general disposition is as much as the discretionary budget allows, never
+		 * above {@link capPerAccount}. Stored on the row because a published slice must be
+		 * auditable against the rate that produced it, and a later rate change must not
+		 * restate a past cycle.
+		 */
+		ratePerAccount: numeric("rate_per_account").notNull().default("0.00"),
+		/**
+		 * The per-account ceiling in force when the row was written — the smallest paid
+		 * Time Pool (a Root supporter's `timePoolByTimeFor`), which is $1.00 at the seeded
+		 * ladder. A free account may never be funded above it: the subsidized pool is a
+		 * floor under free access, not a better deal than the cheapest Badge.
+		 */
+		capPerAccount: numeric("cap_per_account").notNull().default("0.00"),
+		/** The Fund's pot for the cycle: the rate times the eligible accounts, floored by the cap. */
 		poolAmount: numeric("pool_amount").notNull().default("0.00"),
 		/**
-		 * Accounts with at least one credited Public Access second in the cycle and no
-		 * Anthers holding — the pool's denominator. **Frozen at first actualization**
-		 * (see the table note); while a cycle is in flight it restates live, and a
-		 * committed or estimate row carries the last known actual count as its
-		 * projection.
+		 * Accounts with at least one credited Public Access second in the cycle, no
+		 * Anthers holding, and not the platform's own account — the pool's denominator.
+		 * **Frozen at first actualization** (see the table note); while a cycle is in
+		 * flight it restates live, and a committed or estimate row carries the last known
+		 * actual count as its projection.
+		 *
+		 * ⚠️ **The platform account is not a beneficiary of its own Fund.** @anthers.org
+		 * holds no Anthers Badge, so without the exclusion it counts as free and dilutes
+		 * every real free account's slice while its own share pays creators out of money
+		 * the organization already owns.
 		 */
 		activeFreeAccounts: integer("active_free_accounts").notNull().default(0),
 		/**

@@ -32,10 +32,10 @@ import {
 	userBadges,
 	userCycles,
 } from "@anthers/db/schema";
-import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
+import { PUBLIC_ACCESS_PRICE, timePoolByTimeFor, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit } from "@anthers/shared/fees";
 import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
-import { timePoolFundPool } from "@anthers/shared/time-pool-fund";
+import { timePoolFundActual } from "@anthers/shared/time-pool-fund";
 import Decimal from "decimal.js";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
 import app from "../index";
@@ -171,11 +171,11 @@ async function holdOrgRung(userId: number, threshold: string, cycle: string): Pr
 }
 
 /**
- * Publish a Fund row for the test month as the mechanism would have: a settled book
- * of `foundation` dollars (the books the ledger's settled basis reads), a frozen
- * active count of `active`, and the pool and slice the shared arithmetic derives
- * from them. Settlement reads the cycle's slice through the ledger; this is the
- * fixture for it — the same one write `services/time-pool-fund.ts` makes.
+ * Publish a Fund row for the test month as the mechanism would have: the service level
+ * in force, a frozen active count, and the pool and slice the shared arithmetic derives
+ * from them. `foundation` is the settled book the ledger publishes beside the decision —
+ * context, not the pool's basis. Settlement reads the cycle's slice through the ledger;
+ * this is the fixture for it — the same write `services/time-pool-fund.ts` makes.
  */
 async function publishFundRow(activeFreeAccounts: number, foundation = 100): Promise<void> {
 	const { userId } = await makeSupporter(0);
@@ -184,27 +184,34 @@ async function publishFundRow(activeFreeAccounts: number, foundation = 100): Pro
 		billingCycle: MONTH,
 		foundation: foundation.toFixed(2),
 	});
+	const rate = timePoolByTimeFor(PUBLIC_ACCESS_PRICE);
+	const fund = timePoolFundActual({
+		ratePerAccount: rate,
+		activeFreeAccounts,
+		capPerAccount: rate,
+	});
 	await db.insert(poolFundLedger).values({
 		billingCycle: MONTH,
 		status: "actual",
 		charitableRevenue: foundation.toFixed(2),
 		adminBudgetShare: 0.3,
 		freeAccessShare: 0.1,
-		poolAmount: "0.00",
+		ratePerAccount: rate.toFixed(2),
+		capPerAccount: rate.toFixed(2),
+		poolAmount: fund.pool.toFixed(2),
 		activeFreeAccounts,
-		slicePerAccount: "0.00",
+		slicePerAccount: fund.slice.toFixed(2),
 		actualizedAt: new Date("2031-06-02T02:00:00Z"),
 	});
 }
 
 /** The Fund's slice the ledger's arithmetic derives for MONTH — the tests' expected free pool. */
-function fundSlice(activeFreeAccounts: number, foundation = 100): Decimal {
-	return timePoolFundPool({
-		charitableRevenue: foundation,
-		adminBudgetShare: 0.3,
-		freeAccessShare: 0.1,
+function fundSlice(activeFreeAccounts: number): Decimal {
+	const rate = timePoolByTimeFor(PUBLIC_ACCESS_PRICE);
+	return timePoolFundActual({
+		ratePerAccount: rate,
 		activeFreeAccounts,
-		rootPool: timePoolFor(PUBLIC_ACCESS_PRICE),
+		capPerAccount: rate,
 	}).slice;
 }
 
@@ -377,8 +384,8 @@ describe("settling a month from what was paid for it", () => {
 	it("🚨 credits only the free Time Pool for a month nothing was paid for, and pays no Stickers", async () => {
 		// The renewal failed and never cleared. The estimate credited this supporter's whole $6
 		// pool and their Sticker from the first night; none of it was ever collected.
-		// The Fund's published slice for the month ($1.40 from a $100 book, 5 active)
-		// is the free pool the cycle carries; the supporter draws it, Stickers draw none.
+		// The Fund's published slice for the month ($1.00 per eligible account) is the
+		// free pool the cycle carries; the supporter draws it, Stickers draw none.
 		const creator = await makeUser("creator");
 		const { userId, accountId } = await makeSupporter(6);
 		await publishFundRow(5);

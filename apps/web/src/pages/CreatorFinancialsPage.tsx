@@ -18,7 +18,7 @@
 //
 // 🚨 **The free tier's pool is the Time Pool Fund, and it is not this file's number.**
 // Free accounts' streams of Public Access work pay creators from the Fund — a stated
-// share of the charitable remainder after the admin budget, published monthly by its
+// budget line Anthers chooses each month, published by its
 // ledger and fetched here (`useTimePoolFund`) with the settled placeholder —
 // "varies — published monthly" — until the values land. Per the pool ruling, any
 // per-hour comparison quotes a paying Badge (Root) as its base; the free slice is
@@ -176,10 +176,10 @@ function Explanation() {
 						<b className="text-base-content">And the people who pay nothing?</b> A free account
 						streams Public Access work ({FREE_PUBLIC_ACCESS_HOURS} hours a month, free forever), and
 						the time those accounts spend with you still pays. It is paid from the{" "}
-						<b className="text-base-content">Time Pool Fund</b>: a stated share of what is left of
-						support given to Anthers after the admin budget, published monthly and divided across
-						the month's active free accounts. Anthers funds it; the viewer does not, and no ads, no
-						tracking, and no paywall stand behind it.
+						<b className="text-base-content">Time Pool Fund</b>: Anthers' own money, budgeted each
+						month and divided across the month's eligible free accounts, with the per-account amount
+						published and capped at a Root supporter's Time Pool. The viewer does not pay it, and no
+						ads, no tracking, and no paywall stand behind it.
 					</p>
 					<p className="text-base-content/80">
 						{fund ? (

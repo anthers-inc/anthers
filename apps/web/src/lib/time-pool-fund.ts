@@ -4,11 +4,12 @@
  * pool rides.
  *
  * The free account's Time Pool is not a constant (`FREE_TIME_POOL` retired with the
- * pool mechanism): it is the **Fund** — a stated share of the charitable remainder
- * after the admin budget, published monthly, divided across the cycle's active free
- * accounts. Every surface quoting the free pool's number reads it here, from
- * `GET /api/subscriptions/time-pool-fund`, exactly as the Badge ladder's seeded
- * values are fetched rather than quoted from code.
+ * pool mechanism): it is the **Fund**, a budget line Anthers chooses each cycle from
+ * its undirected revenue and divides across the cycle's eligible free accounts. The
+ * per-account amount is capped at a Root supporter's Time Pool, so the subsidy never
+ * pays a free account more than the cheapest Badge. Every surface quoting the free
+ * pool's number reads it here, from `GET /api/subscriptions/time-pool-fund`, exactly as
+ * the Badge ladder's seeded values are fetched rather than quoted from code.
  *
  * ⚠️ **There is no number fallback, on purpose.** The ladder's fallback can be its own
  * constant (the seed's input); the Fund's value is RUNTIME data with no seed-time
@@ -27,6 +28,8 @@ export interface PublishedFundCycle {
 	billingCycle: string;
 	status: string;
 	charitableRevenue: number;
+	ratePerAccount: number;
+	capPerAccount: number;
 	poolAmount: number;
 	activeFreeAccounts: number;
 	slicePerAccount: number;
@@ -44,6 +47,9 @@ export interface FundValues {
 	/** The Fund's pot for the cycle, and the per-account slice it divides into. */
 	poolAmount: number;
 	slicePerAccount: number;
+	/** The service level the cycle was funded at, and the cap it may never exceed. */
+	ratePerAccount: number;
+	capPerAccount: number;
 	/** Actual for an ended or in-flight cycle; committed once it is published in advance. */
 	status: string;
 }
@@ -73,6 +79,8 @@ async function fetchFund(): Promise<void> {
 					billingCycle: actual.billingCycle,
 					poolAmount: actual.poolAmount,
 					slicePerAccount: actual.slicePerAccount,
+					ratePerAccount: actual.ratePerAccount,
+					capPerAccount: actual.capPerAccount,
 					status: actual.status,
 				});
 			}

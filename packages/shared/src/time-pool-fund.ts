@@ -1,39 +1,35 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Time Pool Fund's arithmetic: one pool, one slice, computed.
+ * The Time Pool Fund's arithmetic: one service level, one cap, computed.
  *
  * The free account's Time Pool stopped being a per-head constant (`FREE_TIME_POOL`,
  * retired into this mechanism with the pool-mechanism task, 2026-10-10) and became
- * **the Fund**: a stated share of the charitable remainder after the admin budget,
- * published monthly, divided across the cycle's active free accounts, each slice
- * flowing through `computeMonth` unchanged.
+ * **the Fund**: a budget line the organization chooses each cycle, divided across the
+ * cycle's eligible free accounts, each slice flowing through `computeMonth` unchanged.
  *
- * The math lives HERE, in shared, beside `financial-plan.ts`'s ledger — the same
- * reason that file carries the plan's closed form: the runtime service, the growth
- * model and the plan tool must never carry two copies of the pool formula, because a
- * duplicated formula is the two-floors defect class (the card fee's five copies; the
- * self-sufficiency model that disagreed with the ladder).
+ * ⭐ **The Fund is a choice, not a percentage of revenue** (Parker, 2026-11-07). The
+ * only fixed commitment in the budget is that admin spending stays at or below 30% of
+ * all spending. Time Pool Fund, preservation, bounties and the rest are discretionary,
+ * funded from undirected revenue — support remainders, contributions, and whatever is
+ * not already spoken for by a commitment to a specific user. The **rate** is the chosen
+ * dollars per eligible free account; the **cap** is the smallest paid Time Pool (a Root
+ * supporter's, $1.00 at the seeded ladder), and no free account may be funded above it.
  *
- * ## The closed form
+ * Two functions, two questions, one cap:
  *
- * The Fund takes its share of the **remainder after the admin budget**
- * (`planLedger`'s shape — the obligations dial stays remainder-based), and the
- * pool is the pot of that share:
+ * - {@link timePoolFundActual} — what a cycle's chosen rate funds. The runtime service,
+ *   the ledger and the distribution all read this.
+ * - {@link timePoolFundProjection} — what a revenue share would fund at a modeled
+ *   scale, capped by the same rate. Only the financial plan calls it. It exists so the
+ *   plan can ask whether the self-sufficient share covers the chosen service level;
+ *   it never determines an actual cycle's pool, because contributions and other
+ *   undirected revenue are not modeled there by design.
  *
- *   uncapped = freeAccessShare × (1 − adminBudgetShare) × charitableRevenue
- *   pool     = min(uncapped, rootPool × activeFreeAccounts)
- *
- * The second term is the **parity ceiling** — the subsidized slice never funds any
- * account above what the smallest paid pool (a Root supporter's) funds — with the
- * excess routing to the other programs by construction (the uncapped difference is
- * simply never withdrawn from the remainder). The ceiling never binds at any modeled
- * scale today.
- *
- * The **slice** divides the pot across the cycle's active free accounts, floored to
- * the whole cent (ROUND_DOWN, not HALF_UP): the dust — the pot less slice × accounts —
- * stays in the remainder. Credits are per-slice and nothing distributes the dust, so
- * flooring is what keeps the books exact; rounding up would promise money the pot
- * does not hold.
+ * The rate is capped by the parity ceiling — the subsidized slice never funds any
+ * account above what the smallest paid Time Pool funds — and the slice is floored to
+ * the whole cent (ROUND_DOWN, not HALF_UP): the dust stays in the remainder. Credits
+ * are per-slice and nothing distributes the dust, so flooring is what keeps the books
+ * exact; rounding up would promise money the pot does not hold.
  */
 import Decimal from "decimal.js";
 
@@ -45,34 +41,67 @@ export type FundStatus = (typeof FUND_STATUS)[number];
 const CENTS_DOWN = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_DOWN);
 
 /**
- * The Fund's pot and per-account slice for one cycle.
+ * What a cycle's chosen rate funds: the rate per eligible free account, never above
+ * the cap, times the accounts.
  *
- * Pure; the API service, the growth model and the plan ledger all call this, so a
- * dial that moves republishes everything that derives from it and nothing ever
- * carries a second opinion of the formula.
+ * ⭐ **This is the actual, and the rate is the decision.** An unappropriated cycle's
+ * rate is the cap (the general disposition is as much as the discretionary budget
+ * allows), so the service pays the maximum rather than silently nothing; a budget that
+ * cannot afford the cap sets a lower rate for that cycle. The pool is capped at
+ * `rate × accounts` because the Fund is a service level, not a windfall: extra
+ * contributions do not raise a free account's Time Pool above the cheapest Badge.
  */
-export function timePoolFundPool(input: {
+export function timePoolFundActual(input: {
+	/** The chosen dollars per eligible free account. */
+	ratePerAccount: Decimal.Value;
+	/** Accounts eligible for a Fund-funded Time Pool this cycle. */
+	activeFreeAccounts: number;
+	/** The smallest paid Time Pool — a Root supporter's — the ceiling on the rate. */
+	capPerAccount: Decimal.Value;
+}): { pool: Decimal; slice: Decimal; rate: Decimal } {
+	const cap = new Decimal(input.capPerAccount);
+	const rate = Decimal.max(0, Decimal.min(new Decimal(input.ratePerAccount), cap));
+	// ⚠️ With no eligible account the pool has nobody to divide across and is unspent,
+	// which is the doctrine working (a cycle in which nobody eligible streamed the
+	// commons funds no slice), never a division by zero.
+	const pool = input.activeFreeAccounts > 0 ? rate.times(input.activeFreeAccounts) : new Decimal(0);
+	const slice =
+		input.activeFreeAccounts > 0 ? CENTS_DOWN(pool.div(input.activeFreeAccounts)) : new Decimal(0);
+	return { pool, slice, rate };
+}
+
+/**
+ * What a revenue share would fund at a modeled scale — the financial plan's question.
+ *
+ *   uncapped = share × (1 − adminBudgetShare) × charitableRevenue
+ *   pool     = min(uncapped, cap × freeAccounts)
+ *
+ * ⚠️ **Not the runtime's pool.** The plan models a self-sufficient platform funded by
+ * user revenue alone, so it can answer "does the paying share cover the service
+ * level?" An actual cycle spends from all undirected revenue — contributions included —
+ * and its amount is {@link timePoolFundActual}, where the organization makes that
+ * choice instead of deriving it. The two share the cap and the floor-to-cent slice, so
+ * they can never disagree about the most a free account may receive.
+ */
+export function timePoolFundProjection(input: {
 	/** The cycle's booked charitable revenue (the settled holdings basis). */
 	charitableRevenue: Decimal.Value;
 	/** The admin budget's share of charitable revenue — the plan settings' dial. */
 	adminBudgetShare: Decimal.Value;
-	/** Free Access's share of the programs — the Fund's own dial. */
+	/** Free Access's share of the programs — the plan's allocation dial. */
 	freeAccessShare: Decimal.Value;
 	/** Accounts with at least one credited Public Access second in the cycle and no Anthers holding. Zero when the cycle is a projection without a known count. */
 	activeFreeAccounts: number;
-	/** The smallest paid pool — a Root supporter's — the parity ceiling multiplies by the account count. */
-	rootPool: Decimal.Value;
+	/** The chosen service level the projection may never exceed — a Root supporter's Time Pool. */
+	ratePerAccount: Decimal.Value;
 }): { pool: Decimal; slice: Decimal; uncapped: Decimal } {
 	const base = new Decimal(input.charitableRevenue)
 		.times(input.freeAccessShare)
 		.times(Decimal.max(0, new Decimal(1).minus(input.adminBudgetShare)));
 	const ceiling =
 		input.activeFreeAccounts > 0
-			? new Decimal(input.rootPool).times(input.activeFreeAccounts)
+			? new Decimal(input.ratePerAccount).times(input.activeFreeAccounts)
 			: new Decimal(0);
-	// ⚠️ With no active free account the pot has nobody to divide across — the ceiling
-	// reads zero and the pot is unspent, which is the doctrine working (a cycle in which
-	// nobody streamed the commons funds no slice), never a division by zero.
 	const pool = Decimal.min(base, ceiling);
 	const slice =
 		input.activeFreeAccounts > 0 ? CENTS_DOWN(pool.div(input.activeFreeAccounts)) : new Decimal(0);
