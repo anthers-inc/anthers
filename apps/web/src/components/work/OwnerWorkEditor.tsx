@@ -1503,26 +1503,38 @@ export default function OwnerWorkEditor({
 	// The intake is the empty card's content for a kind whose media is uploaded; the
 	// manager is the same card swapped to its controls. Both reuse the sections the
 	// Manage tab used to carry, so the two surfaces cannot drift apart.
+	const buildDownloadsSection = (
+		<section className="flex flex-col gap-2">
+			<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloadable Builds</h3>
+			<BuildsEditor
+				work={current}
+				onChanged={() => void refreshMedia()}
+				onAdded={setBuildMessage}
+			/>
+		</section>
+	);
+	const buildStreamingSections = (
+		<>
+			<section className="flex flex-col gap-2">
+				<h3 className={WORK_DETAILS_HEADING_CLASS}>Embed</h3>
+				{embedUrlField}
+			</section>
+			<section className="flex flex-col gap-2">
+				<h3 className={WORK_DETAILS_HEADING_CLASS}>Hosted Build</h3>
+				<WebBuildSection work={current} onChanged={() => void refreshMedia()} />
+			</section>
+		</>
+	);
+
 	const mediaIntake =
 		!writing && !isGoods(current.type) ? (
 			isBuildType(current.type) ? (
+				// A build's intake offers only the doors its delivery allows: a download-only
+				// game is not asked for an embed, and a streaming-only one is not asked for a
+				// build it will never hand over.
 				<div className="flex w-full flex-col gap-6 text-left">
-					<section className="flex flex-col gap-2">
-						<h3 className={WORK_DETAILS_HEADING_CLASS}>Embed</h3>
-						{embedUrlField}
-					</section>
-					<section className="flex flex-col gap-2">
-						<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloadable Builds</h3>
-						<BuildsEditor
-							work={current}
-							onChanged={() => void refreshMedia()}
-							onAdded={setBuildMessage}
-						/>
-					</section>
-					<section className="flex flex-col gap-2">
-						<h3 className={WORK_DETAILS_HEADING_CLASS}>Hosted Build</h3>
-						<WebBuildSection work={current} onChanged={() => void refreshMedia()} />
-					</section>
+					{streamEnabled && buildStreamingSections}
+					{downloadEnabled && buildDownloadsSection}
 				</div>
 			) : (
 				<div className="flex w-full flex-col gap-3 text-left">
@@ -1565,28 +1577,35 @@ export default function OwnerWorkEditor({
 					}}
 				/>
 			)
-		) : isBuildType(current.type) ? (
-			<div className="flex flex-col gap-6">
-				<section className="flex flex-col gap-2">
-					<h3 className={WORK_DETAILS_HEADING_CLASS}>Embed</h3>
-					{embedUrlField}
-				</section>
-				<section className="flex flex-col gap-2">
-					<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloadable Builds</h3>
-					<BuildsEditor
-						work={current}
-						onChanged={() => void refreshMedia()}
-						onAdded={setBuildMessage}
-					/>
-				</section>
-				<section className="flex flex-col gap-2">
-					<h3 className={WORK_DETAILS_HEADING_CLASS}>Hosted Build</h3>
-					<WebBuildSection work={current} onChanged={() => void refreshMedia()} />
-				</section>
-			</div>
 		) : (
 			<WorkFileSection work={current} />
 		);
+
+	const versionsSection = (
+		<WorkVersionsSection
+			workId={current.id}
+			versionAddedAt={current.versionAddedAt}
+			versionLabel={current.versionLabel}
+		/>
+	);
+
+	const sourceAndVersions = (
+		<div className="flex flex-col gap-6">
+			{sourceContent}
+			{versionsSection}
+		</div>
+	);
+
+	const previewMedia = supportsPreviewMedia(current.type);
+	const thumbnailAndPreviews =
+		thumbnailTab || previewMedia ? (
+			<div className="flex flex-col gap-6">
+				{thumbnailTab}
+				{previewMedia && (
+					<PreviewMediaSection work={current} onChanged={() => void refreshMedia()} />
+				)}
+			</div>
+		) : null;
 
 	const mediaManagerTabs: MediaManagerTab[] = [];
 	if (!writing && !isGoods(current.type)) {
@@ -1602,9 +1621,14 @@ export default function OwnerWorkEditor({
 				/>
 			),
 		});
-		mediaManagerTabs.push({ key: "source", label: "Source", content: sourceContent });
-		if (thumbnailTab) {
-			mediaManagerTabs.push({ key: "thumbnail", label: "Thumbnail", content: thumbnailTab });
+		// Thumbnail and preview media are one surface now, and paged Works keep Pages
+		// directly after it — the order a creator met these before the merge.
+		if (thumbnailAndPreviews) {
+			mediaManagerTabs.push({
+				key: "thumbnail",
+				label: previewMedia ? "Thumbnail & Preview Media" : "Thumbnail",
+				content: thumbnailAndPreviews,
+			});
 		}
 		if (isPaged(current.type)) {
 			mediaManagerTabs.push({
@@ -1613,17 +1637,37 @@ export default function OwnerWorkEditor({
 				content: <PanelEditor workId={current.id} />,
 			});
 		}
-		mediaManagerTabs.push({
-			key: "versions",
-			label: "Versions",
-			content: (
-				<WorkVersionsSection
-					workId={current.id}
-					versionAddedAt={current.versionAddedAt}
-					versionLabel={current.versionLabel}
-				/>
-			),
-		});
+		if (isBuildType(current.type)) {
+			// A build can be handed over or played here, and the two are separate jobs: the
+			// delivery the creator chose decides which tabs exist at all.
+			if (streamEnabled) {
+				mediaManagerTabs.push({
+					key: "streaming",
+					label: "Streaming",
+					content: <div className="flex flex-col gap-6">{buildStreamingSections}</div>,
+				});
+			}
+			if (downloadEnabled) {
+				mediaManagerTabs.push({
+					key: "downloads",
+					label: "Downloads",
+					content: buildDownloadsSection,
+				});
+			}
+			// A build's history stays its own tab; a file Work's versions sit under the
+			// source they belong to, where the merge put them.
+			mediaManagerTabs.push({
+				key: "versions",
+				label: "Versions",
+				content: versionsSection,
+			});
+		} else {
+			mediaManagerTabs.push({
+				key: "source",
+				label: "Source & Versions",
+				content: sourceAndVersions,
+			});
+		}
 	}
 
 	const sideTabs = [
@@ -1645,12 +1689,6 @@ export default function OwnerWorkEditor({
 					    ways to look at the page — and since Manage opens by default, at the
 					    top of the page itself, standing where the editing banner stood. */}
 					<WorkViewAsSection />
-					{supportsPreviewMedia(current.type) && (
-						// The storefront set sits after the kind's own machinery (media, file
-						// or builds) and before the thumbnail — the same place a reader meets
-						// it, under the locked card (Parker, 2026-10-19).
-						<PreviewMediaSection work={current} onChanged={() => void refreshMedia()} />
-					)}
 					{isGoods(current.type) && (
 						// Same doubling rule: the InlineField names itself "Details".
 						<section className="flex flex-col gap-2">{detailsNoteField}</section>

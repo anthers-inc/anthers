@@ -16,6 +16,13 @@ const RUN = `Flow walk ${Date.now()}`;
 const TITLE_PREFIX = "Flow walk ";
 let session = "";
 
+// ⚠️ **Serial, because the sweep is per worker and the prefix is per file.** The file's
+// `afterAll` runs in every worker that holds a test from it, and `fullyParallel` splits
+// these tests across workers — so one worker's sweep deleted the draft another worker was
+// still delivering, and the delivery PATCH answered "Work not found". One worker keeps the
+// prefix and the sweep honest.
+test.describe.configure({ mode: "serial" });
+
 // The suite shares `media_fixture` with every other walk, and a leftover service Work
 // would widen the Works table's type filter for whoever reads it next (`studio-works-table`
 // asserts that `service` isolates exactly its own row). Sweep by the run's own prefix.
@@ -120,14 +127,20 @@ test("a game's empty media card carries the build intake", async ({ page, contex
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 
 	await expect(page.getByRole("heading", { name: "Downloadable Builds" })).toBeVisible();
-	await expect(page.getByRole("heading", { name: "Hosted Build" })).toBeVisible();
+	// The flow's default delivery for a game is download, so the streaming intake is not
+	// offered until the creator turns Stream on in the manager's Delivery tab.
+	await expect(page.getByRole("heading", { name: "Hosted Build" })).toHaveCount(0);
 	await page.screenshot({ path: `${SHOTS}/13-game-intake.png`, fullPage: true });
 
 	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
-	await page.getByRole("tab", { name: "Source" }).click();
-	await expect(page.getByRole("tab", { name: "Source" })).toHaveAttribute("aria-selected", "true");
+	await page.getByRole("tab", { name: "Downloads" }).click();
+	await expect(page.getByRole("tab", { name: "Downloads" })).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
+	await expect(page.getByRole("tab", { name: "Streaming" })).toHaveCount(0);
 	await page.waitForTimeout(300);
-	await page.screenshot({ path: `${SHOTS}/14-game-manager-source.png`, fullPage: true });
+	await page.screenshot({ path: `${SHOTS}/14-game-manager-downloads.png`, fullPage: true });
 });
 
 test("the Non-Digital branch stops at fulfillment", async ({ page, context }) => {

@@ -340,15 +340,53 @@ test("a comic's media manager carries Thumbnail before Pages", async ({ page, co
 	await expect(page.getByRole("heading", { name: "View As" })).toBeVisible();
 	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
 	const sections = page.getByRole("tablist", { name: "Media management sections" });
-	// The order is the tab strip's: delivery first, the medium's own sections after it, and
-	// Pages only for the paged kinds, immediately before the version history.
+	// The order is the tab strip's: delivery first, then the thumbnail and previews, then
+	// Pages for the paged kinds, and the source with its version history last.
 	await expect(sections.getByRole("tab")).toHaveText([
 		"Delivery",
-		"Source",
 		"Thumbnail",
 		"Pages",
+		"Source & Versions",
+	]);
+});
+
+/**
+ * A game's media manager follows the delivery the creator chose.
+ *
+ * A download-only game used to be asked for an embed, a build and a hosted build all at
+ * once. Only the doors delivery allows appear, and a Work open both ways gets the download
+ * and streaming jobs as separate tabs.
+ */
+test("a game's media manager follows its delivery", async ({ page, context }) => {
+	await signInAsMediaFixture(context);
+	const draft = await createDraftWork(page, {
+		type: "game",
+		title: `${STEM} delivery game`,
+	});
+	await page.goto(draft.url);
+	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	const sections = page.getByRole("tablist", { name: "Media management sections" });
+
+	// The game's default delivery is download, so the streaming door is absent entirely.
+	await expect(sections.getByRole("tab")).toHaveText([
+		"Delivery",
+		"Thumbnail & Preview Media",
+		"Downloads",
 		"Versions",
 	]);
+	await sections.getByRole("tab", { name: "Downloads" }).click();
+	await expect(page.getByRole("heading", { name: "Downloadable Builds" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Embed" })).toHaveCount(0);
+	await expect(page.getByRole("heading", { name: "Hosted Build" })).toHaveCount(0);
+
+	// Turning Stream on adds the streaming job beside the download one, not instead of it.
+	await sections.getByRole("tab", { name: "Delivery" }).click();
+	await page.getByRole("checkbox", { name: "Stream" }).check();
+	await expect(sections.getByRole("tab", { name: "Streaming" })).toBeVisible();
+	await sections.getByRole("tab", { name: "Streaming" }).click();
+	await expect(page.getByRole("heading", { name: "Embed" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Hosted Build" })).toBeVisible();
+	await expect(sections.getByRole("tab", { name: "Downloads" })).toBeVisible();
 });
 
 /**
