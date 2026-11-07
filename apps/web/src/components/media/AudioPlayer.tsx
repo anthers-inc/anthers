@@ -37,6 +37,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useAttentionClaim } from "../../lib/attention";
 import { useMediaPlayer } from "../../lib/media-player";
 import type { QueueTrack } from "../../lib/music-queue";
+import { useExclusivePlayback } from "../../lib/playback";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { useBindPlayerSeek } from "../../lib/work-player";
 import ChapterList from "./ChapterList";
@@ -106,6 +107,7 @@ export default function AudioPlayer({
 	startSeconds = null,
 }: AudioPlayerProps) {
 	const audioRef = useRef<HTMLAudioElement>(null);
+	useExclusivePlayback(audioRef);
 	const [elPlaying, setElPlaying] = useState(false);
 	const [elProgress, setElProgress] = useState(0);
 	const [elDuration, setElDuration] = useState(0);

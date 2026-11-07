@@ -39,6 +39,7 @@ import {
 } from "../../lib/listen-positions";
 import { useMediaPlayer } from "../../lib/media-player";
 import type { QueueTrack } from "../../lib/music-queue";
+import { useExclusivePlayback } from "../../lib/playback";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { SPOKEN_RATE_EVENT, stepSpokenRate, useSpokenRate } from "../../lib/spoken-rate";
 import { useBindPlayerSeek } from "../../lib/work-player";
@@ -110,6 +111,7 @@ export default function SpokenPlayer({
 }: SpokenPlayerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const audioRef = useRef<HTMLAudioElement>(null);
+	useExclusivePlayback(audioRef);
 	const [elPlaying, setElPlaying] = useState(false);
 	const [elProgress, setElProgress] = useState(0);
 	const [elDuration, setElDuration] = useState(0);

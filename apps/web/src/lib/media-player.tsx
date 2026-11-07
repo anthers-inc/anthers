@@ -12,6 +12,10 @@
  * things that are genuinely about the browser — playback state, the Public Access meter,
  * and the Time Pool claim.
  *
+ * ⚠️ **The bar is one of several players, and `playback.ts` is what makes them take turns.**
+ * The element created below registers there, so its play pauses a page video and a page
+ * video's play pauses it; a new media surface owes the same registration.
+ *
  * ## Three Anthers rules the queue has to carry, all of which fail silently
  *
  * 1. **Audio URLs are minted per request.** A `QueueTrack.src` is the delivery *endpoint*
@@ -58,6 +62,7 @@ import {
 	toggleShuffle as toggleShuffleState,
 	upcoming as upcomingIn,
 } from "./music-queue";
+import { registerExclusivePlayback } from "./playback";
 import { refreshBudget, useMeteredBudget } from "./public-access";
 import { readSpokenRate, SPOKEN_RATE_EVENT } from "./spoken-rate";
 
@@ -146,6 +151,9 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 		const audio = new Audio();
 		audio.preload = "metadata";
 		audioRef.current = audio;
+		// The bar's element is created here rather than in JSX, so it registers directly:
+		// its play takes the speaker from a page video, and a page video's play stops it.
+		const releasePlayback = registerExclusivePlayback(audio);
 
 		const onTimeUpdate = () => setProgress(audio.currentTime);
 		const onDurationChange = () => setDuration(audio.duration || 0);
@@ -162,6 +170,7 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 			audio.removeEventListener("durationchange", onDurationChange);
 			audio.removeEventListener("play", onPlay);
 			audio.removeEventListener("pause", onPause);
+			releasePlayback();
 			audio.pause();
 			audio.src = "";
 		};

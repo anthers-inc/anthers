@@ -28,6 +28,7 @@ import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 
 import { useAttentionClaim } from "../../lib/attention";
 import { useMediaPlayer } from "../../lib/media-player";
 import type { QueueTrack } from "../../lib/music-queue";
+import { useExclusivePlayback } from "../../lib/playback";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { useBindPlayerSeek } from "../../lib/work-player";
 import { useWorkTheater } from "../../lib/work-theater";
@@ -158,6 +159,7 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const videoRef = useRef<HTMLVideoElement>(null);
+	useExclusivePlayback(videoRef);
 	useEffect(() => {
 		if (!elementRef) return;
 		elementRef.current = videoRef.current;
