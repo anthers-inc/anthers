@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The locked Work's storefront carousel — the Steam and Vimeo On Demand shape (Parker,
- * 2026-10-19). Slide 0 is the existing locked composition, passed in as an element so the
- * no-preview page and this one render the same component; every later slide is a
- * screenshot or a trailer the creator added.
+ * The Work's storefront carousel — the Steam and Vimeo On Demand shape (Parker,
+ * 2026-10-19). Slide 0 is passed in as an element: the locked composition for a Work the
+ * reader cannot open, the download card for a download-only Work they can. Every later
+ * slide is a screenshot or a trailer the creator added.
  *
  * The strip is the direct-pick row and the side chevrons are its pointer equivalent. Both
  * clamp at the ends rather than wrapping: the first tile is the price card, and a right
@@ -39,14 +39,17 @@ export default function PreviewCarousel({
 	previews,
 	slideZero,
 	slideZeroFill,
+	slideZeroLabel = "The locked Work",
 }: {
 	workTitle: string | null;
 	thumbnail: string | null;
 	previews: PreviewMediaItem[];
-	/** The locked composition, rendered exactly as the no-preview page renders it. */
+	/** Slide zero rendered exactly as the no-preview page renders it. */
 	slideZero: ReactNode;
 	/** The composition's mount shape — a video's gate fills the stage, every other kind composes in it. */
 	slideZeroFill: boolean;
+	/** What slide zero is, for its strip button and the status line. */
+	slideZeroLabel?: string;
 }) {
 	const [active, setActive] = useState(0);
 	const [lightbox, setLightbox] = useState<number | null>(null);
@@ -229,7 +232,7 @@ export default function PreviewCarousel({
 
 			<p role="status" className="sr-only">
 				{active === 0
-					? "Showing the locked Work."
+					? `Showing ${slideZeroLabel.toLowerCase()}.`
 					: `Showing preview ${active} of ${previews.length}.`}
 			</p>
 
