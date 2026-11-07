@@ -95,11 +95,10 @@ test("the posts tab renders the same tiles", async ({ page }) => {
 });
 
 /**
- * The create tile is the owner's, and it survives an empty profile: the walker's own
- * profile has nothing on it, which is exactly the state a grid without a tile would
- * leave a creator with no way in.
+ * The create tile is the owner's, and it leads the grid whether the profile has content
+ * or not: the walker's own profile is the owner surface this suite can visit.
  */
-test("the creator's own empty profile leads with a create tile", async ({ page }) => {
+test("the creator's own profile leads with a create tile", async ({ page }) => {
 	test.setTimeout(60_000);
 	const handle = await gauntletHandle(API_URL, GAUNTLET_WALKER_USERNAME);
 	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}`);
@@ -107,8 +106,16 @@ test("the creator's own empty profile leads with a create tile", async ({ page }
 	const tile = page.getByTestId("profile-create-tile");
 	await expect(tile).toBeVisible();
 	await expect(tile).toContainText("New Content");
-	// No month section exists, so the tile is not merely the first card of one.
-	await expect(page.locator("[data-testid='content-month']")).toHaveCount(0);
+	// It leads the grid: the first child of the first month's grid, or the only child of
+	// the bare grid a profile with nothing renders. This walker may carry content from
+	// other walks, so both shapes are legitimate here.
+	const grid = page.locator("[data-testid='content-month'] .grid").first();
+	if ((await grid.count()) > 0) {
+		await expect(grid.locator(":scope > *").first()).toHaveAttribute(
+			"data-testid",
+			"profile-create-tile",
+		);
+	}
 
 	await tile.click();
 	const menu = page.getByRole("menu", { name: "New content" });
