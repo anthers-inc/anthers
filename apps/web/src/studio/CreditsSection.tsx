@@ -35,9 +35,10 @@
  * freshly ticked Created box stays quiet until a save attempt finds the card still empty.
  */
 
+import { moveItem, useDragReorder } from "@anthers/web-shared/drag-reorder";
 import { client } from "@anthers/web-shared/rpc";
 import type { WorkCredit, WorkCreditType } from "@anthers/web-shared/types";
-import { InformationCircleIcon, TrashIcon, UserIcon } from "@heroicons/react/24/outline";
+import { Bars2Icon, InformationCircleIcon, TrashIcon, UserIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { CREDITS_WIKI_URL } from "../lib/wiki";
 
@@ -67,6 +68,8 @@ interface PersonRef {
 
 /** One contribution card: row one's role and types, row two's people. */
 interface CreditCard {
+	/** Stable for this edit session, so a drag can carry a card and React can key it. */
+	id: string;
 	role: string;
 	types: WorkCreditType[];
 	people: PersonRef[];
@@ -146,7 +149,13 @@ function cardsFromRows(rows: WorkCredit[]): CreditCard[] {
 		const key = cardKey(row.role, row.types);
 		let card = byKey.get(key);
 		if (!card) {
-			card = { role: row.role, types: [...row.types], people: [], awaiting: [] };
+			card = {
+				id: crypto.randomUUID(),
+				role: row.role,
+				types: [...row.types],
+				people: [],
+				awaiting: [],
+			};
 			byKey.set(key, card);
 			cards.push(card);
 		}
@@ -237,6 +246,14 @@ export default function CreditsSection({
 	const missingContributor = (card: CreditCard) =>
 		card.types.includes("created") && card.people.length === 0;
 
+	// Reordering a card reorders the rows it flattens into; the array index is the order
+	// the Work page reads, so no schema change is involved.
+	const cardDrag = useDragReorder<CreditCard, HTMLDivElement>({
+		items: cards,
+		keyOf: (card) => card.id,
+		onReorder: (from, to) => commit(moveItem(cards, from, to)),
+	});
+
 	return (
 		<div className="flex flex-col gap-3">
 			<a href={CREDITS_WIKI_URL} target="_blank" rel="noopener noreferrer" className="link text-xs">
@@ -249,15 +266,26 @@ export default function CreditsSection({
 				</p>
 			)}
 
-			<div className="flex flex-col gap-3">
-				{cards.map((card, i) => (
+			<div ref={cardDrag.containerRef} className="flex flex-col gap-3">
+				{cardDrag.items.map((card, i) => (
 					<div
-						// biome-ignore lint/suspicious/noArrayIndexKey: a contribution card has no id of its own; the inputs are controlled by position and the cards are replaced wholesale on save.
-						key={i}
-						className="rounded-md border border-base-300"
+						key={card.id}
+						{...cardDrag.itemProps(i)}
+						className={`rounded-md border border-base-300 transition-[opacity,box-shadow] ${
+							cardDrag.isDragging(i) ? "opacity-50 ring-2 ring-primary/30" : ""
+						}`}
 					>
 						{/* Row one — what the credit is called, and the way to take it off. */}
 						<div className="flex items-center gap-3 border-b border-base-300 p-3">
+							<button
+								type="button"
+								{...cardDrag.handleProps(i)}
+								className="cursor-grab rounded p-0.5 text-base-content/30 hover:text-base-content/60 active:cursor-grabbing"
+								aria-label={`Drag credit ${i + 1} to reorder`}
+								title="Drag to reorder"
+							>
+								<Bars2Icon className="size-4" />
+							</button>
 							<div className="min-w-40 flex-1">
 								<RoleInput
 									ariaLabel={`Credit ${i + 1} role`}
@@ -329,7 +357,12 @@ export default function CreditsSection({
 				<button
 					type="button"
 					className="btn btn-outline btn-sm"
-					onClick={() => commit([...cards, { role: "", types: [], people: [], awaiting: [] }])}
+					onClick={() =>
+						commit([
+							...cards,
+							{ id: crypto.randomUUID(), role: "", types: [], people: [], awaiting: [] },
+						])
+					}
 				>
 					Add a credit
 				</button>
@@ -408,6 +441,15 @@ function ContributorPicker({
 	const [highlight, setHighlight] = useState(-1);
 	/** The run counter — a settled answer is dropped when a newer keystroke has superseded it. */
 	const seqRef = useRef(0);
+
+	// The chips are one ordered list inside the field, so the same drag affordance the
+	// cards use serves them; the plain input beside them is not a drop target.
+	const peopleDrag = useDragReorder<PersonRef, HTMLDivElement>({
+		items: people,
+		keyOf: (person) => person.value,
+		onReorder: (from, to) => onChange(moveItem(people, from, to)),
+		disabled,
+	});
 
 	useEffect(() => {
 		const q = query.trim();
@@ -489,22 +531,36 @@ function ContributorPicker({
 				{/* The field is the whole box, chips included, so clicking anywhere in it opens
 				    the picker — including the empty space beside a short list of names. */}
 				<div
+					ref={peopleDrag.containerRef}
 					className={`flex min-h-9 flex-wrap items-center gap-1 rounded-md border px-1.5 py-1 ${
 						disabled
 							? "border-base-300 bg-base-200/50"
 							: "border-base-300 bg-base-100 focus-within:border-primary"
 					}`}
 				>
-					{people.map((person) => {
+					{peopleDrag.items.map((person, index) => {
 						const name = personName(person);
 						const profile = person.profile;
 						const self = person.value === selfDid;
 						return (
 							<span
 								key={person.value}
-								className="inline-flex items-center gap-1 rounded-full border border-base-300 bg-base-200/70 py-0.5 pl-1 pr-1.5 text-xs"
+								{...peopleDrag.itemProps(index)}
+								className={`inline-flex items-center gap-1 rounded-full border border-base-300 bg-base-200/70 py-0.5 pl-1 pr-1.5 text-xs transition-[opacity,box-shadow] ${
+									peopleDrag.isDragging(index) ? "opacity-40 ring-2 ring-primary/30" : ""
+								}`}
 								title={person.value}
 							>
+								<button
+									type="button"
+									{...peopleDrag.handleProps(index)}
+									className="cursor-grab text-base-content/25 hover:text-base-content/60 active:cursor-grabbing disabled:cursor-not-allowed"
+									aria-label={`Drag ${name} to reorder`}
+									title="Drag to reorder"
+									disabled={disabled}
+								>
+									<Bars2Icon className="size-3" />
+								</button>
 								{self && selfIdentity?.avatar ? (
 									<img
 										src={selfIdentity.avatar}

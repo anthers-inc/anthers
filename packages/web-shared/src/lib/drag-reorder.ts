@@ -24,15 +24,20 @@
 import { type DragEvent, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFlip } from "./flip";
 
-/** Move one key from `from` to `to`, preserving every other key's order. */
-export function moveKey(keys: readonly string[], from: number, to: number): string[] {
-	if (from === to || from < 0 || to < 0 || from >= keys.length || to >= keys.length) {
-		return [...keys];
+/** Move one item from `from` to `to`, preserving every other item's order. */
+export function moveItem<T>(items: readonly T[], from: number, to: number): T[] {
+	if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) {
+		return [...items];
 	}
-	const next = [...keys];
+	const next = [...items];
 	const [moved] = next.splice(from, 1);
 	next.splice(to, 0, moved);
 	return next;
+}
+
+/** Move one key from `from` to `to`, preserving every other key's order. */
+export function moveKey(keys: readonly string[], from: number, to: number): string[] {
+	return moveItem(keys, from, to);
 }
 
 export interface DragReorderOptions<T> {
