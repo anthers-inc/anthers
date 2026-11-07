@@ -137,3 +137,78 @@ describe("the Works a Badge opens", () => {
 		expect(rung?.price).toBe("0");
 	});
 });
+
+describe("adding a Work from the Badge", () => {
+	const add = (workId: number, cookie = creatorCookie) =>
+		req(`/api/content/badge-gates/${badgeId}`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: JSON.stringify({ workId }),
+		});
+
+	it("writes the zero-dollar row on the Work and lists it", async () => {
+		const work = await insertWork({
+			creatorId,
+			type: "text",
+			title: "Added from the Badge",
+			access: [{ threshold: 0, allow: false, price: "0" }],
+		});
+		const res = await add(work.id);
+		expect(res.status).toBe(200);
+
+		const [row] = await db
+			.select({ access: works.access })
+			.from(works)
+			.where(eq(works.id, work.id));
+		const rung = row?.access?.find((entry) => entry.badgeId === badgeId);
+		// The threshold comes from the Badge, never from the request.
+		expect(rung).toMatchObject({ threshold: 5, allow: true, price: "0" });
+
+		const list = await req(`/api/content/badge-gates/${badgeId}`, {
+			headers: { Cookie: creatorCookie },
+		});
+		expect(((await list.json()) as { works: { id: number }[] }).works.map((w) => w.id)).toContain(
+			work.id,
+		);
+	});
+
+	it("re-opens a Work that was removed, rather than duplicating the row", async () => {
+		const res = await add(gatedWorkId);
+		expect(res.status).toBe(200);
+
+		const [row] = await db
+			.select({ access: works.access })
+			.from(works)
+			.where(eq(works.id, gatedWorkId));
+		const rungs = row?.access?.filter((entry) => entry.badgeId === badgeId) ?? [];
+		expect(rungs).toHaveLength(1);
+		expect(rungs[0]).toMatchObject({ allow: true, price: "0" });
+	});
+
+	it("refuses a Work that is already open to everyone", async () => {
+		const work = await insertWork({
+			creatorId,
+			type: "text",
+			title: "Already open, added anyway",
+			access: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		const res = await add(work.id);
+		expect(res.status).toBe(409);
+		expect(((await res.json()) as { error: string }).error).toContain("already open");
+	});
+
+	it("refuses a Work the caller does not own", async () => {
+		const [other] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.email, `${otherName}@example.com`));
+		const work = await insertWork({
+			creatorId: other.id,
+			type: "text",
+			title: "Somebody else's Work",
+			access: [{ threshold: 0, allow: false, price: "0" }],
+		});
+		const res = await add(work.id);
+		expect(res.status).toBe(404);
+	});
+});

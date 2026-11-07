@@ -550,3 +550,85 @@ test("a supporter's Badge card opens the upgrade modal", async ({ page, context 
 
 	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
 });
+
+/**
+ * The Unlocks tab is where a Badge's Works are managed: the thumbnail is the door to the
+ * Work, and the tab can add a Work as well as remove one.
+ *
+ * The server half writes the Work's own Access row — access is authored on the Work, never
+ * on the Badge — so the proof here is that the picker's add lands and the list re-reads.
+ */
+test("a creator adds and removes a Badge's Works from the Unlocks tab", async ({
+	page,
+	context,
+}) => {
+	const errors = trackErrorsStrict(page);
+	const label = `E2E unlocks ${RUN}`;
+	const token = await signInAsCreator(context);
+
+	const created = await fetch(`${API_URL}/api/subscriptions/badges`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${token}`,
+		},
+		// A distinct rung from the gated-perk walk's $8: a creator can hold only one
+		// Badge at a threshold, and the two tests run in parallel.
+		body: JSON.stringify({ threshold: "9.00", label }),
+	});
+	expect(created.status, "creating the Badge").toBe(201);
+	const badge = ((await created.json()) as { badge: { id: number } }).badge;
+
+	const makeWork = async (title: string) => {
+		const res = await fetch(`${API_URL}/api/content/works`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Origin: WEB_ORIGIN,
+				Cookie: `session=${token}`,
+			},
+			body: JSON.stringify({ type: "service", title }),
+		});
+		const body = await res.text();
+		expect(res.status, `creating ${title}: ${body}`).toBe(201);
+		return (JSON.parse(body) as { work: { id: number; title: string } }).work;
+	};
+
+	const gated = await makeWork(`Gated ${RUN}`);
+	const added = await makeWork(`Added ${RUN}`);
+	const patched = await fetch(`${API_URL}/api/content/works/${gated.id}`, {
+		method: "PATCH",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${token}`,
+		},
+		body: JSON.stringify({
+			access: [{ threshold: 9, allow: true, price: "0", badgeId: badge.id }],
+		}),
+	});
+	expect(patched.status, "gating the first Work").toBe(200);
+
+	const handle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
+	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}?tab=badges`);
+	await page.getByRole("button", { name: `Edit ${label}` }).click();
+	const dialog = page.getByRole("dialog");
+	await dialog.getByRole("tab", { name: "Unlocks" }).click();
+
+	// The thumbnail is the link, and the button whose place it took is gone.
+	await expect(dialog.getByRole("link", { name: `Open ${gated.title} in Studio` })).toBeVisible();
+	await expect(dialog.getByRole("button", { name: "Open in Studio" })).toHaveCount(0);
+	await expect(dialog.getByRole("button", { name: "Remove from Badge" })).toBeVisible();
+
+	// Add a second Work through the same picker the Project page uses.
+	await dialog.getByRole("button", { name: "Add Works" }).click();
+	await page.getByRole("checkbox", { name: `Select ${added.title}` }).check();
+	await page.getByRole("button", { name: "Add Work(s)" }).click();
+
+	// The list re-read from the server and the new Work is on it.
+	await expect(dialog.getByText(added.title)).toBeVisible({ timeout: 15_000 });
+	await expect(dialog.getByRole("link", { name: `Open ${added.title} in Studio` })).toBeVisible();
+
+	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
+});

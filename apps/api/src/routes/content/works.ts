@@ -35,6 +35,7 @@ import { workPreviewFor } from "@anthers/shared/work-preview";
 import { zValidator } from "@hono/zod-validator";
 import { and, asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { z } from "zod";
 import { queueScansForWork } from "../../jobs/scan-media.js";
 import { accountByHandle, resolveHandle } from "../../lib/handles.js";
 import {
@@ -448,9 +449,82 @@ const worksRoutes = new Hono()
 				title: work.title,
 				type: work.type,
 				visibility: work.visibility,
+				// The row's thumbnail is the door to the Work, replacing the "Open in
+				// Studio" button. An image Work with no separate thumbnail is its own.
+				thumbnail: work.thumbnail || (work.type === "image" ? work.sourceKey : ""),
+				imageAlt: work.imageAlt ?? "",
 			})),
 		});
 	})
+
+	/**
+	 * Give a Badge one of this creator's Works, from the Badge Maker's Unlocks tab.
+	 *
+	 * ⭐ **The badge-side door, writing the Work's own table.** Access is authored on the
+	 * Work, so this route reads the Work, sets the row for this Badge to allow at $0 —
+	 * creating it when the rung has never gated that Work — and normalizes the table
+	 * through the same `normalizeAccessRows` the Work editor uses. A Work already open to
+	 * everyone is refused rather than given a redundant row it would never list.
+	 */
+	.post(
+		"/badge-gates/:badgeId",
+		requireAuth,
+		zValidator("json", z.object({ workId: z.number().int().positive() }), invalidBody),
+		async (c) => {
+			const user = c.get("user");
+			const badgeId = Number(c.req.param("badgeId"));
+			const workId = c.req.valid("json").workId;
+
+			const [badge] = await db
+				.select({ id: badges.id, threshold: badges.threshold })
+				.from(badges)
+				.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+				.limit(1);
+			if (!badge) return c.json({ error: "Badge not found" }, 404);
+
+			const [work] = await db
+				.select()
+				.from(works)
+				.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+				.limit(1);
+			if (!work) return c.json({ error: "Work not found" }, 404);
+
+			const access = work.access ?? [];
+			const publicAccess = access.some(
+				(row) => row.threshold === 0 && row.allow && Number(row.price) === 0,
+			);
+			if (publicAccess) {
+				return c.json(
+					{
+						error: "That Work is already open to everyone, so this Badge would add nothing.",
+					},
+					409,
+				);
+			}
+
+			const existing = access.some((row) => row.badgeId === badgeId);
+			const next = existing
+				? access.map((row) => (row.badgeId === badgeId ? { ...row, allow: true, price: "0" } : row))
+				: [
+						...access,
+						{
+							threshold: Number(badge.threshold),
+							badgeId,
+							allow: true,
+							price: "0",
+						},
+					];
+			const normalized = await normalizeAccessRows(user.id, next);
+			if ("error" in normalized) return c.json({ error: normalized.error }, 400);
+
+			await db
+				.update(works)
+				.set({ access: normalized.rows, updatedAt: new Date() })
+				.where(eq(works.id, workId));
+
+			return c.json({ added: true });
+		},
+	)
 
 	/**
 	 * Stop a Badge opening one Work — the inline control in the Badge Maker's Perks tab.

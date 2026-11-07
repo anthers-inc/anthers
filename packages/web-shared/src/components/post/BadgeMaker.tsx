@@ -58,7 +58,9 @@ import { ArrowUpTrayIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/outli
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, client } from "../../lib/rpc";
 import { studioUrl } from "../../lib/studio";
-import type { CreatorBadge } from "../../lib/types";
+import type { CreatorBadge, Work } from "../../lib/types";
+import WorkPicker from "../content/WorkPicker";
+import { TypeIcon } from "../content/works";
 import { BadgeMark } from "../economics/BadgeMark";
 import { CreatorBadgeMark, fallbackBadgeDesign } from "../economics/CreatorBadgeMark";
 import { TakeHome } from "../economics/TakeHome";
@@ -338,6 +340,9 @@ interface GatedWork {
 	title: string;
 	type: string;
 	visibility: string;
+	/** A resolved image URL, or empty for a Work with none. */
+	thumbnail: string;
+	imageAlt: string;
 }
 
 /**
@@ -364,12 +369,14 @@ function GatedWorks({
 	works,
 	error,
 	busyId,
+	onAdd,
 	onRetry,
 	onUngate,
 }: {
 	works: GatedWork[] | null;
 	error: string | null;
 	busyId: number | null;
+	onAdd: () => void;
 	onRetry: () => void;
 	onUngate: (work: GatedWork) => void;
 }) {
@@ -396,7 +403,7 @@ function GatedWorks({
 			failure
 		) : (
 			<p className="px-3 py-4 text-xs text-base-content/50">
-				No Works are gated at this Badge yet. Open a Work's editor and tick this level in its Access
+				No Works are gated at this Badge yet. Add some here, or tick this level in a Work's Access
 				table.
 			</p>
 		);
@@ -405,27 +412,42 @@ function GatedWorks({
 			<ul className="divide-y divide-base-300">
 				{works.map((work) => (
 					<li key={work.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+						{/* The thumbnail is the door to the Work, in the place the "Open in Studio"
+						    button stood. A Work with no image keeps the same door around its own
+						    type's icon, so the row never loses the way in. */}
+						<a
+							href={studioUrl(`/works/${work.publicId}/edit`)}
+							className="h-10 w-10 shrink-0 overflow-hidden rounded border border-base-300"
+							target="_blank"
+							rel="noreferrer"
+							title={`Open ${work.title} in Studio`}
+							aria-label={`Open ${work.title} in Studio`}
+						>
+							{work.thumbnail ? (
+								<img
+									src={work.thumbnail}
+									alt={work.imageAlt}
+									className="h-full w-full object-cover"
+								/>
+							) : (
+								<div className="flex h-full w-full items-center justify-center bg-base-200 text-base-content/40">
+									<TypeIcon type={work.type} className="h-4 w-4" />
+								</div>
+							)}
+						</a>
 						<div className="min-w-0 flex-1">
 							<div className="truncate text-sm font-medium">{work.title}</div>
 							<div className="text-[11px] text-base-content/50">
 								{work.type} · {work.visibility === "released" ? "Released" : "Not released"}
 							</div>
 						</div>
-						<a
-							href={studioUrl(`/works/${work.publicId}/edit`)}
-							className="btn btn-ghost btn-xs"
-							target="_blank"
-							rel="noreferrer"
-						>
-							Open in Studio
-						</a>
 						<button
 							type="button"
 							className="btn btn-ghost btn-xs text-error"
 							onClick={() => onUngate(work)}
 							disabled={busyId === work.id}
 						>
-							{busyId === work.id ? "Stopping…" : "Stop opening"}
+							{busyId === work.id ? "Removing…" : "Remove from Badge"}
 						</button>
 					</li>
 				))}
@@ -435,12 +457,17 @@ function GatedWorks({
 
 	return (
 		<div className="rounded-lg border border-base-300">
-			<div className="border-b border-base-300 px-3 py-2">
-				<div className="text-sm font-medium">Works this Badge opens</div>
-				<p className="text-xs text-base-content/50">
-					A Work joins this list when its Access table allows this Badge's level at $0. Open a
-					Work's editor to change its gates; stop one here to close it for this Badge.
-				</p>
+			<div className="flex flex-wrap items-start justify-between gap-2 border-b border-base-300 px-3 py-2">
+				<div>
+					<div className="text-sm font-medium">Works this Badge opens</div>
+					<p className="text-xs text-base-content/50">
+						Add a Work here, or tick this level in a Work's Access table. Removing one here closes
+						it for this Badge.
+					</p>
+				</div>
+				<button type="button" className="btn btn-outline btn-xs" onClick={onAdd}>
+					Add Works
+				</button>
 			</div>
 
 			{body}
@@ -489,6 +516,7 @@ export default function BadgeMaker({
 	const [gatedError, setGatedError] = useState<string | null>(null);
 	const [gatedBusyId, setGatedBusyId] = useState<number | null>(null);
 	const [gatedReload, setGatedReload] = useState(0);
+	const [pickingWorks, setPickingWorks] = useState(false);
 	const lockedPerkKinds = perkKindsForGatedWorks(gatedWorks ?? []);
 
 	// The art draft. Shape and color start from what the rung stored, and from the fallback
@@ -624,6 +652,38 @@ export default function BadgeMaker({
 			});
 		});
 	}, [gatedWorks, perksLoaded]);
+
+	/**
+	 * Give this Badge the Works picked from the catalog.
+	 *
+	 * The picker excludes what the list already holds, but a Work can join between the
+	 * modal opening and the add, so the fresh filter runs again here. Each add is the
+	 * badge-side door that writes the Work's own Access row; the list is re-read after,
+	 * because the server normalizes the table and the row's shape is not ours to guess.
+	 */
+	const addGatedWorks = async (picked: Work[]) => {
+		if (badgeId === null) return;
+		const fresh = picked.filter((work) => !(gatedWorks ?? []).some((w) => w.id === work.id));
+		if (fresh.length === 0) return;
+		setGatedError(null);
+		const failures: string[] = [];
+		for (const work of fresh) {
+			try {
+				const res = await apiFetch(`/api/content/badge-gates/${badgeId}`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ workId: work.id }),
+				});
+				if (!res.ok) {
+					failures.push(await responseError(res, `Couldn't add ${work.title}.`));
+				}
+			} catch {
+				failures.push(`Couldn't add ${work.title}.`);
+			}
+		}
+		if (failures.length > 0) setGatedError(failures.join(" "));
+		setGatedReload((n) => n + 1);
+	};
 
 	const ungateWork = async (work: GatedWork) => {
 		if (badgeId === null) return;
@@ -1135,13 +1195,22 @@ export default function BadgeMaker({
 	// answered rather than where a perk is described.
 	const unlocksPanel =
 		badgeId === null ? null : (
-			<GatedWorks
-				works={gatedWorks}
-				error={gatedError}
-				busyId={gatedBusyId}
-				onRetry={() => setGatedReload((n) => n + 1)}
-				onUngate={(work) => void ungateWork(work)}
-			/>
+			<>
+				<GatedWorks
+					works={gatedWorks}
+					error={gatedError}
+					busyId={gatedBusyId}
+					onAdd={() => setPickingWorks(true)}
+					onRetry={() => setGatedReload((n) => n + 1)}
+					onUngate={(work) => void ungateWork(work)}
+				/>
+				<WorkPicker
+					open={pickingWorks}
+					excludeIds={(gatedWorks ?? []).map((work) => work.id)}
+					onSelect={(picked) => void addGatedWorks(picked)}
+					onClose={() => setPickingWorks(false)}
+				/>
+			</>
 		);
 
 	return (
