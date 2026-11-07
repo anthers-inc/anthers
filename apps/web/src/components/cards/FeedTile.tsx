@@ -734,14 +734,12 @@ function PostTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtras 
 						}
 						date={compactDate(post.publishedAt ?? post.createdAt)}
 						trailing={
-							<>
-								{post.linkedWorkCount > 0 && (
-									<span className="badge badge-sm badge-ghost gap-1 shrink-0">
-										<LinkIcon className="w-3 h-3" />
-										{post.linkedWorkCount} {post.linkedWorkCount === 1 ? "work" : "works"}
-									</span>
-								)}
-							</>
+							post.linkedWorkCount > 0 && (
+								<span className="badge badge-sm badge-ghost gap-1 shrink-0">
+									<LinkIcon className="w-3 h-3" />
+									{post.linkedWorkCount} {post.linkedWorkCount === 1 ? "work" : "works"}
+								</span>
+							)
 						}
 					/>
 					<div className="flex flex-wrap items-center gap-1.5 empty:hidden">{extras.badges}</div>
@@ -788,13 +786,11 @@ function ProjectTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtr
 						}
 						date={compactDate(project.createdAt)}
 						trailing={
-							<>
-								{trackCount > 0 && (
-									<span className="shrink-0 text-xs text-base-content/40">
-										{trackCount} {trackCount === 1 ? "track" : "tracks"}
-									</span>
-								)}
-							</>
+							trackCount > 0 && (
+								<span className="shrink-0 text-xs text-base-content/40">
+									{trackCount} {trackCount === 1 ? "track" : "tracks"}
+								</span>
+							)
 						}
 					/>
 					<div className="flex flex-wrap items-center gap-1.5 empty:hidden">{extras.badges}</div>
