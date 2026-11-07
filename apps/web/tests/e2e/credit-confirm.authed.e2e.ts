@@ -69,6 +69,22 @@ async function ownWorks(): Promise<OwnedWork[]> {
 }
 
 /**
+ * Carry one card or chip onto another with the browser's own drag events. Playwright's
+ * mouse gestures do not synthesize HTML5 drag data, so the events carry a real
+ * `DataTransfer`; the `drop` alone commits, which is also how the hook is built.
+ */
+async function dragOnto(
+	page: import("@playwright/test").Page,
+	source: import("@playwright/test").Locator,
+	target: import("@playwright/test").Locator,
+) {
+	const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+	await source.dispatchEvent("dragstart", { dataTransfer });
+	await target.dispatchEvent("dragover", { dataTransfer });
+	await target.dispatchEvent("drop", { dataTransfer });
+}
+
+/**
  * Run the Work's listing sync the way the job would, for the one Work this walk releases.
  *
  * 🚨 **No worker runs in a browser session** — `work-schedule.authed.e2e.ts` documents the
@@ -503,6 +519,32 @@ test("the contributor area offers the creator first, keys picks by DID, and hold
 	await illustrator.press("Enter");
 	await expect(page.getByText("Jane Doe", { exact: true })).toBeVisible();
 
+	// ── Reordering ──
+	// The second card moves above the first, and Jane Doe ahead of the self-credit inside
+	// it. The array order is the published order — no order column, no schema change.
+	await dragOnto(
+		page,
+		page.getByRole("button", { name: "Drag credit 2 to reorder" }),
+		page.getByRole("textbox", { name: "Credit 1 role" }),
+	);
+	await expect(page.getByRole("textbox", { name: "Credit 1 role" })).toHaveValue("Illustrated by");
+	await expect(page.getByRole("textbox", { name: "Credit 2 role" })).toHaveValue(ROLE);
+
+	const chips = page
+		.getByRole("textbox", { name: "Credit 1 contributors" })
+		.locator("..")
+		.locator("[data-drag-item]");
+	// The self-credit's DID, read off its chip: the gauntlet walker's `userDid` belongs to
+	// the other card, so the target is the first chip by identity rather than by name.
+	const selfKey = await chips.first().getAttribute("data-flip-id");
+	expect(selfKey).toBeTruthy();
+	await dragOnto(
+		page,
+		page.getByRole("button", { name: "Drag Jane Doe to reorder" }),
+		page.locator(`[data-flip-id="${selfKey}"]`),
+	);
+	await expect(chips.first()).toContainText("Jane Doe");
+
 	// ── The guidance ──
 	// The policy link above the table, and the control's own ask on an (i). The paragraph
 	// that used to run through the flow is gone.
@@ -525,4 +567,10 @@ test("the contributor area offers the creator first, keys picks by DID, and hold
 	});
 	await expect(illustrated).toHaveCount(1);
 	await expect(illustrated).toContainText("Jane Doe");
+
+	// The drags are what the read side shows: the card order, then the people inside the
+	// group, both read straight off the stored array's order.
+	const rows = creditsPanel.locator("table").getByRole("row");
+	await expect(rows.locator("th")).toHaveText(["Illustrated by", "Written by"]);
+	await expect(rows.nth(0).locator("td li").first()).toContainText("Jane Doe");
 });
