@@ -61,6 +61,7 @@ import {
 	modelAt,
 	NO_STAFFING,
 	type Staffing,
+	TIME_POOL_RATE_DEFAULT,
 } from "./growth.js";
 
 export { FREE_ACCESS_SHARE_DEFAULT };
@@ -73,15 +74,17 @@ export interface PlanPhaseInput {
 	/** The phase's planned operating spend, per month. */
 	staffing: Staffing;
 	/**
-	 * The admin budget as a share of charitable revenue. Defaults to the locked
-	 * 30% ceiling — the plan's standing assumption.
+	 * The admin budget as a share of all spending. Defaults to the locked 30% ceiling.
+	 * The plan models a balanced budget, so spending and revenue are the same base here.
 	 */
 	adminBudgetShare?: number;
 	/**
 	 * Free Access's share of Programs — the remainder after admin. Default 0.10.
-	 * The share is spent through the Time Pool Fund: free accounts' Time Pools.
+	 * The plan's modeling dial; the runtime Fund is the rate below.
 	 */
 	freeAccessShare?: number;
+	/** The Time Pool Fund's service level — dollars per eligible free account. Defaults to $1.00, the Root Time Pool. */
+	timePoolRatePerUser?: number;
 }
 
 /** One computed phase — everything the tool's table and phase view draw. */
@@ -161,16 +164,15 @@ export function planLedger(input: PlanPhaseInput): PlanLedger {
 	const adminBudgetShare = input.adminBudgetShare ?? ADMIN_CEILING;
 	const freeAccessShare = input.freeAccessShare ?? FREE_ACCESS_SHARE_DEFAULT;
 
-	// ONE pass: the free pool derives inside `modelAt` from the same shares, through
-	// the same `timePoolFundPool` arithmetic the runtime service uses — the two-pass
-	// convergence this replaced needed a free slice fed back in because the model
-	// carried no notion of the shares; it does now.
+	// ONE pass: the projection derives inside `modelAt` from the shares and the service
+	// level, through the same `timePoolFundProjection` arithmetic the plan's table draws.
 	const m = modelAt({
 		accounts: input.accounts,
 		payingShare: input.payingShare,
 		staffing: input.staffing ?? NO_STAFFING,
 		adminBudgetShare,
 		freeAccessShare,
+		timePoolRatePerUser: input.timePoolRatePerUser,
 	});
 	const charitableRevenue = m.charitableRevenue;
 	const adminBudget = adminBudgetShare * charitableRevenue;
@@ -238,6 +240,7 @@ export function planLedger(input: PlanPhaseInput): PlanLedger {
 export const PLAN_DEFAULTS = {
 	adminBudgetShare: ADMIN_CEILING,
 	freeAccessShare: FREE_ACCESS_SHARE_DEFAULT,
+	timePoolRatePerUser: TIME_POOL_RATE_DEFAULT,
 } as const;
 
 /** One authored row of the plan's path, matching the plan tables' columns. */
@@ -360,18 +363,19 @@ export const DEFAULT_PLAN_PHASES: readonly AuthoredPlanPhase[] = [
 /** A phase row's effective shares against the plan's settings row. */
 function withShares(
 	row: Pick<AuthoredPlanPhase, "adminBudgetShare" | "freeAccessShare">,
-	settings: { adminBudgetShare: number; freeAccessShare: number },
+	settings: { adminBudgetShare: number; freeAccessShare: number; timePoolRatePerUser?: number },
 ) {
 	return {
 		adminBudgetShare: row.adminBudgetShare ?? settings.adminBudgetShare,
 		freeAccessShare: row.freeAccessShare ?? settings.freeAccessShare,
+		timePoolRatePerUser: settings.timePoolRatePerUser,
 	};
 }
 
 /** One plan row at a settings row's defaults, computed — the tool's and generators' shared mapping. */
 export function planLedgerFor(
 	row: Omit<AuthoredPlanPhase, "phase" | "label">,
-	settings: { adminBudgetShare: number; freeAccessShare: number },
+	settings: { adminBudgetShare: number; freeAccessShare: number; timePoolRatePerUser?: number },
 ): PlanLedger {
 	return planLedger({
 		accounts: row.accounts,

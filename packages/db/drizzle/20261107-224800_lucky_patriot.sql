@@ -1,0 +1,1 @@
+ALTER TABLE "financial_plan_settings" ADD COLUMN "time_pool_rate_per_user" real DEFAULT 1 NOT NULL;

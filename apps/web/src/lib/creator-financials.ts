@@ -18,8 +18,8 @@
 // this layer's own decisions, and the composition's agreement with the generated tables.
 //
 // 🚨 **The free account's pool is not in this file.** `timePoolFor(0)` is 0; the free
-// tier's pool is the **Time Pool Fund**, a stated share of the charitable remainder
-// published monthly by its ledger, fetched browser-side by `lib/time-pool-fund.ts`.
+// tier's pool is the **Time Pool Fund**, a budget line Anthers chooses each month and
+// publishes through its ledger, fetched browser-side by `lib/time-pool-fund.ts`.
 // This layer takes the published slice as an argument (`freeSlicePerAccount: number | null`)
 // and answers `null` revenue rows where it is unpublished — a gap rendered as one, not
 // an estimate. Per the pool ruling: Root's paid pool is the reference for any per-hour
@@ -150,11 +150,11 @@ export interface FreeViewerRow {
 }
 
 /**
- * A free account's stream of your Public Access work pays from the **Time Pool Fund**
- * — Anthers' pool for free accounts, a stated share of the charitable remainder
- * after the admin budget, published monthly and divided across the cycle's active
- * free accounts. What the Fund pays is runtime data; where it is unpublished this
- * row is a stated gap, and the page totals it as one. Their directed support is their
+ * A free account's stream of your Public Access work pays from the **Time Pool Fund**,
+ * Anthers' pool for free accounts, chosen each month and divided across the cycle's
+ * eligible free accounts with the per-account amount capped at a Root supporter's Time
+ * Pool. What the Fund pays is runtime data; where it is unpublished this row is a
+ * stated gap, and the page totals it as one. Their directed support is their
  * own charge: everything past its at-cost card fee reaches you — the lone-worst case
  * ($3 on a bare account) is `DIRECTED_SUPPORT_WORST_CASE`, and the copy quotes it.
  */

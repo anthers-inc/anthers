@@ -34,14 +34,24 @@ import {
 // org — Anthers' own global plan settings: exactly one row, the shares phases default to.
 export const financialPlanSettings = pgTable("financial_plan_settings", {
 	id: serial("id").primaryKey(),
-	/** The admin budget as a share of charitable revenue — the locked 30% ceiling. */
+	/** The admin budget as a share of all spending — the locked 30% ceiling. The plan models a balanced budget, so its revenue base is the same figure. */
 	adminBudgetShare: real("admin_budget_share").notNull(),
 	/**
-	 * Free Access's share of Programs — the remainder after admin. Spent through
-	 * the Time Pool Fund: the mechanism that offers free access in a way still
-	 * pays creators.
+	 * Free Access's share of Programs — the plan's modeling dial, not the runtime's
+	 * determinant. The actual Fund is a budget line (see `timePoolRatePerUser`).
 	 */
 	freeAccessShare: real("free_access_share").notNull(),
+	/**
+	 * The Time Pool Fund's service level: dollars per eligible free account per cycle.
+	 *
+	 * ⭐ **This is the Fund's actual input** (Parker, 2026-11-07). The organization spends
+	 * as much of its undirected revenue on free accounts' Time Pools as the discretionary
+	 * budget allows, never above the smallest paid Time Pool — a Root supporter's $1.00.
+	 * The runtime clamps this to that cap; a thinner month lowers it here. The plan's
+	 * `freeAccessShare` is the modeling question of whether user revenue alone could
+	 * carry this service level.
+	 */
+	timePoolRatePerUser: real("time_pool_rate_per_user").notNull().default(1),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

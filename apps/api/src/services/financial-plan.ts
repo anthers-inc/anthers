@@ -25,7 +25,7 @@ import {
 import { asc, eq } from "drizzle-orm";
 
 export type { AuthoredPlanPhase };
-/** The plan's global defaults when nothing has been edited: locked 30% admin, Free Access 10% of Programs. Authored in shared — the published-figures generator reads the same rows. */
+/** The plan's global defaults when nothing has been edited: locked 30% admin, Free Access 10% of Programs, and a $1.00 per-account Fund rate. Authored in shared — the published-figures generator reads the same rows. */
 export { PLAN_DEFAULTS };
 
 /**
@@ -43,6 +43,7 @@ export async function loadPlanSettings(): Promise<{
 	id: number;
 	adminBudgetShare: number;
 	freeAccessShare: number;
+	timePoolRatePerUser: number;
 }> {
 	const existing = await db.select().from(financialPlanSettings).limit(1);
 	const row = existing[0];
@@ -51,11 +52,13 @@ export async function loadPlanSettings(): Promise<{
 			id: row.id,
 			adminBudgetShare: row.adminBudgetShare,
 			freeAccessShare: row.freeAccessShare,
+			timePoolRatePerUser: row.timePoolRatePerUser,
 		};
 	const inserted = await db.insert(financialPlanSettings).values(PLAN_DEFAULTS).returning({
 		id: financialPlanSettings.id,
 		adminBudgetShare: financialPlanSettings.adminBudgetShare,
 		freeAccessShare: financialPlanSettings.freeAccessShare,
+		timePoolRatePerUser: financialPlanSettings.timePoolRatePerUser,
 	});
 	return inserted[0];
 }
@@ -64,6 +67,7 @@ export async function loadPlanSettings(): Promise<{
 export async function updatePlanSettings(values: {
 	adminBudgetShare?: number;
 	freeAccessShare?: number;
+	timePoolRatePerUser?: number;
 }) {
 	const row = await loadPlanSettings();
 	await db
@@ -82,7 +86,7 @@ export async function updatePlanSettings(values: {
  * Seeds the default phases when the table is empty.
  */
 export async function loadPlan(): Promise<{
-	settings: { adminBudgetShare: number; freeAccessShare: number };
+	settings: { adminBudgetShare: number; freeAccessShare: number; timePoolRatePerUser: number };
 	phases: Array<PhaseRow & { ledger: PlanLedger }>;
 }> {
 	const settings = await loadPlanSettings();

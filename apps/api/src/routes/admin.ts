@@ -292,6 +292,9 @@ const planPhaseCreateSchema = z.object({
 const planSettingsSchema = z.object({
 	adminBudgetShare: z.number().min(0).max(1).optional(),
 	freeAccessShare: z.number().min(0).max(1).optional(),
+	// Dollars per eligible free account. The runtime clamps to the ladder's smallest
+	// paid Time Pool; this bound only catches an obvious typo.
+	timePoolRatePerUser: z.number().min(0).max(100).optional(),
 });
 
 /**
