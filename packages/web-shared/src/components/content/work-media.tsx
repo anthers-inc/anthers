@@ -301,25 +301,41 @@ export function WorkTypeFacts({ type, platform }: { type: ContentType; platform?
 }
 
 /** A progress bar for one upload, or an indeterminate one where the transport reports none. */
-export function UploadProgress({ upload }: { upload: WorkUpload }) {
-	const label =
-		upload.status === "attaching"
-			? "Finishing"
-			: upload.progress == null
-				? "Uploading"
-				: `${upload.progress}%`;
+export function UploadProgressBar({
+	fileName,
+	progress,
+	finishing = false,
+}: {
+	fileName: string;
+	/** Whole percent, or `null` where the transport reports no progress yet. */
+	progress: number | null;
+	/** The bytes are up and the Work is being told about them. */
+	finishing?: boolean;
+}) {
+	const label = finishing ? "Finishing" : progress == null ? "Uploading" : `${progress}%`;
 	return (
 		<div className="flex flex-col gap-2">
 			<div className="flex items-center gap-3 rounded-lg bg-base-200 p-3">
-				<span className="flex-1 truncate text-sm">{upload.fileName}</span>
+				<span className="flex-1 truncate text-sm">{fileName}</span>
 				<span className="font-mono text-xs">{label}</span>
 			</div>
-			{upload.progress == null || upload.status === "attaching" ? (
+			{progress == null || finishing ? (
 				<progress className="progress progress-primary w-full" />
 			) : (
-				<progress className="progress progress-primary w-full" value={upload.progress} max="100" />
+				<progress className="progress progress-primary w-full" value={progress} max="100" />
 			)}
 		</div>
+	);
+}
+
+/** A progress bar for one upload store row. */
+export function UploadProgress({ upload }: { upload: WorkUpload }) {
+	return (
+		<UploadProgressBar
+			fileName={upload.fileName}
+			progress={upload.progress}
+			finishing={upload.status === "attaching"}
+		/>
 	);
 }
 

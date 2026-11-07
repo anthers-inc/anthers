@@ -483,3 +483,54 @@ test("a Work's page and the Works list follow its processing", async ({ page, co
 		.where(eq(workTranscodingJobs.workId, work.id));
 	await expect(page.getByText("Processing…")).toHaveCount(0, { timeout: 15_000 });
 });
+
+/**
+ * A downloadable build is the gap Belle saw: the Add button said "Adding…" and nothing
+ * said how far the bytes had gone or that the row had landed. The bar is held open with
+ * the direct-upload request (the checkout's door), so the walk proves it is there while
+ * the file is on the wire rather than only after it has finished.
+ */
+test("a downloadable build reports its progress and confirms the row that landed", async ({
+	page,
+	context,
+}) => {
+	session = await signInAsMediaFixture(context);
+	const title = `${STEM} build`;
+	const draft = await createDraftWork(page, { type: "game", title });
+	const fileName = `${STEM} build.zip`;
+	await page.goto(draft.url);
+
+	const section = page.getByRole("heading", { name: "Downloadable Builds" }).locator("..");
+	await expect(section).toBeVisible();
+
+	let release = () => {};
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	await page.route("**/api/content/media-upload/direct", async (route) => {
+		await held;
+		await route.continue();
+	});
+
+	await section.locator('input[type="file"]').setInputFiles({
+		name: fileName,
+		mimeType: "application/zip",
+		buffer: Buffer.from("a downloadable build"),
+	});
+	await expect(section.getByRole("button", { name: fileName })).toBeVisible();
+
+	await section.getByRole("button", { name: "Add", exact: true }).click();
+	// The bar exists while the bytes are held on the wire, named for the file.
+	await expect(section.locator("progress")).toBeVisible();
+	await expect(section.getByText(fileName).last()).toBeVisible();
+
+	release();
+	// The first build swaps the media card to the deliverable, so the confirmation is the
+	// page-level status rather than a row inside the editor that just unmounted.
+	await expect(page.getByRole("status")).toContainText(`${fileName} is in the builds table.`, {
+		timeout: 15_000,
+	});
+	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("tab", { name: "Source" }).click();
+	await expect(page.getByRole("table")).toContainText(fileName);
+});

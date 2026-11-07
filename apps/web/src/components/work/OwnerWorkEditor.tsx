@@ -68,6 +68,7 @@ import WebBuildSection from "@anthers/web-shared/content/WorkWebBuildSection";
 import {
 	type FileWorkType,
 	isFileWorkType,
+	UploadProgressBar,
 	WorkFileDropzone,
 	WorkFileSection,
 	WorkTypeFacts,
@@ -337,6 +338,9 @@ export default function OwnerWorkEditor({
 	}, [current.credits]);
 
 	const [error, setError] = useState<string | null>(null);
+	/** The last downloadable build that landed, said at the page level because the media
+	 *  card unmounts the editor when the first build exists. */
+	const [buildMessage, setBuildMessage] = useState<string | null>(null);
 	/** Whether the media area is showing its management surface instead of the medium. */
 	const [mediaManaging, setMediaManaging] = useState(false);
 	/** The management tab the card opens on; the manager falls back if a type lacks it. */
@@ -1522,7 +1526,11 @@ export default function OwnerWorkEditor({
 					</section>
 					<section className="flex flex-col gap-2">
 						<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloadable Builds</h3>
-						<BuildsEditor work={current} onChanged={() => void refreshMedia()} />
+						<BuildsEditor
+							work={current}
+							onChanged={() => void refreshMedia()}
+							onAdded={setBuildMessage}
+						/>
 					</section>
 					<section className="flex flex-col gap-2">
 						<h3 className={WORK_DETAILS_HEADING_CLASS}>Hosted Build</h3>
@@ -1578,7 +1586,11 @@ export default function OwnerWorkEditor({
 				</section>
 				<section className="flex flex-col gap-2">
 					<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloadable Builds</h3>
-					<BuildsEditor work={current} onChanged={() => void refreshMedia()} />
+					<BuildsEditor
+						work={current}
+						onChanged={() => void refreshMedia()}
+						onAdded={setBuildMessage}
+					/>
 				</section>
 				<section className="flex flex-col gap-2">
 					<h3 className={WORK_DETAILS_HEADING_CLASS}>Hosted Build</h3>
@@ -1789,6 +1801,21 @@ export default function OwnerWorkEditor({
 					/>
 				)}
 			</section>
+
+			{/* The build's landing, said where the media card is not: adding the first build
+			    swaps the card to the deliverable, so the editor that announced it is gone. */}
+			{buildMessage && (
+				<div className="alert alert-success text-sm" role="status">
+					<span className="flex-1">{buildMessage}</span>
+					<button
+						type="button"
+						className="btn btn-ghost btn-xs"
+						onClick={() => setBuildMessage(null)}
+					>
+						Dismiss
+					</button>
+				</div>
+			)}
 
 			{/* ── The byline strip: the title (editable in place as everywhere) on the first
 			    line, the creator with the kind and access chips on the second. The rating
@@ -2476,22 +2503,36 @@ function formatFileSize(bytes: number): string {
  * moment they are added or deleted, as they always have here too: nothing waits a save,
  * and `onChanged` re-reads the row so the table and the deliverable follow.
  */
-function BuildsEditor({ work, onChanged }: { work: WorkDetail; onChanged: () => void }) {
+function BuildsEditor({
+	work,
+	onChanged,
+	onAdded,
+}: {
+	work: WorkDetail;
+	onChanged: () => void;
+	/** Reports the landing at the page level: the media card unmounts this editor when the
+	 *  first build lands, and a success message inside it would go with it. */
+	onAdded?: (message: string | null) => void;
+}) {
 	const assets = work.assets ?? [];
 	const [file, setFile] = useState<File | null>(null);
 	const [platform, setPlatform] = useState("windows");
 	const [version, setVersion] = useState("");
 	const [primary, setPrimary] = useState(false);
 	const [busy, setBusy] = useState(false);
+	const [progress, setProgress] = useState<number | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	const add = async (e: FormEvent) => {
 		e.preventDefault();
 		if (!file) return;
+		const name = file.name;
 		setBusy(true);
 		setError(null);
+		onAdded?.(null);
+		setProgress(null);
 		try {
-			const fileKey = await uploadMediaFile(file, "asset");
+			const fileKey = await uploadMediaFile(file, "asset", setProgress);
 			const res = await client.api.content.works[":id"].assets.$post({
 				param: { id: String(work.id) },
 				json: {
@@ -2508,11 +2549,13 @@ function BuildsEditor({ work, onChanged }: { work: WorkDetail; onChanged: () => 
 			setFile(null);
 			setVersion("");
 			setPrimary(false);
+			onAdded?.(`${name} is in the builds table.`);
 			onChanged();
 		} catch {
 			setError("Failed to upload build.");
 		} finally {
 			setBusy(false);
+			setProgress(null);
 		}
 	};
 
@@ -2538,7 +2581,11 @@ function BuildsEditor({ work, onChanged }: { work: WorkDetail; onChanged: () => 
 							maxSize={4 * 1024 * 1024 * 1024}
 							compact
 							label="Choose a build file"
-							onFileSelect={setFile}
+							onFileSelect={(picked) => {
+								setFile(picked);
+								setError(null);
+								onAdded?.(null);
+							}}
 						/>
 					</div>
 					<select
@@ -2579,6 +2626,11 @@ function BuildsEditor({ work, onChanged }: { work: WorkDetail; onChanged: () => 
 			</form>
 
 			{error && <p className="text-xs text-error">{error}</p>}
+
+			{/* The bar the file picker's own progress had no way to show: a build's bytes
+			    travel as one session upload, and the button's "Adding…" said nothing about
+			    how far along they were. */}
+			{busy && file && <UploadProgressBar fileName={file.name} progress={progress} />}
 
 			{/* The card under the build picker follows its Platform select: what a person can
 			    run is the file type, and the fact that changes with the platform belongs to
