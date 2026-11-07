@@ -25,7 +25,7 @@ import {
 import { asc, eq } from "drizzle-orm";
 
 export type { AuthoredPlanPhase };
-/** The plan's global defaults when nothing has been edited: locked 30% admin, Free Access 10% of Programs. Authored in shared — the published-figures generator reads the same rows. */
+/** The plan's global defaults when nothing has been edited: locked 30% admin, Free Access 10% of Programs, and a $1.00 per-account Fund rate. Authored in shared — the published-figures generator reads the same rows. */
 export { PLAN_DEFAULTS };
 
 /**

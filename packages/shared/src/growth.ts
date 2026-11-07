@@ -101,6 +101,12 @@ export const staffingForPhase = (phase: number): Staffing => PHASE_OVERHEAD[phas
 export const NO_STAFFING: Staffing = { staff: 0, tooling: 0, services: 0 };
 
 /** Board policy (11.02): Admin ≤ 30% of charitable revenue — the CharityNavigator line. */
+/**
+ * The cap on admin spending: no more than 30% of **all spending**, not of revenue alone
+ * (Parker's precision, 2026-11-07). The model budgets the line against charitable
+ * revenue, which equals spending when the plan balances; the distinction matters in a
+ * deficit month, where the ceiling is the stricter reading.
+ */
 export const ADMIN_CEILING = 0.3;
 
 /**

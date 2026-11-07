@@ -74,8 +74,8 @@ export interface PlanPhaseInput {
 	/** The phase's planned operating spend, per month. */
 	staffing: Staffing;
 	/**
-	 * The admin budget as a share of charitable revenue. Defaults to the locked
-	 * 30% ceiling — the plan's standing assumption.
+	 * The admin budget as a share of all spending. Defaults to the locked 30% ceiling.
+	 * The plan models a balanced budget, so spending and revenue are the same base here.
 	 */
 	adminBudgetShare?: number;
 	/**

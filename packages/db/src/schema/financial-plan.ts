@@ -34,7 +34,7 @@ import {
 // org — Anthers' own global plan settings: exactly one row, the shares phases default to.
 export const financialPlanSettings = pgTable("financial_plan_settings", {
 	id: serial("id").primaryKey(),
-	/** The admin budget as a share of charitable revenue — the locked 30% ceiling. */
+	/** The admin budget as a share of all spending — the locked 30% ceiling. The plan models a balanced budget, so its revenue base is the same figure. */
 	adminBudgetShare: real("admin_budget_share").notNull(),
 	/**
 	 * Free Access's share of Programs — the plan's modeling dial, not the runtime's

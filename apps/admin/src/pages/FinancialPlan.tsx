@@ -753,7 +753,7 @@ function SettingsEditor({
 	return (
 		<div className="mb-6 flex flex-wrap items-end gap-4 rounded-box border border-base-300 bg-base-100 p-4">
 			<label className="text-sm" htmlFor="fp-admin-share">
-				<div>Admin Budget (share of revenue)</div>
+				<div>Admin Budget (share of spending)</div>
 				<input
 					className="input input-bordered input-sm mt-1 w-28 tabular-nums"
 					type="number"
