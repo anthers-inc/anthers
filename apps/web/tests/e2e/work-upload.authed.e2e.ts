@@ -200,7 +200,18 @@ test("a folder of an export becomes a hosted build from the media card", async (
 		const folder = join(dir, "web");
 		writeExport(folder);
 
-		await page.goto((await createDraftWork(page, { type: "game", title })).url);
+		// A hosted build is the streaming door, so the draft opens both: a download-only
+		// game's media card offers no Hosted Build at all now.
+		await page.goto(
+			(
+				await createDraftWork(page, {
+					type: "game",
+					title,
+					streamEnabled: true,
+					downloadEnabled: true,
+				})
+			).url,
+		);
 
 		// The card tells the creator what a browser build needs, and the downloadable
 		// lane's picker is not what Web offers.
@@ -533,6 +544,7 @@ test("a downloadable build reports its progress and confirms the row that landed
 		page.getByRole("status").filter({ hasText: `${fileName} is in the builds table.` }),
 	).toContainText(`${fileName} is in the builds table.`, { timeout: 15_000 });
 	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
-	await page.getByRole("tab", { name: "Source" }).click();
+	// A game's build lives on Downloads; Source & Versions is the file kinds' tab.
+	await page.getByRole("tab", { name: "Downloads" }).click();
 	await expect(page.getByRole("table")).toContainText(fileName);
 });
