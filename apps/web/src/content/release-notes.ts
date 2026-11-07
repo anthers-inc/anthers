@@ -71,6 +71,25 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.9",
+		date: "2026-11-07",
+		lede: "A Work's page can open before the Work is out, the cart is called the cart, and the Studio and Badge editor were rebuilt around a week of real use.",
+		entries: [
+			"A Work's page can open before the Work does. A creator sets a Pre-Release date beside the release date; at that date the page, its description, credits, and preview media become public while buying, downloading, streaming, and Reviews stay closed. A Coming soon card carries the price and the scheduled release date. Clearing the date returns the page to private and removes its listing.",
+			"Free accounts' Time Pools are funded from a budget line Anthers sets each month, at a per-account rate capped by the smallest paid Badge's Time Pool, not a fixed share of revenue. The published ledger carries the rate, the cap, the pool, and the slice. The platform's own account no longer counts as a free beneficiary, and a free account that has never bought anything now has its share paid out.",
+			"The Review composer states why a Review is not open before it opens: the Work is the user's own, it is unreleased or still in Pre-Release, its gate is not cleared, or the user has not spent time with it. An existing Review stays editable and removable, and removing one withdraws the votes it carried.",
+			"What the site called the basket is the cart everywhere a person sees it: the page at `/cart`, the icon in the header, the empty and error copy, Add to Cart and View Cart, and the routes behind them. The old address redirects to the new one, the sidebar row is gone, and the header cart stays reachable at a narrow viewport.",
+			"A creator can save a Badge with no perks and no unlocked Works, and a new Badge lands in the full editor rather than a reduced one. The perks table is one fixed row per tax-code kind, the Unlocks tab manages which Works the Badge opens, and the emblem tab gives its icons the width of the cell.",
+			"The Badge cards a user sees on a creator's page are cheapest first and lead with one action, Upgrade, Downgrade, or Cancel, each charging a raise as its difference and waiting until the 1st for a decrease. A first Badge with no subscription takes a card and address in the same modal. Badges and Purchases are separate tabs in settings.",
+			"The Studio opens on Works now, with the Dashboard tab gone. The editor marks what a release still needs on its tabs and media, so a Work is not sent to release with a missing rating, credit, or file without the gap being named.",
+			"A Work's release dates sit under its media. A creator can reorder credits, and the people within one credit, and every drag-to-reorder shows a preview and a landing place. A creator's own attention is no longer counted as audience time.",
+			"Every media surface takes turns at the speaker, so a second player pauses the first rather than playing over it. A trailer starts when the carousel selects it, and the channel guide's arrows flip the direction autoplay moves through the guide. Video Works no longer carry an audio-only rendition or the Podcast This action.",
+			"An upload's progress is shown as it runs, with the planned ladder and a page-level confirmation when the build lands. The media manager gathers its tabs and follows delivery, a downloadable Work has its media area back, and a downloaded build shows progress before it finishes.",
+			"One payment method is saved with its full billing address, and replacing it moves the subscription to the new card and detaches the old ones; a card attached to a subscription carries a chip and cannot be removed. A creator's payout onboarding now counts as adult verification, with card funding as the fallback.",
+			"Work tags go to ten. The image edit menu renders above the page instead of being clipped by it, the cart count clears when the server cart empties behind an open tab, a signed-out Work page uses the app's quiet meadow, every content grid on a profile leads with an owner-only create tile, and its All Content opens a New Post or New Work menu.",
+		],
+	},
+	{
 		version: "2026.11.8",
 		date: "2026-11-06",
 		lede: "The account's settings moved into the sidebar, the content tile leads with its title, and the site gained three more palettes.",
