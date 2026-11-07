@@ -17,7 +17,7 @@
  */
 
 /** The most tags one Work may carry. Changing one is fine; the cap is the list's length. */
-export const MAX_WORK_TAGS = 5;
+export const MAX_WORK_TAGS = 10;
 
 /** A tag's longest normalized form, in characters. */
 export const TAG_MAX_LENGTH = 32;
