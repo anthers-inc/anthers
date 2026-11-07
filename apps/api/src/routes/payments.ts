@@ -44,7 +44,7 @@ import {
 } from "@anthers/db/schema";
 import { currentCycleKey, cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
 import { isChargeableAmount, MAX_BASKET_ITEMS, REFUND_AUTO_CAP } from "@anthers/shared/constants";
-import { calculateFees } from "@anthers/shared/fees";
+import { allocateFeeByValue, calculateFees } from "@anthers/shared/fees";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import type { WorkType } from "@anthers/shared/tax-codes";
 import { purchaseTaxCode, SHIPPING_TAX_CODE } from "@anthers/shared/tax-codes";
@@ -550,17 +550,18 @@ async function resolveStoredBasket(
 			? item.amount.plus(item.physical.shippingOnLine)
 			: item.amount;
 
-	// 🚨 The per-line fee shares are APPORTIONED, not recomputed — pro-rata by item value
-	// with the last line absorbing the rounding remainder, so the parts always reconstruct
-	// the whole exactly. `badge_charges.processing_fee` and the purchase rows' fee both
-	// read their share from these, so the rows and the quote cannot disagree.
-	let allocatedFee = new Decimal(0);
+	// 🚨 The per-line fee shares are APPORTIONED, not recomputed — pro-rata by item value,
+	// with the whole reconstructing exactly. `allocateFeeByValue` owns the arithmetic and
+	// the bound: no line pays more than the same Work would alone, which the naive
+	// last-absorbs remainder breaks at the cents when many lines round against one.
+	// `badge_charges.processing_fee` and the purchase rows' fee both read their share
+	// from these, so the rows and the quote cannot disagree.
+	const lineFees = allocateFeeByValue(
+		items.map((item) => chargeValue(item)),
+		fees.processingFee,
+	);
 	for (let idx = 0; idx < items.length; idx++) {
-		items[idx].lineFee =
-			idx === items.length - 1
-				? fees.processingFee.minus(allocatedFee)
-				: fees.processingFee.times(chargeValue(items[idx])).dividedBy(subtotal).toDecimalPlaces(2);
-		if (idx < items.length - 1) allocatedFee = allocatedFee.plus(items[idx].lineFee);
+		items[idx].lineFee = lineFees[idx];
 	}
 
 	// The distinct issuers the charge covers. Anthers' own ladder is NOT excluded here —

@@ -39,6 +39,65 @@ export function cardFee(amount: Decimal | number): Decimal {
 }
 
 /**
+ * Split one charge's card fee across its lines by value, never charging a line more
+ * than it would pay on its own.
+ *
+ * The proportional share is `fee * value / total`, and the last line absorbs the
+ * rounding remainder — the shape the purchase rows and badge charges are written with,
+ * so the parts always reconstruct the whole. ⚠️ **The naive remainder alone does not
+ * keep Parker's bound**: a line's own share can fall below zero, or above its solo
+ * `cardFee`, when many small lines round against a dominant last line. A cart of
+ * nineteen $1,000 Works and one $0.50 Work landed the last line at -$0.07, and the
+ * reverse shape (many tiny lines, one $1,000 line last) charged it $0.09 more than the
+ * same Work alone. Neither can stand: the worst case for a creator is a single-Work
+ * purchase, and sharing a cart may only make it better.
+ *
+ * So each share is clamped to `[0, cardFee(value)]` and the difference is moved a cent
+ * at a time onto lines with headroom (or taken from lines that still carry a share).
+ * The sum is always exactly `fee`; the caps sum to more than `fee` whenever there is a
+ * second line, because every line's solo fee carries its own flat $0.30.
+ */
+export function allocateFeeByValue(values: Decimal[], fee: Decimal): Decimal[] {
+	if (values.length === 0) return [];
+	const total = values.reduce((sum, value) => sum.plus(value), new Decimal(0));
+	if (total.lte(0)) return values.map(() => new Decimal(0));
+
+	const caps = values.map((value) => cardFee(value));
+	const shares = values.map((value) => CENTS(fee.mul(value).div(total)));
+
+	// The last line absorbs the whole fee's rounding remainder.
+	const last = values.length - 1;
+	const allocated = shares
+		.slice(0, last)
+		.reduce((sum: Decimal, share: Decimal) => sum.plus(share), new Decimal(0));
+	shares[last] = CENTS(fee.minus(allocated));
+
+	for (let i = 0; i < shares.length; i++) {
+		shares[i] = Decimal.max(0, Decimal.min(shares[i], caps[i]));
+	}
+
+	const cent = new Decimal("0.01");
+	let difference = CENTS(
+		fee.minus(shares.reduce((sum: Decimal, share: Decimal) => sum.plus(share), new Decimal(0))),
+	);
+	// The caps sum above the fee whenever there is a second line, so a positive
+	// difference always has somewhere to land; a negative one always has cents to take.
+	while (difference.gt(0)) {
+		const line = shares.findIndex((share, i) => share.plus(cent).lte(caps[i]));
+		if (line < 0) break;
+		shares[line] = shares[line].plus(cent);
+		difference = difference.minus(cent);
+	}
+	while (difference.lt(0)) {
+		const line = shares.findIndex((share) => share.gte(cent));
+		if (line < 0) break;
+		shares[line] = shares[line].minus(cent);
+		difference = difference.plus(cent);
+	}
+	return shares;
+}
+
+/**
  * Split the at-cost card fee on a whole batched monthly charge between what a user
  * gives Anthers and what they give creators, pro-rata by dollar value.
  *

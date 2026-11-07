@@ -2189,6 +2189,46 @@ describe("Basket checkout — one charge, one card fee", () => {
 		expect(sum((r) => r.salesTax).toFixed(2)).toBe("0.00");
 	});
 
+	it("splits the fee by value — Parker's thousand-and-ten cart", async () => {
+		// The principle (Parker, 2026-11-06): the worst case for a creator is a single-Work
+		// purchase, and sharing a cart with anybody else may only make it better. One $1,000
+		// Work and one $10 Work, two creators, one charge: the $10 line pays a tenth of the
+		// flat, not half, and neither line pays more than it would alone.
+		const { id: secondCreator } = await signUp(`bskt_ten_${run}`);
+		await connect(secondCreator);
+		const expensive = await insertWork({
+			creatorId,
+			type: "game",
+			title: `Thousand ${run}`,
+			streamEnabled: false,
+			downloadEnabled: true,
+			access: [{ threshold: 0, allow: true, price: "1000.00" }],
+		});
+		const cheap = await insertWork({
+			creatorId: secondCreator,
+			type: "game",
+			title: `Ten ${run}`,
+			streamEnabled: false,
+			downloadEnabled: true,
+			access: [{ threshold: 0, allow: true, price: "10.00" }],
+		});
+		await seedBasket([expensive.id, cheap.id], { fresh: true });
+
+		const { res, body } = await basket([], "quote");
+		expect(res.status).toBe(200);
+		const lines = body.items as { processingFee: string; price: string }[];
+		expect(lines.map((line) => line.processingFee)).toEqual(["29.30", "0.29"]);
+		for (const line of lines) {
+			expect(
+				new Decimal(line.processingFee).lessThanOrEqualTo(cardFee(new Decimal(line.price))),
+				`line ${line.price} pays no more than its solo fee`,
+			).toBe(true);
+		}
+		expect(
+			lines.reduce((sum, line) => sum.plus(line.processingFee), new Decimal(0)).toFixed(2),
+		).toBe(body.processingFee);
+	});
+
 	it("carries two creators on one charge — the dealbreaker, fixed (2026-10-15)", async () => {
 		// The behavior this whole change exists to deliver: a basket holding two
 		// creators' Works checks out as ONE session, ONE charge, and never wiped the

@@ -28,6 +28,7 @@ import {
 	timePoolFor,
 } from "./constants.js";
 import {
+	allocateFeeByValue,
 	anthersSupportBreakdown,
 	badgeViews,
 	calculateFees,
@@ -153,6 +154,52 @@ describe("cardFee (Payments, inside the price)", () => {
 		expect(cardFee(3).div(3).toNumber()).toBeCloseTo(0.13, 2); // ~13% borne alone
 		expect(cardFee(12).div(12).toNumber()).toBeCloseTo(0.054, 3); // ~5.4% batched
 		expect(cardFee(12).lessThan(cardFee(3).mul(4))).toBe(true); // one charge beats four
+	});
+});
+
+describe("allocateFeeByValue — one charge's fee across its lines", () => {
+	/** The shares always reconstruct the whole, and no line pays more than it would alone. */
+	const check = (values: string[], fee: Decimal) => {
+		const shares = allocateFeeByValue(
+			values.map((v) => new Decimal(v)),
+			fee,
+		);
+		expect(shares.reduce((sum, s) => sum.plus(s), new Decimal(0)).toFixed(2)).toBe(fee.toFixed(2));
+		for (let i = 0; i < values.length; i++) {
+			expect(shares[i].gte(0)).toBe(true);
+			expect(shares[i].lte(cardFee(new Decimal(values[i])))).toBe(true);
+		}
+		return shares;
+	};
+
+	test("splits Parker's thousand-and-ten example by value", () => {
+		// $1,000 and $10 on one charge: the $10 line pays a tenth of the flat, not half.
+		const fee = cardFee(1010);
+		const [big, small] = check(["1000", "10"], fee);
+		expect(big.toFixed(2)).toBe("29.30");
+		expect(small.toFixed(2)).toBe("0.29");
+		expect(small.lessThan(cardFee(10))).toBe(true);
+	});
+
+	test("a dominant last line is never charged more than it would pay alone", () => {
+		// Nineteen tiny lines round their shares to zero; the naive remainder handed the
+		// whole fee to the $1,000 line and put it 9 cents over its solo charge.
+		const values = [...Array(19).fill("0.50"), "1000"];
+		const shares = check(values, cardFee(1009.5));
+		expect(shares.at(-1)!.toFixed(2)).toBe(cardFee(1000).toFixed(2));
+	});
+
+	test("a tiny line last is never handed a negative fee", () => {
+		// The reverse shape: nineteen $1,000 lines each round their share UP, and the
+		// naive remainder left the last $0.50 line at -$0.07 — the platform paying the
+		// creator for the privilege.
+		const values = [...Array(19).fill("1000"), "0.50"];
+		const shares = check(values, cardFee(19000.5));
+		expect(shares.at(-1)!.gte(0)).toBe(true);
+	});
+
+	test("twenty equal lines each stay under their own solo fee", () => {
+		check(Array(20).fill("0.50"), cardFee(10));
 	});
 });
 
