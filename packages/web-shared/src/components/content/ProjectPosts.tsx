@@ -36,7 +36,8 @@ import {
 	sortProjectItems,
 } from "@anthers/shared/project-sort";
 import { Bars3Icon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDragReorder } from "../../lib/drag-reorder";
 import { postUrl } from "../../lib/postUrl";
 import { Link } from "../../lib/router";
 import { client } from "../../lib/rpc";
@@ -59,8 +60,6 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 	const [error, setError] = useState<string | null>(null);
 	const [sortMode, setSortMode] = useState<ProjectSortMode>("manual");
 	const [sortDirection, setSortDirection] = useState<ProjectSortDirection>("asc");
-	/** Where the drag started, in the stored list's own indices; cleared on every end. */
-	const dragFrom = useRef<number | null>(null);
 
 	useEffect(() => {
 		let live = true;
@@ -186,6 +185,17 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 		}
 	};
 
+	const manual = sortMode === "manual";
+	const displayed = sortProjectItems(posts, sortMode, sortDirection);
+	// Dragging is Manual's alone: in a saved reading order the displayed indices are not
+	// the stored ones, and the list is not an arrangement to edit.
+	const drag = useDragReorder<ProjectPost, HTMLUListElement>({
+		items: displayed,
+		keyOf: (post) => String(post.id),
+		onReorder: (from, to) => move(from, to),
+		disabled: !manual,
+	});
+
 	if (loading) {
 		return (
 			<div className="flex justify-center py-6">
@@ -193,9 +203,6 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 			</div>
 		);
 	}
-
-	const manual = sortMode === "manual";
-	const displayed = sortProjectItems(posts, sortMode, sortDirection);
 
 	return (
 		<div className="space-y-3">
@@ -258,40 +265,23 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 				</p>
 			)}
 
-			<ul aria-label="Posts on this Project" className="space-y-2">
-				{displayed.map((post, i) => {
-					const storedIndex = manual ? i : posts.findIndex((p) => p.id === post.id);
+			<ul ref={drag.containerRef} aria-label="Posts on this Project" className="space-y-2">
+				{drag.items.map((post, i) => {
 					return (
 						<li
 							key={post.id}
-							className="flex items-center gap-3 rounded-lg border border-base-300 bg-base-100 p-2"
-							onDragOver={(e) => e.preventDefault()}
-							onDrop={(e) => {
-								e.preventDefault();
-								const from = dragFrom.current;
-								dragFrom.current = null;
-								if (from !== null && from !== storedIndex) void move(from, storedIndex);
-							}}
+							{...drag.itemProps(i)}
+							className={`flex items-center gap-3 rounded-lg border border-base-300 bg-base-100 p-2 transition-[opacity,box-shadow] ${
+								drag.isDragging(i) ? "opacity-40 ring-2 ring-primary/30" : ""
+							}`}
 						>
 							{/* The grip is the drag source a native HTML5 drag needs (the sidebar
 							    nav's pattern). Keyboard reorder is not built; the gap is named in
 							    the task. */}
 							<span
+								{...drag.handleProps(i)}
 								title={manual ? "Drag to reorder" : "Sorting is Manual's — switch back to drag"}
 								aria-hidden="true"
-								draggable={manual}
-								onDragStart={(e) => {
-									if (!manual) {
-										e.preventDefault();
-										return;
-									}
-									e.dataTransfer.effectAllowed = "move";
-									e.dataTransfer.setData("text/plain", String(post.id));
-									dragFrom.current = storedIndex;
-								}}
-								onDragEnd={() => {
-									dragFrom.current = null;
-								}}
 								className={
 									manual
 										? "cursor-grab px-1.5 text-base-content/25 hover:text-base-content/50 transition-colors self-stretch flex items-center active:cursor-grabbing"

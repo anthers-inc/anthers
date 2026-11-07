@@ -13,6 +13,7 @@
  * price box cannot be clobbered.
  */
 
+import { useDragReorder } from "@anthers/web-shared/drag-reorder";
 import { uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
 import {
 	Bars3Icon,
@@ -38,7 +39,6 @@ export function PhysicalImagesEditor({
 }) {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [dragged, setDragged] = useState<number | null>(null);
 	/** Descriptions being typed, keyed by the image's storage key. */
 	const [drafts, setDrafts] = useState<Record<string, string>>({});
 	const picker = useRef<HTMLInputElement | null>(null);
@@ -86,7 +86,7 @@ export function PhysicalImagesEditor({
 		}
 	};
 
-	const reorder = async (from: number, to: number) => {
+	const reorderImages = async (from: number, to: number) => {
 		if (from === to) return;
 		const next = [...images];
 		const [moved] = next.splice(from, 1);
@@ -99,9 +99,15 @@ export function PhysicalImagesEditor({
 			setError(err instanceof Error ? err.message : "The pictures didn't reorder.");
 		} finally {
 			setBusy(false);
-			setDragged(null);
 		}
 	};
+
+	const drag = useDragReorder<PhysicalImage, HTMLUListElement>({
+		items: images,
+		keyOf: (image) => image.key,
+		onReorder: (from, to) => reorderImages(from, to),
+		disabled: busy,
+	});
 
 	const setCover = async (key: string) => {
 		setBusy(true);
@@ -153,16 +159,14 @@ export function PhysicalImagesEditor({
 				onChange={(e) => void add(e.target.files)}
 			/>
 
-			<ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-				{images.map((image, index) => (
+			<ul ref={drag.containerRef} className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+				{drag.items.map((image, index) => (
 					<li
 						key={image.key}
-						onDragOver={(e) => e.preventDefault()}
-						onDrop={(e) => {
-							e.preventDefault();
-							if (dragged != null) void reorder(dragged, index);
-						}}
-						className="flex min-w-0 flex-col gap-2 rounded-box border border-base-300 p-2"
+						{...drag.itemProps(index)}
+						className={`flex min-w-0 flex-col gap-2 rounded-box border border-base-300 p-2 transition-[opacity,box-shadow] ${
+							drag.isDragging(index) ? "opacity-40 ring-2 ring-primary/30" : ""
+						}`}
 					>
 						<div className="relative aspect-square overflow-hidden rounded-lg bg-base-100">
 							<img
@@ -191,12 +195,7 @@ export function PhysicalImagesEditor({
 							</button>
 							<button
 								type="button"
-								draggable
-								onDragStart={(e) => {
-									setDragged(index);
-									e.dataTransfer.effectAllowed = "move";
-								}}
-								onDragEnd={() => setDragged(null)}
+								{...drag.handleProps(index)}
 								title="Drag to reorder"
 								aria-label={`Drag photo ${index + 1} to reorder`}
 								className="absolute top-2 left-1/2 -translate-x-1/2 cursor-grab rounded bg-base-100/85 p-1 text-base-content/60 backdrop-blur"

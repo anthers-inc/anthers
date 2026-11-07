@@ -56,6 +56,7 @@ import {
 import { BADGE_ART_MAX_BYTES, STRIPE_MIN_CHARGE, supportAmount } from "@anthers/shared/constants";
 import { ArrowUpTrayIcon, Bars2Icon, TrashIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
+import { useDragReorder } from "../../lib/drag-reorder";
 import { apiFetch, client } from "../../lib/rpc";
 import { studioUrl } from "../../lib/studio";
 import type { CreatorBadge } from "../../lib/types";
@@ -223,9 +224,6 @@ function PerkEditor({
 	perks: PerkDraft[];
 	onChange: (perks: PerkDraft[]) => void;
 }) {
-	const [dragIndex, setDragIndex] = useState<number | null>(null);
-	const [overIndex, setOverIndex] = useState<number | null>(null);
-
 	const update = (i: number, patch: Partial<PerkDraft>) => {
 		onChange(perks.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 	};
@@ -237,6 +235,12 @@ function PerkEditor({
 		next.splice(to, 0, row);
 		onChange(next);
 	};
+
+	const drag = useDragReorder<PerkDraft, HTMLTableSectionElement>({
+		items: perks,
+		keyOf: (perk) => perk.key,
+		onReorder: (from, to) => move(from, to),
+	});
 
 	const remove = (i: number) => onChange(perks.filter((_, j) => j !== i));
 	const add = () => {
@@ -303,7 +307,7 @@ function PerkEditor({
 							<th className="w-10" />
 						</tr>
 					</thead>
-					<tbody>
+					<tbody ref={drag.containerRef}>
 						{perks.length === 0 ? (
 							<tr>
 								<td colSpan={4} className="py-6 text-center text-xs text-base-content/50">
@@ -311,51 +315,27 @@ function PerkEditor({
 								</td>
 							</tr>
 						) : (
-							perks.map((perk, i) => (
+							drag.items.map((perk, i) => (
 								<tr
 									key={perk.key}
-									onDragOver={(e) => {
-										if (dragIndex === null) return;
-										e.preventDefault();
-										setOverIndex(i);
-									}}
-									onDragLeave={() => setOverIndex((n) => (n === i ? null : n))}
-									onDrop={(e) => {
-										e.preventDefault();
-										if (dragIndex !== null) move(dragIndex, i);
-										setDragIndex(null);
-										setOverIndex(null);
-									}}
-									className={
-										overIndex === i && dragIndex !== null && dragIndex !== i
-											? "bg-base-200/60"
-											: undefined
-									}
+									{...drag.itemProps(i)}
+									className={drag.isDragging(i) ? "opacity-40" : undefined}
 								>
 									<td className="w-6 pr-0">
 										<button
 											type="button"
-											draggable
+											{...drag.handleProps(i)}
 											className="cursor-grab rounded p-0.5 text-base-content/50 hover:text-base-content/80 active:cursor-grabbing"
 											aria-label={`Reorder ${perk.label.trim() || "this perk"}`}
 											title="Drag to reorder, or press the up and down arrows"
-											onDragStart={(e) => {
-												setDragIndex(i);
-												e.dataTransfer.effectAllowed = "move";
-												e.dataTransfer.setData("text/plain", String(i));
-											}}
-											onDragEnd={() => {
-												setDragIndex(null);
-												setOverIndex(null);
-											}}
 											onKeyDown={(e) => {
 												if (e.key === "ArrowUp") {
 													e.preventDefault();
-													move(i, i - 1);
+													drag.moveBy(i, -1);
 												}
 												if (e.key === "ArrowDown") {
 													e.preventDefault();
-													move(i, i + 1);
+													drag.moveBy(i, 1);
 												}
 											}}
 										>
