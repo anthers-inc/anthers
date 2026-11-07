@@ -313,6 +313,56 @@ describe("settling a month from what was paid for it", () => {
 		);
 	});
 
+	it("🚨 follows the two charged amounts across a mid-month Badge's first months", async () => {
+		// Financial alignment: the first month is charged in full and funds the full pool
+		// share; the second carries the day-exact reduction and funds the reduced share.
+		// The held rung stays $3, so a settlement reading the holding instead of the invoice
+		// would credit the full pool in June and fail here.
+		const creator = await makeUser("creator");
+		const { userId } = await makeSupporter(3);
+		await paidInvoice(userId, { anthers: 3 });
+		await watch(userId, creator, 1800);
+		await settle(userId, AFTER);
+
+		const [may] = await db
+			.select({ amount: creatorCredits.amount })
+			.from(creatorCredits)
+			.where(
+				and(
+					eq(creatorCredits.subscriberId, userId),
+					eq(creatorCredits.billingCycle, MONTH),
+					eq(creatorCredits.creatorId, creator),
+					eq(creatorCredits.kind, "time_pool"),
+				),
+			);
+		expect(may?.amount).toBe(new Decimal(timePoolFor(3)).toFixed(2));
+
+		await paidInvoice(userId, { anthers: 1.5, month: "2031-06-01" });
+		await insertAttentionRange({
+			userId,
+			creatorId: creator,
+			eventType: "watch",
+			seconds: 1800,
+			publicAccess: true,
+			endsAt: new Date("2031-06-15T12:00:00Z"),
+		});
+		await settle(userId, LATER);
+
+		const [june] = await db
+			.select({ amount: creatorCredits.amount })
+			.from(creatorCredits)
+			.where(
+				and(
+					eq(creatorCredits.subscriberId, userId),
+					eq(creatorCredits.billingCycle, "2031-06-01"),
+					eq(creatorCredits.creatorId, creator),
+					eq(creatorCredits.kind, "time_pool"),
+				),
+			);
+		expect(june?.amount).toBe(new Decimal(timePoolFor(1.5)).toFixed(2));
+		expect(june?.amount).not.toBe(new Decimal(timePoolFor(3)).toFixed(2));
+	});
+
 	it("credits nothing while the month is still running", async () => {
 		const creator = await makeUser("creator");
 		const { userId } = await makeSupporter(6);
