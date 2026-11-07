@@ -15,7 +15,11 @@
  * nothing here seeds or deletes.
  */
 
-import { GAUNTLET_CREATOR_USERNAME, gauntletHandle } from "@anthers/db/gauntlet";
+import {
+	GAUNTLET_CREATOR_USERNAME,
+	GAUNTLET_WALKER_USERNAME,
+	gauntletHandle,
+} from "@anthers/db/gauntlet";
 import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
@@ -88,4 +92,44 @@ test("the posts tab renders the same tiles", async ({ page }) => {
 		expect(text, "every post tile names its creator").toContain("Gauntlet Creator");
 		expect(text, "no post tile renders the missing-creator fallback").not.toContain("?");
 	}
+});
+
+/**
+ * The create tile is the owner's, and it survives an empty profile: the walker's own
+ * profile has nothing on it, which is exactly the state a grid without a tile would
+ * leave a creator with no way in.
+ */
+test("the creator's own empty profile leads with a create tile", async ({ page }) => {
+	test.setTimeout(60_000);
+	const handle = await gauntletHandle(API_URL, GAUNTLET_WALKER_USERNAME);
+	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}`);
+
+	const tile = page.getByTestId("profile-create-tile");
+	await expect(tile).toBeVisible();
+	await expect(tile).toContainText("New Content");
+	// No month section exists, so the tile is not merely the first card of one.
+	await expect(page.locator("[data-testid='content-month']")).toHaveCount(0);
+
+	await tile.click();
+	const menu = page.getByRole("menu", { name: "New content" });
+	await expect(menu).toBeVisible();
+	await expect(menu.getByRole("menuitem", { name: "New Post" })).toHaveAttribute(
+		"href",
+		"/studio/posts/new",
+	);
+	await expect(menu.getByRole("menuitem", { name: "New Work" })).toHaveAttribute(
+		"href",
+		"/studio/works/new",
+	);
+	// The menu's backdrop is the click-outside dismiss; close it before switching tabs.
+	await page.getByRole("button", { name: "Close the new content menu" }).click();
+	await expect(menu).toHaveCount(0);
+
+	// The Posts tab's tile is the direct one: one destination, named for the tab.
+	await page.getByRole("button", { name: "Posts", exact: true }).click();
+	await expect(page.getByTestId("profile-create-tile")).toContainText("New Post");
+	await expect(page.getByTestId("profile-create-tile")).toHaveAttribute(
+		"href",
+		"/studio/posts/new",
+	);
 });

@@ -15,16 +15,28 @@ import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
 import type { ReactNode } from "react";
 import { monthSections } from "../../lib/month-sections";
 
+/** The profile grid's one track definition; the create tile and every card share it. */
+const GRID = "grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch";
+
 export default function ContentMonths<T>({
 	items,
 	dateOf,
 	renderItem,
+	leading,
 }: {
 	items: readonly T[];
 	dateOf: (item: T) => string;
 	renderItem: (item: T) => ReactNode;
+	/** The grid's first slot — the profile owner's create tile, when this is their page. */
+	leading?: ReactNode;
 }) {
 	const sections = monthSections(items, dateOf);
+	// A creator with nothing to show still gets the create tile: the empty list renders
+	// one bare grid rather than falling through to an empty state with no way in.
+	if (sections.length === 0) {
+		return leading ? <div className={GRID}>{leading}</div> : null;
+	}
+	const firstMonth = sections.find((section) => section.kind === "month")?.key;
 
 	return (
 		<>
@@ -64,7 +76,8 @@ export default function ContentMonths<T>({
 								className="h-px flex-1 bg-base-content/15"
 							/>
 						</div>
-						<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
+						<div className={GRID}>
+							{section.key === firstMonth && leading}
 							{section.items.map(renderItem)}
 						</div>
 					</section>
