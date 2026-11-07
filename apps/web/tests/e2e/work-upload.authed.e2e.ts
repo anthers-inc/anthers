@@ -526,10 +526,12 @@ test("a downloadable build reports its progress and confirms the row that landed
 
 	release();
 	// The first build swaps the media card to the deliverable, so the confirmation is the
-	// page-level status rather than a row inside the editor that just unmounted.
-	await expect(page.getByRole("status")).toContainText(`${fileName} is in the builds table.`, {
-		timeout: 15_000,
-	});
+	// page-level status rather than a row inside the editor that just unmounted. The page
+	// carries other live regions, so the status is filtered by the sentence it owns.
+	await expect(page.getByRole("status").filter({ hasText: fileName })).toContainText(
+		`${fileName} is in the builds table.`,
+		{ timeout: 15_000 },
+	);
 	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
 	await page.getByRole("tab", { name: "Source" }).click();
 	await expect(page.getByRole("table")).toContainText(fileName);
