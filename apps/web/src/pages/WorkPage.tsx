@@ -650,7 +650,7 @@ function VisitorRecord({
 								label: "Reviews",
 								// 🚨 A Work takes no votes and no comments: a review is the only feedback
 								// it accepts (Parker, 2026-09-13).
-								content: <WorkReviews workId={work.id} />,
+								content: <WorkReviews workId={work.id} creatorId={work.creatorId ?? null} />,
 							},
 							{
 								key: "showings",

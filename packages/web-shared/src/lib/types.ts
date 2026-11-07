@@ -1085,6 +1085,16 @@ export interface Review {
 	userVote: "up" | "down" | null;
 }
 
+/** Why a reader cannot write a review, as the server decides it. */
+export type ReviewRefusalCode = "own_work" | "unreleased" | "locked" | "unconsumed";
+
+export interface ReviewEligibility {
+	canReview: boolean;
+	code: ReviewRefusalCode | null;
+	/** Written for the reader and rendered verbatim; null when `canReview`. */
+	reason: string | null;
+}
+
 export interface ReviewAggregate {
 	/**
 	 * The share who recommended it, 0–100, or null when nobody has reviewed.
@@ -1120,6 +1130,11 @@ export interface ReviewAggregate {
 	userVerdict: string | null;
 	/** The user's own review text, so the form can open pre-filled for an edit. */
 	userReview: string | null;
+	/**
+	 * Whether this reader may write a review, or the one reason they may not.
+	 * Null for a signed-out reader, who has no composer.
+	 */
+	eligibility: ReviewEligibility | null;
 	/**
 	 * Newest first from the server. The client's two sorts — Helpful by default and
 	 * Newest as the alternative — are presentations of this one payload rather than two

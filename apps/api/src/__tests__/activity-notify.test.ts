@@ -23,7 +23,7 @@ import { blockUser } from "../services/blocks.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
-import { insertWork, testPublicId } from "./work-fixtures.js";
+import { consumeWork, insertWork, testPublicId } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
 
@@ -85,6 +85,7 @@ beforeAll(async () => {
 		access: [{ threshold: 0, allow: true, price: "0" }],
 	});
 	workId = work.id;
+	await consumeWork(people.reviewer.userId, workId);
 }, DB_SETUP_TIMEOUT);
 
 describe("emitters", () => {

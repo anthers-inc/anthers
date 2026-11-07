@@ -36,7 +36,7 @@ import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
-import { CREATED_CREDIT } from "./work-fixtures.js";
+import { CREATED_CREDIT, consumeWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -90,6 +90,7 @@ let bee: string;
 let cam: string;
 let abeId: number;
 let beeId: number;
+let camId: number;
 let workId: number;
 let postSlug: string;
 
@@ -129,6 +130,7 @@ beforeAll(async () => {
 
 	abeId = await userId(abeName);
 	beeId = await userId(beeName);
+	camId = await userId(camName);
 
 	// Rated on create so the release below is not refused for a reason
 	// this suite is not about.
@@ -152,6 +154,11 @@ beforeAll(async () => {
 		}),
 	});
 	expect(release.status).toBe(200);
+
+	// The three reviewers have watched the Work, so their reviews are allowed.
+	for (const reviewerId of [abeId, beeId, camId]) {
+		await consumeWork(reviewerId, workId);
+	}
 
 	const postRes = await post("/api/content/posts", host, {
 		title: `Blk post ${id}`,

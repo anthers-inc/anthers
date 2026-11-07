@@ -61,6 +61,7 @@ export default function VoteControl({
 	label,
 	onChange,
 	variant = "subtle",
+	disabledReason,
 }: {
 	subjectType: VoteSubject;
 	subjectId: number;
@@ -88,6 +89,12 @@ export default function VoteControl({
 	label: string;
 	/** Subtle (comments, review helpfulness) or boxed (a post page's vote row). */
 	variant?: VoteVariant;
+	/**
+	 * Why this reader may not vote at all, shown on hover and to a screen reader.
+	 * Undefined is the ordinary case; set it rather than hiding the control, so the
+	 * reason has somewhere to be said.
+	 */
+	disabledReason?: string;
 	onChange?: (next: { score: number; collapsed: boolean; userVote: VoteDirection | null }) => void;
 }) {
 	const { isAuthenticated } = useAuth();
@@ -208,8 +215,8 @@ export default function VoteControl({
 
 	const Up = mine === "up" ? HandThumbUpSolid : HandThumbUpIcon;
 	const Down = mine === "down" ? HandThumbDownSolid : HandThumbDownIcon;
-	const disabled = !isAuthenticated || busy;
-	const hint = isAuthenticated ? undefined : "Log in to react";
+	const disabled = !isAuthenticated || busy || disabledReason !== undefined;
+	const hint = disabledReason ?? (isAuthenticated ? undefined : "Log in to react");
 	// ⚠️ **Only the press that writes is blocked.** Pressing the direction already chosen takes the
 	// vote back, which removes a record rather than creating one and is never refused.
 	const blocked = (direction: VoteDirection) => permissionMissing === true && mine !== direction;
@@ -236,7 +243,7 @@ export default function VoteControl({
 				disabled={disabled || blocked("up")}
 				title={hint ?? (blocked("up") ? INTERACTION_PERMISSION_HINT : "Upvote")}
 				aria-pressed={mine === "up"}
-				aria-label={`Upvote ${label}`}
+				aria-label={disabledReason ? `Upvote ${label} — ${disabledReason}` : `Upvote ${label}`}
 				onClick={() => vote("up")}
 			>
 				<Up className={boxed ? "h-5 w-5" : "h-4 w-4"} />
@@ -272,7 +279,7 @@ export default function VoteControl({
 				disabled={disabled || blocked("down")}
 				title={hint ?? (blocked("down") ? INTERACTION_PERMISSION_HINT : "Downvote")}
 				aria-pressed={mine === "down"}
-				aria-label={`Downvote ${label}`}
+				aria-label={disabledReason ? `Downvote ${label} — ${disabledReason}` : `Downvote ${label}`}
 				onClick={() => vote("down")}
 			>
 				<Down className={boxed ? "h-5 w-5" : "h-4 w-4"} />

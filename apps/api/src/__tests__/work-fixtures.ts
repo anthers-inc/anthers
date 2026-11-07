@@ -17,7 +17,7 @@
 import { afterAll } from "bun:test";
 import { db } from "@anthers/db/client";
 import type { AccessRow, WorkCredit } from "@anthers/db/schema";
-import { works } from "@anthers/db/schema";
+import { attentionEvents, works } from "@anthers/db/schema";
 import type { DeclarableMaturity } from "@anthers/shared/content-rating";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq } from "drizzle-orm";
@@ -135,6 +135,35 @@ export interface WorkFixture {
 }
 
 /** Insert a Work with the identity fields filled in. Returns the inserted row. */
+/**
+ * Give an account the attention evidence a real visit would record, so a suite that
+ * exercises a review write is not refused for not having consumed the Work.
+ *
+ * A row on the Work is the whole test: the review gate asks whether any recorded time
+ * exists, not how much, and inventing a different rule for fixtures would test the
+ * fixture rather than the gate.
+ */
+export async function consumeWork(userId: number, workId: number, seconds = 60): Promise<void> {
+	const [work] = await db
+		.select({ creatorId: works.creatorId })
+		.from(works)
+		.where(eq(works.id, workId))
+		.limit(1);
+	if (!work?.creatorId) throw new Error(`no Work ${workId} to consume`);
+	const endedAt = new Date();
+	await db.insert(attentionEvents).values({
+		userId,
+		creatorId: work.creatorId,
+		workId,
+		eventType: "read",
+		durationSeconds: seconds,
+		startedAt: new Date(endedAt.getTime() - seconds * 1_000),
+		endedAt,
+		clientId: `fixture-consumption-${userId}-${crypto.randomUUID()}`,
+		viaShareLink: false,
+	});
+}
+
 export async function insertWork(fixture: WorkFixture) {
 	const publicId = testPublicId();
 	const slug = fixture.slug ?? `test-work-${publicId}`;

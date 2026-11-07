@@ -27,7 +27,7 @@ import {
 	GAUNTLET_SLUG_PREFIX,
 	GAUNTLET_WALKER_EMAIL,
 } from "@anthers/db/gauntlet";
-import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
+import { MEDIA_FIXTURE_EMAIL, mediaFixtureWork } from "@anthers/db/media-fixture";
 import {
 	badges,
 	comments,
@@ -43,7 +43,7 @@ import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { STICKER_DENOMINATIONS, stickerBudgetFor } from "@anthers/shared/constants";
 import type { Page } from "@playwright/test";
 import { and, eq, or, sql } from "drizzle-orm";
-import { expect, signInAsWalker, test, trackErrorsStrict } from "./fixtures";
+import { API_URL, expect, signInAsWalker, test, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
 
 /**
  * The gauntlet's free post — published, and authored by the gauntlet creator, which is not
@@ -62,6 +62,48 @@ const WORK_SLUG = "media-fixture-video";
  */
 let POST_PATH = "";
 let WORK_PATH = "";
+
+/**
+ * Give the walker the consumption evidence a real visit records, so the review composer
+ * opens rather than stating it has not seen the Work. The player's own attention flush is
+ * on a 30-second cadence, longer than this walk.
+ */
+async function seedReviewConsumption(page: Page) {
+	const cookies = await page.context().cookies();
+	const session = cookies.find((cookie) => cookie.name === "session")?.value;
+	expect(session, "the walker's session cookie").toBeTruthy();
+
+	const fixture = mediaFixtureWork("video");
+	const read = await fetch(`${API_URL}/api/content/works/${fixture.slug}-${fixture.publicId}`);
+	expect(read.status).toBe(200);
+	const { work } = (await read.json()) as {
+		work: { id: number; creatorId: number | null };
+	};
+
+	const endedAt = Date.now();
+	const recorded = await fetch(`${API_URL}/api/subscriptions/attention`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${session}`,
+		},
+		body: JSON.stringify({
+			events: [
+				{
+					creatorId: work.creatorId,
+					workId: work.id,
+					eventType: "watch",
+					durationSeconds: 2,
+					startedAt: endedAt - 2_000,
+					endedAt,
+					clientId: `e2e-sticker-review-${crypto.randomUUID()}`,
+				},
+			],
+		}),
+	});
+	expect(recorded.status, "seeding the walker's consumption").toBe(200);
+}
 
 /**
  * The allowance this suite's giver holds: their Badge is Blossom at $12, and what that
@@ -418,6 +460,7 @@ test("⭐ the review composer carries the Work's chooser, with the same rows", a
 }) => {
 	const errors = trackErrorsStrict(page);
 	await signInAsWalker(context);
+	await seedReviewConsumption(page);
 	await page.goto(WORK_PATH);
 	// Reviews is the side column's default tab; the click names it the way its role names it.
 	await page.getByRole("tab", { name: "Reviews", exact: true }).click();
@@ -425,6 +468,12 @@ test("⭐ the review composer carries the Work's chooser, with the same rows", a
 	// ⭐ A Sticker for a Work rides a review (Parker, 2026-09-13), added from this editor.
 	// There is no give on the Work page itself any more.
 	await expect(page.getByLabel(/Add a Sticker to this Work/)).toHaveCount(0);
+	// A review left by an earlier run opens as the walker's own; the chooser lives in the
+	// composer, so an existing one is reopened for the edit first.
+	const yourReview = page.getByTestId("your-review");
+	if ((await yourReview.count()) > 0) {
+		await yourReview.getByRole("button", { name: "Edit" }).click();
+	}
 	await page.getByLabel("Add a Sticker to your review").click();
 	await assertCountedRows(page);
 	expect(errors).toEqual([]);

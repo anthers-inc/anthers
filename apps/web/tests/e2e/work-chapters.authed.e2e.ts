@@ -35,7 +35,7 @@
  */
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
 import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const EPISODE = mediaFixtureWork("episode");
 const CLIP = mediaFixtureWork("video");
@@ -69,6 +69,50 @@ const timeWrites = async (page: Page): Promise<number[]> =>
 		() => (window as unknown as { __mediaTimeWrites?: number[] }).__mediaTimeWrites,
 	)) ?? [];
 
+/**
+ * Give the signed-in walker the consumption evidence a page visit would produce.
+ *
+ * The review composer is locked for a reader who has not spent recorded time with the
+ * Work, and the player's attention flushes on its own schedule — too late for a review
+ * posted in the same walk. The API is the same one the player flushes to.
+ */
+async function seedConsumption(page: Page, work: { slug: string; publicId: number }) {
+	const cookies = await page.context().cookies();
+	const session = cookies.find((cookie) => cookie.name === "session")?.value;
+	expect(session, "the walker's session cookie").toBeTruthy();
+
+	const read = await fetch(`${API_URL}/api/content/works/${work.slug}-${work.publicId}`);
+	expect(read.status).toBe(200);
+	const { work: row } = (await read.json()) as {
+		work: { id: number; creatorId: number | null };
+	};
+	expect(row.creatorId, "the fixture Work has a creator").not.toBeNull();
+
+	const endedAt = Date.now();
+	const recorded = await fetch(`${API_URL}/api/subscriptions/attention`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${session}`,
+		},
+		body: JSON.stringify({
+			events: [
+				{
+					creatorId: row.creatorId,
+					workId: row.id,
+					eventType: "listen",
+					durationSeconds: 2,
+					startedAt: endedAt - 2_000,
+					endedAt,
+					clientId: `e2e-review-${crypto.randomUUID()}`,
+				},
+			],
+		}),
+	});
+	expect(recorded.status, "seeding the walker's consumption").toBe(200);
+}
+
 test("an audio Work's page lists the chapters its description carries", async ({ page }) => {
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
 
@@ -92,6 +136,7 @@ test("a chapter row starts the bar at the moment it names", async ({ page }) => 
 	 * the prototype's accessor, so the moment's write is still the observable.
 	 */
 	await hookCurrentTime(page, "audio");
+	await seedConsumption(page, EPISODE);
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
 	await expect(page.getByTestId("chapter-list")).toBeVisible();
 
@@ -169,14 +214,25 @@ test("a review's timestamp is a link that starts the bar at the moment it names"
 	page,
 }) => {
 	await hookCurrentTime(page, "audio");
+	await seedConsumption(page, EPISODE);
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
 	await expect(page.getByTestId("chapter-list")).toBeVisible();
+	// The Reviews heading renders once the aggregate has arrived, which is when the card
+	// and the composer below are decided.
+	await expect(page.getByRole("heading", { name: "Reviews" })).toBeVisible();
 
-	// The walker's own review, re-posted over its previous self on every run.
-	await page.getByRole("button", { name: "Recommend", exact: true }).click();
+	// The walker's own review, re-posted over its previous self on every run. An earlier
+	// run leaves a review, which now opens as the walker's own rather than as an open
+	// composer, so the second and later runs take the Edit door.
+	const yourReview = page.getByTestId("your-review");
+	if ((await yourReview.count()) > 0) {
+		await yourReview.getByRole("button", { name: "Edit" }).click();
+	} else {
+		await page.getByRole("button", { name: "Recommend", exact: true }).click();
+	}
 	const body = "Watch from 0:02 on. You're welcome.";
 	await page.locator("textarea").fill(body);
-	await page.getByRole("button", { name: "Post review" }).click();
+	await page.getByRole("button", { name: /Post review|Save changes/ }).click();
 
 	// Two cues named 0:02 render once the review lands — the description's and the
 	// review's; the review renders further down the page, and the last is it.
@@ -188,4 +244,24 @@ test("a review's timestamp is a link that starts the bar at the moment it names"
 	await expect
 		.poll(() => timeWrites(page), { message: "the review link never reached the bar" })
 		.toContain(2);
+});
+
+test("the creator's own Work states the review and vote refusals in place", async ({
+	page,
+	context,
+}) => {
+	// The media fixture creator owns the episode, so the side column's Reviews tab is the
+	// creator's view of their own reception. `#reviews` is a real address for that tab.
+	await signInAsMediaFixture(context);
+	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}#reviews`);
+
+	await expect(page.getByRole("heading", { name: "Reviews" })).toBeVisible();
+	// The composer is closed with the reason in place of its button, not left open to
+	// fail on submit.
+	await expect(page.getByText("You can't review your own Work.")).toBeVisible();
+	await expect(page.getByRole("button", { name: "Recommend", exact: true })).toBeDisabled();
+	// ⚠️ The helpfulness controls are disabled with the same reason, but this fixture has
+	// no review a public list would show: the only reviewer here is the walker, whose
+	// account is a test account and is filtered out of the public list. The vote refusal
+	// is proven in `reviews.test.ts`; the client passes the same reason to the control.
 });
