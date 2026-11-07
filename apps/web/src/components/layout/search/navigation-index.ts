@@ -107,9 +107,16 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		kind: "setting",
 	},
 	{
+		id: "setting-badges",
+		label: "Badges",
+		keywords: ["settings", "badges", "support", "billing", "month", "cycle"],
+		href: "/settings?tab=badges",
+		kind: "setting",
+	},
+	{
 		id: "setting-purchases",
-		label: "Badges & Purchases",
-		keywords: ["settings", "badges", "purchases", "receipts", "support", "billing", "month"],
+		label: "Purchases",
+		keywords: ["settings", "purchases", "receipts", "orders", "billing"],
 		href: "/settings?tab=purchases",
 		kind: "setting",
 	},

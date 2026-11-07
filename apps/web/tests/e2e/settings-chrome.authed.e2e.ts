@@ -46,7 +46,8 @@ test("the settings sections are a sidebar tablist, not a row at the top of the p
 	expect(labels).toEqual([
 		"Account",
 		"Experience",
-		"Badges & Purchases",
+		"Badges",
+		"Purchases",
 		"Identity & Devices",
 		"Content & Safety",
 		"Activity & Data",
@@ -72,6 +73,32 @@ test("the settings sections are a sidebar tablist, not a row at the top of the p
 		"true",
 	);
 	await expect(page.getByRole("heading", { name: "Color Theme" })).toBeVisible();
+});
+
+test("Badges and Purchases are separate tabs, and each old address lands on its own half", async ({
+	page,
+}) => {
+	await page.goto("/settings?tab=badges");
+	await expect(page.getByRole("tab", { name: "Badges", exact: true })).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
+	await expect(page.getByRole("heading", { name: "Badges", exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Purchases", exact: true })).toHaveCount(0);
+
+	await page.goto("/settings?tab=purchases");
+	await expect(page.getByRole("tab", { name: "Purchases", exact: true })).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
+	await expect(page.getByRole("heading", { name: "Purchases", exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Badges", exact: true })).toHaveCount(0);
+
+	// The two old addresses still resolve, each to the half that now owns its subject.
+	await page.goto("/badges");
+	await expect(page).toHaveURL(/\/settings\?tab=badges$/);
+	await page.goto("/purchases");
+	await expect(page).toHaveURL(/\/settings\?tab=purchases$/);
 });
 
 test("the Experience tab carries the theme card, and a pick changes the document", async ({

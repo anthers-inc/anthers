@@ -40,7 +40,7 @@ interface Props {
 	 * *quantity* was `anthersSupport` plus these until 2026-08-16; a quantity can only
 	 * express multiples of one unit, so the retirement replaced it with itemized amounts.
 	 * Omitted everywhere the caller only changes the Anthers amount (the post unlock,
-	 * the Badges & Purchases tab on /settings).
+	 * the Badges tab on /settings).
 	 */
 	directed?: { creatorId: number; amount: number }[];
 	badgeName: string;

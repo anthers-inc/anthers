@@ -318,7 +318,7 @@ function LoggedInLayoutInner() {
 		    mode leaves out search and the basket, which belong to user mode. The sidebar's
 		    own toggle used to live here too and moved onto the sidebar's edge (2026-10-16),
 		    and the account menu left on 2026-10-26 — the sidebar is the door to Settings and
-		    Badges & Purchases lives in the account pages' footer.
+		    Badges and Purchases live in the account pages' sidebar rows.
 
 		    ⚠️ **The safe-area strip is INSIDE the header, not padding on it.** The bar is a
 		    fixed `h-14` and the page's background sits behind it, so padding on the header

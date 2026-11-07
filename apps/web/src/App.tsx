@@ -403,12 +403,12 @@ export default function App() {
 					 * account's basket.
 					 */}
 					<Route path="/basket" element={<BasketPage />} />
-					{/* Badges & Purchases is a tab on Settings since 2026-10-23 — see
-					    `pages/SettingsPage.tsx`. `/purchases` stays as the address every older
-					    reference, the billing portal's return path and the post-subscribe redirect
-					    already name, and forwards to the tab rather than every reference moving. */}
-					<Route path="/badges" element={<Navigate to="/settings?tab=purchases" replace />} />
-					<Route path="/subscription" element={<Navigate to="/settings?tab=purchases" replace />} />
+					{/* Badges and Purchases are two tabs on Settings since 2026-11-06 — see
+					    `pages/SettingsPage.tsx`. `/badges`, `/subscription` and `/purchases` stay
+					    as the addresses older references and the post-subscribe redirect already
+					    name, and each forwards to the tab that now owns its subject. */}
+					<Route path="/badges" element={<Navigate to="/settings?tab=badges" replace />} />
+					<Route path="/subscription" element={<Navigate to="/settings?tab=badges" replace />} />
 					<Route path="/purchases" element={<Navigate to="/settings?tab=purchases" replace />} />
 					{/* One physical order. Guarded, because an order is somebody's purchase: the API
 					    answers 404 to anybody else, and the page shows the same nothing. */}

@@ -7,7 +7,7 @@
  * that name nothing openable any more; PurchaseRow decides per row whether a link is
  * offered. The month selector scopes both the list and the totals beneath it.
  *
- * This is the second section of the account page, under BadgesSection: Badges are the
+ * This is the Purchases settings tab (2026-11-06), beside Badges: Badges are the
  * standing monthly amount, and these are the one-time buys.
  */
 
