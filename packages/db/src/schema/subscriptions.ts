@@ -1219,6 +1219,13 @@ export const badges = pgTable(
 		artShape: text("art_shape"),
 		artColor: text("art_color"),
 		/**
+		 * The edging color, as an id from `BADGE_EDGE_COLORS`; null means the default brown.
+		 *
+		 * It is part of the composition, so it rides the fingerprint the same way the shape
+		 * and field do: an edge-only change is a real recompose, not a free save.
+		 */
+		artEdgeColor: text("art_edge_color"),
+		/**
 		 * What the composed art was made from, as a fingerprint over every parameter the
 		 * composition reads — noun icon id, shape, field color, emblem color, scale and
 		 * offsets — so an unchanged save matches it and costs nothing at all.

@@ -46,6 +46,7 @@ const RUN = crypto.randomUUID().slice(0, 8);
 const placement = {
 	shape: "circle",
 	fieldColor: "moss",
+	edgeColor: "brown",
 	emblemColor: "#ffffff",
 	scale: 1,
 	offsetX: 0,
@@ -263,7 +264,7 @@ describe("badge composition", () => {
 
 	it("answers an unchanged recompose without spending a vendor call", async () => {
 		const callsBefore = vendorIconCalls;
-		const res = await recompose({ shape: "circle", fieldColor: "moss" });
+		const res = await recompose({ shape: "circle", fieldColor: "moss", edgeColor: "brown" });
 		expect(res.status).toBe(200);
 		expect(((await res.json()) as { unchanged?: boolean }).unchanged).toBe(true);
 		expect(vendorIconCalls).toBe(callsBefore);
@@ -275,7 +276,7 @@ describe("badge composition", () => {
 		const callsBefore = vendorIconCalls;
 		const spendBefore = await spendToday(before.creatorId);
 
-		const res = await recompose({ shape: "hexagon", fieldColor: "sun" });
+		const res = await recompose({ shape: "hexagon", fieldColor: "sun", edgeColor: "brown" });
 		expect(res.status).toBe(200);
 		expect(((await res.json()) as { unchanged?: boolean }).unchanged).toBeFalsy();
 
@@ -289,6 +290,7 @@ describe("badge composition", () => {
 		expect(after.artKey).not.toBe(before.artKey);
 		expect(after.artShape).toBe("hexagon");
 		expect(after.artColor).toBe("sun");
+		expect(after.artEdgeColor).toBe("brown");
 		// The emblem color and placement are the ones the first composition stored.
 		expect(after.artEmblemColor).toBe("#000000");
 		expect(after.artEmblemScale).toBe(before.artEmblemScale);
@@ -309,6 +311,21 @@ describe("badge composition", () => {
 		expect(meta.width).toBe(1024);
 	});
 
+	it("recomposes on an edge-only change, and the edge rides the fingerprint", async () => {
+		// The edge is part of the composition, not a client-side decoration: same shape and
+		// field with a different edge must rebuild the PNG rather than dedupe the save.
+		const before = await storedBadge();
+		const res = await recompose({ shape: "hexagon", fieldColor: "sun", edgeColor: "navy" });
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { unchanged?: boolean }).unchanged).toBeFalsy();
+
+		const after = await storedBadge();
+		expect(after.artEdgeColor).toBe("navy");
+		expect(after.artShape).toBe(before.artShape);
+		expect(after.artColor).toBe(before.artColor);
+		expect(after.artFingerprint).not.toBe(before.artFingerprint);
+	});
+
 	it("🚨 a failed recompose leaves the previous art untouched", async () => {
 		// The scan refuses the composed PNG, which is the failure this module's rule exists
 		// for: the vendor call is spent, the object is held, and the Badge still shows what
@@ -317,7 +334,7 @@ describe("badge composition", () => {
 		const beforeProv = await storedProvenance();
 		const stub = stubVendorWithShield("harmful-abusive-material");
 		try {
-			const res = await recompose({ shape: "triangle", fieldColor: "dusk" });
+			const res = await recompose({ shape: "triangle", fieldColor: "dusk", edgeColor: "brown" });
 			expect(res.status).toBe(422);
 			expect(((await res.json()) as { code?: string }).code).toBe("refused");
 		} finally {
@@ -337,13 +354,16 @@ describe("badge composition", () => {
 		const other = await createAccount(`bc_recompose_other_${RUN}`, {
 			fields: { creatorMode: true },
 		});
-		const res = await recompose({ shape: "hexagon", fieldColor: "sun" }, other.cookie);
+		const res = await recompose(
+			{ shape: "hexagon", fieldColor: "sun", edgeColor: "brown" },
+			other.cookie,
+		);
 		expect(res.status).toBe(404);
 	});
 
 	it("refuses a recompose with a shape the library does not carry", async () => {
 		const callsBefore = vendorIconCalls;
-		const res = await recompose({ shape: "star", fieldColor: "sun" });
+		const res = await recompose({ shape: "star", fieldColor: "sun", edgeColor: "brown" });
 		expect(res.status).toBe(400);
 		expect(vendorIconCalls).toBe(callsBefore);
 	});
@@ -361,7 +381,7 @@ describe("badge composition", () => {
 			};
 			expect(body.badges.find((b) => b.id === badgeId)?.canRecompose).toBeUndefined();
 
-			const res = await recompose({ shape: "hexagon", fieldColor: "sun" });
+			const res = await recompose({ shape: "hexagon", fieldColor: "sun", edgeColor: "brown" });
 			expect(res.status).toBe(409);
 			expect(((await res.json()) as { code?: string }).code).toBe("needs_new_emblem");
 			expect((await storedBadge()).artKey).toBe(before.artKey);
@@ -486,7 +506,7 @@ describe("the compose budget", () => {
 		}
 		const callsBefore = vendorIconCalls;
 
-		const res = await budgetRecompose({ shape: "hexagon", fieldColor: "sun" });
+		const res = await budgetRecompose({ shape: "hexagon", fieldColor: "sun", edgeColor: "brown" });
 		expect(res.status).toBe(429);
 		expect(((await res.json()) as { code?: string }).code).toBe("budget_exhausted");
 		expect(vendorIconCalls).toBe(callsBefore);
@@ -498,7 +518,7 @@ describe("the compose budget", () => {
 	});
 
 	it("still answers an unchanged save for free while the budget is spent", async () => {
-		const res = await budgetRecompose({ shape: "circle", fieldColor: "moss" });
+		const res = await budgetRecompose({ shape: "circle", fieldColor: "moss", edgeColor: "brown" });
 		expect(res.status).toBe(200);
 		expect(((await res.json()) as { unchanged?: boolean }).unchanged).toBe(true);
 	});

@@ -91,6 +91,8 @@ export interface SignupBadgeOption {
 	/** Ids into `@anthers/shared/badge-art`; null means the default. */
 	artShape: string | null;
 	artColor: string | null;
+	/** Not shipped by the creators list; absent draws the default brown. */
+	artEdgeColor?: string | null;
 	/** The rung's perks, as the labels the creator wrote them as — what a chip's hover states. */
 	perks: string[];
 	/** The rung's own words, when the ladder carries them. */
@@ -1413,6 +1415,8 @@ export interface BadgeHolding {
 	description: string | null;
 	artShape: string | null;
 	artColor: string | null;
+	/** An edge id from the library; null or absent draws the default brown. */
+	artEdgeColor?: string | null;
 	artEmblem: string | null;
 	hasArt: boolean;
 	/** Whether the art is a composed Noun emblem rather than an uploaded interior. */
@@ -1489,6 +1493,7 @@ export interface CreatorBadge {
 	/** Ids into `@anthers/shared/badge-art`; null means the default. */
 	artShape: string | null;
 	artColor: string | null;
+	artEdgeColor: string | null;
 	sortOrder: number;
 	createdAt: string;
 	updatedAt: string;

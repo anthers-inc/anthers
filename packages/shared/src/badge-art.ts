@@ -40,6 +40,35 @@
  */
 export const BADGE_EDGE = "oklch(34% 0.05 55)";
 
+/**
+ * The edging colors a creator may choose — the third swatch row on the Emblem tab.
+ *
+ * ⭐ **The brown is the default, and it stays the collection's shared stitching** (Parker's
+ * scout-badge reference). The rest are alternates for a creator whose field needs a
+ * different binding; each stays dark or light enough to read as a ring against the fields
+ * in `BADGE_COLORS`.
+ */
+export const BADGE_EDGE_COLORS = [
+	{ id: "brown", label: "Brown", fill: BADGE_EDGE },
+	{ id: "black", label: "Black", fill: "oklch(24% 0.01 60)" },
+	{ id: "cream", label: "Cream", fill: "oklch(90% 0.02 95)" },
+	{ id: "moss", label: "Moss", fill: "oklch(40% 0.06 150)" },
+	{ id: "navy", label: "Navy", fill: "oklch(32% 0.05 260)" },
+	{ id: "clay", label: "Clay", fill: "oklch(50% 0.08 45)" },
+] as const;
+
+export type BadgeEdgeColor = (typeof BADGE_EDGE_COLORS)[number];
+
+export const DEFAULT_BADGE_EDGE = "brown";
+
+export function badgeEdgeColor(id: string | null | undefined): BadgeEdgeColor {
+	return BADGE_EDGE_COLORS.find((edge) => edge.id === id) ?? BADGE_EDGE_COLORS[0];
+}
+
+export function isBadgeEdgeColor(value: unknown): boolean {
+	return typeof value === "string" && BADGE_EDGE_COLORS.some((edge) => edge.id === value);
+}
+
 /** How thick that edging is, in viewBox units, painted inward from the shape's outline. */
 export const BADGE_EDGE_WIDTH = 9;
 
@@ -136,6 +165,15 @@ export const BADGE_SHAPES: BadgeShape[] = [
 		artBox: { x: 16, y: 16, size: 68 },
 	},
 	{
+		id: "diamond",
+		label: "Diamond",
+		// A rotated square, so its sides are equal and its corners sit on the axes.
+		path: "M50 3 97 50 50 97 3 50Z",
+		// The largest axis-aligned square inside the eroded diamond: 38 a side.
+		emblemBox: { x: 31, y: 31, size: 38 },
+		artBox: { x: 16, y: 16, size: 68 },
+	},
+	{
 		id: "hexagon",
 		label: "Hexagon",
 		path: "M50 4 90 27v46L50 96 10 73V27Z",
@@ -162,11 +200,12 @@ export const BADGE_SHAPES: BadgeShape[] = [
 		artBox: { x: 15, y: 17, size: 70 },
 	},
 	{
-		id: "seed",
-		label: "Seed",
-		path: "M50 4c26 0 46 20 46 46 0 26-20 46-46 46S4 76 4 50C4 24 24 4 50 4Zm0 14c-8 12-8 52 0 64 8-12 8-52 0-64Z",
-		emblemBox: { x: 24, y: 24, size: 52 },
-		artBox: { x: 16, y: 16, size: 68 },
+		id: "heart",
+		label: "Heart",
+		path: "M50 91C21 71 5 51 5 32 5 16 18 5 32 5c9 0 15 5 18 11 3-6 9-11 18-11 14 0 27 11 27 27 0 19-16 39-45 59Z",
+		// The lobes bind the top, the point below leaves the box roomy.
+		emblemBox: { x: 31, y: 27, size: 38 },
+		artBox: { x: 16, y: 18, size: 68 },
 	},
 ];
 
@@ -336,6 +375,8 @@ export const BADGE_COMPOSE_PX = 1024;
 export interface BadgeComposeParams {
 	shape: string;
 	fieldColor: string;
+	/** An id from `BADGE_EDGE_COLORS`; the composition paints its fill as the ring. */
+	edgeColor: string;
 	/**
 	 * The emblem color, as a hex string — the server recolors the vector with it at
 	 * composition. ⚠️ **Hex deliberately, not an oklch token**: the picker offers it from
@@ -409,6 +450,7 @@ export function isBadgeComposeParams(value: unknown): value is BadgeComposeParam
 	if (typeof value !== "object" || value === null) return false;
 	const v = value as Record<string, unknown>;
 	if (!isBadgeShape(v.shape) || !isBadgeColor(v.fieldColor)) return false;
+	if (!isBadgeEdgeColor(v.edgeColor)) return false;
 	if (!isBadgeEmblemColor(v.emblemColor)) return false;
 	if (typeof v.scale !== "number") return false;
 	if (typeof v.offsetX !== "number" || typeof v.offsetY !== "number") return false;
@@ -440,6 +482,7 @@ export function badgeComposeFingerprint(
 				params.nounIconId,
 				params.shape,
 				params.fieldColor,
+				params.edgeColor,
 				params.emblemColor,
 				params.scale.toFixed(4),
 				params.offsetX.toFixed(4),

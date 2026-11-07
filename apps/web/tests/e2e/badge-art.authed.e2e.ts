@@ -318,7 +318,7 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	await editButton.click();
 	await dialog.getByRole("tab", { name: "Emblem" }).click();
 	await control.getByRole("button", { name: "Circle" }).click();
-	await control.getByRole("button", { name: "Moss" }).click();
+	await control.getByRole("button", { name: "Background Moss" }).click();
 	await dialog.getByRole("button", { name: "Cancel" }).click();
 
 	const [stored] = await db
@@ -488,7 +488,7 @@ test("a composed Badge saves a shape and background change by recomposing", asyn
 	const control = page.getByTestId("badge-art-control");
 
 	await control.getByRole("button", { name: "Hexagon" }).click();
-	await control.getByRole("button", { name: "Amber" }).click();
+	await control.getByRole("button", { name: "Background Amber" }).click();
 	await expect(
 		dialog.getByText("Saving rebuilds this emblem on the new shape and background."),
 	).toBeVisible();
@@ -496,7 +496,7 @@ test("a composed Badge saves a shape and background change by recomposing", asyn
 
 	await dialog.getByRole("button", { name: "Save" }).click();
 	await expect(dialog).toBeHidden();
-	expect(recomposeBody).toEqual({ shape: "hexagon", fieldColor: "amber" });
+	expect(recomposeBody).toEqual({ shape: "hexagon", fieldColor: "amber", edgeColor: "brown" });
 
 	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
 });
@@ -629,6 +629,67 @@ test("a creator adds and removes a Badge's Works from the Unlocks tab", async ({
 	// The list re-read from the server and the new Work is on it.
 	await expect(dialog.getByText(added.title)).toBeVisible({ timeout: 15_000 });
 	await expect(dialog.getByRole("link", { name: `Open ${added.title} in Studio` })).toBeVisible();
+
+	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
+});
+
+/**
+ * Adding a Badge opens the full editor rather than closing on the basics modal.
+ *
+ * The new shape library and the edge color row live behind the Emblem tab, so a creator
+ * who lands on the tabs can finish the Badge in one pass. This walks the create door and
+ * reads the two new shape choices, the edge swatches and the default emblem mode.
+ */
+test("adding a Badge lands on the full editor with the new shapes and edge", async ({
+	page,
+	context,
+}) => {
+	const errors = trackErrorsStrict(page);
+	const label = `E2E full editor ${RUN}`;
+	await signInAsCreator(context);
+
+	const handle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
+	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}?tab=badges`);
+	await page.getByRole("button", { name: "Add a Badge" }).click();
+	const dialog = page.getByRole("dialog");
+	await expect(dialog.getByRole("heading", { name: "Add a Badge" })).toBeVisible();
+
+	await dialog.getByPlaceholder("Label (e.g. Supporter)").fill(label);
+	await dialog.getByLabel("Monthly Amount").fill("11.00");
+	await dialog.getByRole("button", { name: "Add Badge" }).click();
+
+	// The dialog stays open, now as the editor for the created rung: the tabs and the
+	// footer's Save are what a creator should meet next, not a closed modal.
+	await expect(dialog.getByRole("heading", { name: "Edit Badge" })).toBeVisible({
+		timeout: 15_000,
+	});
+	await expect(dialog.getByRole("tab", { name: "Basics" })).toBeVisible();
+	await expect(dialog.getByRole("tab", { name: "Perks" })).toBeVisible();
+	await expect(dialog.getByRole("tab", { name: "Unlocks" })).toBeVisible();
+	// It lands on Emblem, where the art is finished.
+	await expect(dialog.getByRole("tab", { name: "Emblem" })).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
+
+	const control = page.getByTestId("badge-art-control");
+	// Seed is gone; diamond and heart are the two new shapes.
+	await expect(control.getByRole("button", { name: "Diamond" })).toBeVisible();
+	await expect(control.getByRole("button", { name: "Heart" })).toBeVisible();
+	await expect(control.getByRole("button", { name: "Seed" })).toHaveCount(0);
+	// The third swatch row is the edge, and the brown is the default selection.
+	for (const edge of ["Brown", "Black", "Cream", "Moss", "Navy", "Clay"]) {
+		await expect(control.getByRole("button", { name: `Edge ${edge}` })).toBeVisible();
+	}
+	await expect(control.getByRole("button", { name: "Edge Brown" })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
+	// Find an Emblem is first and selected, so the catalog is open rather than a placeholder.
+	await expect(control.getByRole("button", { name: "Find an Emblem" })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
 
 	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
 });

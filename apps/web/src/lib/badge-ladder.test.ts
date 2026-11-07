@@ -21,6 +21,7 @@ function rung(id: number, threshold: string): CreatorBadge {
 		hasArt: false,
 		artShape: null,
 		artColor: null,
+		artEdgeColor: null,
 		sortOrder: id,
 		createdAt: "",
 		updatedAt: "",
