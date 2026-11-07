@@ -18,6 +18,7 @@ import {
 } from "@anthers/web-shared/publishing";
 import { useParams, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
+import { studioNewPostUrl, studioNewWorkUrl } from "@anthers/web-shared/studio";
 import type {
 	Creator,
 	CreatorStatus,
@@ -43,6 +44,7 @@ import { createPortal } from "react-dom";
 import FeedTile from "../components/cards/FeedTile";
 import BadgesTab from "../components/creator/BadgesTab";
 import ContentMonths from "../components/creator/ContentMonths";
+import { CreateMenuTile, CreateTile } from "../components/creator/CreateTile";
 import CreatorCredits from "../components/creator/CreatorCredits";
 import ReportDialog from "../components/ui/ReportDialog";
 import { InlineField } from "../components/work/Editing";
@@ -446,6 +448,14 @@ export default function CreatorProfilePage() {
 		] as const
 	).filter(([, , nonzero]) => nonzero);
 
+	/** The create tile's sentence on each typed tab: the thing the tab is a list of. */
+	const createLabel: Record<string, string> = {
+		games: "New Game",
+		videos: "New Video",
+		audio: "New Audio",
+		writing: "New Writing",
+	};
+
 	// Every content tab renders through one entry shape — the tile to draw plus the date
 	// its month section groups on — so the mixed timeline and each type tab sort, group
 	// and space identically. The "All" tab is the timeline: everything this creator has
@@ -831,11 +841,17 @@ export default function CreatorProfilePage() {
 				{/* Tab content */}
 				<div className="pb-8">
 					{tab === "all" &&
-						(allEntries.length > 0 ? (
+						(allEntries.length > 0 || isOwnProfile ? (
 							// The same uniform tile grid the feed renders, split into the
 							// months the creator's work came out in. A Project uses the
 							// tile's own album shape, so all three kinds sit in one grid.
-							<ContentMonths items={allEntries} dateOf={entryDate} renderItem={tileFor} />
+							// The owner's create tile leads the first month.
+							<ContentMonths
+								items={allEntries}
+								dateOf={entryDate}
+								renderItem={tileFor}
+								leading={isOwnProfile ? <CreateMenuTile /> : undefined}
+							/>
 						) : (
 							<EmptyState
 								title="No content yet"
@@ -844,8 +860,17 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "posts" &&
-						(postEntries.length > 0 ? (
-							<ContentMonths items={postEntries} dateOf={entryDate} renderItem={tileFor} />
+						(postEntries.length > 0 || isOwnProfile ? (
+							<ContentMonths
+								items={postEntries}
+								dateOf={entryDate}
+								renderItem={tileFor}
+								leading={
+									isOwnProfile ? (
+										<CreateTile href={studioNewPostUrl()} label="New Post" />
+									) : undefined
+								}
+							/>
 						) : (
 							<EmptyState
 								title="No posts yet"
@@ -855,7 +880,16 @@ export default function CreatorProfilePage() {
 
 					{tab === "games" &&
 						(gameEntries.length > 0 ? (
-							<ContentMonths items={gameEntries} dateOf={entryDate} renderItem={tileFor} />
+							<ContentMonths
+								items={gameEntries}
+								dateOf={entryDate}
+								renderItem={tileFor}
+								leading={
+									isOwnProfile ? (
+										<CreateTile href={studioNewWorkUrl()} label={createLabel.games} />
+									) : undefined
+								}
+							/>
 						) : (
 							<EmptyState
 								title="No games yet"
@@ -865,7 +899,16 @@ export default function CreatorProfilePage() {
 
 					{tab === "videos" &&
 						(videoEntries.length > 0 ? (
-							<ContentMonths items={videoEntries} dateOf={entryDate} renderItem={tileFor} />
+							<ContentMonths
+								items={videoEntries}
+								dateOf={entryDate}
+								renderItem={tileFor}
+								leading={
+									isOwnProfile ? (
+										<CreateTile href={studioNewWorkUrl()} label={createLabel.videos} />
+									) : undefined
+								}
+							/>
 						) : (
 							<EmptyState
 								title="No videos yet"
@@ -875,7 +918,16 @@ export default function CreatorProfilePage() {
 
 					{tab === "audio" &&
 						(audioEntries.length > 0 ? (
-							<ContentMonths items={audioEntries} dateOf={entryDate} renderItem={tileFor} />
+							<ContentMonths
+								items={audioEntries}
+								dateOf={entryDate}
+								renderItem={tileFor}
+								leading={
+									isOwnProfile ? (
+										<CreateTile href={studioNewWorkUrl()} label={createLabel.audio} />
+									) : undefined
+								}
+							/>
 						) : (
 							<EmptyState
 								title="No audio yet"
@@ -885,7 +937,16 @@ export default function CreatorProfilePage() {
 
 					{tab === "writing" &&
 						(textEntries.length > 0 ? (
-							<ContentMonths items={textEntries} dateOf={entryDate} renderItem={tileFor} />
+							<ContentMonths
+								items={textEntries}
+								dateOf={entryDate}
+								renderItem={tileFor}
+								leading={
+									isOwnProfile ? (
+										<CreateTile href={studioNewWorkUrl()} label={createLabel.writing} />
+									) : undefined
+								}
+							/>
 						) : (
 							<EmptyState
 								title="No writing yet"

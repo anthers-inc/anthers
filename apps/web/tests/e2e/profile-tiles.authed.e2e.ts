@@ -15,7 +15,11 @@
  * nothing here seeds or deletes.
  */
 
-import { GAUNTLET_CREATOR_USERNAME, gauntletHandle } from "@anthers/db/gauntlet";
+import {
+	GAUNTLET_CREATOR_USERNAME,
+	GAUNTLET_WALKER_USERNAME,
+	gauntletHandle,
+} from "@anthers/db/gauntlet";
 import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
@@ -88,4 +92,50 @@ test("the posts tab renders the same tiles", async ({ page }) => {
 		expect(text, "every post tile names its creator").toContain("Gauntlet Creator");
 		expect(text, "no post tile renders the missing-creator fallback").not.toContain("?");
 	}
+});
+
+/**
+ * The create tile is the owner's, and it leads the grid whether the profile has content
+ * or not: the walker's own profile is the owner surface this suite can visit.
+ */
+test("the creator's own profile leads with a create tile", async ({ page }) => {
+	test.setTimeout(60_000);
+	const handle = await gauntletHandle(API_URL, GAUNTLET_WALKER_USERNAME);
+	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}`);
+
+	const tile = page.getByTestId("profile-create-tile");
+	await expect(tile).toBeVisible();
+	await expect(tile).toContainText("New Content");
+	// It leads the grid: the first child of the first month's grid, or the only child of
+	// the bare grid a profile with nothing renders. This walker may carry content from
+	// other walks, so both shapes are legitimate here.
+	const grid = page.locator("[data-testid='content-month'] .grid").first();
+	if ((await grid.count()) > 0) {
+		await expect(
+			grid.locator(":scope > *").first().getByTestId("profile-create-tile"),
+		).toBeVisible();
+	}
+
+	await tile.click();
+	const menu = page.getByRole("menu", { name: "New content" });
+	await expect(menu).toBeVisible();
+	await expect(menu.getByRole("menuitem", { name: "New Post" })).toHaveAttribute(
+		"href",
+		"/studio/posts/new",
+	);
+	await expect(menu.getByRole("menuitem", { name: "New Work" })).toHaveAttribute(
+		"href",
+		"/studio/works/new",
+	);
+	// The menu's backdrop is the click-outside dismiss; close it before switching tabs.
+	await page.getByRole("button", { name: "Close the new content menu" }).click();
+	await expect(menu).toHaveCount(0);
+
+	// The Posts tab's tile is the direct one: one destination, named for the tab.
+	await page.getByRole("button", { name: "Posts", exact: true }).click();
+	await expect(page.getByTestId("profile-create-tile")).toContainText("New Post");
+	await expect(page.getByTestId("profile-create-tile")).toHaveAttribute(
+		"href",
+		"/studio/posts/new",
+	);
 });
