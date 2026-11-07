@@ -240,23 +240,39 @@ test.describe.configure({ mode: "serial" });
 // unscoped `getByRole("link", { name: /Basket/ })` matches two and fails strict mode.
 const header = (page: Page) => page.getByRole("banner");
 
-test("the header shows a basket link with a count when the basket has items", async ({
+test("the header shows a basket link with a count when the basket has items, and drops it when the server empties", async ({
 	browser,
 }) => {
 	const context = await newBuyerContext(browser);
 	const page = await context.newPage();
 	await page.goto("/discovery");
+	// The page has read an empty basket and cached it. Seeding behind the tab is what a
+	// purchase in another tab looks like to this one.
+	await expect(header(page).getByRole("link", { name: /Basket/ })).toHaveCount(0);
 	await seedThisBuyersBasket(await buyerCookie(context));
-	// The header reads the server on the page's own terms — a navigation, not a guess.
-	await page.reload();
 
-	await expect(page.getByRole("heading", { name: "Discovery", exact: true })).toBeVisible();
+	// 🚨 **A tab coming back into view re-reads the server** — no reload. The count must
+	// not wait for a full page load to notice a basket that changed elsewhere.
+	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 	const link = header(page).getByRole("link", { name: /Basket \(1 item\)/ });
 	await expect(link, "the basket link did not appear in the header").toBeVisible();
 	await expect(link).toHaveAttribute("href", "/basket");
 	// The count badge is the load-bearing part — a link that is always there with no
 	// count is a different, weaker control.
 	await expect(header(page).locator(".badge").filter({ hasText: "1" })).toBeVisible();
+
+	// And the completion the tab did not see: the checkout webhook empties the rows while
+	// the buyer is on another surface. The stale count is the bug this pins.
+	const emptied = await fetch(`${API_URL}/api/payments/basket`, {
+		method: "DELETE",
+		headers: { Cookie: await buyerCookie(context), Origin: WEB_ORIGIN },
+	});
+	fixtureExpect(emptied.status, `emptying the basket failed: ${await emptied.text()}`).toBe(200);
+	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+	await expect(
+		header(page).getByRole("link", { name: /Basket/ }),
+		"the header kept the count after the server basket was emptied",
+	).toHaveCount(0);
 	await context.close();
 });
 
@@ -277,7 +293,7 @@ test("the basket link reaches the basket page and shows the seeded item", async 
 	const page = await context.newPage();
 	await page.goto("/discovery");
 	await seedThisBuyersBasket(await buyerCookie(context));
-	await page.reload();
+	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 
 	await header(page)
 		.getByRole("link", { name: /Basket \(1 item\)/ })
