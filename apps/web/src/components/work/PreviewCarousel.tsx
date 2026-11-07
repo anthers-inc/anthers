@@ -16,7 +16,7 @@
 
 import type { PreviewMediaItem, WorkCaptionTrack } from "@anthers/web-shared/types";
 import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
-import { type ReactNode, useCallback, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useExclusivePlayback } from "../../lib/playback";
 import Lightbox from "../media/Lightbox";
 import WorkMediaFrame from "./WorkMediaFrame";
@@ -57,6 +57,15 @@ export default function PreviewCarousel({
 
 	const images = previews.filter((p) => p.kind === "image");
 	const activeItem = active > 0 ? previews[active - 1] : null;
+
+	// Selecting a trailer starts it. Every path that changes the slide is a user gesture —
+	// the strip's clicks, the chevrons and the arrow keys — so an unmuted play is allowed,
+	// and a held arrow key remounts (the `key`) and re-plays cleanly. The previous
+	// trailer's element is gone with the key, so stopping it needs nothing here.
+	useEffect(() => {
+		if (activeItem?.kind !== "video") return;
+		void videoRef.current?.play().catch(() => {});
+	}, [activeItem]);
 
 	const go = useCallback(
 		(delta: -1 | 1) => {
