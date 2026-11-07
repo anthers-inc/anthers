@@ -15,7 +15,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { attentionEvents, userPreferences } from "@anthers/db/schema";
+import { attentionEvents, stripeConnectAccounts, userPreferences } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -335,6 +335,38 @@ describe("Parental controls", () => {
 		).json();
 		expect(prefs.adult).toBe("blur");
 		await reset();
+	});
+
+	it("⭐ counts a completed creator payout onboarding as the age check", async () => {
+		// Stripe's Connect onboarding has already checked identity and age, so a creator
+		// cleared to be paid should not be asked to add a card to reach the same rung.
+		await reset();
+		await db.delete(userPreferences).where(eq(userPreferences.userId, creatorId));
+		await db
+			.insert(stripeConnectAccounts)
+			.values({
+				userId: creatorId,
+				stripeAccountId: `acct_payout_${id}`,
+				chargesEnabled: true,
+				payoutsEnabled: true,
+				onboardingComplete: true,
+			})
+			.onConflictDoUpdate({
+				target: stripeConnectAccounts.userId,
+				set: { chargesEnabled: true, payoutsEnabled: true, onboardingComplete: true },
+			});
+
+		const res = await send("/api/accounts/me/adult-access", "POST", creatorCookie, {});
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { canReach: boolean; method: string | null };
+		expect(body.canReach).toBe(true);
+		expect(body.method).toBe("payout_standing");
+
+		const [row] = await db
+			.select({ method: userPreferences.adultVerifiedMethod })
+			.from(userPreferences)
+			.where(eq(userPreferences.userId, creatorId));
+		expect(row?.method).toBe("payout_standing");
 	});
 
 	it("⭐ still lets the account opt back OUT under the lock, because that only tightens", async () => {

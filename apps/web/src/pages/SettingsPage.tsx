@@ -651,9 +651,10 @@ function RatingControlsSection() {
 						<div className="mt-2">
 							<p className="flex flex-wrap items-center gap-1 text-xs text-base-content/60">
 								<span>
-									Adult content requires a payment method for non-intrusive age verification.
+									Adult content needs a credit card on file or a completed creator payout account —
+									either one is a non-intrusive age check.
 								</span>
-								<InfoHint text="Anthers reads whether the card on your account is a credit card, because card issuers require the primary accountholder of a credit line to be 18. Nothing is charged and nothing appears on your statement, and we keep only that the check happened and when — we never see or store your date of birth, and we never ask for ID. Debit and prepaid cards have no age requirement, so they cannot answer it; if that is your only card, there is no other way to do this today." />
+								<InfoHint text="Anthers reads whether the card on your account is a credit card, because card issuers require the primary accountholder of a credit line to be 18. A creator whose payout onboarding is complete has already had their identity and age checked by Stripe, so that counts too and asks for no card. Nothing is charged and nothing appears on your statement, and we keep only that the check happened, when, and which proof it was — we never see or store your date of birth, and we never ask for ID. Debit and prepaid cards have no age requirement, so they cannot answer the card check; if one is your only card and you are not a verified creator, there is no other way to do this today." />
 							</p>
 							{needsCard ? (
 								<Elements stripe={getStripe()}>

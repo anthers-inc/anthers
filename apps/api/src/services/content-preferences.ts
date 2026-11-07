@@ -72,9 +72,18 @@ import { eq, type SQL, sql } from "drizzle-orm";
 import { createSetupIntent, listCardPaymentMethods, paymentsConfigured } from "../lib/processor.js";
 import { ensureStripeCustomer } from "./billing.js";
 import { maturityLocked } from "./parental-controls.js";
+import { payoutStanding } from "./payouts.js";
 
-/** The only method there is. Stored rather than assumed, so a second one could not make the existing rows ambiguous. */
+/** A credit card's funding type: the original proof. Stored rather than assumed, so a second one cannot make the existing rows ambiguous. */
 export const CARD_FUNDING_METHOD = "card_funding";
+
+/**
+ * A completed creator payout onboarding. Stripe's Connect onboarding checks identity and age
+ * on its own, so a creator who has been cleared to be paid has already been through the
+ * check an Adult-content opt-in would ask them to repeat. The stored method names this
+ * proof, so the record says why the account was verified.
+ */
+export const PAYOUT_STANDING_METHOD = "payout_standing";
 
 /**
  * Everything a user has said about what they meet, with the defaults already applied.
@@ -509,19 +518,25 @@ export async function enableAdultAccess(
 		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	const customerId = billingRow?.customerId ?? null;
-	// No verification anywhere and no customer to verify a card on: the honest answer for
-	// "never paid" is still no card, which is the case that reads `no_card` from a fresh
-	// account — and, unlike the old read, it can't mask a verification that a
-	// preferences-only user actually holds.
-	if (!prefRow && !customerId) return "no_card";
-
 	let verifiedAt = prefRow?.verifiedAt ?? null;
 	let method = prefRow?.method ?? null;
 	if (verifiedAt == null) {
-		const result = await verifyAdulthoodByCardFunding(customerId, now);
-		if (typeof result === "string") return result;
-		verifiedAt = result.verifiedAt;
-		method = result.method;
+		// ⭐ **A completed creator payout onboarding is the alternative proof** (Parker,
+		// 2026-11-06). Stripe's Connect onboarding already checked identity and age, so a
+		// verified creator should not be asked to add a card to reach the same rung. The
+		// standing is read first: a ready creator with no Stripe Customer row — the ordinary
+		// shape, since Connect uses a separate account — would otherwise answer `no_card`
+		// before the proof it already carries.
+		const standing = await payoutStanding(userId);
+		if (standing.ready) {
+			verifiedAt = now;
+			method = PAYOUT_STANDING_METHOD;
+		} else {
+			const result = await verifyAdulthoodByCardFunding(customerId, now);
+			if (typeof result === "string") return result;
+			verifiedAt = result.verifiedAt;
+			method = result.method;
+		}
 	}
 
 	// ⭐ **Opting in sets the display preference, if the user has never set one.** The
