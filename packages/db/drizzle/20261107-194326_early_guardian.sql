@@ -1,0 +1,1 @@
+ALTER TABLE "work_transcoding_jobs" ADD COLUMN "planned_depths" jsonb;

@@ -69,6 +69,17 @@ describe("processingText", () => {
 		expect(processingText(work(1, { status: "pending" }).transcoding)).toBe("Waiting to process");
 	});
 
+	it("names the finishing stage once the encode is done", () => {
+		// The upload-and-rewrite tail has no ffmpeg ticks, so a time left would be the last
+		// tick's figure standing through work it never saw. The stage is named instead.
+		expect(processingText(work(1, { progress: 80, etaSeconds: null }).transcoding)).toBe(
+			"Processing 80% · Finishing up",
+		);
+		expect(processingText(work(1, { progress: 90, etaSeconds: 12 }).transcoding)).toBe(
+			"Processing 90% · Finishing up",
+		);
+	});
+
 	it("gives a waiting row its total — front wait plus its own cost — as a sentence", () => {
 		// The recompute wrote the lane's own total figure (`eta_seconds` on a pending row):
 		// the creator waiting is told when the WORK is done, not when it merely starts.

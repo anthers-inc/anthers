@@ -48,6 +48,7 @@ export function VariantChip({
 	name,
 	ready,
 	running,
+	planned,
 	actions,
 	removeBusy,
 	menuAlign = "end",
@@ -55,6 +56,8 @@ export function VariantChip({
 	name: string;
 	ready: string | "";
 	running?: boolean;
+	/** A rung the run intends but has not produced yet — grayed rather than absent. */
+	planned?: boolean;
 	/** The dropdown member: never produced → it still carries the pencil, because there is
 	 * exactly nothing to replace until it exists; a chip with no actions is passive. */
 	actions?: { onReplace?: () => void; onRemove?: () => void; replaceLabel?: string };
@@ -65,7 +68,7 @@ export function VariantChip({
 }) {
 	const chip = ready ? (
 		<CheckIcon className="size-3.5" />
-	) : running ? (
+	) : running || planned ? (
 		<ArrowPathIcon className="size-3.5" />
 	) : (
 		<XMarkIcon className="size-3.5" />
@@ -178,6 +181,11 @@ export function VideoMediaStatusChips({
 	const running = job != null && (job.status === "pending" || job.status === "processing");
 	const uploading = sourceUpload?.status === "uploading" || sourceUpload?.status === "attaching";
 	const depths = useLadderDepths(job?.hlsManifestUrl ?? null);
+	// The run's own plan, in the encoding order the server wrote it. Every rung it intends
+	// is on the row from the first probe, grayed until its manifest entry appears, so the
+	// ladder fills in rather than appearing whole at the end.
+	const planned = job?.plannedDepths ?? [];
+	const ladder = (planned.length > 0 ? planned : depths).slice().sort((a, b) => b - a);
 
 	return (
 		<div className="flex flex-wrap items-center gap-1.5">
@@ -191,13 +199,18 @@ export function VideoMediaStatusChips({
 				menuAlign={menuAlign}
 				actions={originalActions}
 			/>
-			{depths.length > 0 ? (
+			{ladder.length > 0 ? (
 				// Largest first (Parker, 2026-10-13): the ladder reads as what it offers,
-				// best at the left.
-				depths
-					.slice()
-					.sort((a, b) => b - a)
-					.map((h) => <VariantChip key={h} name={`${h}p`} ready="ready" />)
+				// best at the left. A planned rung that is not in the manifest yet is gray
+				// rather than missing, so the run's whole shape is visible while it works.
+				ladder.map((h) => (
+					<VariantChip
+						key={h}
+						name={`${h}p`}
+						ready={depths.includes(h) ? "ready" : ""}
+						planned={planned.length > 0 && !depths.includes(h)}
+					/>
+				))
 			) : (
 				<VariantChip name="Ladder" ready={job?.hlsManifestUrl ?? ""} running={running} />
 			)}

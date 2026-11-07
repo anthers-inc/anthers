@@ -105,6 +105,10 @@ describe("a video transcode", () => {
 			.from(workTranscodingJobs)
 			.where(eq(workTranscodingJobs.id, jobId));
 		expect(job.status).toBe("completed");
+		// The plan the run wrote is the whole ladder, not only what the manifest had at the
+		// end; the stage writes cleared the estimate they cannot honestly keep.
+		expect(job.plannedDepths).toEqual([480]);
+		expect(job.etaSeconds).toBeNull();
 		const [work] = await db.select().from(works).where(eq(works.id, workId));
 		expect(work.thumbnail).toBeNull();
 		expect(sent.filter((s) => s.name === QUEUES.SCAN_MEDIA)).toEqual([]);

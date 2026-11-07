@@ -338,6 +338,11 @@ export interface TranscodingJob {
 	 * and the running job's own remaining otherwise.
 	 */
 	queueEtaSeconds: number | null;
+	/**
+	 * The ladder the run planned, smallest first, written once the source is probed. Null
+	 * before then; the chips fall back to their single Ladder placeholder.
+	 */
+	plannedDepths: number[] | null;
 	errorMessage: string | null;
 	/**
 	 * The moment this tree first played — the smallest rung's upload (publish-early):
