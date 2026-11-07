@@ -203,7 +203,7 @@ export async function recordNettingForRefund(
 			amount: amount.toFixed(2),
 			openedAt: now,
 		})
-		// The (refund, purchase) pair — a basket refunds as a basket, so one refund
+		// The (refund, purchase) pair — a cart refunds as a cart, so one refund
 		// settles several siblings and each sibling's netting is its own row under it.
 		.onConflictDoNothing({ target: [creatorNettings.stripeRefundId, creatorNettings.purchaseId] });
 }

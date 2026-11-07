@@ -29,7 +29,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const surfaces = {
-	BasketCheckout: "src/components/basket/BasketCheckout.tsx",
+	CartCheckout: "src/components/cart/CartCheckout.tsx",
 } as const;
 
 /**
@@ -100,7 +100,7 @@ describe("checkout lives in exactly one place", () => {
 	// 🚨 **The Work page's inline checkout is retired, not deprecated.** It cost the
 	// first live purchase three defects at once (nested forms, a session POST per page
 	// view, swallowed refusals), and the fix was the decision that purchases go through
-	// the basket — so any reappearance of Checkout on the Work page's tree regresses a
+	// the cart — so any reappearance of Checkout on the Work page's tree regresses a
 	// decision, and this is the guard that says so at a glance.
 	//
 	// Comments are stripped before matching: the retirement's doc comments name the
@@ -131,9 +131,7 @@ describe("checkout lives in exactly one place", () => {
 			if (name === "ProjectPricing") {
 				// The price card keeps one form-free rule: no `<form>` at all — its two
 				// buttons are plain buttons, and buying happens elsewhere.
-				expect(source, `${name} grew a form; buying happens in the basket`).not.toMatch(
-					/<form[\s>]/,
-				);
+				expect(source, `${name} grew a form; buying happens in the cart`).not.toMatch(/<form[\s>]/);
 			}
 		});
 	}

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Paying for a basket — **the one checkout, embedded on Anthers' own page** (Parker,
+ * Paying for a cart — **the one checkout, embedded on Anthers' own page** (Parker,
  * 2026-10-03: payments are the one place that cannot be rough around the edges).
  *
  * Since the Work page's inline checkout was retired, this is the ONLY place in the app
  * where `CheckoutElementsProvider` mounts and the only purchase form that exists. Every
- * purchase — a single Work, a five-item basket, a Badge's first Month beside Works —
+ * purchase — a single Work, a five-item cart, a Badge's first Month beside Works —
  * lands here; the flow is one flow, exercised at every count and every kind.
  *
- * The session is created server-side (`POST /basket/checkout`) and confirmed in place
+ * The session is created server-side (`POST /cart/checkout`) and confirmed in place
  * with Stripe's Checkout-flavored Payment Element. The billing address is Anthers' own
  * US-only form (`CheckoutBillingAddressBlock`) writing to the session as the buyer types
  * (no address button — see `useSessionBillingAddress`), so Stripe Tax resolves the rate
@@ -16,10 +16,10 @@
  * anything: the server builds the line items, the tax codes and the transfers; this
  * component reports what they resolved to.
  *
- * 🚨 **The session POST fires once per basket content — never per render.** The first
+ * 🚨 **The session POST fires once per cart content — never per render.** The first
  * live checkout remounted this whole subtree every time the parent re-rendered, because
  * a fresh id-array identity reached the fetch effect and re-fired it — see
- * `useBasketClientSecret` for how the identity is pinned now, by the parent's content
+ * `useCartClientSecret` for how the identity is pinned now, by the parent's content
  * key, and the failing case the session remount test exists to keep out.
  *
  * 🚨 **Reliability rules this file owns** (each paid for by the first live checkout,
@@ -48,13 +48,13 @@ import {
 	useSessionBillingAddress,
 } from "../payments/useSessionBillingAddress";
 
-interface BasketCheckoutProps {
+interface CartCheckoutProps {
 	/**
-	 * The basket's CONTENT identity — every line's id, kind-tagged, sorted and joined
-	 * (`basketContentKey` in `lib/basket.ts` computes it; the parent derives it once per
-	 * basket content). The session POST fires when this changes, and never on identity
+	 * The cart's CONTENT identity — every line's id, kind-tagged, sorted and joined
+	 * (`cartContentKey` in `lib/cart.ts` computes it; the parent derives it once per
+	 * cart content). The session POST fires when this changes, and never on identity
 	 * churn; the body carries nothing either way (the server buys the account's own
-	 * stored basket).
+	 * stored cart).
 	 */
 	contentKey: string;
 	/** Server-quoted subtotal, shown until the session's real total resolves. */
@@ -78,11 +78,7 @@ interface BasketCheckoutProps {
 	onComplete: () => void;
 }
 
-function CheckoutForm({
-	buyerTotal,
-	onComplete,
-	onTotals,
-}: Omit<BasketCheckoutProps, "contentKey">) {
+function CheckoutForm({ buyerTotal, onComplete, onTotals }: Omit<CartCheckoutProps, "contentKey">) {
 	const checkoutState = useCheckoutElements();
 	const savedPrefill = useSavedBillingAddress();
 	const billing = useSessionBillingAddress(checkoutState, savedPrefill);
@@ -175,7 +171,7 @@ function CheckoutForm({
 	if (succeeded) {
 		return (
 			<div className="alert alert-success">
-				<span>Purchase complete — everything in this basket is yours, in your Library.</span>
+				<span>Purchase complete — everything in this cart is yours, in your Library.</span>
 			</div>
 		);
 	}
@@ -232,7 +228,7 @@ function CheckoutForm({
 }
 
 /**
- * Fetch the basket's session client secret from the server — exactly once per basket
+ * Fetch the cart's session client secret from the server — exactly once per cart
  * content — and hand back the means to try again.
  *
  * 🚨 **A failure is a state with a Retry button, not a tombstone.** The first live
@@ -241,7 +237,7 @@ function CheckoutForm({
  * broke". The server's own `{ error }` text renders verbatim, and retrying re-fires
  * the same POST without touching anything else on the page.
  *
- * 🚨 **The POST fires once per basket content, by CONTENT rather than by dependency
+ * 🚨 **The POST fires once per cart content, by CONTENT rather than by dependency
  * identity.** The first live checkout keyed this effect on a `workIds` array — a fresh
  * array identity from `items.map(...)` on every render — so the totals-reporting
  * re-render that follows a tax resolution re-fired the POST and remounted the Element
@@ -249,9 +245,9 @@ function CheckoutForm({
  * that as "the page refreshed and wiped my form". The parent-derived CONTENT key ends
  * that class entirely: the parent may render as often as it likes, and the POST re-fires
  * only when the sorted, kind-tagged contents actually changed (a Badge line added to a
- * basket of Works re-fires it too — the charge is a new one).
+ * cart of Works re-fires it too — the charge is a new one).
  */
-function useBasketClientSecret(contentKey: string) {
+function useCartClientSecret(contentKey: string) {
 	const [secret, setSecret] = useState<string | null>(null);
 	const [failed, setFailed] = useState<string | null>(null);
 	const [fetching, setFetching] = useState(true);
@@ -261,11 +257,11 @@ function useBasketClientSecret(contentKey: string) {
 		setFetching(true);
 		setFailed(null);
 		try {
-			// The body carries nothing: the server buys the account's own stored basket —
+			// The body carries nothing: the server buys the account's own stored cart —
 			// the same ids this page displayed and the quote priced. A client-named list
-			// was the localStorage design's trust; the server-side basket does not accept
+			// was the localStorage design's trust; the server-side cart does not accept
 			// it, and the empty body is the honest request.
-			const res = await client.api.payments.basket.checkout.$post({ json: {} });
+			const res = await client.api.payments.cart.checkout.$post({ json: {} });
 			if (!res.ok) {
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
 				setFailed(body?.error ?? "Couldn't start checkout — please try again.");
@@ -294,8 +290,8 @@ function useBasketClientSecret(contentKey: string) {
 	return { secret, failed, fetching, retry: fetchSecret };
 }
 
-export default function BasketCheckout(props: BasketCheckoutProps) {
-	const { secret, failed, fetching, retry } = useBasketClientSecret(props.contentKey);
+export default function CartCheckout(props: CartCheckoutProps) {
+	const { secret, failed, fetching, retry } = useCartClientSecret(props.contentKey);
 	if (failed) {
 		return (
 			<div className="alert alert-warning text-sm">

@@ -18,7 +18,7 @@
  *
  *     🚨 **"Full refunds only" means full refunds of an ITEM, not of a charge**
  *     (clarified 2026-08-13, Parker; this used to read "full refunds only, for
- *     now" and was applied to the charge). A basket puts several independent
+ *     now" and was applied to the charge). A cart puts several independent
  *     purchases on one PaymentIntent, and refunding one of five must not return
  *     the other four — the buyer chose each of them and keeps what they keep.
  *     What remains prohibited is refunding *part of one item*, which is what the
@@ -133,7 +133,7 @@ export function refundShortfall(purchase: Purchase): Decimal {
  * Attempt the clawback of one purchase's creator share: reverse the row's recorded
  * earnings off the transfer that carried them. The one reversal mechanism, shared by
  * `refundPurchase` and the webhook's dashboard-refund branch, because the two doors must
- * leave the money in the same state — the single-writer rule the basket storage follows,
+ * leave the money in the same state — the single-writer rule the cart storage follows,
  * pointed at Stripe instead of a table.
  *
  * Returns whether the share came back. `reversed: false` on a row WITH a transfer is the
@@ -219,7 +219,7 @@ export async function refundPurchase(
 	 * How much of the charge this purchase is.
 	 *
 	 * 🚨 **"Full refunds only" means full refunds of an ITEM, not of a charge** (settled
-	 * 2026-08-13, Parker). A basket puts several independent purchases on one
+	 * 2026-08-13, Parker). A cart puts several independent purchases on one
 	 * PaymentIntent, and refunding one of five must not return the other four — they are
 	 * separate things the buyer chose to keep. So where the charge carries siblings, the
 	 * refund names an explicit `amount`: this row's price plus its apportioned share of
@@ -234,7 +234,7 @@ export async function refundPurchase(
 	 * move it onto a new one for symmetry's sake.
 	 */
 	// 🚨 **A Badge line is a sibling too.** The test used to count only `purchases`, so a
-	// basket of one Work and one Badge looked like a lone purchase and the refund returned
+	// cart of one Work and one Badge looked like a lone purchase and the refund returned
 	// the WHOLE PaymentIntent — the Work's price and the Badge's first month — while the
 	// Badge and its holding survived. Counting every component makes the Work's refund
 	// name its own amount and leaves the Badge paid for.
@@ -307,16 +307,16 @@ export async function refundPurchase(
 	 * 🚨 Settle **every** purchase on this charge, not just the one asked for.
 	 *
 	 * `refunds.create` above passes no `amount`, so it refunds the whole PaymentIntent.
-	 * That was the same thing as "this purchase" until baskets existed. On a basket it is
+	 * That was the same thing as "this purchase" until carts existed. On a cart it is
 	 * not: refunding one of five items returns all five items' money and reverses the
 	 * whole transfer, so settling one row would leave the buyer holding permanent access
 	 * to four Works nobody was paid for. `resolveAccess` reads completed purchases, so an
 	 * unsettled sibling is a live entitlement, not a stale record.
 	 *
-	 * A basket therefore refunds **as a basket** — which is also why the buyer-facing copy
+	 * A cart therefore refunds **as a cart** — which is also why the buyer-facing copy
 	 * has to say so before they click. Refunding a single item would mean a *partial*
 	 * refund, and the standing rule is full refunds only for now; it is genuinely available
-	 * later (a same-creator basket reverses the transfer proportionally, which is exactly
+	 * later (a same-creator cart reverses the transfer proportionally, which is exactly
 	 * that item's earnings) but it is a decision, not a detail.
 	 */
 	return await settleRefundedPurchase(purchase, {

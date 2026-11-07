@@ -114,7 +114,7 @@ export const purchases = pgTable(
 		 * 🚨 **Indexed, not UNIQUE** (changed 2026-08-13, migration `0033`).
 		 *
 		 * It was unique while one charge could only ever mean one purchase, and that
-		 * assumption is exactly what a basket breaks: buying five Works on one card charge
+		 * assumption is exactly what a cart breaks: buying five Works on one card charge
 		 * writes five rows sharing this id — which is the entire point, since the fixed
 		 * $0.30 is per charge. The constraint didn't guard idempotency (the `pending` →
 		 * `completed` status predicate does that, and still does); it encoded a
@@ -131,7 +131,7 @@ export const purchases = pgTable(
 		 * checkout COMPLETION — the same moment the tax and the intent re-key land.
 		 *
 		 * 🚨 **Purchases are platform charges, not destination charges** (Parker,
-		 * 2026-10-15, the multi-creator basket decision): a charge can carry Works by
+		 * 2026-10-15, the multi-creator cart decision): a charge can carry Works by
 		 * several creators, and Stripe's `transfer_data.destination` names exactly one
 		 * connected account, so the split runs as **one transfer per distinct creator
 		 * at completion**, funded by the charge (`source_transaction`). Rows by the same
@@ -383,66 +383,66 @@ export const disputes = pgTable(
 );
 
 /**
- * org — the signed-in buyer's basket, one row per (user, item). A **scratchpad, not a
+ * org — the signed-in buyer's cart, one row per (user, item). A **scratchpad, not a
  * record** — nothing here is money and nothing is an entitlement — but it is the buyer's,
- * not the browser's (Parker, 2026-10-03): the basket is scoped to the account, so a second
+ * not the browser's (Parker, 2026-10-03): the cart is scoped to the account, so a second
  * account signing in on the same machine starts empty. It moved out of client-side
- * `localStorage` for exactly that reason, and the anonymous scratch basket that still lives
+ * `localStorage` for exactly that reason, and the anonymous scratch cart that still lives
  * in the browser MERGES into this table at sign-in and is then cleared — once a session has
- * an account, this table is the only basket it reads.
+ * an account, this table is the only cart it reads.
  *
  * 🚨 **Never trusted.** The rows are ids, not facts: every id is re-resolved server-side
- * through `resolveBasket` at quote and checkout (price, release state, ownership, the
+ * through `resolveCart` at quote and checkout (price, release state, ownership, the
  * item cap — all the refusals that fired on the client-supplied list still fire on these
  * rows), and `list` returns only what still resolves — so an item that stopped being
  * buyable between add and checkout counts on no badge and charges in no checkout. A
  * tampered table buys nothing it shouldn't.
  *
  * ⚠️ **The rows do not self-clean.** An item that stops being buyable leaves its row here
- * until the buyer removes it or the basket clears at a completed checkout. That is
+ * until the buyer removes it or the cart clears at a completed checkout. That is
  * deliberate: resolution is what the reads are for, and a sweeper job is one more thing
  * that can disagree with them.
  *
- * 🚨 **The basket carries any number of creators** (Parker, 2026-10-15): `add` appends a
+ * 🚨 **The cart carries any number of creators** (Parker, 2026-10-15): `add` appends a
  * second creator's Work rather than replacing the rows — the replace-on-clash rule this
  * table used to document existed because a Stripe destination charge names exactly one
  * connected account, and the platform-charge split (`services/purchase-split.ts`) is
- * what removed it. See `resolveBasket` in `routes/payments.ts`.
+ * what removed it. See `resolveCart` in `routes/payments.ts`.
  *
  * **Since the same day, a second item kind: a Badge's first Month** (the creator-page
  * purchase, Parker 2026-10-14/15). A line names a Work or a Badge rung, never both
- * (`basket_items_exactly_one_kind`); a second rung from one issuer replaces the first, the
- * one-holding-per-issuer rule's basket shape. Money columns live none here all the same:
+ * (`cart_items_exactly_one_kind`); a second rung from one issuer replaces the first, the
+ * one-holding-per-issuer rule's cart shape. Money columns live none here all the same:
  * a Badge line's price, its fee share and its settlement are `badge_charges`' business.
  *
- * Cascade on every side, like `user_library_items`: a basket is a preference, not a record —
+ * Cascade on every side, like `user_library_items`: a cart is a preference, not a record —
  * it dies with the account, the Work, and the Badge, and never outlives any of them.
  */
-// org — a buyer's basket is the buyer's record (same reasoning as `userLibraryItems`: the
+// org — a buyer's cart is the buyer's record (same reasoning as `userLibraryItems`: the
 // user has no node in the current topology, so their preferences are org-side rows).
 // It sits with the payments tables because only the payments routes read it, but note
 // it is NOT money: no column here is a figure, and nothing downstream books from it.
-export const basketItems = pgTable(
-	"basket_items",
+export const cartItems = pgTable(
+	"cart_items",
 	{
 		id: serial("id").primaryKey(),
 		userId: integer("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		// Cascade, not SET NULL (opposite of `purchases.work_id`): a purchase is money and
-		// must outlive the Work; a basket entry is scratch and must not name a Work that
-		// no longer exists. resolveBasket would refuse the row anyway — this just is not
+		// must outlive the Work; a cart entry is scratch and must not name a Work that
+		// no longer exists. resolveCart would refuse the row anyway — this just is not
 		// in the business of remembering it.
 		//
-		// Nullable since the basket grew a second item kind (the Badge purchase, 2026-10-15):
+		// Nullable since the cart grew a second item kind (the Badge purchase, 2026-10-15):
 		// exactly one of `work_id`/`badge_id` is set on any row, the check below holds it.
 		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
 		// A Badge's first Month — the rung the buyer picked. Cascade for the same reason
-		// as `work_id`: a basket entry is scratch, and a rung its creator deleted was
+		// as `work_id`: a cart entry is scratch, and a rung its creator deleted was
 		// never bought. The money's record lives in `badge_charges`, not here.
 		badgeId: integer("badge_id").references(() => badges.id, { onDelete: "cascade" }),
-		// Insertion order is the basket's display order — the client's old array order —
-		// and no column reorders it: newest item at the end, like a physical basket.
+		// Insertion order is the cart's display order — the client's old array order —
+		// and no column reorders it: newest item at the end, like a physical cart.
 		addedAt: timestamp("added_at", { withTimezone: true }).defaultNow().notNull(),
 		/**
 		 * How many of a physical good this line means to buy. Absent for everything else —
@@ -463,27 +463,27 @@ export const basketItems = pgTable(
 		options: jsonb("options").$type<Array<{ name: string; label: string }>>(),
 	},
 	(table) => [
-		// Exactly one item kind per row — a basket line names a Work or a Badge, never
+		// Exactly one item kind per row — a cart line names a Work or a Badge, never
 		// both and never neither. A CHECK, because the service cannot defend a shape the
 		// table itself tolerates (the sign-in merge and the buy-now clear both write).
 		check(
-			"basket_items_exactly_one_kind",
+			"cart_items_exactly_one_kind",
 			sql`(${table.workId} IS NOT NULL) <> (${table.badgeId} IS NOT NULL)`,
 		),
-		// An item sits in an account's basket once. Both uniques are PARTIAL (the plain
+		// An item sits in an account's cart once. Both uniques are PARTIAL (the plain
 		// forms would let two NULLs collide the wrong way): a given Work may appear once,
 		// and a given Badge rung once — adding a different rung from the same issuer is
 		// the service-level replacement (the pick replaces, one holding per issuer).
-		uniqueIndex("uq_basket_items_user_work")
+		uniqueIndex("uq_cart_items_user_work")
 			.on(table.userId, table.workId)
 			.where(sql`${table.workId} IS NOT NULL`),
-		uniqueIndex("uq_basket_items_user_badge")
+		uniqueIndex("uq_cart_items_user_badge")
 			.on(table.userId, table.badgeId)
 			.where(sql`${table.badgeId} IS NOT NULL`),
-		// The cascades' read side: deleting a Work or a Badge finds its basket rows here.
+		// The cascades' read side: deleting a Work or a Badge finds its cart rows here.
 		// The user list is covered by the uniques' leading column.
-		index("idx_basket_items_work").on(table.workId),
-		index("idx_basket_items_badge").on(table.badgeId),
+		index("idx_cart_items_work").on(table.workId),
+		index("idx_cart_items_badge").on(table.badgeId),
 	],
 );
 
@@ -492,7 +492,7 @@ export const basketItems = pgTable(
  * moment the charge exists to the moment the cycle settles it. The purchase of a Badge is
  * the raise's charge half (Parker, 2026-10-14: **a Badge is a purchase like any other** —
  * it is the monthly recurring subscription, but it starts with a first transaction, and
- * that first transaction is batchable with anything else in the basket) — so this table is
+ * that first transaction is batchable with anything else in the cart) — so this table is
  * the payments-side sibling of `purchases`, kept SEPARATE from it deliberately:
  *
  * 🚨 **A Badge line never transfers at completion.** Purchase money moves out per creator
@@ -698,8 +698,8 @@ export const creatorTransferCredits = pgTable(
  *
  * One row per (source event, creator). The source is at most one of: a purchase dispute
  * (`disputeId` — the `disputes` row's `purchaseId` names the sale) or a refunded purchase
- * (`purchaseId` + `stripeRefundId`, the (refund, purchase) pair — a basket refunds as a
- * basket, so one refund settles several siblings and each sibling's earnings are their
+ * (`purchaseId` + `stripeRefundId`, the (refund, purchase) pair — a cart refunds as a
+ * cart, so one refund settles several siblings and each sibling's earnings are their
  * own netting under it). The check constraint
  * holds "at most one" rather than "exactly one" because both links are `set null` — the
  * row must survive its source's deletion, which is the money-record rule every table
@@ -768,7 +768,7 @@ export const creatorNettings = pgTable(
 		index("idx_creator_nettings_dispute").on(table.disputeId),
 		index("idx_creator_nettings_purchase").on(table.purchaseId),
 		// One row per source event. The refund source's identity is the (refund, purchase)
-		// pair — NOT the refund id alone, because a basket refunds as a basket: one
+		// pair — NOT the refund id alone, because a cart refunds as a cart: one
 		// refund settles several sibling purchases, and each sibling's earnings are its
 		// own netting under the same refund. The dispute source's identity is the dispute
 		// row, which is itself unique on the Stripe dispute id.

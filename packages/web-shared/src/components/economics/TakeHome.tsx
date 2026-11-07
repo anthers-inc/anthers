@@ -87,7 +87,7 @@ export interface TakeHomeProps {
 	 *
 	 * 🚨 The two have **different worst cases**, and getting it backwards understates the
 	 * deduction on the one a creator is most likely to set low. A purchase's worst case is
-	 * a single-item basket. A Badge's worst case is a supporter for whom this is the only
+	 * a single-item cart. A Badge's worst case is a supporter for whom this is the only
 	 * thing on the month's invoice — so the whole fixed fee lands on it, exactly as for a
 	 * lone purchase, and anything else they give amortizes it away.
 	 */
@@ -247,7 +247,7 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 					    a creator their price merely "cannot be sold on its own" while the save
 					    button refuses it would be describing a different product. The reason is
 					    still the rail's rather than ours, which is why the sentence leads with it.
-					    Baskets exist and one could clear the floor collectively, but a creator
+					    Carts exist and one could clear the floor collectively, but a creator
 					    cannot make anybody buy two things, so a lone purchase is the case that
 					    decides it. */}
 					Card networks will not take a charge under {usd(STRIPE_MIN_CHARGE)}, so this amount can't

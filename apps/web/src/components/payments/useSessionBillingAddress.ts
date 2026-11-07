@@ -213,7 +213,7 @@ export function useSessionBillingAddress(
  * 🚨 **Both figures convert here or nowhere.** The first pass divided the total in place
  * and left the tax raw in cents, so a $0.48 tax rendered "+$48.00" on the live checkout
  * (2026-10-06) beside a correct "Pay $10.48" — two derivations of the same payload, one
- * of them 100× wrong. `sessionTotals` (the session-object entry) and BasketCheckout's
+ * of them 100× wrong. `sessionTotals` (the session-object entry) and CartCheckout's
  * totals effect (the same figures read straight off the checkout object) both route
  * through this.
  *

@@ -15,7 +15,7 @@
  * as the end of the column's own story.
  *
  * 🚨 **Nothing here charges anything.** Like every other purchase door since 2026-10-03, the
- * two buttons put the line in the basket and send the buyer to the one checkout that
+ * two buttons put the line in the cart and send the buyer to the one checkout that
  * exists. What this panel adds is the choosing: the pictures, the options the creator
  * offers, how many, and the money those choices come to.
  *
@@ -32,7 +32,7 @@ import { useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { PencilSquareIcon, PhotoIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useState } from "react";
-import { useBasket } from "@/lib/basket";
+import { useCart } from "@/lib/cart";
 import { PhysicalImagesEditor } from "./PhysicalImagesSection";
 import { MAX_OPTIONS, PhysicalPolicyFields, PhysicalVariantEditor } from "./PhysicalListingFields";
 import { type ListingOption, useListing } from "./physical-listing";
@@ -226,7 +226,7 @@ export default function PhysicalStorePanel({
 	owner?: boolean;
 }) {
 	const { user } = useAuth();
-	const { add } = useBasket();
+	const { add } = useCart();
 	const navigate = useNavigate();
 	const [storefront, setStorefront] = useState<Storefront | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -291,7 +291,7 @@ export default function PhysicalStorePanel({
 	const options = useMemo(() => shownListing?.options ?? [], [shownListing]);
 	const minQuantity = shownListing?.minQuantity ?? 1;
 	// The storefront adds the smallest order the listing allows; the buyer changes the count
-	// in the basket, where the line's quantity already lives.
+	// in the cart, where the line's quantity already lives.
 	const quantity = minQuantity;
 
 	// The quote: the goods, the shipping and the estimated tax for exactly this pick.
@@ -429,12 +429,12 @@ export default function PhysicalStorePanel({
 		if (await removeOption(variantDraft.index)) setVariantDraft(null);
 	};
 
-	const basketItem = {
+	const cartItem = {
 		kind: "work" as const,
 		workId,
 		slug,
 		title,
-		// The basket's own display price; the checkout re-resolves it either way.
+		// The cart's own display price; the checkout re-resolves it either way.
 		price: quote?.goods ?? unitPrice,
 		creatorHandle,
 		thumbnail: thumbnail ?? null,
@@ -442,19 +442,19 @@ export default function PhysicalStorePanel({
 		options: Object.entries(picks).map(([name, label]) => ({ name, label })),
 	};
 
-	const toBasket = async (thenBuy: boolean) => {
+	const toCart = async (thenBuy: boolean) => {
 		if (!user) {
 			navigate(`/login?next=${encodeURIComponent(`/works/${slug}`)}`);
 			return;
 		}
 		setAdding(true);
 		try {
-			const result = await add(basketItem);
+			const result = await add(cartItem);
 			if (!result.ok) {
 				setQuoteError(result.error);
 				return;
 			}
-			if (thenBuy) navigate("/basket");
+			if (thenBuy) navigate("/cart");
 		} finally {
 			setAdding(false);
 		}
@@ -679,7 +679,7 @@ export default function PhysicalStorePanel({
 											type="button"
 											className="btn btn-primary w-full"
 											disabled={!storefront.priced || adding || soldOutPick}
-											onClick={() => void toBasket(true)}
+											onClick={() => void toCart(true)}
 										>
 											{adding ? "Adding…" : user ? "Buy Now" : "Sign in to buy"}
 										</button>
@@ -687,9 +687,9 @@ export default function PhysicalStorePanel({
 											type="button"
 											className="btn btn-outline btn-sm w-full"
 											disabled={!storefront.priced || adding || soldOutPick}
-											onClick={() => void toBasket(false)}
+											onClick={() => void toCart(false)}
 										>
-											Add to Basket
+											Add to Cart
 										</button>
 									</div>
 								</div>

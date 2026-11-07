@@ -359,10 +359,10 @@ afterAll(async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Refunding one item out of a basket.
+ * Refunding one item out of a cart.
  *
  * 🚨 **"Full refunds only" means full refunds of an ITEM, not of a charge** (Parker,
- * 2026-08-13). A basket puts several independent purchases on one PaymentIntent; the
+ * 2026-08-13). A cart puts several independent purchases on one PaymentIntent; the
  * buyer chose each of them separately and refunding one must not return the others.
  *
  * The reversal lands exactly right by arithmetic rather than luck: `reverse_transfer` on
@@ -380,14 +380,14 @@ afterAll(async () => {
  * Stripe's, and no fake can prove it. Same limit the file header states for the
  * destination charge.
  */
-describe("A basket refunds one item at a time", () => {
+describe("A cart refunds one item at a time", () => {
 	/** Three purchases on ONE PaymentIntent, apportioned the way checkout writes them. */
-	async function basketOfThree() {
-		const intent = `pi_basket_${uid()}`;
-		// The one transfer the completion made for the creator this whole basket belongs
+	async function cartOfThree() {
+		const intent = `pi_cart_${uid()}`;
+		// The one transfer the completion made for the creator this whole cart belongs
 		// to — all three rows share it, and each row's reversal takes its own earnings
 		// from that shared transfer.
-		const transfer = `tr_basket_${uid()}`;
+		const transfer = `tr_cart_${uid()}`;
 		const unit = new Decimal("1.00");
 		const subtotal = unit.times(3);
 		const whole = calculateFees(subtotal, { type: "digital" });
@@ -398,9 +398,9 @@ describe("A basket refunds one item at a time", () => {
 				.insert(purchases)
 				.values({
 					buyerId,
-					workId: await makeWork(`Basket work ${uid()}`),
+					workId: await makeWork(`Cart work ${uid()}`),
 					creatorId,
-					workTitle: `Basket item ${i}`,
+					workTitle: `Cart item ${i}`,
 					workType: "audio",
 					workPublicId: null,
 					type: "digital",
@@ -419,13 +419,13 @@ describe("A basket refunds one item at a time", () => {
 	}
 
 	it("refunds only that item's share of the charge", async () => {
-		const rows = await basketOfThree();
+		const rows = await cartOfThree();
 		const res = await refundAs(buyerCookie, rows[0].id);
 		expect(res.status).toBe(200);
 
 		const params = fake.lastCall("refunds.create")?.args[0] as Stripe.RefundCreateParams;
 		// The item's price plus its apportioned tax — what the buyer paid for THIS thing,
-		// not what they paid for the basket.
+		// not what they paid for the cart.
 		const expected = Math.round(
 			new Decimal(rows[0].amount).plus(rows[0].salesTax).toNumber() * 100,
 		);
@@ -444,7 +444,7 @@ describe("A basket refunds one item at a time", () => {
 	});
 
 	it("leaves the other two purchases untouched, and still owned", async () => {
-		const rows = await basketOfThree();
+		const rows = await cartOfThree();
 		await refundAs(buyerCookie, rows[0].id);
 
 		expect((await reload(rows[0].id)).status).toBe("refunded");
@@ -454,7 +454,7 @@ describe("A basket refunds one item at a time", () => {
 	});
 
 	it("books only that item's share of the sunk card fee", async () => {
-		const rows = await basketOfThree();
+		const rows = await cartOfThree();
 		await refundAs(buyerCookie, rows[0].id);
 
 		const ledger = await ledgerFor(rows[0].id);
@@ -495,7 +495,7 @@ describe("A basket refunds one item at a time", () => {
 		await refundAs(buyerCookie, purchase.id);
 		const params = fake.lastCall("refunds.create")?.args[0] as Stripe.RefundCreateParams;
 		// The long-tested path for the common case: no `amount` means the whole charge,
-		// and there is no reason to move it onto the basket's arithmetic for symmetry.
+		// and there is no reason to move it onto the cart's arithmetic for symmetry.
 		expect(params.amount).toBeUndefined();
 	});
 });

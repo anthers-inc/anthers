@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The purchase flow, in the browser: **every purchase goes through the basket** (Parker,
- * 2026-10-03) — the Work page offers the doors, and `/basket` is where the money moves.
+ * The purchase flow, in the browser: **every purchase goes through the cart** (Parker,
+ * 2026-10-03) — the Work page offers the doors, and `/cart` is where the money moves.
  *
  * ⚠️ **What this suite can and cannot see.** The browser session has no Stripe key, so
  * the session POST answers 503 and the Payment Element never mounts — the same constraint
  * `checkout-address-guard.test.ts` documents. What CAN be walked, and is: the Work page's
- * two doors (Buy Now and Add to Basket), the Work page carrying NO payment form (the
- * nested-form defect shipped because nothing looked), the basket's quote receipt, the
+ * two doors (Buy Now and Add to Cart), the Work page carrying NO payment form (the
+ * nested-form defect shipped because nothing looked), the cart's quote receipt, the
  * failure surfaces showing the server's own message, and the retry-without-reload path.
  * A real charge is the Stripe walk's business (`make stripe-walk`); this is the flow's.
  *
- * The single-item basket is asserted deliberately: since the Work page's inline checkout
+ * The single-item cart is asserted deliberately: since the Work page's inline checkout
  * was retired, one item is the PRIMARY flow (Buy Now lands there), not an edge case.
  *
  * Runs in the `authed` project, signed in as the gauntlet user (storageState), with
@@ -26,8 +26,8 @@ import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { API_URL, expect, type Page, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 /** Unique per run, so a leftover row from a crashed run can never satisfy an assertion. */
-const TITLE = `Basket checkout walk ${Date.now()}`;
-const TITLE_PREFIX = "Basket checkout walk ";
+const TITLE = `Cart checkout walk ${Date.now()}`;
+const TITLE_PREFIX = "Cart checkout walk ";
 /** Priced above the card floor, so the quote resolves to real numbers. */
 const PRICE = "9.99";
 
@@ -71,46 +71,46 @@ async function sweep(): Promise<void> {
 }
 
 /**
- * Seed the SERVER-side basket through the add route, then reload so `useBasket` reads it.
+ * Seed the SERVER-side cart through the add route, then reload so `useCart` reads it.
  *
  * 🚨 **The seeding is sent through `page.request`, which carries the page's own session
- * cookie** — the basket is the account's now (Parker, 2026-10-03), and the account the
+ * cookie** — the cart is the account's now (Parker, 2026-10-03), and the account the
  * page renders for is the gauntlet user, not the fixture creator who owns the walk
- * Work. Seeding from a different account's session would plant a basket on the wrong
+ * Work. Seeding from a different account's session would plant a cart on the wrong
  * account and the page would not show it — the exact property this server-side move
- * exists to establish. The seeding path (rather than driving the Add to Basket button)
+ * exists to establish. The seeding path (rather than driving the Add to Cart button)
  * is used for the tests AFTER the first: the add path is exercised once on its own, and
  * re-driving it per test would make every later assertion depend on a navigation this
  * suite has already proven.
  */
-async function seedBasket(page: Page): Promise<void> {
+async function seedCart(page: Page): Promise<void> {
 	if (!work) throw new Error("walk Work was not created");
-	const res = await page.request.post(`${API_URL}/api/payments/basket/items`, {
+	const res = await page.request.post(`${API_URL}/api/payments/cart/items`, {
 		headers: { Origin: WEB_ORIGIN },
 		data: { workId: work.id },
 	});
-	expect(res.status(), `seeding the basket failed: ${await res.text()}`).toBe(200);
-	// The page's own `useBasket` learns the new item only when the page reads the server
+	expect(res.status(), `seeding the cart failed: ${await res.text()}`).toBe(200);
+	// The page's own `useCart` learns the new item only when the page reads the server
 	// again — a `page.request` seed fires nothing in the document — so land on the
-	// basket (or reload it) after seeding. (The `localStorage` design's evaluate+reload
+	// cart (or reload it) after seeding. (The `localStorage` design's evaluate+reload
 	// had the same shape; the store just moved across the wire.)
-	await page.goto("/basket");
+	await page.goto("/cart");
 }
 
 /**
- * Empty the buyer's server-side basket, through the page's own session.
+ * Empty the buyer's server-side cart, through the page's own session.
  *
- * 🚨 **The walk's later tests need the basket they assert on, not the one a sibling test
- * left** — the basket is per-ACCOUNT now, so it persists across this file's every test
- * where the `localStorage` design reset with each test's fresh context. "Add to Basket
+ * 🚨 **The walk's later tests need the cart they assert on, not the one a sibling test
+ * left** — the cart is per-ACCOUNT now, so it persists across this file's every test
+ * where the `localStorage` design reset with each test's fresh context. "Add to Cart
  * keeps the buyer on the Work page" in particular asserts the ADD door, which renders
- * only while the Work is NOT in the basket.
+ * only while the Work is NOT in the cart.
  */
-async function clearServerBasket(page: Page): Promise<void> {
-	const res = await page.request.delete(`${API_URL}/api/payments/basket`, {
+async function clearServerCart(page: Page): Promise<void> {
+	const res = await page.request.delete(`${API_URL}/api/payments/cart`, {
 		headers: { Origin: WEB_ORIGIN },
 	});
-	expect(res.status(), `clearing the basket failed: ${await res.text()}`).toBe(200);
+	expect(res.status(), `clearing the cart failed: ${await res.text()}`).toBe(200);
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -191,17 +191,17 @@ test.describe.configure({ mode: "serial" });
  * project config) spreads a file's tests across workers, and each worker would run its own
  * `beforeAll` — creating its own walk Work and then, through the prefix sweep, deleting the
  * OTHER workers' walk Works as litter. The first 4-worker run failed exactly that way: every
- * Work-page test read "Not Found" while the basket tests, which never named the Work's page,
+ * Work-page test read "Not Found" while the cart tests, which never named the Work's page,
  * passed. One stateful fixture, one worker, one walk — the same reasoning the gauntlet
  * declares serial on.
  */
-test.describe("the basket purchase flow", () => {
-	test("the Work page offers the basket doors and no payment form", async ({ page }) => {
+test.describe("the cart purchase flow", () => {
+	test("the Work page offers the cart doors and no payment form", async ({ page }) => {
 		await gotoWork(page);
 
 		// The two doors exist.
 		await expect(page.getByRole("button", { name: /Buy Now/ })).toBeVisible();
-		await expect(page.getByRole("button", { name: /Add to basket/ })).toBeVisible();
+		await expect(page.getByRole("button", { name: /Add to Cart/ })).toBeVisible();
 
 		// 🚨 **And no payment form is on the page** — the defect that shipped was a `<form>`
 		// nested in the page's tree with undefined submit behavior. Asserted by what a
@@ -214,10 +214,10 @@ test.describe("the basket purchase flow", () => {
 
 		// The quote's fee breakdown prices the purchase, from the server. The Work page's
 		// price card still says "calculated at checkout" — it is a price display without
-		// an address form, so nothing resolves there; the basket's Payment card is where
-		// tax reads "calculated from your address", asserted in the basket tests. The
-		// card fee line reads the same here as on the basket (2026-10-06 moved it into
-		// the receives figure's tooltip on /basket; the Work page's price card keeps
+		// an address form, so nothing resolves there; the cart's Payment card is where
+		// tax reads "calculated from your address", asserted in the cart tests. The
+		// card fee line reads the same here as on the cart (2026-10-06 moved it into
+		// the receives figure's tooltip on /cart; the Work page's price card keeps
 		// its own).
 		await expect(page.getByText("Card processing")).toBeVisible();
 		await expect(page.getByText("calculated at checkout")).toBeVisible();
@@ -230,62 +230,62 @@ test.describe("the basket purchase flow", () => {
 		await expect
 			.poll(
 				async () => {
-					if (await page.getByTestId("basket-receipt").isVisible()) return "receipt";
+					if (await page.getByTestId("cart-receipt").isVisible()) return "receipt";
 					const alert = page.locator(".alert-error, .alert-warning").first();
 					return (await alert.isVisible())
 						? ((await alert.textContent()) ?? "error-alert")
 						: "none";
 				},
-				{ message: "the basket receipt never rendered from the quote", timeout: 15_000 },
+				{ message: "the cart receipt never rendered from the quote", timeout: 15_000 },
 			)
 			.toBe("receipt");
-		await expect(page.getByTestId("basket-receipt")).toBeVisible();
+		await expect(page.getByTestId("cart-receipt")).toBeVisible();
 	}
 
-	test("Buy Now adds the item and lands on the basket — the one-item flow", async ({ page }) => {
+	test("Buy Now adds the item and lands on the cart — the one-item flow", async ({ page }) => {
 		// A sibling file (or a prior run of this one) may have left items on the USER's
-		// server basket — the account's basket is state this file's walk starts from, and
+		// server cart — the account's cart is state this file's walk starts from, and
 		// the empty-badge assertion below wants it empty.
-		await clearServerBasket(page);
+		await clearServerCart(page);
 		await gotoWork(page);
 
 		// The header badge is empty before the add.
 		const header = page.getByRole("banner");
-		await expect(header.getByRole("link", { name: /Basket/ })).toHaveCount(0);
+		await expect(header.getByRole("link", { name: /Cart/ })).toHaveCount(0);
 
 		await page.getByRole("button", { name: /Buy Now/ }).click();
 
-		// Landed on the basket, with the item in it and the badge moved.
-		await expect(page).toHaveURL(/\/basket$/);
+		// Landed on the cart, with the item in it and the badge moved.
+		await expect(page).toHaveURL(/\/cart$/);
 		await expect(page.getByText(TITLE)).toBeVisible();
-		await expect(header.getByRole("link", { name: /Basket \(1 item\)/ })).toBeVisible();
+		await expect(header.getByRole("link", { name: /Cart \(1 item\)/ })).toBeVisible();
 
 		// The receipt renders real numbers from the quote — subtotal and at-cost fee, with
 		// tax named as coming (never estimated).
 		await expectReceiptWithQuote(page);
-		await expect(page.getByTestId("basket-total")).toHaveText(`$${PRICE} + tax`);
-		await expect(page.getByTestId("basket-receipt")).toContainText("calculated from your address");
+		await expect(page.getByTestId("cart-total")).toHaveText(`$${PRICE} + tax`);
+		await expect(page.getByTestId("cart-receipt")).toContainText("calculated from your address");
 	});
 
-	test("the basket reads in two columns on desktop and stacks on mobile", async ({ page }) => {
+	test("the cart reads in two columns on desktop and stacks on mobile", async ({ page }) => {
 		// 🚨 **Two columns is the second checkout's layout decision (2026-10-03), flipped
 		// 2026-10-04**: the CHECKOUT (form) column sits LEFT on desktop, items and
 		// receipt on the right; below `lg` it stacks to one column reading items →
 		// receipt → checkout. Asserted by computed layout rather than class strings, so
 		// a Tailwind class that silently loses cannot pass.
-		await seedBasket(page);
+		await seedCart(page);
 		await expectReceiptWithQuote(page);
 		// The receipt lives in the items column; visible here means the columns exist.
-		await expect(page.getByTestId("basket-items-column")).toBeVisible();
-		await expect(page.getByTestId("basket-checkout-column")).toBeVisible();
-		await expect(page.getByTestId("basket-items")).toBeVisible();
+		await expect(page.getByTestId("cart-items-column")).toBeVisible();
+		await expect(page.getByTestId("cart-checkout-column")).toBeVisible();
+		await expect(page.getByTestId("cart-items")).toBeVisible();
 
 		// Desktop (the project default, 1280×720): the two columns sit side by side —
 		// the checkout column is LEFT, so its RIGHT edge is at or left of the items
 		// column's left edge, on the same rows.
 		const desktop = async () => {
-			const itemsBox = await page.getByTestId("basket-items-column").boundingBox();
-			const checkoutBox = await page.getByTestId("basket-checkout-column").boundingBox();
+			const itemsBox = await page.getByTestId("cart-items-column").boundingBox();
+			const checkoutBox = await page.getByTestId("cart-checkout-column").boundingBox();
 			expect(itemsBox).not.toBeNull();
 			expect(checkoutBox).not.toBeNull();
 			expect(
@@ -300,8 +300,8 @@ test.describe("the basket purchase flow", () => {
 		// receipt → checkout (the DOM order under the flex column).
 		await page.setViewportSize({ width: 390, height: 844 });
 		const stacked = async () => {
-			const itemsBox = await page.getByTestId("basket-items-column").boundingBox();
-			const checkoutBox = await page.getByTestId("basket-checkout-column").boundingBox();
+			const itemsBox = await page.getByTestId("cart-items-column").boundingBox();
+			const checkoutBox = await page.getByTestId("cart-checkout-column").boundingBox();
 			expect(itemsBox).not.toBeNull();
 			expect(checkoutBox).not.toBeNull();
 			expect(
@@ -311,9 +311,9 @@ test.describe("the basket purchase flow", () => {
 		};
 		await stacked();
 		// And the receipt sits between them vertically — the reading-order claim.
-		const receiptBox = await page.getByTestId("basket-receipt").boundingBox();
-		const itemsBox = await page.getByTestId("basket-items-column").boundingBox();
-		const checkoutBox = await page.getByTestId("basket-checkout-column").boundingBox();
+		const receiptBox = await page.getByTestId("cart-receipt").boundingBox();
+		const itemsBox = await page.getByTestId("cart-items-column").boundingBox();
+		const checkoutBox = await page.getByTestId("cart-checkout-column").boundingBox();
 		expect(receiptBox!.y).toBeGreaterThanOrEqual(itemsBox!.y);
 		expect(receiptBox!.y + receiptBox!.height).toBeLessThanOrEqual(checkoutBox!.y + 1);
 
@@ -322,29 +322,27 @@ test.describe("the basket purchase flow", () => {
 		await desktop();
 	});
 
-	test("the pricing reads as two cards: Payment beside Basket", async ({ page }) => {
+	test("the pricing reads as two cards: Payment beside Cart", async ({ page }) => {
 		// 2026-10-06 (Parker): the receipt became two cards — Payment (the buyer's
-		// statement: subtotal, tax, total) and Basket (the items grouped by creator,
+		// statement: subtotal, tax, total) and Cart (the items grouped by creator,
 		// the receives headline on top). The card fee's own line is gone from the
 		// page: it is the receives figure's tooltip material, the price's cost and
 		// never a line the buyer could read as theirs to pay.
-		await seedBasket(page);
+		await seedCart(page);
 		await expectReceiptWithQuote(page);
-		const receipt = page.getByTestId("basket-receipt");
-		const basket = page.getByTestId("basket-card");
+		const receipt = page.getByTestId("cart-receipt");
+		const cart = page.getByTestId("cart-card");
 		await expect(receipt.getByText("Subtotal")).toBeVisible();
 		await expect(receipt.getByText("Sales Tax")).toBeVisible();
 		await expect(receipt.getByText("Total", { exact: true })).toBeVisible();
-		await expect(basket.getByTestId("basket-creator-earns")).toBeVisible();
-		await expect(basket.getByText("receives", { exact: true })).toBeVisible();
-		await expect(basket.getByTestId("basket-items")).toBeVisible();
-		// Vertical order in the right column: the Payment card ABOVE the Basket card —
+		await expect(cart.getByTestId("cart-creator-earns")).toBeVisible();
+		await expect(cart.getByText("receives", { exact: true })).toBeVisible();
+		await expect(cart.getByTestId("cart-items")).toBeVisible();
+		// Vertical order in the right column: the Payment card ABOVE the Cart card —
 		// what you pay first, then the detail of what you're buying and who receives it.
-		const basketBox = await basket.boundingBox();
+		const cartBox = await cart.boundingBox();
 		const receiptBox = await receipt.boundingBox();
-		expect(receiptBox!.y, "the Payment card must sit above the Basket card").toBeLessThan(
-			basketBox!.y,
-		);
+		expect(receiptBox!.y, "the Payment card must sit above the Cart card").toBeLessThan(cartBox!.y);
 	});
 
 	test("the checkout page's forms are siblings, never ancestors of each other", async ({
@@ -354,8 +352,8 @@ test.describe("the basket purchase flow", () => {
 		// nested-form defect shipped because nothing looked — this is the looking. It runs
 		// regardless of whether the Payment Element mounted (the skeleton replaces it here),
 		// because the defect was one OUR markup introduced, not one Stripe's iframe brought.
-		await seedBasket(page);
-		await page.goto("/basket");
+		await seedCart(page);
+		await page.goto("/cart");
 		await expectReceiptWithQuote(page);
 
 		const nesting = await page.evaluate(() => {
@@ -364,29 +362,29 @@ test.describe("the basket purchase flow", () => {
 				forms.some((inner) => inner !== outer && outer.contains(inner)),
 			).length;
 		});
-		expect(nesting, "a <form> is nested inside another <form> on the basket page").toBe(0);
+		expect(nesting, "a <form> is nested inside another <form> on the cart page").toBe(0);
 	});
 
-	test("Add to Basket keeps the buyer on the Work page", async ({ page }) => {
-		// Whatever the sibling tests left on the account's server basket goes first —
+	test("Add to Cart keeps the buyer on the Work page", async ({ page }) => {
+		// Whatever the sibling tests left on the account's server cart goes first —
 		// the door under test renders only when the Work isn't already in it.
-		await clearServerBasket(page);
+		await clearServerCart(page);
 		await gotoWork(page);
-		await page.getByRole("button", { name: /Add to basket/ }).click();
-		// Still here — the door that adds without leaving, for the buyer building a basket.
-		// (Anchored at the end: the Work's own slug starts "…-walk-…", and a bare /basket/
+		await page.getByRole("button", { name: /Add to Cart/ }).click();
+		// Still here — the door that adds without leaving, for the buyer building a cart.
+		// (Anchored at the end: the Work's own slug starts "…-walk-…", and a bare /cart/
 		// pattern would match the word inside it.)
-		await expect(page).not.toHaveURL(/\/basket\/?(\?.*)?$/);
-		await expect(page.getByText("In your basket")).toBeVisible();
+		await expect(page).not.toHaveURL(/\/cart\/?(\?.*)?$/);
+		await expect(page.getByText("In your cart")).toBeVisible();
 		const header = page.getByRole("banner");
-		await expect(header.getByRole("link", { name: /Basket \(1 item\)/ })).toBeVisible();
+		await expect(header.getByRole("link", { name: /Cart \(1 item\)/ })).toBeVisible();
 	});
 
 	test("a failed checkout session surfaces the server's own message and offers a retry", async ({
 		page,
 	}) => {
-		await seedBasket(page);
-		await page.goto("/basket");
+		await seedCart(page);
+		await page.goto("/cart");
 
 		// The browser session has no Stripe key: the session POST answers 503 with
 		// "Payments are not configured." — the server's sentence, not a generic banner.

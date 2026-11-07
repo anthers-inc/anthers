@@ -6,7 +6,7 @@
  * 🚨 **A module store rather than per-component state, because the bell is chrome**: the
  * header renders in every mode and every route, so per-component polling would be one
  * fetch per mounted surface (and the Layout remounts over the auth unmount, so its state
- * dies with it). This is the basket store's exact shape — one truth at module scope, a
+ * dies with it). This is the cart store's exact shape — one truth at module scope, a
  * `Set` of subscribers, publish on every read — chosen by copying it rather than by
  * inventing a third way.
  *

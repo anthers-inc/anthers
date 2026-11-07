@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The basket is reachable from the header — the one conversion surface that was only
+ * The cart is reachable from the header — the one conversion surface that was only
  * reachable from a Work page.
  *
- * 🚨 **This spec exists because `/basket` was linked from no layout or header component
+ * 🚨 **This spec exists because `/cart` was linked from no layout or header component
  * at all.** A buyer who added an item and navigated anywhere had no way back except the
  * browser's back button — on the one surface where money changes hands. The header link
- * renders only when the basket has items, so the tight header costs nothing when empty;
+ * renders only when the cart has items, so the tight header costs nothing when empty;
  * this spec pins both halves (appears when non-empty, absent when empty) and the count.
  *
- * The basket is the SERVER's now (`basket_items`, moved off localStorage — Parker,
+ * The cart is the SERVER's now (`cart_items`, moved off localStorage — Parker,
  * 2026-10-03), so the spec seeds it through the storage routes rather than into a
  * browser store: seeding fake ids the way the localStorage spec did would now test
  * nothing, because the server excludes an id that does not resolve.
  *
  * 🚨 **This spec's buyer is a throwaway account, not the gauntlet user** — and that is
- * load-bearing now rather than tidy. The basket is per-account, and
- * `basket-checkout-flow.authed.e2e.ts` walks the user's own basket in the SAME
+ * load-bearing now rather than tidy. The cart is per-account, and
+ * `cart-checkout-flow.authed.e2e.ts` walks the user's own cart in the SAME
  * `authed` project beside this file; two files seeding and asserting counts on ONE
- * account's basket would race (`fullyParallel: true` is the project config, so the two
+ * account's cart would race (`fullyParallel: true` is the project config, so the two
  * files run on different workers at once). A buyer of our own makes this spec's server
  * state private to itself: the account is minted with `db:local-account`, signed in by
  * API, and its session becomes this spec's storageState — the badge walked is the one an
@@ -39,7 +39,7 @@ import {
 } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
-const TITLE_PREFIX = "Basket header walk ";
+const TITLE_PREFIX = "Cart header walk ";
 const PRICE = "9.99";
 
 interface OwnedWork {
@@ -110,10 +110,10 @@ function makeBuyer(name: string): { id: number; email: string } {
  * The buyer's session.
  *
  * Minted rather than posted: sign-in is OAuth at the identity's server, so there is no route a
- * spec can hand a password to, and a basket spec has no business driving a consent screen.
+ * spec can hand a password to, and a cart spec has no business driving a consent screen.
  */
 async function signInBuyer(userId: number): Promise<string> {
-	const token = await mintSession(userId, "anthers e2e basket");
+	const token = await mintSession(userId, "anthers e2e cart");
 	fixtureExpect(token, "no session was minted").toBeTruthy();
 	return token;
 }
@@ -148,13 +148,13 @@ async function newBuyerContext(
 }
 
 /**
- * Put the walk Work into THIS buyer's server-side basket — one add of one Work, the same
+ * Put the walk Work into THIS buyer's server-side cart — one add of one Work, the same
  * route the Work page's button drives. Distinct counts need distinct Works, and the
  * count assertions here are 1s and 0s, so one Work covers every case walked.
  */
-async function seedThisBuyersBasket(cookie: string): Promise<void> {
+async function seedThisBuyersCart(cookie: string): Promise<void> {
 	if (!work) throw new Error("walk Work was not created");
-	const res = await fetch(`${API_URL}/api/payments/basket/items`, {
+	const res = await fetch(`${API_URL}/api/payments/cart/items`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
@@ -163,7 +163,7 @@ async function seedThisBuyersBasket(cookie: string): Promise<void> {
 		},
 		body: JSON.stringify({ workId: work.id }),
 	});
-	fixtureExpect(res.status, `seeding the basket failed: ${await res.text()}`).toBe(200);
+	fixtureExpect(res.status, `seeding the cart failed: ${await res.text()}`).toBe(200);
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -175,7 +175,7 @@ test.beforeAll(async ({ browser }) => {
 	await sweep();
 
 	// Create and price the Work directly through the API — the Studio's access editor is
-	// another surface's business (`basket-checkout-flow.authed.e2e.ts` carries the full
+	// another surface's business (`cart-checkout-flow.authed.e2e.ts` carries the full
 	// reasoning for the shape: software type, released, priced, credited, payout-ready
 	// creator — the fixture carries that).
 	const created = await fetch(`${API_URL}/api/content/works`, {
@@ -228,7 +228,7 @@ test.beforeAll(async ({ browser }) => {
 
 test.afterAll(async () => {
 	await sweep();
-	// The buyer's own basket is emptied with the account — the purge helper takes the
+	// The buyer's own cart is emptied with the account — the purge helper takes the
 	// cascade, from the API unit suites' cleanup (the canonical dependency-ordered
 	// delete; importing it keeps THIS order from drifting).
 	await purgeAccountIds([buyerId]);
@@ -236,73 +236,92 @@ test.afterAll(async () => {
 
 test.describe.configure({ mode: "serial" });
 
-// Scope to the header — the sidebar also carries a Basket entry when non-empty, so an
-// unscoped `getByRole("link", { name: /Basket/ })` matches two and fails strict mode.
+// Scope to the header: the sidebar's separate Cart row was removed with the rename
+// (2026-11-07), and the top-bar icon is the one door at every width.
 const header = (page: Page) => page.getByRole("banner");
 
-test("the header shows a basket link with a count when the basket has items, and drops it when the server empties", async ({
+test("the header shows a cart link with a count when the cart has items, and drops it when the server empties", async ({
 	browser,
 }) => {
 	const context = await newBuyerContext(browser);
 	const page = await context.newPage();
 	await page.goto("/discovery");
-	// The page has read an empty basket and cached it. Seeding behind the tab is what a
+	// The page has read an empty cart and cached it. Seeding behind the tab is what a
 	// purchase in another tab looks like to this one.
-	await expect(header(page).getByRole("link", { name: /Basket/ })).toHaveCount(0);
-	await seedThisBuyersBasket(await buyerCookie(context));
+	await expect(header(page).getByRole("link", { name: /Cart/ })).toHaveCount(0);
+	await seedThisBuyersCart(await buyerCookie(context));
 
 	// 🚨 **A tab coming back into view re-reads the server** — no reload. The count must
-	// not wait for a full page load to notice a basket that changed elsewhere.
+	// not wait for a full page load to notice a cart that changed elsewhere.
 	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-	const link = header(page).getByRole("link", { name: /Basket \(1 item\)/ });
-	await expect(link, "the basket link did not appear in the header").toBeVisible();
-	await expect(link).toHaveAttribute("href", "/basket");
+	const link = header(page).getByRole("link", { name: /Cart \(1 item\)/ });
+	await expect(link, "the cart link did not appear in the header").toBeVisible();
+	await expect(link).toHaveAttribute("href", "/cart");
 	// The count badge is the load-bearing part — a link that is always there with no
 	// count is a different, weaker control.
 	await expect(header(page).locator(".badge").filter({ hasText: "1" })).toBeVisible();
 
 	// And the completion the tab did not see: the checkout webhook empties the rows while
 	// the buyer is on another surface. The stale count is the bug this pins.
-	const emptied = await fetch(`${API_URL}/api/payments/basket`, {
+	const emptied = await fetch(`${API_URL}/api/payments/cart`, {
 		method: "DELETE",
 		headers: { Cookie: await buyerCookie(context), Origin: WEB_ORIGIN },
 	});
-	fixtureExpect(emptied.status, `emptying the basket failed: ${await emptied.text()}`).toBe(200);
+	fixtureExpect(emptied.status, `emptying the cart failed: ${await emptied.text()}`).toBe(200);
 	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 	await expect(
-		header(page).getByRole("link", { name: /Basket/ }),
-		"the header kept the count after the server basket was emptied",
+		header(page).getByRole("link", { name: /Cart/ }),
+		"the header kept the count after the server cart was emptied",
 	).toHaveCount(0);
 	await context.close();
 });
 
-test("the header hides the basket link when the basket is empty", async ({ browser }) => {
+test("the header hides the cart link when the cart is empty", async ({ browser }) => {
 	const context = await newBuyerContext(browser);
 	const page = await context.newPage();
-	// No seed — an empty basket is what an account nobody added to holds.
+	// No seed — an empty cart is what an account nobody added to holds.
 	await page.goto("/discovery");
 	await expect(
-		header(page).getByRole("link", { name: /Basket/ }),
-		"the basket link appeared when the basket was empty",
+		header(page).getByRole("link", { name: /Cart/ }),
+		"the cart link appeared when the cart was empty",
 	).toHaveCount(0);
 	await context.close();
 });
 
-test("the basket link reaches the basket page and shows the seeded item", async ({ browser }) => {
+test("the cart link reaches the cart page and shows the seeded item", async ({ browser }) => {
 	const context = await newBuyerContext(browser);
 	const page = await context.newPage();
 	await page.goto("/discovery");
-	await seedThisBuyersBasket(await buyerCookie(context));
+	await seedThisBuyersCart(await buyerCookie(context));
 	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 
 	await header(page)
-		.getByRole("link", { name: /Basket \(1 item\)/ })
+		.getByRole("link", { name: /Cart \(1 item\)/ })
 		.click();
-	await expect(page).toHaveURL("/basket");
+	await expect(page).toHaveURL("/cart");
 	// The item the seed put on the server is what the page reads — a count from a
 	// browser-side ghost with an empty page behind it is exactly the lie this mode
 	// exists to prevent.
 	await expect(page.getByText(work?.title ?? "")).toBeVisible();
+	await context.close();
+});
+
+test("the header cart is the one door on a phone", async ({ browser }) => {
+	const context = await newBuyerContext(browser);
+	const page = await context.newPage();
+	await page.setViewportSize({ width: 375, height: 800 });
+	await page.goto("/discovery");
+	await seedThisBuyersCart(await buyerCookie(context));
+	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+
+	// The header link is visible and is the only Cart link on the page — the sidebar row
+	// that used to share this job is gone, and this is the width where losing it would
+	// have stranded a buyer.
+	const link = header(page).getByRole("link", { name: /Cart \(1 item\)/ });
+	await expect(link).toBeVisible();
+	await expect(page.getByRole("link", { name: /Cart/ })).toHaveCount(1);
+	await link.click();
+	await expect(page).toHaveURL("/cart");
 	await context.close();
 });
 

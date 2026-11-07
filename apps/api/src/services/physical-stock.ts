@@ -146,10 +146,10 @@ export function validatePhysicalPick(
 export type ReserveResult = { ok: true } | { ok: false; problems: PickProblem[] };
 
 /**
- * Take a basket's physical picks off the shelf, or refuse the whole charge.
+ * Take a cart's physical picks off the shelf, or refuse the whole charge.
  *
- * 🚨 **One transaction, every line, all or nothing.** A basket that half-reserves is a
- * basket whose buyer is charged for goods nobody can send; the transaction rolls back on
+ * 🚨 **One transaction, every line, all or nothing.** A cart that half-reserves is a
+ * cart whose buyer is charged for goods nobody can send; the transaction rolls back on
  * the first refusal and the buyer reads why.
  *
  * The listing row is locked (`FOR UPDATE`) before it is read, so two buyers asking for the
@@ -163,7 +163,7 @@ export async function reserveStock(
 
 	// 🚨 **A refusal throws, because drizzle commits a transaction that returns.** An early
 	// `return` from this callback would leave the lines it had already decremented
-	// committed and the rest refused — a basket refusing a charge while quietly taking
+	// committed and the rest refused — a cart refusing a charge while quietly taking
 	// stock off the shelf. The sentinel carries the problems out; nothing else catches.
 	class Refused extends Error {
 		constructor(readonly problems: PickProblem[]) {

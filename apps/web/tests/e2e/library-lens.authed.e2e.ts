@@ -483,7 +483,7 @@ async function putReadingPosition(page: Page, workId: number, progress: number) 
 	expect(res.status, "the signed-in user writes their own row").toBe(200);
 }
 
-/** A throwaway account, made the canonical way (`db:local-account`), as the basket spec does. */
+/** A throwaway account, made the canonical way (`db:local-account`), as the cart spec does. */
 function makeRailAccount(name: string): { email: string; id: number } {
 	const address = `${name}@example.com`;
 	const out = JSON.parse(

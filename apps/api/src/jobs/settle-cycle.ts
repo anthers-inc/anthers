@@ -200,7 +200,7 @@ async function paidChargesFor(userId: number, month: string): Promise<PaidCharge
 	}
 
 	// ── Badge first transactions ride in beside the invoices (2026-10-15) ────
-	// A Badge bought through the basket is this month's support money on a second rail:
+	// A Badge bought through the cart is this month's support money on a second rail:
 	// `badge_charges` rows completed this month, grouped by their charge. The fee they
 	// carry is their Pinned pro-rata shares summed (`creatorFeeShare` reads it as the
 	// charge's own), and the directed line is the charged amount — an upgrade's delta,

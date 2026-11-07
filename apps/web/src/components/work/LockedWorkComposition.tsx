@@ -118,7 +118,7 @@ export default function LockedWorkComposition({
 				)}
 				{access &&
 					(access.requiresPurchase ? (
-						/* Every purchase goes through the basket: the pricing card offers
+						/* Every purchase goes through the cart: the pricing card offers
 						   the two doors into it and nothing about a card lives on this page. */
 						<ProjectPricing
 							workId={work.id}

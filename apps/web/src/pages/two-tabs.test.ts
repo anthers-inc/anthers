@@ -2,7 +2,7 @@
 /**
  * The two-tab rework's structural contract (Parker, 2026-10-24).
  *
- * A source-text guard in the family of `basket-layout.test.ts`: the pieces that make
+ * A source-text guard in the family of `cart-layout.test.ts`: the pieces that make
  * Library and Discovery one family are a shared header, one nav vocabulary, and a
  * Discovery body that shows one stream under a recipe the reader can see and change.
  * Each is a decision a refactor can quietly undo — a page growing its own heading again,

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The buyer's basket — which Works they mean to buy on one charge.
+ * The buyer's cart — which Works they mean to buy on one charge.
  *
  * 🚨 **Server-side, scoped to the account** (Parker, 2026-10-03, live testing: the old
- * `localStorage` basket followed the browser, so a second account signing in inherited the
- * first account's basket). A signed-in buyer's basket lives in `basket_items` and is read
+ * `localStorage` cart followed the browser, so a second account signing in inherited the
+ * first account's cart). A signed-in buyer's cart lives in `cart_items` and is read
  * and written through the authenticated API; the browser holds nothing but this module's
  * cache of what the server answered — a module store rather than per-component state, for
  * the same reasons `lib/library.ts` is one: the badge, the page and the buy doors are
@@ -12,9 +12,9 @@
  * another within the tab.
  *
  * ⚠️ **An anonymous visitor still keeps a scratchpad in `localStorage`** — a buyer who
- * fills a basket before signing in must not find it empty after. That scratch is the only
- * browser-side basket, and it is transient by contract: at sign-in it is merged into the
- * account's basket through the server's own `add` logic (the one-creator rule, the item
+ * fills a cart before signing in must not find it empty after. That scratch is the only
+ * browser-side cart, and it is transient by contract: at sign-in it is merged into the
+ * account's cart through the server's own `add` logic (the one-creator rule, the item
  * cap and the existence check all fire — nothing bypassed) and then cleared. Nothing
  * signed-in ever reads it, so a second account starts empty, which is the whole point of
  * the move. Cross-tab sync is the one thing scratch mode keeps and server mode does not:
@@ -26,15 +26,15 @@
  * answer identically to the buyer because both mean "my most recent intent wins".
  *
  * Everything is re-resolved server-side at quote and checkout exactly as before; the
- * basket — wherever it lives — is intent, never prices.
+ * cart — wherever it lives — is intent, never prices.
  */
 import { useAuth } from "@anthers/web-shared/auth";
 import { client } from "@anthers/web-shared/rpc";
 import { useEffect, useState } from "react";
 
-/** The scratchpad's localStorage key. An account basket never lives here. */
-const KEY = "anthers_basket";
-/** Bumped when the stored shape changes, so an old basket is dropped rather than parsed. */
+/** The scratchpad's localStorage key. An account cart never lives here. */
+const KEY = "anthers_cart";
+/** Bumped when the stored shape changes, so an old cart is dropped rather than parsed. */
 const VERSION = 1;
 
 /**
@@ -42,7 +42,7 @@ const VERSION = 1;
  * Badge rung is detoured through sign-in/up before anything is held, so no scratch
  * Badge exists), and the stored shape.
  */
-export interface BasketWorkItem {
+export interface CartWorkItem {
 	kind: "work";
 	workId: number;
 	slug: string;
@@ -60,12 +60,12 @@ export interface BasketWorkItem {
 }
 
 /**
- * A Badge line — the rung the buyer picked, joined from the account basket only. Its
+ * A Badge line — the rung the buyer picked, joined from the account cart only. Its
  * `price` is the FIRST transaction's figure (a delta when the buyer upgrades from a
  * lower rung) and `recurring` is the rung's monthly price the line begins — together,
  * because an upgrade line reads as the upgrade it is rather than a discount.
  */
-export interface BasketBadgeItem {
+export interface CartBadgeItem {
 	kind: "badge";
 	badgeId: number;
 	title: string;
@@ -75,21 +75,21 @@ export interface BasketBadgeItem {
 	creatorHandle: string;
 }
 
-export type BasketItem = BasketWorkItem | BasketBadgeItem;
+export type CartItem = CartWorkItem | CartBadgeItem;
 
 /**
- * The basket's CONTENT identity — every line's id, kind-tagged, sorted, plus a physical
+ * The cart's CONTENT identity — every line's id, kind-tagged, sorted, plus a physical
  * line's count and chosen values.
  *
  * 🚨 **The picks are part of the identity.** This string decides when the embedded checkout
- * re-posts for a session (`BasketCheckout`'s remount guard). A buyer who switches a size
- * or raises a count has a different basket and must get a session built for it, not the
+ * re-posts for a session (`CartCheckout`'s remount guard). A buyer who switches a size
+ * or raises a count has a different cart and must get a session built for it, not the
  * one built for what they chose a minute ago. The **server** keeps its own copy of this
- * question (`basketPicksKey` in `routes/payments.ts`, compared against the session's
+ * question (`cartPicksKey` in `routes/payments.ts`, compared against the session's
  * metadata) and the two deliberately do not share a format — each only has to be stable
  * for its own side.
  */
-export function basketContentKey(items: BasketItem[]): string {
+export function cartContentKey(items: CartItem[]): string {
 	return items
 		.map((i) => {
 			if (i.kind === "badge") return `b${i.badgeId}`;
@@ -104,40 +104,40 @@ export function basketContentKey(items: BasketItem[]): string {
 		.join(",");
 }
 
-interface StoredBasket {
+interface StoredCart {
 	version: number;
-	items: BasketWorkItem[];
+	items: CartWorkItem[];
 }
 
-function read(): BasketWorkItem[] {
+function read(): CartWorkItem[] {
 	try {
 		const raw = localStorage.getItem(KEY);
 		if (!raw) return [];
-		const parsed = JSON.parse(raw) as StoredBasket;
+		const parsed = JSON.parse(raw) as StoredCart;
 		if (parsed?.version !== VERSION || !Array.isArray(parsed.items)) return [];
 		// Version 1 stored only Works; the type is the contract.
 		return parsed.items;
 	} catch {
-		// A corrupt basket is an empty basket. Never throw out of storage access —
+		// A corrupt cart is an empty cart. Never throw out of storage access —
 		// Safari's private mode throws on `localStorage` entirely.
 		return [];
 	}
 }
 
-function write(items: BasketWorkItem[]) {
+function write(items: CartWorkItem[]) {
 	try {
-		localStorage.setItem(KEY, JSON.stringify({ version: VERSION, items } satisfies StoredBasket));
+		localStorage.setItem(KEY, JSON.stringify({ version: VERSION, items } satisfies StoredCart));
 	} catch {
-		// Storage full or blocked: the basket stays in memory for this page's lifetime.
+		// Storage full or blocked: the cart stays in memory for this page's lifetime.
 	}
 	// Same-tab listeners. The native `storage` event fires only in OTHER tabs, so
 	// without this the header count wouldn't move on the tab doing the adding.
 	window.dispatchEvent(new CustomEvent(EVENT));
 }
 
-const EVENT = "anthers:basket";
+const EVENT = "anthers:cart";
 /**
- * The server's answer for `/basket` reads — cached here so every subscriber shares one
+ * The server's answer for `/cart` reads — cached here so every subscriber shares one
  * fetch, and discriminated: the server resolves both kinds live (price, handle, only
  * what a checkout could accept — a Badge line carries the rung's monthly price beside
  * the first transaction's).
@@ -163,7 +163,7 @@ type ServerItem =
 			recurring: string | null;
 			creatorHandle: string;
 	  };
-interface ServerBasket {
+interface ServerCart {
 	items: ServerItem[];
 }
 
@@ -177,25 +177,25 @@ interface ServerBasket {
 // navigation. The badge on a stale tab heals on next read, which is the same tolerance
 // every other server-scoped surface here accepts.
 
-let serverCurrent: ServerBasket | null = null;
-const serverListeners = new Set<(b: ServerBasket | null) => void>();
+let serverCurrent: ServerCart | null = null;
+const serverListeners = new Set<(b: ServerCart | null) => void>();
 
-function publishServer(next: ServerBasket | null) {
+function publishServer(next: ServerCart | null) {
 	serverCurrent = next;
 	for (const fn of serverListeners) fn(next);
 }
 
 /**
- * A bump for every write that changes the server's basket. A read that started before the
- * write must not publish over it: the optimistic empty basket after a purchase is correct,
+ * A bump for every write that changes the server's cart. A read that started before the
+ * write must not publish over it: the optimistic empty cart after a purchase is correct,
  * and the pre-clear GET still in flight is not.
  */
 let serverGeneration = 0;
 
-/** Ask the server for the account's basket, and publish it if no write overtook the read. */
+/** Ask the server for the account's cart, and publish it if no write overtook the read. */
 async function loadServer(generation: number): Promise<void> {
 	try {
-		const res = await client.api.payments.basket.$get();
+		const res = await client.api.payments.cart.$get();
 		if (generation !== serverGeneration) return;
 		if (!res.ok) {
 			publishServer(null);
@@ -210,7 +210,7 @@ async function loadServer(generation: number): Promise<void> {
 }
 
 /**
- * Refresh the server basket NOW, deduplicated — every caller in one tick shares the fetch,
+ * Refresh the server cart NOW, deduplicated — every caller in one tick shares the fetch,
  * the way `refreshLibrary` works.
  *
  * ⚠️ **A refresh asked for while one is in flight is queued, never dropped.** The purchase
@@ -218,7 +218,7 @@ async function loadServer(generation: number): Promise<void> {
  * behind a read that started before it; dropping the second request left the pre-clear
  * answer as the last word and the header count stale.
  */
-export function refreshServerBasket(): void {
+export function refreshServerCart(): void {
 	if (loadInFlight) {
 		reloadQueued = true;
 		return;
@@ -228,7 +228,7 @@ export function refreshServerBasket(): void {
 		loadInFlight = null;
 		if (reloadQueued) {
 			reloadQueued = false;
-			refreshServerBasket();
+			refreshServerCart();
 		}
 	});
 }
@@ -242,34 +242,34 @@ function beginServerWrite(): void {
 }
 
 /**
- * Merge the anonymous scratch basket into the account's basket and clear the scratchpad.
+ * Merge the anonymous scratch cart into the account's cart and clear the scratchpad.
  *
  * Called by the auth flows at the moment a session becomes real (`LoginPage`'s code
  * verify, the ATProto callback, the signup finish — each just before `refreshUser`).
  * A failed merge KEEPS the scratch: the next sign-in path will try again, and losing a
- * buyer's filled basket to a network blip is the one failure worse than not merging.
+ * buyer's filled cart to a network blip is the one failure worse than not merging.
  * The scratch is cleared only on a good answer, after which the browser holds nothing —
  * which is the design's whole point.
  */
-export async function mergeIntoServerBasket(): Promise<void> {
+export async function mergeIntoServerCart(): Promise<void> {
 	const scratch = read();
 	if (scratch.length > 0) {
 		beginServerWrite();
-		const res = await client.api.auth.basket.merge.$post({
+		const res = await client.api.auth.cart.merge.$post({
 			json: { items: scratch.map((i) => ({ workId: i.workId })) },
 		});
-		// A refusal keeps the scratch for a later attempt. The account basket is untouched
+		// A refusal keeps the scratch for a later attempt. The account cart is untouched
 		// either way — the server merges item-by-item through its own `add`.
 		if (!res.ok) return;
 	}
 	write([]);
-	// The account basket may have grown; the fetch happens when the hook mounts or the
+	// The account cart may have grown; the fetch happens when the hook mounts or the
 	// caller refreshes — here we invalidate so the next read is fresh.
 	publishServer(null);
 }
 
 /**
- * Read and mutate the basket, in two modes.
+ * Read and mutate the cart, in two modes.
  *
  * **Authenticated → server-backed.** `items` is what the server says the account holds,
  * resolved live (price, handle, and only what a checkout would accept). Mutations are
@@ -282,18 +282,18 @@ export async function mergeIntoServerBasket(): Promise<void> {
  *
  * Both modes expose the same verbs and the same item shape, so the page, badge and buy
  * doors never branch on the mode. (`add`'s refusal shape differs between modes only in
- * that server mode can actually refuse — a full basket, a vanished Work.)
+ * that server mode can actually refuse — a full cart, a vanished Work.)
  */
-export function useBasket(): BasketApi {
+export function useCart(): CartApi {
 	const { user } = useAuth();
 	const authenticated = user != null;
 
-	const [scratchItems, setScratchItems] = useState<BasketWorkItem[]>([]);
-	const [serverItems, setServerItems] = useState<ServerBasket | null>(serverCurrent);
+	const [scratchItems, setScratchItems] = useState<CartWorkItem[]>([]);
+	const [serverItems, setServerItems] = useState<ServerCart | null>(serverCurrent);
 
 	// Scratch mode's subscriptions: unchanged from the client-side design. The effect
 	// re-subscribes on a mode change only: `authenticated` flipping is what moves the
-	// hook between the two baskets, and that re-run is the transition's own wiring
+	// hook between the two carts, and that re-run is the transition's own wiring
 	// (Biome reads only the ref inside; the dependency INTENDS the flip, and the
 	// exhaustive-deps rule is satisfied by naming what the effect genuinely answers to).
 	useEffect(() => {
@@ -317,13 +317,13 @@ export function useBasket(): BasketApi {
 		// A cache the auth flow deliberately invalidated (a just-completed merge, a fresh
 		// sign-in) refetches; a live one is used as-is.
 		if (serverCurrent) setServerItems(serverCurrent);
-		else refreshServerBasket();
+		else refreshServerCart();
 		return () => {
 			serverListeners.delete(setServerItems);
 		};
 	}, [authenticated]);
 
-	// 🚨 **The webhook can empty the server basket after the buyer left the checkout**, and
+	// 🚨 **The webhook can empty the server cart after the buyer left the checkout**, and
 	// a second tab can complete a purchase this tab never saw. Neither writes through this
 	// tab's module cache, so a tab coming back into view re-reads instead of trusting a
 	// cache that only reloads with the page. This is the half that makes the header count
@@ -331,7 +331,7 @@ export function useBasket(): BasketApi {
 	useEffect(() => {
 		if (!authenticated) return;
 		const reconcile = () => {
-			if (document.visibilityState === "visible") refreshServerBasket();
+			if (document.visibilityState === "visible") refreshServerCart();
 		};
 		window.addEventListener("focus", reconcile);
 		document.addEventListener("visibilitychange", reconcile);
@@ -341,12 +341,12 @@ export function useBasket(): BasketApi {
 		};
 	}, [authenticated]);
 
-	// Signing out ends this tab's knowledge of the account's basket. Dropping the module
+	// Signing out ends this tab's knowledge of the account's cart. Dropping the module
 	// cache is what stops the NEXT account signing in on this tab from rendering the last
-	// one's basket until its own fetch lands — the cross-account leak the server-side move
+	// one's cart until its own fetch lands — the cross-account leak the server-side move
 	// exists to prevent, still reachable inside one SPA session without a reload. The
-	// sign-in flows also invalidate on their way in (`mergeIntoServerBasket`), so this is
-	// the half that does not depend on the sign-out path calling into the basket at all.
+	// sign-in flows also invalidate on their way in (`mergeIntoServerCart`), so this is
+	// the half that does not depend on the sign-out path calling into the cart at all.
 	useEffect(() => {
 		if (authenticated) return;
 		if (serverCurrent) publishServer(null);
@@ -355,7 +355,7 @@ export function useBasket(): BasketApi {
 	if (authenticated) {
 		// Read through the subscription state so a publish re-renders; the verbs below
 		// read the same module store, so the render and the verbs cannot disagree.
-		const items: BasketItem[] = (serverItems?.items ?? []).map((i) =>
+		const items: CartItem[] = (serverItems?.items ?? []).map((i) =>
 			i.kind === "badge"
 				? {
 						kind: "badge" as const,
@@ -386,36 +386,36 @@ export function useBasket(): BasketApi {
 			clear: SERVER_API.clear,
 			has: (workId: number) => items.some((i) => i.kind === "work" && i.workId === workId),
 			hasBadge: (badgeId: number) => items.some((i) => i.kind === "badge" && i.badgeId === badgeId),
-		} satisfies BasketApi;
+		} satisfies CartApi;
 	}
 	return scratchApi(scratchItems);
 }
 
 /** The verbs over the server-backed store. Stable identities at module scope. */
 const SERVER_API = {
-	async add(item: BasketItem) {
+	async add(item: CartItem) {
 		// A Badge add skips the optimistic half on purpose: the first transaction's price
 		// is the server's resolution (a delta, known nowhere on the client), and the POST
-		// answers with the resolved basket anyway — showing a guessed price for the half
+		// answers with the resolved cart anyway — showing a guessed price for the half
 		// second the POST takes would be a wrong number, which is worse than a spinner.
 		beginServerWrite();
 		if (item.kind === "badge") {
 			try {
-				const res = await client.api.payments.basket.items.$post({
+				const res = await client.api.payments.cart.items.$post({
 					json: { badgeId: item.badgeId },
 				});
 				if (!res.ok) {
 					const body = (await res.json().catch(() => null)) as { error?: string } | null;
-					return { ok: false as const, error: body?.error ?? "Couldn't add to your basket." };
+					return { ok: false as const, error: body?.error ?? "Couldn't add to your cart." };
 				}
 				const body = (await res.json()) as unknown as { items: ServerItem[] };
 				publishServer({ items: body.items });
 				return { ok: true as const };
 			} catch {
-				return { ok: false as const, error: "Couldn't add to your basket." };
+				return { ok: false as const, error: "Couldn't add to your cart." };
 			}
 		}
-		// Optimistic: show the Work in the basket now, reconcile on the answer.
+		// Optimistic: show the Work in the cart now, reconcile on the answer.
 		const prev = serverCurrent;
 		publishServer({
 			items: [
@@ -434,7 +434,7 @@ const SERVER_API = {
 			],
 		});
 		try {
-			const res = await client.api.payments.basket.items.$post({
+			const res = await client.api.payments.cart.items.$post({
 				json: {
 					workId: item.workId,
 					...(item.quantity != null ? { quantity: item.quantity } : {}),
@@ -445,14 +445,14 @@ const SERVER_API = {
 				// Refused — put the cache back and say so.
 				publishServer(prev);
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
-				return { ok: false as const, error: body?.error ?? "Couldn't add to your basket." };
+				return { ok: false as const, error: body?.error ?? "Couldn't add to your cart." };
 			}
 			const body = (await res.json()) as unknown as { items: ServerItem[] };
 			publishServer({ items: body.items });
 			return { ok: true as const };
 		} catch {
 			publishServer(prev);
-			return { ok: false as const, error: "Couldn't add to your basket." };
+			return { ok: false as const, error: "Couldn't add to your cart." };
 		}
 	},
 	async update(item: {
@@ -478,7 +478,7 @@ const SERVER_API = {
 				),
 			});
 		try {
-			const res = await client.api.payments.basket.items[":workId"].$put({
+			const res = await client.api.payments.cart.items[":workId"].$put({
 				param: { workId: String(item.workId) },
 				json: {
 					...(item.quantity != null ? { quantity: item.quantity } : {}),
@@ -511,46 +511,46 @@ const SERVER_API = {
 			});
 		try {
 			if (id.kind === "badge") {
-				await client.api.payments.basket.badges[":badgeId"].$delete({
+				await client.api.payments.cart.badges[":badgeId"].$delete({
 					param: { badgeId: String(id.badgeId) },
 				});
 			} else {
-				await client.api.payments.basket.items[":workId"].$delete({
+				await client.api.payments.cart.items[":workId"].$delete({
 					param: { workId: String(id.workId) },
 				});
 			}
 		} catch {
 			// Reconcile on the next read either way.
 		}
-		refreshServerBasket();
+		refreshServerCart();
 	},
 	async clear() {
 		beginServerWrite();
 		const prev = serverCurrent;
 		publishServer({ items: [] });
 		try {
-			await client.api.payments.basket.$delete();
+			await client.api.payments.cart.$delete();
 		} catch {
 			// Reconcile on the next read either way.
 		}
-		if (prev) refreshServerBasket();
+		if (prev) refreshServerCart();
 	},
 };
 
 /** The scratchpad verbs, per-hook (they close over the hook's state list). */
-function scratchApi(scratchItems: BasketWorkItem[]): BasketApi {
+function scratchApi(scratchItems: CartWorkItem[]): CartApi {
 	return {
 		items: scratchItems,
 		count: scratchItems.length,
-		add: (item: BasketItem) => {
+		add: (item: CartItem) => {
 			// A scratch add is a Work add: a visitor picking a Badge rung is detoured
 			// through sign-in/up before anything is held, so no Badge line exists in the
 			// anonymous half (and this cast is never a lie).
-			const work = item as BasketWorkItem;
+			const work = item as CartWorkItem;
 			const current = read();
 			if (current.some((i) => i.workId === work.workId)) return { ok: true as const };
-			// A basket carries any number of creators (2026-10-15) — the shared charge is
-			// settled at checkout, so the scratchpad appends exactly as the server's basket
+			// A cart carries any number of creators (2026-10-15) — the shared charge is
+			// settled at checkout, so the scratchpad appends exactly as the server's cart
 			// does, and the sign-in merge folds it in the same way.
 			write([...current, work]);
 			return { ok: true as const };
@@ -582,11 +582,11 @@ function scratchApi(scratchItems: BasketWorkItem[]): BasketApi {
 	};
 }
 
-export interface BasketApi {
-	items: BasketItem[];
+export interface CartApi {
+	items: CartItem[];
 	count: number;
 	add: (
-		item: BasketItem,
+		item: CartItem,
 	) =>
 		| { ok: true }
 		| { ok: false; error: string }
@@ -594,7 +594,7 @@ export interface BasketApi {
 	remove: (
 		id: { kind: "work"; workId: number } | { kind: "badge"; badgeId: number },
 	) => void | Promise<void>;
-	/** Change a Work line's count or chosen values — the basket page's own controls. */
+	/** Change a Work line's count or chosen values — the cart page's own controls. */
 	update: (item: {
 		workId: number;
 		quantity?: number;
@@ -605,7 +605,7 @@ export interface BasketApi {
 		| Promise<{ ok: true } | { ok: false; error: string }>;
 	clear: () => void | Promise<void>;
 	has: (workId: number) => boolean;
-	/** Whether the rung is already in the basket — signed-in mode only; false while anonymous. */
+	/** Whether the rung is already in the cart — signed-in mode only; false while anonymous. */
 	hasBadge: (badgeId: number) => boolean;
 }
 
@@ -614,8 +614,8 @@ export interface BasketApi {
  * which calls `clear` on the mode that's active. A no-op for the scratchpad's callers
  * today (nothing purchases anonymously), harmless for both.
  */
-export function pruneBasket(purchasedWorkIds: number[]) {
-	// Scratch mode only — a signed-in basket clears through the API (see `clear`).
+export function pruneCart(purchasedWorkIds: number[]) {
+	// Scratch mode only — a signed-in cart clears through the API (see `clear`).
 	if (read().length === 0) return;
 	write(read().filter((i) => !purchasedWorkIds.includes(i.workId)));
 }

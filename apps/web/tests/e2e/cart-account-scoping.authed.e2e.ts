@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The basket is the account's, not the browser's — the property Parker's live testing
- * found broken (2026-10-03): signed in as A, built a basket, signed out, signed in as B —
- * and B inherited A's basket, because the basket lived in `localStorage`, keyed to the
- * browser. The basket moved into `basket_items`, scoped to the buyer's account; this spec
+ * The cart is the account's, not the browser's — the property Parker's live testing
+ * found broken (2026-10-03): signed in as A, built a cart, signed out, signed in as B —
+ * and B inherited A's cart, because the cart lived in `localStorage`, keyed to the
+ * browser. The cart moved into `cart_items`, scoped to the buyer's account; this spec
  * walks that exact case in the browser.
  *
  * What is walked, and why in the browser rather than an API suite:
  *
  * - **B's header badge reads zero** — the badge is the surface the bug showed on, and it
- *   is only honest if `useBasket` in its server-backed mode reads the SERVER's basket for
+ *   is only honest if `useCart` in its server-backed mode reads the SERVER's cart for
  *   whoever is signed in. An API suite cannot see a badge.
- * - **The login merge**: a basket built while logged OUT survives sign-in — the one place
- *   the anonymous scratch basket survives — after which the browser holds nothing, so B's
- *   basket following it is impossible by construction.
+ * - **The login merge**: a cart built while logged OUT survives sign-in — the one place
+ *   the anonymous scratch cart survives — after which the browser holds nothing, so B's
+ *   cart following it is impossible by construction.
  * - **The mixed-creator merge**: the scratch held one creator's work and the account's
- *   basket holds another's — both land (2026-10-15's decision ended the add's
- *   replace-on-clash, so the basket carries any number of creators and the merge is
+ *   cart holds another's — both land (2026-10-15's decision ended the add's
+ *   replace-on-clash, so the cart carries any number of creators and the merge is
  *   additive), and both the banner and the server read say so.
  *
  * The accounts are throwaways made with `db:local-account` and signed in through the
@@ -26,7 +26,7 @@
  */
 import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
-import { basketItems } from "@anthers/db/schema";
+import { cartItems } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import type { Page } from "@playwright/test";
 import { inArray } from "drizzle-orm";
@@ -35,7 +35,7 @@ import { purgeAccountIds, purgeWorkIds } from "../../../api/src/__tests__/purge"
 import { API_URL, expect, leashedExecFileSync, mintSession, test, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
-const TITLE_PREFIX = "Basket account scoping ";
+const TITLE_PREFIX = "Cart account scoping ";
 const PRICE = "9.99";
 
 const stamp = () => `${Date.now().toString(36)}`;
@@ -69,13 +69,13 @@ function makeAccount(name: string, creator = false): { handle: string; email: st
  *
  * 🚨 **The landing is the point, not the cookie.** Sign-in is OAuth at the identity's own
  * server now, so there is no form here to drive — but `/auth/atproto/callback?success=login` is
- * exactly where the round trip comes back to, and it is what folds an anonymous scratch basket
+ * exactly where the round trip comes back to, and it is what folds an anonymous scratch cart
  * into the account's. Minting the cookie and then landing there exercises the same code the
  * handoff does; putting the cookie on and reloading would quietly skip the merge this spec
  * exists to check.
  */
 async function signInThroughCallback(page: Page, userId: number): Promise<void> {
-	const token = await mintSession(userId, "anthers e2e basket scoping");
+	const token = await mintSession(userId, "anthers e2e cart scoping");
 	await page.context().addCookies([
 		{
 			name: "session",
@@ -106,9 +106,9 @@ async function signOutThroughUi(page: Page): Promise<void> {
 		.not.toContain("/settings");
 }
 
-/** The signed-in basket, as the server holds it — the truth the badge renders. */
-async function serverBasket(cookie: string): Promise<{ count: number; workIds: number[] }> {
-	const res = await fetch(`${API_URL}/api/payments/basket`, {
+/** The signed-in cart, as the server holds it — the truth the badge renders. */
+async function serverCart(cookie: string): Promise<{ count: number; workIds: number[] }> {
+	const res = await fetch(`${API_URL}/api/payments/cart`, {
 		headers: { Cookie: `session=${cookie}` },
 	});
 	const body = (await res.json()) as { items: { workId: number }[]; count: number };
@@ -117,7 +117,7 @@ async function serverBasket(cookie: string): Promise<{ count: number; workIds: n
 
 /** A session for the account, minted rather than posted — sign-in is OAuth at its own server. */
 async function apiSession(userId: number): Promise<string> {
-	const token = await mintSession(userId, "anthers e2e basket scoping");
+	const token = await mintSession(userId, "anthers e2e cart scoping");
 	expect(token, "no session was minted").toBeTruthy();
 	return token;
 }
@@ -205,47 +205,45 @@ test.afterAll(async () => {
 	// The spec's own litter, by id — the dependency-ordered delete is the same one the
 	// API unit suites write, pulled in directly so the order can't drift.
 	const workIds = [workX?.id ?? 0, workY?.id ?? 0].filter((n) => n > 0);
-	await db
-		.delete(basketItems)
-		.where(inArray(basketItems.workId, workIds.length > 0 ? workIds : [0]));
+	await db.delete(cartItems).where(inArray(cartItems.workId, workIds.length > 0 ? workIds : [0]));
 	await purgeWorkIds(workIds);
 	await purgeAccountIds(
 		[sellerCreatedId, buyerACreatedId, buyerBCreatedId, ...createdAccountIds].filter((n) => n > 0),
 	);
 });
 
-test("account A's basket stays account A's, and account B starts empty", async ({ page }) => {
-	// A signs in through the real door and puts X in their basket — through the Work
-	// page's own door, the way an item actually enters a basket.
+test("account A's cart stays account A's, and account B starts empty", async ({ page }) => {
+	// A signs in through the real door and puts X in their cart — through the Work
+	// page's own door, the way an item actually enters a cart.
 	if (!workX) throw new Error("the walk Work was not created");
 	await signInThroughCallback(page, buyerACreatedId);
 	// The Work page accepts a bare id and settles to its canonical slug-publicId form;
 	// waiting on the pricing card is the sync point either side of that settling.
 	await page.goto(`/works/${workX.id}`);
 	await expect(page.getByRole("heading", { name: "Pricing" })).toBeVisible({ timeout: 15_000 });
-	await page.getByRole("button", { name: /Add to basket/ }).click();
-	await expect(page.getByText("In your basket")).toBeVisible();
+	await page.getByRole("button", { name: /Add to Cart/ }).click();
+	await expect(page.getByText("In your cart")).toBeVisible();
 	await expect(
-		page.getByRole("banner").getByRole("link", { name: /Basket \(1 item\)/ }),
+		page.getByRole("banner").getByRole("link", { name: /Cart \(1 item\)/ }),
 	).toBeVisible();
 
-	// Sign out. A's basket survives on the SERVER — the browser holds nothing.
+	// Sign out. A's cart survives on the SERVER — the browser holds nothing.
 	await signOutThroughUi(page);
-	expect((await serverBasket(buyerACookie)).workIds).toContain(workX.id);
+	expect((await serverCart(buyerACookie)).workIds).toContain(workX.id);
 
 	// B signs in on the SAME browser: the badge must read nothing.
 	await signInThroughCallback(page, buyerBId);
 	await page.goto("/discovery");
 	await expect(
-		page.getByRole("banner").getByRole("link", { name: /Basket/ }),
-		"B's header offered a basket their account never built",
+		page.getByRole("banner").getByRole("link", { name: /Cart/ }),
+		"B's header offered a cart their account never built",
 	).toHaveCount(0);
-	// And the server half agrees — B's account basket is empty.
+	// And the server half agrees — B's account cart is empty.
 	const bCookie = await apiSession(buyerBId);
-	expect((await serverBasket(bCookie)).count).toBe(0);
+	expect((await serverCart(bCookie)).count).toBe(0);
 });
 
-test("an anonymous scratch basket survives sign-in — the merge, then the scratch is gone", async ({
+test("an anonymous scratch cart survives sign-in — the merge, then the scratch is gone", async ({
 	browser,
 }) => {
 	if (!workX) throw new Error("the walk Work was not created");
@@ -262,35 +260,35 @@ test("an anonymous scratch basket survives sign-in — the merge, then the scrat
 	});
 	const scratchPage = await anon.newPage();
 
-	// Anonymous: build the scratch basket through the Work page's door, exactly as a
-	// pre-login buyer does. The scratch is the only browser-side basket.
+	// Anonymous: build the scratch cart through the Work page's door, exactly as a
+	// pre-login buyer does. The scratch is the only browser-side cart.
 	await scratchPage.goto(`/works/${workX.id}`);
 	await expect(scratchPage.getByRole("heading", { name: "Pricing" })).toBeVisible({
 		timeout: 15_000,
 	});
-	await scratchPage.getByRole("button", { name: /Add to basket/ }).click();
-	await expect(scratchPage.getByText("In your basket")).toBeVisible();
+	await scratchPage.getByRole("button", { name: /Add to Cart/ }).click();
+	await expect(scratchPage.getByText("In your cart")).toBeVisible();
 	// Scratch mode confirmed: the browser's own key carries it.
-	const scratch = await scratchPage.evaluate((key) => localStorage.getItem(key), "anthers_basket");
-	expect(scratch, "the scratch basket never landed in the browser").toBeTruthy();
+	const scratch = await scratchPage.evaluate((key) => localStorage.getItem(key), "anthers_cart");
+	expect(scratch, "the scratch cart never landed in the browser").toBeTruthy();
 
 	// Sign in — the merge is the ceremony's own act, and the badge is what proves it.
 	await signInThroughCallback(scratchPage, buyerACreatedId);
 	await scratchPage.goto("/discovery");
 	await expect(
-		scratchPage.getByRole("banner").getByRole("link", { name: /Basket \(1 item\)/ }),
+		scratchPage.getByRole("banner").getByRole("link", { name: /Cart \(1 item\)/ }),
 		"the merged item never reached the header badge",
 	).toBeVisible();
 
-	// The account's server basket holds it...
-	const after = (await serverBasket(buyerACookie)) as { count: number; workIds: number[] };
+	// The account's server cart holds it...
+	const after = (await serverCart(buyerACookie)) as { count: number; workIds: number[] };
 	expect(after.workIds).toContain(workX.id);
 	// ...and the scratch is GONE — after login the browser holds nothing. (The key
 	// itself may remain with an empty shape; the thing that must not survive is ITEM
 	// CONTENT — that is what a second account would otherwise inherit through the merge.)
 	const scratchAfter = (await scratchPage.evaluate(
 		(key) => localStorage.getItem(key),
-		"anthers_basket",
+		"anthers_cart",
 	)) as string | null;
 	expect(
 		scratchAfter === null || JSON.parse(scratchAfter).items.length === 0,
@@ -306,9 +304,9 @@ test("a mixed-creator sign-in merge keeps both the account's and the scratch's i
 	// X and Y above are the same seller's; the CLASH needs a second creator, so this test
 	// mints one and its Work beside them (purged in afterAll via `createdAccountIds`).
 
-	// The account's basket ALREADY holds X. (Clean slate from the merge test, which is
+	// The account's cart ALREADY holds X. (Clean slate from the merge test, which is
 	// serial-before this one.)
-	const pre = await fetch(`${API_URL}/api/payments/basket/items`, {
+	const pre = await fetch(`${API_URL}/api/payments/cart/items`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
@@ -370,19 +368,19 @@ test("a mixed-creator sign-in merge keeps both the account's and the scratch's i
 	await expect(scratchPage.getByRole("heading", { name: "Pricing" })).toBeVisible({
 		timeout: 15_000,
 	});
-	await scratchPage.getByRole("button", { name: /Add to basket/ }).click();
-	await expect(scratchPage.getByText("In your basket")).toBeVisible();
+	await scratchPage.getByRole("button", { name: /Add to Cart/ }).click();
+	await expect(scratchPage.getByText("In your cart")).toBeVisible();
 
-	// Sign back in as A. The account's basket holds X (creator X) and the scratch holds
-	// the other creator's Work: the merge is additive — a basket carries any number of
+	// Sign back in as A. The account's cart holds X (creator X) and the scratch holds
+	// the other creator's Work: the merge is additive — a cart carries any number of
 	// creators (2026-10-15), so both intents land and the account ends with X and Y.
 	// The banner says so before the server read does.
 	await signInThroughCallback(scratchPage, buyerACreatedId);
 	await scratchPage.goto("/discovery");
 	await expect(
-		scratchPage.getByRole("banner").getByRole("link", { name: /Basket \(2 items\)/ }),
+		scratchPage.getByRole("banner").getByRole("link", { name: /Cart \(2 items\)/ }),
 	).toBeVisible();
-	const after = await serverBasket(buyerACookie);
+	const after = await serverCart(buyerACookie);
 	expect(after.workIds).toEqual([workX.id, otherWork.id]);
 	await anon.close();
 });

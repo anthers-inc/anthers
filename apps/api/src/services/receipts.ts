@@ -162,7 +162,7 @@ function sumsOf(rows: PurchaseRow[]) {
  * is not the creator — the creator's sale receipt.
  *
  * Called from the `payment_intent.succeeded` webhook after the completion loop, with
- * every row the webhook just completed. A basket arrives as several rows sharing one
+ * every row the webhook just completed. A cart arrives as several rows sharing one
  * PaymentIntent id, which is one receipt with one line per Work, not one email per
  * Work: the charge was one charge, and the receipt records what it bought.
  *
@@ -199,7 +199,7 @@ export async function sendPurchaseReceipts(rows: PurchaseRow[]): Promise<void> {
 	}
 
 	// The creator's copy: one receipt for the whole charge, the earnings figure being
-	// the sum the rows recorded — a basket's pro-rata fee split leaves them summing to
+	// the sum the rows recorded — a cart's pro-rata fee split leaves them summing to
 	// the transfer pinned at session creation, which is the number Stripe moved.
 	if (creatorId != null && creatorId !== buyerId) {
 		const [creator] = await db

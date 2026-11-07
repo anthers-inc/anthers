@@ -277,7 +277,7 @@ const CREATOR_TERMS: LegalDocument = {
 		"**Payouts run through Stripe**, which verifies your identity, holds your bank details, and sends the money, on their schedule. Because that verification is also what lets you publish at all, it happens before your first Work rather than after your first sale.",
 
 		"## Setting your prices and your gates",
-		"**You set the price a buyer sees**, and we show you what you will receive before you commit to it. The figure we show is the single-item worst case — a buyer who puts several things in one basket pays one card fee across all of them, and **the whole of that saving goes to you.**",
+		"**You set the price a buyer sees**, and we show you what you will receive before you commit to it. The figure we show is the single-item worst case — a buyer who puts several things in one cart pays one card fee across all of them, and **the whole of that saving goes to you.**",
 		"**You set your own Badges** — the amount someone must be giving you each month to reach a given piece of work, at whatever amounts you choose, each with a Badge you design and name. You decide what each one carries.",
 		"Prices and gates apply from when you set them. **Changing them does not reach back**: someone who already bought something, or who already holds a Badge for the cycle they have paid for, keeps what they had.",
 

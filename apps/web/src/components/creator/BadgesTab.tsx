@@ -10,7 +10,7 @@
  * nothing else changes shape.
  *
  * ⭐ **Buying is direct, one button per card** (Parker, 2026-11-06). There is no selection
- * step and no basket pair: a card above the rung the reader holds says **Upgrade**, one
+ * step and no cart pair: a card above the rung the reader holds says **Upgrade**, one
  * below says **Downgrade**, and the rung they hold says **Cancel**. A reader with no Badge
  * sees Upgrade on every card. The action opens the one subscription-change modal, which
  * prorates a raise and holds a decrease until the first of the month; the first Badge on an

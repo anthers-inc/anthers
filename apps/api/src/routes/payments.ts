@@ -13,7 +13,7 @@
  * share moves out as one transfer funded by the charge (`services/purchase-split.ts` is
  * the one writer of that half). The destination-charge shape this replaces pinned one
  * creator's transfer inside the charge (`transfer_data[amount]`), which named exactly one
- * connected account — the constraint that forced the one-creator basket, removed rather
+ * connected account — the constraint that forced the one-creator cart, removed rather
  * than accepted; the counsel brief's "A basket spanning two creators" decision record
  * (Internal Wiki doc 26) carries the reasoning, the precedent and the accepted cost.
  * Since 2026-08-03 the listed price IS the advertised price: card processing comes
@@ -43,7 +43,7 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { currentCycleKey, cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
-import { isChargeableAmount, MAX_BASKET_ITEMS, REFUND_AUTO_CAP } from "@anthers/shared/constants";
+import { isChargeableAmount, MAX_CART_ITEMS, REFUND_AUTO_CAP } from "@anthers/shared/constants";
 import { allocateFeeByValue, calculateFees } from "@anthers/shared/fees";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import type { WorkType } from "@anthers/shared/tax-codes";
@@ -74,16 +74,6 @@ import { resolveAccess } from "../services/access.js";
 import { oweAccessReceipt } from "../services/access-receipts.js";
 import { anthersUserId } from "../services/anthers-badges.js";
 import {
-	addBasketBadge,
-	addBasketItem,
-	clearBasket,
-	clearPurchasedBasketItems,
-	listBasket,
-	removeBasketBadge,
-	removeBasketItem,
-	updateBasketItem,
-} from "../services/basket.js";
-import {
 	applyBadgeRecurrence,
 	applyDirectedSupport,
 	ensureBadgeProduct,
@@ -94,6 +84,16 @@ import {
 	stripeCustomerIdFor,
 	syncSubscriptionToAccount,
 } from "../services/billing.js";
+import {
+	addCartBadge,
+	addCartItem,
+	clearCart,
+	clearPurchasedCartItems,
+	listCart,
+	removeCartBadge,
+	removeCartItem,
+	updateCartItem,
+} from "../services/cart.js";
 import { recordDisputeClosed, recordDisputeCreated } from "../services/disputes.js";
 import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
@@ -215,7 +215,7 @@ async function resolvePurchase(slug: string, userId: number) {
  * - holding that threshold or higher → nothing to buy (the ratchet), refused here rather
  *   than quoted at zero, because a zero delta is not a discount, it is a no-op.
  *
- * One ladder per basket line and one line per ladder are the basket service's rules; the
+ * One ladder per cart line and one line per ladder are the cart service's rules; the
  * money refusals are all here, at the door where they are honest. ⚠️ The Stripe-side
  * half — the rung's Product — is priced only when the caller will build a session
  * (`needsProduct`): a quote names prices the database knows, so a quote stays free of
@@ -233,7 +233,7 @@ async function resolveBadgePurchase(
 	if (badge.creatorId === userId)
 		return { ok: false as const, status: 400 as const, error: "You cannot hold your own Badge" };
 
-	// The issuer the support is directed at, with the handle the receipt and the basket
+	// The issuer the support is directed at, with the handle the receipt and the cart
 	// page name — reachable only through the badge until it is read here.
 	const [issuer] = await db
 		.select({ id: users.id, handle: users.atprotoHandle })
@@ -317,7 +317,7 @@ async function resolveBadgePurchase(
 	return { ok: true as const, badge, issuer, held, threshold, amount, product };
 }
 
-/** One resolved line of a basket, in the order the buyer built it. */
+/** One resolved line of a cart, in the order the buyer built it. */
 type ResolvedLine =
 	| {
 			kind: "work";
@@ -363,13 +363,13 @@ type ResolvedLine =
 	  };
 
 /**
- * The same resolution for a **basket** of items bought on one charge — Works and Badge
+ * The same resolution for a **cart** of items bought on one charge — Works and Badge
  * first transactions alike.
  *
- * 🚨 **A basket carries any number of creators, settled as one platform charge plus one
+ * 🚨 **A cart carries any number of creators, settled as one platform charge plus one
  * transfer per creator at completion** (Parker, 2026-10-15). The one-creator rule this
  * function used to enforce — `mixed_creators` — existed because a Stripe **destination
- * charge** names exactly one connected account in `transfer_data`, so a basket spanning
+ * charge** names exactly one connected account in `transfer_data`, so a cart spanning
  * two creators could not be a single destination charge. The split decision removed that
  * constraint rather than accepting it: the charge is made to the platform and the money
  * moves out per creator on the charge's completion (`completeSessionPurchases` below,
@@ -386,8 +386,8 @@ type ResolvedLine =
  * already sits on the platform balance by construction; there is nowhere for a transfer
  * to go).
  */
-/** One stored basket line, as the buyer built it — a Work or a Badge rung. */
-export type StoredBasketRow =
+/** One stored cart line, as the buyer built it — a Work or a Badge rung. */
+export type StoredCartRow =
 	| {
 			kind: "work";
 			workId: number;
@@ -398,8 +398,8 @@ export type StoredBasketRow =
 	  }
 	| { kind: "badge"; badgeId: number };
 
-async function resolveStoredBasket(
-	rows: StoredBasketRow[],
+async function resolveStoredCart(
+	rows: StoredCartRow[],
 	userId: number,
 	opts?: { atCheckout?: boolean; needsProduct?: boolean },
 ): Promise<
@@ -415,22 +415,22 @@ async function resolveStoredBasket(
 > {
 	// Deduplicated by identity: adding the same Work or rung twice is one line (the adds
 	// already no-op on duplicates; this is the same defense at this door).
-	const deduped: StoredBasketRow[] = Object.values(
-		rows.reduce<Record<string, StoredBasketRow>>((acc, row) => {
+	const deduped: StoredCartRow[] = Object.values(
+		rows.reduce<Record<string, StoredCartRow>>((acc, row) => {
 			acc[row.kind === "work" ? `w${row.workId}` : `b${row.badgeId}`] = row;
 			return acc;
 		}, {}),
 	);
-	if (deduped.length === 0) return { ok: false, status: 400, error: "Your basket is empty" };
-	if (deduped.length > MAX_BASKET_ITEMS)
+	if (deduped.length === 0) return { ok: false, status: 400, error: "Your cart is empty" };
+	if (deduped.length > MAX_CART_ITEMS)
 		return {
 			ok: false,
 			status: 400,
-			error: `A basket holds at most ${MAX_BASKET_ITEMS} items`,
+			error: `A cart holds at most ${MAX_CART_ITEMS} items`,
 		};
 
-	// Resolved per item, in the order the buyer built the basket — the line fee shares
-	// below are pinned in this order, and the receipt reads in it. The basket changes who
+	// Resolved per item, in the order the buyer built the cart — the line fee shares
+	// below are pinned in this order, and the receipt reads in it. The cart changes who
 	// pays the flat fee, never who may buy what.
 	// The items list with line shares assigned by the apportionment pass below — read at
 	// push as zeros, never consumed before that pass runs.
@@ -443,7 +443,7 @@ async function resolveStoredBasket(
 			// listing's flat charge — none of which `resolvePurchase` knows, because that
 			// resolver refuses a good outright. The refusal it gives is kept for every
 			// other `physical` reach (a single-purchase URL), which is the product's own
-			// rule: the basket is the one buy door.
+			// rule: the cart is the one buy door.
 			const [maybeWork] = await db
 				.select({ type: works.type })
 				.from(works)
@@ -498,7 +498,7 @@ async function resolveStoredBasket(
 
 	/**
 	 * 🚨 **Shipping is charged once per creator, and the charge lands on that creator's
-	 * last line.** A creator ships their own parcels, so a basket holding two of their
+	 * last line.** A creator ships their own parcels, so a cart holding two of their
 	 * goods is still one shipping charge; holding goods from two creators is two, because
 	 * two people post two boxes. The figure is the **highest** of that creator's lines'
 	 * shipping prices — the least surprising single number when a creator prices a mug
@@ -535,7 +535,7 @@ async function resolveStoredBasket(
 	);
 
 	// 🚨 Fees on the SUM, once — computing per item and adding would charge the flat
-	// $0.30 per item and defeat the entire point of the basket (Works and Badges amortize
+	// $0.30 per item and defeat the entire point of the cart (Works and Badges amortize
 	// it identically; the Badge's money follows the settlement rail, the fee's share is
 	// pinned on the row either way). The sum is everything the charge collects: goods,
 	// Badges and the shipping the buyer is paying, because the card fee is levied on what
@@ -581,9 +581,9 @@ async function resolveStoredBasket(
  * real tax calculation landed (2026-09-29).
  *
  * 🚨 **A platform charge, not a destination charge** (Parker, 2026-10-15, the multi-creator
- * basket decision). A destination charge pinned the creator's transfer through
+ * cart decision). A destination charge pinned the creator's transfer through
  * `transfer_data[amount]` — one connected account per charge, which is exactly the
- * constraint that forced the one-creator basket. The split decision removed the constraint
+ * constraint that forced the one-creator cart. The split decision removed the constraint
  * rather than accepting it: the charge is made to the platform, and the completion path
  * moves each creator's share out as one transfer per creator, funded by the charge
  * (`completeSessionPurchases`), amounts read off the rows' pinned earnings so they never
@@ -633,7 +633,7 @@ function purchaseSession(params: {
 	customerEmail: string;
 	/**
 	 * A Badge's recurrence awaits on this charge when no active subscription exists (the
-	 * checkout computes it — see the basket route's note); the card save is no longer the
+	 * checkout computes it — see the cart route's note); the card save is no longer the
 	 * Badge lane's alone, because a normal purchase now leaves the account's one saved
 	 * payment method behind as well.
 	 *
@@ -1059,9 +1059,9 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 		await linkCheckoutCustomer(buyerUserId, linkCustomerId);
 	}
 
-	// ── The basket's bought lines leave with the money ───────────────────────
-	// This is the ONLY place a purchase empties part of the basket (Parker, 2026-10-19):
-	// the checkout route builds a session on every visit to the basket page and must not
+	// ── The cart's bought lines leave with the money ───────────────────────
+	// This is the ONLY place a purchase empties part of the cart (Parker, 2026-10-19):
+	// the checkout route builds a session on every visit to the cart page and must not
 	// spend the buyer's intent, so the rows leave here, once the charge has actually
 	// completed. Exactly the ids this charge carried — `stamped` and `stampedBadges` are
 	// its completed rows — so a Work the buyer added in another tab while the webhook was
@@ -1073,7 +1073,7 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 		const boughtBadgeIds = stampedBadges
 			.map(({ row }) => row.badgeId)
 			.filter((id): id is number => id != null);
-		await clearPurchasedBasketItems(buyerUserId, boughtWorkIds, boughtBadgeIds);
+		await clearPurchasedCartItems(buyerUserId, boughtWorkIds, boughtBadgeIds);
 	}
 
 	// ── A physical purchase opens a shipment ─────────────────────────────────
@@ -1169,10 +1169,10 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	}
 }
 
-// ─── Basket storage: the shared read the storage routes answer with ─────────
+// ─── Cart storage: the shared read the storage routes answer with ─────────
 
 /**
- * The account's basket, each row resolved to what the buyer could actually buy — Works
+ * The account's cart, each row resolved to what the buyer could actually buy — Works
  * and Badge lines alike, each with the money the checkout would charge.
  *
  * 🚨 **A stale row answers by absence, never by error.** The table may hold an item that
@@ -1180,11 +1180,11 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
  * rung deleted, re-priced past the buyer, or fallen behind the ratchet; a buyer's
  * subscription gone past due) — this read is where it stops being visible. Returning it
  * with an error flag would make every subscriber (the badge first) into a place that has
- * to know the rules; the basket page rendering only what a checkout could charge is the
+ * to know the rules; the cart page rendering only what a checkout could charge is the
  * honest shape, and the refusals keep firing where money is at stake — at quote and
  * checkout. See `resolveBadgePurchase` and `resolvePurchase`.
  */
-export interface ResolvedBasketItem {
+export interface ResolvedCartItem {
 	kind: "work" | "badge";
 	/** The Work's id, when this is a Work row. */
 	workId?: number;
@@ -1217,9 +1217,9 @@ export interface ResolvedBasketItem {
 	error?: string;
 }
 
-async function resolvedBasketItems(userId: number): Promise<ResolvedBasketItem[]> {
-	const rows = await listBasket(userId);
-	const items: ResolvedBasketItem[] = [];
+async function resolvedCartItems(userId: number): Promise<ResolvedCartItem[]> {
+	const rows = await listCart(userId);
+	const items: ResolvedCartItem[] = [];
 	for (const row of rows) {
 		if (row.kind === "badge") {
 			// Display-only: pricing is the database's read (the holdings), never a
@@ -1300,15 +1300,15 @@ async function resolvedBasketItems(userId: number): Promise<ResolvedBasketItem[]
 }
 
 /**
- * The content identity of a resolved basket — every line's id, plus a physical line's count
+ * The content identity of a resolved cart — every line's id, plus a physical line's count
  * and chosen values.
  *
  * 🚨 **The picks are part of the identity, not a detail of the line.** A buyer who opens the
- * checkout as a medium and then switches to a large has a different basket, and handing
+ * checkout as a medium and then switches to a large has a different cart, and handing
  * back the session built for the medium would charge them for the wrong shirt. The count
  * rides for the same reason: two mugs are not one mug.
  */
-function basketPicksKey(
+function cartPicksKey(
 	workLines: Array<Extract<ResolvedLine, { kind: "work" }>>,
 	badgeLines: Array<Extract<ResolvedLine, { kind: "badge" }>>,
 ): string {
@@ -1324,8 +1324,8 @@ function basketPicksKey(
 	return [...workKeys, ...badgeKeys].sort().join(",");
 }
 
-/** The content identity a basket Checkout Session was built for, read off its metadata. */
-function sessionBasketContentKey(metadata: Stripe.Metadata | null): string {
+/** The content identity a cart Checkout Session was built for, read off its metadata. */
+function sessionCartContentKey(metadata: Stripe.Metadata | null): string {
 	const ids = (value: string | undefined, prefix: "w" | "b") =>
 		(value ?? "")
 			.split(",")
@@ -1337,13 +1337,13 @@ function sessionBasketContentKey(metadata: Stripe.Metadata | null): string {
 /**
  * Settle a checkout session's still-pending ledger rows as failed.
  *
- * A session that expired, or one this visit expired because the basket it carried is no
- * longer the basket the buyer is looking at, will never be paid — its rows are dead
+ * A session that expired, or one this visit expired because the cart it carried is no
+ * longer the cart the buyer is looking at, will never be paid — its rows are dead
  * weight in the purchases ledger and in any later reconciliation. A `complete` session is
  * deliberately NOT passed here: its payment succeeded and the webhook owns those rows,
  * which may simply not have landed yet.
  */
-async function failPendingBasketRows(sessionId: string): Promise<void> {
+async function failPendingCartRows(sessionId: string): Promise<void> {
 	const failed = await db
 		.update(purchases)
 		.set({ status: "failed", updatedAt: new Date() })
@@ -1382,27 +1382,27 @@ async function failPendingBasketRows(sessionId: string): Promise<void> {
 }
 
 /**
- * What the account's existing basket sessions mean for a checkout attempt right now.
+ * What the account's existing cart sessions mean for a checkout attempt right now.
  *
- * - `resume` — an open session for exactly this basket, whose client secret is handed back.
- * - `confirming` — a session for this basket has already been PAID, and its webhook has not
- *   landed yet. Building a second session here is how a buyer pays twice for one basket,
+ * - `resume` — an open session for exactly this cart, whose client secret is handed back.
+ * - `confirming` — a session for this cart has already been PAID, and its webhook has not
+ *   landed yet. Building a second session here is how a buyer pays twice for one cart,
  *   so the route refuses with a retry-shaped message instead; the completion clears the
- *   basket within moments.
+ *   cart within moments.
  */
-type BasketSessionState =
+type CartSessionState =
 	| { state: "resume"; session: Stripe.Checkout.Session }
 	| { state: "confirming" };
 
 /**
- * The open basket Checkout Session this account already holds for exactly this basket, or
+ * The open cart Checkout Session this account already holds for exactly this cart, or
  * null when a fresh one is needed.
  *
- * 🚨 **This is what lets the basket survive an abandoned checkout** (Parker, 2026-10-19).
- * The basket used to be emptied the moment a session was built — which is the moment the
- * basket page loads — so opening the page and leaving without paying erased the buyer's
- * choices. Now the session is the disposable thing: a revisit with the same basket gets
- * the same session back; a session for a basket that has since changed (or one Stripe has
+ * 🚨 **This is what lets the cart survive an abandoned checkout** (Parker, 2026-10-19).
+ * The cart used to be emptied the moment a session was built — which is the moment the
+ * cart page loads — so opening the page and leaving without paying erased the buyer's
+ * choices. Now the session is the disposable thing: a revisit with the same cart gets
+ * the same session back; a session for a cart that has since changed (or one Stripe has
  * already expired) is closed and its pending rows failed, and a new one is built from what
  * the buyer actually holds.
  *
@@ -1410,10 +1410,10 @@ type BasketSessionState =
  * processor degrades to "build a new one", the same fail-open the checkout already
  * accepts.
  */
-async function resumeBasketSession(
+async function resumeCartSession(
 	userId: number,
 	contentKey: string,
-): Promise<BasketSessionState | null> {
+): Promise<CartSessionState | null> {
 	const [workSessions, badgeSessions] = await Promise.all([
 		db
 			.selectDistinct({ id: purchases.stripePaymentIntentId })
@@ -1429,29 +1429,29 @@ async function resumeBasketSession(
 	for (const id of ids) {
 		const session = await retrieveCheckoutSession(id);
 		if (!session) continue;
-		// Only a BASKET session may be resumed or refused here — a buy-now Badge charge
-		// leaves its own pending rows, and its session is not this basket's even when the
+		// Only a CART session may be resumed or refused here — a buy-now Badge charge
+		// leaves its own pending rows, and its session is not this cart's even when the
 		// ids happen to coincide.
-		if (session.metadata?.kind !== "direct_purchase_basket") continue;
+		if (session.metadata?.kind !== "direct_purchase_cart") continue;
 		// A session built since goods could be bought carries the whole pick as its key;
 		// an older (or digital-only) one is recomputed from the ids it named. Both shapes
-		// answer the same question: is this session the basket the buyer is looking at?
-		const sameBasket =
-			(session.metadata?.contentKey ?? sessionBasketContentKey(session.metadata)) === contentKey;
+		// answer the same question: is this session the cart the buyer is looking at?
+		const sameCart =
+			(session.metadata?.contentKey ?? sessionCartContentKey(session.metadata)) === contentKey;
 		if (session.status === "open") {
-			if (sameBasket) return { state: "resume", session };
-			// The basket changed under it: nobody may pay this one any more, and its
+			if (sameCart) return { state: "resume", session };
+			// The cart changed under it: nobody may pay this one any more, and its
 			// ledger rows will never complete.
 			await expireCheckoutSession(id);
-			await failPendingBasketRows(id);
+			await failPendingCartRows(id);
 			continue;
 		}
-		// A paid session for this very basket is mid-confirmation: its rows are still
+		// A paid session for this very cart is mid-confirmation: its rows are still
 		// pending only because the webhook has not landed. Never build a second charge.
-		if (sameBasket && session.status === "complete" && session.payment_status === "paid") {
+		if (sameCart && session.status === "complete" && session.payment_status === "paid") {
 			return { state: "confirming" };
 		}
-		if (session.status === "expired") await failPendingBasketRows(id);
+		if (session.status === "expired") await failPendingCartRows(id);
 	}
 	return null;
 }
@@ -1854,9 +1854,9 @@ const paymentRoutes = new Hono()
 	})
 
 	/**
-	 * The signed-in buyer's server-side basket.
+	 * The signed-in buyer's server-side cart.
 	 *
-	 * 🚨 **These routes are the basket's only writers and users, and `resolveBasket` is
+	 * 🚨 **These routes are the cart's only writers and users, and `resolveCart` is
 	 * never bypassed.** The table holds ids and nothing more; quote and checkout re-resolve
 	 * exactly what the client-supplied list used to be re-resolved against — so a row that
 	 * fell out of purchasability (withdrawn, already owned, moved behind a higher gate,
@@ -1864,23 +1864,23 @@ const paymentRoutes = new Hono()
 	 * `list` returns only what resolves, so a badge counts Work the buyer could actually be
 	 * charged for and nothing else.
 	 *
-	 * The basket carries any number of creators (Parker, 2026-10-15): `add` appends in
-	 * `services/basket.ts` — the sign-in merge and the Work-page button go through the
+	 * The cart carries any number of creators (Parker, 2026-10-15): `add` appends in
+	 * `services/cart.ts` — the sign-in merge and the Work-page button go through the
 	 * same function, so they cannot disagree — and the one charge the checkout builds is
 	 * settled per creator at completion (`services/purchase-split.ts`).
 	 */
-	// What the header badge and the basket page read. Resolved live, per read: a Work
+	// What the header badge and the cart page read. Resolved live, per read: a Work
 	// that stopped being buyable does not count — the buyer is never teased with a badge
 	// for something their money cannot reach. Price and creator handle come off the same
 	// resolution, so the receipt's line items and the page's creator line read the
 	// server's numbers, exactly as the quote's always did.
-	.get("/basket", requireAuth, async (c) => {
+	.get("/cart", requireAuth, async (c) => {
 		const user = c.get("user");
-		const items = await resolvedBasketItems(user.id);
+		const items = await resolvedCartItems(user.id);
 		return c.json({ items, count: items.length });
 	})
 
-	.post("/basket/items", requireAuth, async (c) => {
+	.post("/cart/items", requireAuth, async (c) => {
 		const user = c.get("user");
 		const body = await c.req.json().catch(() => null);
 		// A line names a Work or a Badge rung — never both. The Badge add carries its own
@@ -1893,10 +1893,10 @@ const paymentRoutes = new Hono()
 			return c.json({ error: "Name exactly one thing: a Work id or a Badge id." }, 400);
 
 		if (hasBadge) {
-			const result = await addBasketBadge(user.id, badgeId);
+			const result = await addCartBadge(user.id, badgeId);
 			if (!result.ok) {
 				if (result.reason === "at_capacity") {
-					return c.json({ error: "Your basket is full.", code: "at_capacity" }, 409);
+					return c.json({ error: "Your cart is full.", code: "at_capacity" }, 409);
 				}
 				if (result.reason === "own_ladder") {
 					return c.json({ error: "You cannot hold your own Badge.", code: result.reason }, 400);
@@ -1916,7 +1916,7 @@ const paymentRoutes = new Hono()
 						}))
 						.filter((entry) => entry.name && entry.label)
 				: null;
-			const result = await addBasketItem(
+			const result = await addCartItem(
 				user.id,
 				workId,
 				options || Number.isInteger(quantity)
@@ -1927,31 +1927,31 @@ const paymentRoutes = new Hono()
 					: undefined,
 			);
 			if (!result.ok) {
-				// 404 names the Work (gone before it could be held); 409 names the basket (full).
+				// 404 names the Work (gone before it could be held); 409 names the cart (full).
 				// Both are refusals the buyer can act on at the moment of the click, which is
 				// the whole courtesy — the alternative was discovering both at checkout.
 				if (result.reason === "at_capacity") {
-					return c.json({ error: "Your basket is full.", code: "at_capacity" }, 409);
+					return c.json({ error: "Your cart is full.", code: "at_capacity" }, 409);
 				}
 				return c.json({ error: "Work not found", code: result.reason }, 404);
 			}
 		}
-		// Answer with the post-add basket so the client's optimistic update can reconcile
-		// against the truth in one round trip — each item resolved exactly as `/basket`
+		// Answer with the post-add cart so the client's optimistic update can reconcile
+		// against the truth in one round trip — each item resolved exactly as `/cart`
 		// resolves it.
-		const items = await resolvedBasketItems(user.id);
+		const items = await resolvedCartItems(user.id);
 		return c.json({ items });
 	})
 
 	/**
-	 * Change what a basket line asks for — the basket page's quantity stepper and picker.
+	 * Change what a cart line asks for — the cart page's quantity stepper and picker.
 	 *
 	 * The same validation the checkout runs is NOT repeated here: the line is intent, and
 	 * a count somebody may no longer have is the quote's refusal to give, in its own words,
-	 * where the money is. This route only refuses a Work that is not in the basket.
+	 * where the money is. This route only refuses a Work that is not in the cart.
 	 */
 	.put(
-		"/basket/items/:workId",
+		"/cart/items/:workId",
 		requireAuth,
 		zValidator(
 			"json",
@@ -1974,54 +1974,54 @@ const paymentRoutes = new Hono()
 						}))
 						.filter((entry) => entry.name && entry.label)
 				: undefined;
-			const result = await updateBasketItem(user.id, workId, {
+			const result = await updateCartItem(user.id, workId, {
 				...(Number.isInteger(quantity) && quantity > 0 ? { quantity } : {}),
 				...(options !== undefined ? { options } : {}),
 			});
-			if (!result.ok) return c.json({ error: "That Work isn't in your basket." }, 404);
-			return c.json({ items: await resolvedBasketItems(user.id) });
+			if (!result.ok) return c.json({ error: "That Work isn't in your cart." }, 404);
+			return c.json({ items: await resolvedCartItems(user.id) });
 		},
 	)
 
-	.delete("/basket/items/:workId", requireAuth, async (c) => {
+	.delete("/cart/items/:workId", requireAuth, async (c) => {
 		const user = c.get("user");
 		const workId = Number(c.req.param("workId"));
 		if (!Number.isInteger(workId) || workId <= 0) return c.json({ error: "Work not found" }, 404);
-		await removeBasketItem(user.id, workId);
-		return c.json({ items: await resolvedBasketItems(user.id) });
+		await removeCartItem(user.id, workId);
+		return c.json({ items: await resolvedCartItems(user.id) });
 	})
 
-	.delete("/basket/badges/:badgeId", requireAuth, async (c) => {
+	.delete("/cart/badges/:badgeId", requireAuth, async (c) => {
 		const user = c.get("user");
 		const badgeId = Number(c.req.param("badgeId"));
 		if (!Number.isInteger(badgeId) || badgeId <= 0)
 			return c.json({ error: "Badge not found" }, 404);
-		await removeBasketBadge(user.id, badgeId);
-		return c.json({ items: await resolvedBasketItems(user.id) });
+		await removeCartBadge(user.id, badgeId);
+		return c.json({ items: await resolvedCartItems(user.id) });
 	})
 
-	.delete("/basket", requireAuth, async (c) => {
+	.delete("/cart", requireAuth, async (c) => {
 		const user = c.get("user");
-		await clearBasket(user.id);
+		await clearCart(user.id);
 		return c.json({ items: [] });
 	})
 
 	/**
-	 * What a basket would cost, without creating anything. The buy UI quotes from here so
-	 * the saving is visible *before* the decision, which is the whole reason a basket is
+	 * What a cart would cost, without creating anything. The buy UI quotes from here so
+	 * the saving is visible *before* the decision, which is the whole reason a cart is
 	 * worth building rather than a convenience.
 	 */
-	.post("/basket/quote", requireAuth, async (c) => {
+	.post("/cart/quote", requireAuth, async (c) => {
 		const user = c.get("user");
-		// 🚨 **The resolved basket is the source of the ids; the request body never was.**
-		// The account's table is asked through the SAME resolution `/basket` answers with —
+		// 🚨 **The resolved cart is the source of the ids; the request body never was.**
+		// The account's table is asked through the SAME resolution `/cart` answers with —
 		// so a row that stopped being buyable is excluded here exactly as the badge
 		// excluded it, and the buyer is never failed by an item they cannot see or remove.
-		// What remains is then re-resolved by `resolveStoredBasket` below, whose refusal
+		// What remains is then re-resolved by `resolveStoredCart` below, whose refusal
 		// paths (the cap, the per-item rules, the ratchet) keep firing.
-		const stored = await resolvedBasketItems(user.id);
+		const stored = await resolvedCartItems(user.id);
 		const rows = stored.map(
-			(item): StoredBasketRow =>
+			(item): StoredCartRow =>
 				item.kind === "badge"
 					? { kind: "badge", badgeId: item.badgeId as number }
 					: {
@@ -2033,16 +2033,16 @@ const paymentRoutes = new Hono()
 						},
 		);
 		// A line the buyer can fix (a count past the shelf) is refused here, in its own
-		// words, rather than priced around: a basket total that quietly omits what the page
+		// words, rather than priced around: a cart total that quietly omits what the page
 		// is showing is the one number a buyer must never be given.
 		const blocked = stored.find((item) => item.error);
 		if (blocked?.error) return c.json({ error: blocked.error }, 400);
 
-		const q = await resolveStoredBasket(rows, user.id, { needsProduct: false });
+		const q = await resolveStoredCart(rows, user.id, { needsProduct: false });
 		if (!q.ok) return c.json({ error: q.error, code: "code" in q ? q.code : undefined }, q.status);
 
 		// What the same items would have cost bought one at a time. Not decoration: it is
-		// the number that makes the basket legible, and it is derived rather than typed —
+		// the number that makes the cart legible, and it is derived rather than typed —
 		// `cardFee` per item, summed, against one `cardFee` on the subtotal. Badge lines
 		// count identically: a Badge's first Month bought beside a Work shares the flat
 		// fee, which is the saving Parker's batching decision priced.
@@ -2051,9 +2051,9 @@ const paymentRoutes = new Hono()
 			new Decimal(0),
 		);
 
-		// The creator groups the basket page renders — one per distinct creator, each with
+		// The creator groups the cart page renders — one per distinct creator, each with
 		// a receives figure summed from that creator's own lines (price less the line's
-		// pinned fee share), so the groups reconstruct the whole basket's take exactly: the
+		// pinned fee share), so the groups reconstruct the whole cart's take exactly: the
 		// last line's rounding remainder lands wherever the last line's issuer is, and the
 		// per-group sums still add up. The line shares are pinned IN the resolution now, so
 		// the quote, the checkout's rows and the badge rows all read the same figures. Badge
@@ -2088,15 +2088,15 @@ const paymentRoutes = new Hono()
 							title: i.work.title,
 							type: i.work.type,
 							thumbnail: i.work.thumbnail,
-							// This line's own share of the basket's ONE card fee — pro-rata by value,
+							// This line's own share of the cart's ONE card fee — pro-rata by value,
 							// the same apportionment the purchase rows are written with. The
 							// receipt's creator group reads it, so the receives line's tooltip can
-							// name what was taken out of this creator's part of the basket.
+							// name what was taken out of this creator's part of the cart.
 							processingFee: i.lineFee.toFixed(2),
 							price: i.amount.toFixed(2),
 							recurring: null,
 							// A physical line's count and the shipping charged on it — the
-							// basket page's quantity control and its shipping row read these.
+							// cart page's quantity control and its shipping row read these.
 							quantity: i.physical?.quantity ?? 1,
 							options: i.physical?.picks ?? null,
 							shipping: (i.physical?.shippingOnLine ?? new Decimal(0)).toFixed(2),
@@ -2115,7 +2115,7 @@ const paymentRoutes = new Hono()
 							quantity: 1,
 						},
 			),
-			// One entry per creator the charge covers, in the order the basket named them.
+			// One entry per creator the charge covers, in the order the cart named them.
 			creators: creatorIdList.map((cid) => ({
 				handle: handleRows.find((r) => r.id === cid)?.handle ?? null,
 				itemCount: byCreator.get(cid)!.itemCount,
@@ -2126,14 +2126,14 @@ const paymentRoutes = new Hono()
 			salesTax: q.fees.salesTax.toFixed(2),
 			creatorEarnings: q.fees.creatorEarnings.toFixed(2),
 			buyerTotal: q.fees.buyerTotal.toFixed(2),
-			/** Card fees if these were bought separately, and what the basket saves. */
+			/** Card fees if these were bought separately, and what the cart saves. */
 			feeSeparately: separately.toFixed(2),
 			creatorGains: separately.minus(q.fees.processingFee).toFixed(2),
 		});
 	})
 
 	/**
-	 * Buy a basket on one charge — one Checkout Session, one card fee, one row per item.
+	 * Buy a cart on one charge — one Checkout Session, one card fee, one row per item.
 	 *
 	 * Deliberately a sibling of `/checkout/:slug` rather than a replacement: a single
 	 * purchase is the overwhelming case and there is no reason to make it travel through
@@ -2142,16 +2142,16 @@ const paymentRoutes = new Hono()
 	 * creator's money does not ride the session any more: it moves out per creator at
 	 * completion, funded by the charge (the platform-charge split).
 	 */
-	.post("/basket/checkout", requireAuth, requireVerified, async (c) => {
+	.post("/cart/checkout", requireAuth, requireVerified, async (c) => {
 		const user = c.get("user");
-		// Same rule as quote: the account's resolved basket is what's bought — an item
+		// Same rule as quote: the account's resolved cart is what's bought — an item
 		// that stopped being buyable is excluded by the same resolution the page showed,
-		// and what remains is re-resolved by `resolveStoredBasket` below, whose refusal
+		// and what remains is re-resolved by `resolveStoredCart` below, whose refusal
 		// paths keep firing on it. Nothing trusts the table further than the client's old
 		// word was trusted.
-		const stored = await resolvedBasketItems(user.id);
+		const stored = await resolvedCartItems(user.id);
 		const rows = stored.map(
-			(item): StoredBasketRow =>
+			(item): StoredCartRow =>
 				item.kind === "badge"
 					? { kind: "badge", badgeId: item.badgeId as number }
 					: {
@@ -2168,7 +2168,7 @@ const paymentRoutes = new Hono()
 		// The resolution runs BEFORE the processor guard — the refusals are the database's
 		// business and must fire without Stripe — and the rung's Product, the one
 		// processor-dependent piece, is priced only when a session could be built at all.
-		const q = await resolveStoredBasket(rows, user.id, {
+		const q = await resolveStoredCart(rows, user.id, {
 			atCheckout: true,
 			needsProduct: paymentsConfigured(),
 		});
@@ -2177,7 +2177,7 @@ const paymentRoutes = new Hono()
 		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 		// Same hard precondition as a single purchase, now per issuer: Anthers does not
-		// sell a creator's work when the money cannot reach them — and a basket can ask
+		// sell a creator's work when the money cannot reach them — and a cart can ask
 		// for several creators' money to move at once, so every one of them must be
 		// reachable before the buyer is charged. A Badge issuer's reachability matters just
 		// as much (their share moves at the cycle's settlement) — the one exception is
@@ -2204,12 +2204,12 @@ const paymentRoutes = new Hono()
 			}
 		}
 
-		// 🚨 **A basket the buyer already has a live session for is not charged twice, and
-		// the intent is not spent until the money moves** (Parker, 2026-10-19). The basket
+		// 🚨 **A cart the buyer already has a live session for is not charged twice, and
+		// the intent is not spent until the money moves** (Parker, 2026-10-19). The cart
 		// used to be emptied the moment this route built a session — which is the moment
-		// the basket page loads — so opening the page and leaving without paying erased
-		// what the buyer had chosen. Now a revisit with the same basket gets the same open
-		// session back; a session built for a basket that has since changed is expired, its
+		// the cart page loads — so opening the page and leaving without paying erased
+		// what the buyer had chosen. Now a revisit with the same cart gets the same open
+		// session back; a session built for a cart that has since changed is expired, its
 		// pending rows failed, and a fresh one is built below.
 		const workLinesForSession = q.items.filter(
 			(i): i is Extract<typeof i, { kind: "work" }> => i.kind === "work",
@@ -2217,15 +2217,15 @@ const paymentRoutes = new Hono()
 		const badgeLinesForSession = q.items.filter(
 			(i): i is Extract<typeof i, { kind: "badge" }> => i.kind === "badge",
 		);
-		const known = await resumeBasketSession(
+		const known = await resumeCartSession(
 			user.id,
-			basketPicksKey(workLinesForSession, badgeLinesForSession),
+			cartPicksKey(workLinesForSession, badgeLinesForSession),
 		);
 		if (known?.state === "confirming") {
-			// The payment for this basket already went through and its webhook has not
-			// landed yet. A second session here is a second charge for the same basket.
+			// The payment for this cart already went through and its webhook has not
+			// landed yet. A second session here is a second charge for the same cart.
 			return c.json(
-				{ error: "Your payment is being confirmed — this basket clears in a moment." },
+				{ error: "Your payment is being confirmed — this cart clears in a moment." },
 				409,
 			);
 		}
@@ -2276,7 +2276,7 @@ const paymentRoutes = new Hono()
 			});
 		};
 
-		// One line per Work, each with its own tax code — a basket can span media, and a
+		// One line per Work, each with its own tax code — a cart can span media, and a
 		// video and an image are not taxed as the same thing in every jurisdiction. A
 		// Badge line names its rung's own Product, whose tax code the rung's own kinds
 		// stamped (`ensureBadgeProduct`).
@@ -2313,7 +2313,7 @@ const paymentRoutes = new Hono()
 		 * One shipping line per creator, charged once for their parcel(s).
 		 *
 		 * ⚠️ **A line item, not the session's `shipping_cost`.** Checkout carries exactly one
-		 * `shipping_cost`, and a basket can hold goods from several creators who each post a
+		 * `shipping_cost`, and a cart can hold goods from several creators who each post a
 		 * box; naming the charge as its own line is what lets each one be taxed with
 		 * `SHIPPING_TAX_CODE` and appear on the receipt as the delivery it is.
 		 */
@@ -2363,14 +2363,14 @@ const paymentRoutes = new Hono()
 				// creator's order list reads it from.
 				shippingAddress: physicalLines.length > 0 ? "us" : undefined,
 				metadata: {
-					kind: "direct_purchase_basket",
+					kind: "direct_purchase_cart",
 					workIds: workLines.map((i) => i.work.id).join(","),
 					badgeIds: badgeLines.map((i) => i.badge.id).join(","),
 					buyerId: String(user.id),
 					// What the buyer asked for, not merely which Works: a count or a size
-					// changed between two visits is a different basket, and a session built
-					// for the old one must not be handed back (see `resumeBasketSession`).
-					contentKey: basketPicksKey(workLines, badgeLines),
+					// changed between two visits is a different cart, and a session built
+					// for the old one must not be handed back (see `resumeCartSession`).
+					contentKey: cartPicksKey(workLines, badgeLines),
 				},
 			}),
 		);
@@ -2381,7 +2381,7 @@ const paymentRoutes = new Hono()
 
 		/**
 		 * One row per Work, all sharing the PaymentIntent — because access, refunds and
-		 * the buyer's Library are all **per Work** and must stay that way. The basket is a
+		 * the buyer's Library are all **per Work** and must stay that way. The cart is a
 		 * property of the *charge*, not of the entitlement.
 		 *
 		 * 🚨 The per-item money is the resolution's PINNED line share, not a recomputation —
@@ -2446,14 +2446,14 @@ const paymentRoutes = new Hono()
 		}));
 		if (badgeChargeRows.length > 0) await db.insert(badgeCharges).values(badgeChargeRows);
 
-		// 🚨 **The basket is NOT cleared here** (Parker, 2026-10-19). This route runs the
-		// moment the basket page mounts — it is how the embedded checkout gets its client
-		// secret — so clearing here meant opening the basket and walking away erased it.
+		// 🚨 **The cart is NOT cleared here** (Parker, 2026-10-19). This route runs the
+		// moment the cart page mounts — it is how the embedded checkout gets its client
+		// secret — so clearing here meant opening the cart and walking away erased it.
 		// The rows now leave when the charge completes (`completeSessionPurchases` clears
-		// exactly the ids the session carried), or when the buyer empties the basket
+		// exactly the ids the session carried), or when the buyer empties the cart
 		// themselves. The purchase and Badge-charge rows above are the money's record and
 		// are already keyed to this session; abandoning it leaves them pending, and the
-		// next `/basket/checkout` either resumes this session or fails them.
+		// next `/cart/checkout` either resumes this session or fails them.
 		return c.json({
 			subtotal: q.subtotal.toFixed(2),
 			processingFee: q.fees.processingFee.toFixed(2),
@@ -2469,8 +2469,8 @@ const paymentRoutes = new Hono()
 
 	/**
 	 * **Buy a Badge now** — the rung's first Month, on its own charge, bypassing the
-	 * basket. Same money as a basket checkout of one Badge line: the rung's Product, the
-	 * delta-first-transaction pricing, the same rows, the same completion. The basket the
+	 * cart. Same money as a cart checkout of one Badge line: the rung's Product, the
+	 * delta-first-transaction pricing, the same rows, the same completion. The cart the
 	 * buyer already carries is untouched — buy-now is the one item the buyer pointed at,
 	 * not a replacement of what they were assembling.
 	 */
@@ -2481,7 +2481,7 @@ const paymentRoutes = new Hono()
 		if (!Number.isInteger(badgeId) || badgeId <= 0)
 			return c.json({ error: "Badge not found" }, 404);
 
-		// Same discipline as the basket checkout: the resolution (and its refusals) is the
+		// Same discipline as the cart checkout: the resolution (and its refusals) is the
 		// database's business and never needs the processor; the rung's Product is priced
 		// only when a session could be built at all, and the guard below answers for the
 		// unconfigured case after the refusals had their word.
@@ -2494,7 +2494,7 @@ const paymentRoutes = new Hono()
 
 		// The Issuer's connected account — the Anthers ladder takes no transfer (its money
 		// is already platform-side), so it is the one issuer this precondition skips; the
-		// basket checkout's loop carries the same exception with the same reason.
+		// cart checkout's loop carries the same exception with the same reason.
 		if (one.issuer.id !== (await anthersUserId())) {
 			const [account] = await db
 				.select()
@@ -2515,8 +2515,8 @@ const paymentRoutes = new Hono()
 		const fees = calculateFees(one.amount, { type: "digital" });
 		const lineItems = [badgeLineItem(one.product, Math.round(one.amount.toNumber() * 100))];
 
-		// The card rides when the recurrence needs it — see the basket checkout's note; a
-		// Badge bought now must recur for the same reason one saved to a basket must.
+		// The card rides when the recurrence needs it — see the cart checkout's note; a
+		// Badge bought now must recur for the same reason one saved to a cart must.
 		const saveCard = !(await hasActiveSupportSubscription(user.id));
 
 		const session = await createCheckoutSession(
@@ -2766,7 +2766,7 @@ const paymentRoutes = new Hono()
 			// Idempotent: only a still-pending row flips, so redelivered events are no-ops.
 			//
 			// 🚨 **Every** row, not the first. This destructured a single `[completed]`
-			// until baskets existed, which was correct while one charge meant one purchase
+			// until carts existed, which was correct while one charge meant one purchase
 			// and silently wrong the moment it didn't: the update flips all the rows (the
 			// predicate matches them all) but only the first got its ledger entry or its
 			// Seed credit. The buyer would have been charged for five Works, unlocked all
@@ -2794,7 +2794,7 @@ const paymentRoutes = new Hono()
 
 			// The receipt, after the books have moved: buyer's itemized receipt for the
 			// charge, creator's sale receipt when another account bought the work. One
-			// email per charge (a basket's rows arrive together), latched on the
+			// email per charge (a cart's rows arrive together), latched on the
 			// PaymentIntent id, so a redelivered event mails nobody twice. A receipt
 			// built from rows that had not yet settled would show the transaction at
 			// the wrong moment, which is why this sits after the loop above.
@@ -2837,12 +2837,12 @@ const paymentRoutes = new Hono()
 				// correct only while a charge could carry one purchase.
 				//
 				// This branch runs only when the charge is **wholly** refunded, so on a
-				// basket it means every item is gone and every row must be settled. Our own
+				// cart it means every item is gone and every row must be settled. Our own
 				// per-item refunds arrive here as *partial* refunds (`refunded: false`) and
 				// are skipped by the guard above, having already settled their own row.
 				//
 				// ⚠️ **A partial refund issued from the Stripe DASHBOARD is still not
-				// handled**, and baskets make that reachable where it wasn't before: the
+				// handled**, and carts make that reachable where it wasn't before: the
 				// money goes back and the row stays `completed`, so the buyer keeps access.
 				// Nothing in a charge says *which* item an operator meant, so this cannot be
 				// inferred — operator refunds have to go through the app. Worth a real fix

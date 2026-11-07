@@ -10,7 +10,7 @@
  * which leaves these two cards as the only doors.) Two pages, one shared component, so this
  * walks both rather than trusting the import.
  *
- * The click itself is exercised by `basket-account-scoping.authed.e2e.ts`, whose sign-out
+ * The click itself is exercised by `cart-account-scoping.authed.e2e.ts`, whose sign-out
  * walk now goes through this card. This spec asserts the card renders on both pages, names
  * the actual signed-in account, and offers the button — not that the session ends, which
  * would leave the shared `authed` cookie jar signed out for every later spec.

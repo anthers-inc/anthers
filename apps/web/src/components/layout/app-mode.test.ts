@@ -15,7 +15,7 @@ describe("modeForPath", () => {
 	});
 
 	it("puts the user-only pages in user mode", () => {
-		for (const path of ["/network", "/library", "/discovery", "/basket", "/settings"]) {
+		for (const path of ["/network", "/library", "/discovery", "/cart", "/settings"]) {
 			expect(modeForPath(path, "studio")).toBe("user");
 		}
 	});

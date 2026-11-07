@@ -86,7 +86,7 @@ export function trackErrorsStrict(page: Page, allow: RegExp[] = []): string[] {
  *
  * 🚨 **Minted, not posted.** Sign-in is OAuth at the identity's own server now, and there is no
  * login route a harness could call: the real flow leaves for `anthers.social` (or Bluesky), gets
- * the person's authorization, and comes back with a grant. A spec about a basket or a library has
+ * the person's authorization, and comes back with a grant. A spec about a cart or a library has
  * no business driving that, so this calls the same `createSession` the OAuth callback calls and
  * puts the token where the cookie would be — exactly what `account-fixture.ts` does for the API
  * suite.

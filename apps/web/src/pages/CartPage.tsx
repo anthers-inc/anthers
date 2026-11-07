@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The basket: what you're about to buy, what it costs, and what buying it together saves.
+ * The cart: what you're about to buy, what it costs, and what buying it together saves.
  *
  * 🚨 **The saving is the whole reason this page exists**, so it is stated in money and
  * before the decision rather than after it. Stripe's fixed **$0.30 is per charge, not per
  * item** — five $1 tracks pay $1.65 in card fees bought one at a time and $0.45 bought
  * together — and because Anthers keeps nothing either way, every cent of that difference
- * is the creator's. A basket that merely batched clicks would not be worth building.
+ * is the creator's. A cart that merely batched clicks would not be worth building.
  *
- * Every figure here comes from `/basket/quote`, which computes it with the same
+ * Every figure here comes from `/cart/quote`, which computes it with the same
  * `calculateFees` that checkout charges from — and, once the checkout's billing address
  * resolves, the session's own tax-inclusive total joins it (reported up through
- * `BasketCheckout`'s `onTotals`). Nothing on this page does money arithmetic: a receipt
+ * `CartCheckout`'s `onTotals`). Nothing on this page does money arithmetic: a receipt
  * that derives its own totals stops reconciling the moment a dial moves, which is the
  * failure this codebase has already had twice.
  *
@@ -19,15 +19,15 @@
  * day (2026-10-04): the form belongs LEFT and the pricing right.** Checkout on the
  * left — the column the buyer fills out, the only one with buttons on it; the pricing on
  * the right. The right column carries TWO cards (Parker, 2026-10-06): **Payment** — the
- * buyer's statement, subtotal + tax − discounts = the total they pay — and **Basket** —
+ * buyer's statement, subtotal + tax − discounts = the total they pay — and **Cart** —
  * the items grouped by creator, each group topped by what the creator receives with an
  * (i) naming the card fee taken out of their part. The two statements never mix inside
  * one card: the card fee is the price's cost, not the buyer's, and a card that showed
  * both read as a mystery deduction on the buyer's own total. The checkout's column never
  * re-renders the checkout's input state: the work ids handed down are derived once per
- * basket content (`useMemo` — see `BasketCheckout`'s header for why that identity was
+ * cart content (`useMemo` — see `CartCheckout`'s header for why that identity was
  * load-bearing), and totals reporting up only re-renders these cards. Below `lg` the
- * grid stacks to one column in reading order: payment, basket, checkout — you read
+ * grid stacks to one column in reading order: payment, cart, checkout — you read
  * what you pay, then what you're buying, before you pay for it. On desktop the two
  * columns sit side by side (`lg:grid-cols-2`), which is why the checkout renders FIRST
  * in the JSX (it owns the page's only form) and sits left (`lg:order-1`).
@@ -42,10 +42,10 @@ import { client } from "@anthers/web-shared/rpc";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { ShoppingBagIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { ShoppingCartIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { basketContentKey, useBasket } from "@/lib/basket";
-import BasketCheckout from "../components/basket/BasketCheckout";
+import { cartContentKey, useCart } from "@/lib/cart";
+import CartCheckout from "../components/cart/CartCheckout";
 
 /**
  * The Sales Tax tooltip's sentence, in the two states the derivation can be in: before
@@ -58,7 +58,7 @@ function salesTaxDerivation(totals: SessionTotals | null, quote: Quote): string 
 		const head =
 			totals.taxPercentage != null
 				? `The rate is ${totals.taxPercentage}%, from your billing address${address ? ` (${address})` : ""}: $${quote?.subtotal ?? "0.00"} × ${totals.taxPercentage}% = $${totals.tax.toFixed(2)}.`
-				: `The rate is the one Stripe Tax resolved from your billing address${address ? ` (${address})` : ""}: $${totals.tax.toFixed(2)} on this basket.`;
+				: `The rate is the one Stripe Tax resolved from your billing address${address ? ` (${address})` : ""}: $${totals.tax.toFixed(2)} on this cart.`;
 		return `${head} Anthers collects it as marketplace facilitator and remits it; creators receive none of it.`;
 	}
 	return "Added on top of the price and calculated from your billing address by Stripe Tax once the address above is filled in — never estimated, never pocketed: Anthers remits every cent.";
@@ -66,7 +66,7 @@ function salesTaxDerivation(totals: SessionTotals | null, quote: Quote): string 
 
 interface Quote {
 	/**
-	 * The receipt's lines, in basket order — a Work or a Badge rung each, discriminated.
+	 * The receipt's lines, in cart order — a Work or a Badge rung each, discriminated.
 	 * A Badge line carries the rung's monthly price beside the first transaction's, so an
 	 * upgrade line can read as the upgrade it is.
 	 */
@@ -127,9 +127,9 @@ interface SessionTotals {
 	addressSummary: string | null;
 }
 
-export default function BasketPage() {
+export default function CartPage() {
 	const { user } = useAuth();
-	const { items, remove, update, clear, count } = useBasket();
+	const { items, remove, update, clear, count } = useCart();
 	const [lineError, setLineError] = useState<string | null>(null);
 	const [quote, setQuote] = useState<Quote | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -138,15 +138,15 @@ export default function BasketPage() {
 	// what turns the Payment card's tax line from "coming" into a real number and its
 	// tooltip from generic into the actual derivation.
 	const [sessionTotals, setSessionTotals] = useState<SessionTotals | null>(null);
-	// Cleared with the basket, so a completed purchase never leaves stale numbers up.
+	// Cleared with the cart, so a completed purchase never leaves stale numbers up.
 	const handleTotals = useCallback((t: SessionTotals | null) => setSessionTotals(t), []);
 
 	/**
-	 * The creator groups the Basket card renders — one per distinct creator, with each
+	 * The creator groups the Cart card renders — one per distinct creator, with each
 	 * group's receives figure read straight off the quote (server-computed, never derived
 	 * here: a receipt that computes its own totals stops reconciling the moment a dial
-	 * moves). The lines join their group through the basket's own items, which are what
-	 * carry the creator handle; a quote line whose item left the basket mid-render simply
+	 * moves). The lines join their group through the cart's own items, which are what
+	 * carry the creator handle; a quote line whose item left the cart mid-render simply
 	 * matches no group and renders nowhere.
 	 */
 	const groups = useMemo(() => {
@@ -166,20 +166,20 @@ export default function BasketPage() {
 			}));
 	}, [items, quote]);
 
-	// 🚨 Derived ONCE per basket content, not per render — `items` is re-read from
-	// storage on every basket event, so an inline mapping at the use site was a new
+	// 🚨 Derived ONCE per cart content, not per render — `items` is re-read from
+	// storage on every cart event, so an inline mapping at the use site was a new
 	// array identity on every render, and the checkout's session POST keyed on that
 	// identity re-fired on the totals-reporting re-render, remounting the Payment
 	// Element mid-fill (the first live checkout's worst defect). Stable identity here is
-	// the belt; BasketCheckout keys on sorted CONTENT by the same key (the suspenders).
-	const contentKey = basketContentKey(items);
+	// the belt; CartCheckout keys on sorted CONTENT by the same key (the suspenders).
+	const contentKey = cartContentKey(items);
 
-	// The quote's re-fire trigger is the basket's CONTENT — the kind-tagged sorted key above —
+	// The quote's re-fire trigger is the cart's CONTENT — the kind-tagged sorted key above —
 	// and never the `items` array identity, whose churn is exactly the re-firing the
 	// first live checkout paid for. `useExhaustiveDependencies` wants the body's own
 	// reads listed; the key is deliberately NOT one of them, so the suppression is the
 	// honest form and the deps below carry only `items.length` beside it.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the trigger is basket CONTENT, not a body value
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the trigger is cart CONTENT, not a body value
 	const refresh = useCallback(async () => {
 		if (items.length === 0) {
 			setQuote(null);
@@ -188,21 +188,21 @@ export default function BasketPage() {
 		setLoading(true);
 		setError(null);
 		try {
-			// The body carries nothing: the server prices the account's own stored basket,
+			// The body carries nothing: the server prices the account's own stored cart,
 			// never a list the client named — that trust ended with the localStorage
 			// design. Which contents this call prices is decided by the effect below —
-			// it re-fires on a change of the basket's CONTENT (the sorted ids), not on
+			// it re-fires on a change of the cart's CONTENT (the sorted ids), not on
 			// array identity, so a totals-reporting re-render re-quotes nothing.
-			const res = await client.api.payments.basket.quote.$post({ json: {} });
+			const res = await client.api.payments.cart.quote.$post({ json: {} });
 			if (!res.ok) {
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
-				setError(body?.error ?? "Couldn't price your basket.");
+				setError(body?.error ?? "Couldn't price your cart.");
 				setQuote(null);
 				return;
 			}
 			setQuote((await res.json()) as unknown as Quote);
 		} catch {
-			setError("Couldn't price your basket.");
+			setError("Couldn't price your cart.");
 		} finally {
 			setLoading(false);
 		}
@@ -216,8 +216,8 @@ export default function BasketPage() {
 		return (
 			<div className="container mx-auto max-w-2xl px-4 py-12">
 				<EmptyState
-					icon={<ShoppingBagIcon className="w-12 h-12" />}
-					title="Your Basket is empty"
+					icon={<ShoppingCartIcon className="w-12 h-12" />}
+					title="Your Cart is empty"
 					description="Add a few things — from one creator or many — and buy them together. The card fee is charged once per purchase, not once per item, so buying together leaves more with them."
 				/>
 			</div>
@@ -227,25 +227,25 @@ export default function BasketPage() {
 	const taxResolved = sessionTotals?.buyerTotal != null;
 
 	// The right column's two cards (Parker, 2026-10-06), each a statement that never
-	// mixes with the other, in the order he named them — Payment above, Basket under:
+	// mixes with the other, in the order he named them — Payment above, Cart under:
 	//
 	// **Payment** — what the buyer pays: the items' subtotal, plus sales tax once the
 	// billing address resolved the rate, less any discount, ending in the tax-inclusive
 	// total. From the quote before the address lands; from the session after —
 	// `sessionTotals`' dollars, formatted, never recomputed here.
 	//
-	// **Basket** — what the buyer is buying: the items grouped by creator, one group per
+	// **Cart** — what the buyer is buying: the items grouped by creator, one group per
 	// creator the charge covers (any number since 2026-10-15), each topped by the
 	// creator's receives line — the headline of the
 	// group, beside their name — with an (i) naming the card fee taken out of their part
-	// of the basket, pro-rata by item value. Anthers keeps none of it: the fee goes to
+	// of the cart, pro-rata by item value. Anthers keeps none of it: the fee goes to
 	// the processor, which is exactly what the tooltip says.
 	//
 	// The card fee is the price's cost, not the buyer's, so it appears nowhere in the
 	// Payment card — its only buyer-visible effect is the smaller receives figure, whose
 	// tooltip explains it.
 	const paymentCard = quote ? (
-		<div className="rounded-lg border border-base-300 p-4" data-testid="basket-receipt">
+		<div className="rounded-lg border border-base-300 p-4" data-testid="cart-receipt">
 			<h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-base-content/60">
 				Payment
 			</h2>
@@ -262,7 +262,7 @@ export default function BasketPage() {
 							Sales Tax
 							<InfoTip text={salesTaxDerivation(sessionTotals, quote)} />
 						</span>
-						<span className="tabular-nums" data-testid="basket-tax">
+						<span className="tabular-nums" data-testid="cart-tax">
 							+${(sessionTotals?.tax ?? 0).toFixed(2)}
 						</span>
 					</div>
@@ -278,14 +278,14 @@ export default function BasketPage() {
 				{Number(sessionTotals?.discount) > 0 && (
 					<div className="flex justify-between py-1 text-base-content/60">
 						<span>Discount</span>
-						<span className="tabular-nums" data-testid="basket-discount">
+						<span className="tabular-nums" data-testid="cart-discount">
 							−${(sessionTotals?.discount ?? 0).toFixed(2)}
 						</span>
 					</div>
 				)}
 				<div className="mt-2 flex justify-between border-t border-base-300 pt-2 font-semibold">
 					<span>Total</span>
-					<span className="tabular-nums" data-testid="basket-total">
+					<span className="tabular-nums" data-testid="cart-total">
 						{taxResolved
 							? `$${(sessionTotals?.buyerTotal ?? 0).toFixed(2)}`
 							: `$${quote.subtotal} + tax`}
@@ -295,10 +295,10 @@ export default function BasketPage() {
 		</div>
 	) : null;
 
-	const basketCard = quote ? (
-		<div className="rounded-lg border border-base-300 p-4" data-testid="basket-card">
+	const cartCard = quote ? (
+		<div className="rounded-lg border border-base-300 p-4" data-testid="cart-card">
 			<h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-base-content/60">
-				Basket
+				Cart
 			</h2>
 			{/* A refused count stays visible where it was attempted, in the server's words. */}
 			{lineError && (
@@ -324,12 +324,12 @@ export default function BasketPage() {
 								<span className="text-xs font-normal text-base-content/60">receives</span>
 							</span>
 							<span className="shrink-0 text-[15px] font-semibold tabular-nums text-success">
-								<span data-testid="basket-creator-earns">${group.receives}</span>
+								<span data-testid="cart-creator-earns">${group.receives}</span>
 							</span>
 							<span className="flex w-6 shrink-0 items-center justify-center">
 								<InfoTip
 									align="right"
-									text={`Each price is all-in: card processing (${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, at cost) is taken out of it, not added on top. This basket's one fee is split pro-rata by item value; Anthers keeps none of it.`}
+									text={`Each price is all-in: card processing (${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, at cost) is taken out of it, not added on top. This cart's one fee is split pro-rata by item value; Anthers keeps none of it.`}
 								/>
 							</span>
 						</div>
@@ -339,11 +339,11 @@ export default function BasketPage() {
 						    and the price column stay aligned with the Payment card's. */}
 						<ul
 							className="ml-3 divide-y divide-base-300 border-l border-base-300 pl-3"
-							data-testid="basket-items"
+							data-testid="cart-items"
 						>
 							{group.lines.map((item) => {
 								// The list's own item record — the remove buttons work off the
-								// BASKET's items (the source with handles), matched by id.
+								// CART's items (the source with handles), matched by id.
 								const held =
 									item.kind === "badge"
 										? items.find((i) => i.kind === "badge" && i.badgeId === item.badgeId)
@@ -458,7 +458,7 @@ export default function BasketPage() {
 				))}
 				{/*
 				 * Only shown when it is actually non-zero — a "you saved $0.00" on a
-				 * single-item basket would teach the user to ignore the line that
+				 * single-item cart would teach the user to ignore the line that
 				 * matters. Anthers keeps nothing either way, so the saving is not ours
 				 * to share: it is entirely the creators', and the copy says so.
 				 */}
@@ -479,7 +479,7 @@ export default function BasketPage() {
 
 	return (
 		<div className="container mx-auto max-w-6xl px-4 py-8">
-			<h1 className="text-2xl font-bold mb-1">Your Basket</h1>
+			<h1 className="text-2xl font-bold mb-1">Your Cart</h1>
 			{groups.length > 0 && (
 				<p className="text-sm text-base-content/60 mb-6">
 					Work by{" "}
@@ -491,14 +491,14 @@ export default function BasketPage() {
 							</Link>
 						</span>
 					))}
-					. One charge buys the whole basket; each creator receives their part.
+					. One charge buys the whole cart; each creator receives their part.
 				</p>
 			)}
 
 			{error && (
 				<div className="alert alert-error text-sm mb-4">
 					<span className="block">{error}</span>
-					{/* No dead ends: the quote can be asked for again in place — a basket page
+					{/* No dead ends: the quote can be asked for again in place — a cart page
 					    that needed a reload to re-price itself would be one the buyer has to
 					    trust on faith. */}
 					<button
@@ -520,37 +520,37 @@ export default function BasketPage() {
 				 * The two columns. DOM order is checkout first (its form is the page's only
 				 * one), and since 2026-10-04 that column sits LEFT on desktop (`lg:order-1`)
 				 * with the pricing cards right (`lg:order-2`); on mobile the flex column
-				 * reads basket → payment → checkout via the `order` utilities.
+				 * reads cart → payment → checkout via the `order` utilities.
 				 */
 				<div className="flex flex-col gap-8 lg:grid lg:grid-cols-2 lg:gap-12">
-					<section className="order-3 lg:order-1" data-testid="basket-checkout-column">
+					<section className="order-3 lg:order-1" data-testid="cart-checkout-column">
 						{user ? (
-							<BasketCheckout
+							<CartCheckout
 								contentKey={contentKey}
 								buyerTotal={quote.subtotal}
 								onTotals={handleTotals}
 								onComplete={() => {
 									setSessionTotals(null);
-									// The server already emptied the stored basket when the checkout
+									// The server already emptied the stored cart when the checkout
 									// session was built; this clears this hook's cache. Awaiting it
 									// (async in server mode) before the quote refresh stops the
-									// receipt from being re-quoted off a half-cleared basket.
+									// receipt from being re-quoted off a half-cleared cart.
 									void Promise.resolve(clear()).then(() => void refresh());
 								}}
 							/>
 						) : (
 							// The signed-out detour, with the return trip attached: the buyer lands
 							// back here after signing in or up, one `next` parameter away from the
-							// basket they were about to pay for (the generalized purchase-path fix —
+							// cart they were about to pay for (the generalized purchase-path fix —
 							// the same open-redirect-safe pattern the locked-post unlock panel uses).
-							<Link to={withNextPath("/login", "/basket")} className="btn btn-primary w-full">
+							<Link to={withNextPath("/login", "/cart")} className="btn btn-primary w-full">
 								Log in to buy
 							</Link>
 						)}
 					</section>
-					<aside className="order-1 lg:order-2 space-y-4" data-testid="basket-items-column">
+					<aside className="order-1 lg:order-2 space-y-4" data-testid="cart-items-column">
 						{paymentCard}
-						{basketCard}
+						{cartCard}
 					</aside>
 				</div>
 			) : null}

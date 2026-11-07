@@ -15,7 +15,7 @@
  *
  * ⚠️ **Shipping is flat, per order, and the creator's to set.** There is no rate source any
  * more: a creator charges what a parcel costs them, and two of one good still go in one
- * box. A basket carrying goods from several creators charges each creator's shipping once
+ * box. A cart carrying goods from several creators charges each creator's shipping once
  * — the most expensive of their lines, so nobody is underpaid for a parcel and nobody is
  * charged twice for one.
  */

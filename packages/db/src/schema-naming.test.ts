@@ -44,7 +44,7 @@ import { PgTable } from "drizzle-orm/pg-core";
  * `shipment_complaints` its member.
  */
 const ROOTS: ReadonlySet<string> = new Set([
-	"basket_items",
+	"cart_items",
 	"card_impressions",
 	"charitable_ledger",
 	"comments",

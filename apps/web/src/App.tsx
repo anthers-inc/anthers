@@ -109,7 +109,7 @@ const LegalPage = lazy(() => import("./pages/LegalPage"));
 const CopyrightPage = lazy(() => import("./pages/CopyrightPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
-const BasketPage = lazy(() => import("./pages/BasketPage"));
+const CartPage = lazy(() => import("./pages/CartPage"));
 const ParentsPage = lazy(() => import("./pages/ParentsPage"));
 const AbusePage = lazy(() => import("./pages/AbusePage"));
 const PostPage = lazy(() => import("./pages/PostPage"));
@@ -395,14 +395,16 @@ export default function App() {
 						}
 					/>
 					{/*
-					 * Deliberately NOT a ProtectedRoute. The basket is the account's when
+					 * Deliberately NOT a ProtectedRoute. The cart is the account's when
 					 * there is one and a browser scratchpad when there is not, so a
 					 * logged-out user can fill one and is asked to log in at the point of
 					 * payment — where the ask is motivated — rather than at the point of
 					 * browsing, where it is a wall. Signing in merges the scratch into the
-					 * account's basket.
+					 * account's cart.
 					 */}
-					<Route path="/basket" element={<BasketPage />} />
+					<Route path="/cart" element={<CartPage />} />
+					{/* The old address forwards: "basket" was the name before the 2026-11-07 rename. */}
+					<Route path="/basket" element={<Navigate to="/cart" replace />} />
 					{/* Badges and Purchases are two tabs on Settings since 2026-11-06 — see
 					    `pages/SettingsPage.tsx`. `/badges`, `/subscription` and `/purchases` stay
 					    as the addresses older references and the post-subscribe redirect already

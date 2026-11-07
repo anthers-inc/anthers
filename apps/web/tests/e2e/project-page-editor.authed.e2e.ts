@@ -45,7 +45,7 @@ const authed = async () => ({
 
 /**
  * Make a Work: released, or a draft. Text needs no file, so the release chain is the
- * rating, a created credit and an everyone row — the same shape the basket specs use.
+ * rating, a created credit and an everyone row — the same shape the cart specs use.
  * An original release date rides when given; the `original` sort mode's own subject.
  */
 async function makeWork(title: string, released: boolean, originallyReleased?: string) {

@@ -4,7 +4,7 @@ import { userPreferences, users } from "@anthers/db/schema";
 // `BADGE_ORDER` is the display list of Anthers' ladder — Free plus each paid Badge — which
 // is exactly the set a signup's `badge` pick may name. Read from it rather than restating
 // the names, so a rung added to the ladder is pickable the moment it exists.
-import { BADGE_ORDER, MAX_BASKET_ITEMS } from "@anthers/shared/constants";
+import { BADGE_ORDER, MAX_CART_ITEMS } from "@anthers/shared/constants";
 import { MAX_PICKED_CREATORS } from "@anthers/shared/signup";
 import type { ThemeValue } from "@anthers/shared/theme";
 import { zValidator } from "@hono/zod-validator";
@@ -33,7 +33,7 @@ import {
 	startDesktopAuth,
 	validateSession,
 } from "../services/auth.js";
-import { addBasketItem } from "../services/basket.js";
+import { addCartItem } from "../services/cart.js";
 import { isCreator } from "../services/creator-standing.js";
 import { discordConfigured } from "../services/discord.js";
 import { sendSignInCodeEmail, sendSignupCodeEmail } from "../services/email.js";
@@ -78,13 +78,13 @@ const emailCodeStartSchema = z.object({
 });
 
 /**
- * The anonymous scratch basket the browser hands over at sign-in. Work ids only —
+ * The anonymous scratch cart the browser hands over at sign-in. Work ids only —
  * everything else the scratchpad held (titles, prices) was display copy, and the merge's
  * answer re-derives what matters through the same resolution every other route uses.
- * Bounded to the basket's own cap, so a padded scratch spends a bounded amount of work.
+ * Bounded to the cart's own cap, so a padded scratch spends a bounded amount of work.
  */
-const basketMergeSchema = z.object({
-	items: z.array(z.object({ workId: z.number().int().positive() })).max(MAX_BASKET_ITEMS),
+const cartMergeSchema = z.object({
+	items: z.array(z.object({ workId: z.number().int().positive() })).max(MAX_CART_ITEMS),
 });
 
 // The names a signup's `badge` pick may carry: Anthers' own ladder, Free included.
@@ -961,10 +961,10 @@ const authRoutes = new Hono()
 		return c.json({ user: await serializeUser(result.user) });
 	})
 
-	// ── Basket Merge ─────────────────────────────────────────────────────────
+	// ── Cart Merge ─────────────────────────────────────────────────────────
 	/**
-	 * Fold the anonymous scratch basket this browser has been keeping into the account's
-	 * own server-side basket, and clear the scratchpad.
+	 * Fold the anonymous scratch cart this browser has been keeping into the account's
+	 * own server-side cart, and clear the scratchpad.
 	 *
 	 * 🚨 **Called after every authentication that lands a session in a browser** — the email
 	 * code's verify and the ATProto callback both call it once `refreshUser` is about to
@@ -973,33 +973,28 @@ const authRoutes = new Hono()
 	 * merge that fired on every page load would be a write path keyed to a read.
 	 *
 	 * The scratch arrives as the client told us, and is treated exactly as the scratchpad
-	 * always deserved: each item goes through `addBasketItem` — the same function the Work
+	 * always deserved: each item goes through `addCartItem` — the same function the Work
 	 * page's button calls — so the item cap and the existence check all fire rather than
 	 * being bypassed by a bulk insert. Unbuyable items in the scratch are still merged
 	 * (they are intent, and quote/checkout re-resolve everything anyway); a Work that no
 	 * longer exists is not.
 	 *
 	 * The merge order is scratch order, so the scratch appends after whatever the account's
-	 * basket already holds — and a basket carries any number of creators (2026-10-15), so
+	 * cart already holds — and a cart carries any number of creators (2026-10-15), so
 	 * nothing clashes and nothing replaces anything.
 	 */
-	.post(
-		"/basket/merge",
-		requireAuth,
-		zValidator("json", basketMergeSchema, invalidBody),
-		async (c) => {
-			const user = c.get("user");
-			const added: number[] = [];
-			for (const item of c.req.valid("json").items) {
-				const result = await addBasketItem(user.id, item.workId);
-				if (!result.ok) continue; // gone from the catalog — not an intent anyone can honor
-				added.push(item.workId);
-			}
-			// The scratchpad is the client's to clear, and it clears it below on `ok` — but the
-			// contract is server-stated all the same: once answered, the browser's copy is dead.
-			return c.json({ added });
-		},
-	)
+	.post("/cart/merge", requireAuth, zValidator("json", cartMergeSchema, invalidBody), async (c) => {
+		const user = c.get("user");
+		const added: number[] = [];
+		for (const item of c.req.valid("json").items) {
+			const result = await addCartItem(user.id, item.workId);
+			if (!result.ok) continue; // gone from the catalog — not an intent anyone can honor
+			added.push(item.workId);
+		}
+		// The scratchpad is the client's to clear, and it clears it below on `ok` — but the
+		// contract is server-stated all the same: once answered, the browser's copy is dead.
+		return c.json({ added });
+	})
 
 	// ── Devices / Sessions ───────────────────────────────────────────────────
 	// The revocation surface that makes long-lived desktop tokens safe to hand out:

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A physical good's store panel, and its line in the basket — in a real browser.
+ * A physical good's store panel, and its line in the cart — in a real browser.
  *
  * The panel is the one surface where the goods model becomes visible to a buyer: a price,
  * the creator's choices, a count and what shipping costs. No API test can tell you whether
@@ -10,7 +10,7 @@
  * ⚠️ **The fixture creator has no connected Stripe account**, deliberately: the gauntlet
  * creator is reset between runs and a Work made there can vanish mid-walk, while the media
  * fixture is stable but unconnected. So the panel is walked for its pricing and choices —
- * the half that renders without money — and the basket line is placed through the same API
+ * the half that renders without money — and the cart line is placed through the same API
  * the panel's button calls. What the button itself does is the API test's subject.
  */
 import { db } from "@anthers/db/client";
@@ -121,18 +121,18 @@ test("the store panel prices the good, offers its choices and refuses the sold-o
 	await expect(page.getByRole("button", { name: "Large" })).toBeVisible();
 	await expect(page.getByRole("button", { name: /Bare — sold out/ })).toBeDisabled();
 
-	// The storefront no longer asks for a count; the basket owns it.
+	// The storefront no longer asks for a count; the cart owns it.
 	await expect(page.getByLabel("How many")).toHaveCount(0);
 
 	expect(errors).toEqual([]);
 });
 
-test("a physical line in the basket shows its count and choices, and the count is editable", async ({
+test("a physical line in the cart shows its count and choices, and the count is editable", async ({
 	page,
 	context,
 }) => {
 	await signInAsMediaFixture(context);
-	const add = await fetch(`${API_URL}/api/payments/basket/items`, {
+	const add = await fetch(`${API_URL}/api/payments/cart/items`, {
 		method: "POST",
 		headers: headers(),
 		body: JSON.stringify({
@@ -146,13 +146,13 @@ test("a physical line in the basket shows its count and choices, and the count i
 	});
 	expect(add.status, "adding the physical line").toBe(200);
 
-	await page.goto("/basket");
+	await page.goto("/cart");
 	await expect(page.getByText(/Size: Large · Glaze: Blue · × 2/)).toBeVisible({
 		timeout: 15_000,
 	});
 	await expect(page.getByText("$36.00").first()).toBeVisible();
 
-	// The stepper is the basket's own — the buyer fixes a count where they read it.
+	// The stepper is the cart's own — the buyer fixes a count where they read it.
 	await page.getByRole("button", { name: /One more/ }).click();
 	await expect(page.getByText(/× 3/)).toBeVisible({ timeout: 15_000 });
 	await expect(page.getByText("$54.00")).toBeVisible({ timeout: 15_000 });
