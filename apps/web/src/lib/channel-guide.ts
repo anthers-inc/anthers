@@ -113,6 +113,43 @@ export function previousProgramIndex(index: number, count: number): number | nul
 }
 
 /**
+ * Which way autoplay steps along a channel's rank order. The default is toward the newer
+ * end, the guide's own reading; the other is a choice made in the interface, never a
+ * stored preference, and it resets with the component.
+ */
+export type GuideDirection = "newer" | "older";
+
+/**
+ * The program an ended video advances to in the chosen direction, or `null` at that end.
+ * The sort never changes — only which neighbour autoplay reaches for.
+ */
+export function advanceProgramIndex(
+	index: number,
+	count: number,
+	direction: GuideDirection,
+): number | null {
+	return direction === "newer" ? nextProgramIndex(index) : previousProgramIndex(index, count);
+}
+
+/**
+ * Where one rank sits in the row grid: rank 0 (the newest) at the rightmost column, and
+ * **every rank on row 1**. The explicit row is what keeps a channel's programs on one
+ * horizontal line — left to auto-placement, the descending column numbers wrap each
+ * program onto its own row and the channel marches diagonally down the page.
+ */
+export function rowGridPlacement(
+	rank: number,
+	rowCount: number,
+): { gridColumn: number; gridRow: number } {
+	return { gridColumn: 2 + (rowCount - 1 - rank), gridRow: 1 };
+}
+
+/** The channel bug's cell in the row grid: the first column, on the programs' own row. */
+export function channelGridPlacement(): { gridColumn: number; gridRow: number } {
+	return { gridColumn: 1, gridRow: 1 };
+}
+
+/**
  * The autoplay preference, deliberately **off by default** (Parker, 2026-10-11: autoplay
  * is not the default — it is something a user flips on when they are in the mood for
  * multi-video play) and remembered on this device once they do.

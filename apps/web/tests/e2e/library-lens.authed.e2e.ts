@@ -643,6 +643,38 @@ test("the Channel Guide flips to rows, creators down the left and programs runni
 	await page.evaluate(() => localStorage.removeItem("anthers_guide_orientation"));
 });
 
+test("the guide's arrows flip autoplay's direction without re-sorting the guide", async ({
+	page,
+}) => {
+	await saveFixtureWork(page, "video");
+	await page.goto("/library?lens=channel-guide");
+	await expect(page.getByRole("heading", { name: "Channel Guide" })).toBeVisible();
+
+	// The ruler's arrow is a real control. It starts pointing at the newer end, and a
+	// click turns it around without touching the guide's own order.
+	const flip = page.getByRole("button", { name: "Flip autoplay direction" }).first();
+	await expect(flip).toHaveAttribute("title", /toward the newer end/);
+	await flip.click();
+	await expect(flip).toHaveAttribute("title", /toward the older end/);
+	// The sorting labels still describe the sort: Latest is still the newest end.
+	await expect(page.getByText("Latest", { exact: true })).toBeVisible();
+
+	// Tune the channel's only program. Next now looks toward the older end, and there is
+	// nothing below it — the opposite sentence from the default reading.
+	await page.getByTestId("guide-block").click();
+	await expect(page.getByTestId("guide-playing")).toBeVisible();
+	await expect(page.getByTestId("guide-next")).toBeDisabled();
+	await expect(page.getByTestId("guide-next")).toContainText(/nothing below/i);
+
+	// The choice resets rather than sticking: returning to the guide and flipping back
+	// leaves the default direction for the walks that follow.
+	await page.getByRole("button", { name: "Back to the guide" }).click();
+	await page.getByRole("button", { name: "Flip autoplay direction" }).first().click();
+	await expect(
+		page.getByRole("button", { name: "Flip autoplay direction" }).first(),
+	).toHaveAttribute("title", /toward the newer end/);
+});
+
 test("the new lenses are views, not containers — switching through them leaves the Library exact", async ({
 	page,
 }) => {
