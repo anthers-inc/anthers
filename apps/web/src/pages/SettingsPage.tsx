@@ -2969,10 +2969,11 @@ function DataSection() {
  * since 2026-11-06. The tab is carried in the URL as `?tab=` so a link can point somebody
  * at the right one.
  *
- * ⭐ **Badges & Purchases joined as a tab on 2026-10-23**, rather than staying a page of its
- * own at `/purchases`. Both halves answer what the account has given, which is a settings
- * question, and the account had two doors for one subject: a menu item for the money and a
- * menu item for everything else. It sits between Experience and Identity.
+ * ⭐ **Badges and Purchases are two tabs since 2026-11-06** (Parker). They shared one tab
+ * from 2026-10-23, and the split is the starting point for working through the cards, the
+ * layout of the cycle record and the bugs each half carries on its own. Badges is the
+ * standing relationship; Purchases is the one-time receipts. Both sit between Experience
+ * and Identity.
  *
  * ⭐ **Experience is the appearance-and-playback tab** (Parker, 2026-11-06): the theme, the
  * starting tab, the per-browser media preferences, the miniplayer and the keyboard chords
@@ -2983,6 +2984,7 @@ function DataSection() {
 type SettingsTab =
 	| "account"
 	| "experience"
+	| "badges"
 	| "purchases"
 	| "identity"
 	| "content"
@@ -2992,7 +2994,8 @@ type SettingsTab =
 const TAB_LABELS: { id: SettingsTab; label: string }[] = [
 	{ id: "account", label: "Account" },
 	{ id: "experience", label: "Experience" },
-	{ id: "purchases", label: "Badges & Purchases" },
+	{ id: "badges", label: "Badges" },
+	{ id: "purchases", label: "Purchases" },
 	{ id: "identity", label: "Identity & Devices" },
 	{ id: "content", label: "Content & Safety" },
 	{ id: "activity", label: "Activity & Data" },
@@ -3270,11 +3273,18 @@ export default function SettingsPage() {
 				</div>
 			)}
 
+			{visitedTabs.has("badges") && (
+				<div hidden={activeTab !== "badges"}>
+					{/* The standing relationship: the Badges this account holds, the cycle's
+					    accounting record and the supporters list. Purchases is its own tab
+					    beside this one since 2026-11-06. */}
+					<BadgesSection />
+				</div>
+			)}
+
 			{visitedTabs.has("purchases") && (
 				<div hidden={activeTab !== "purchases"}>
-					{/* What this account holds and what it has bought — the same two components the
-					    old `/purchases` page mounted, now a tab so the account has one address. */}
-					<BadgesSection />
+					{/* The one-time receipts — what this account has bought, and its orders. */}
 					<PurchasesSection />
 				</div>
 			)}

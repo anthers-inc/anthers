@@ -19,11 +19,17 @@
  * A creator's Badge emblem renders through the same BadgeMark Anthers' own Badges render
  * through (CreatorBadgeMark), so both ladders read as one collection.
  *
- * This is the first section of the account page, with PurchasesSection below it: Badges
- * are the standing relationship and Purchases are the one-time receipts, and they share
- * a page because both answer what this account has given and what it holds.
+ * This is the Badges settings tab (2026-11-06), with Purchases as its own tab beside it:
+ * Badges are the standing relationship, Purchases are the one-time receipts, and the split
+ * lets each answer its own question rather than sharing one page.
  */
 
+import {
+	currentCycleKey,
+	cycleStart,
+	nextCycleKey,
+	previousCycleKey,
+} from "@anthers/shared/billing-cycle";
 // The narrower `Badge` (Anthers' own four, no "free") is what `AnthersBadgeMark` keys on —
 // both types carry the name, and the disambiguation keeps the cast honest.
 import type { Badge as IssuerBadge } from "@anthers/shared/constants";
@@ -74,24 +80,16 @@ function formatHours(seconds: number): string {
 /*  Cycle helpers                                                      */
 /* ------------------------------------------------------------------ */
 
-function getCurrentCycle(): string {
-	const now = new Date();
-	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-}
-function offsetCycle(cycle: string, offset: number): string {
-	const d = new Date(`${cycle}T00:00:00`);
-	d.setMonth(d.getMonth() + offset);
-	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
 function cycleLabel(cycle: string): string {
-	return new Date(`${cycle}T00:00:00`).toLocaleString("default", {
+	return cycleStart(cycle).toLocaleString("default", {
 		month: "long",
 		year: "numeric",
+		timeZone: "UTC",
 	});
 }
 type ViewMode = "past" | "current" | "next";
 function viewModeFor(cycle: string): ViewMode {
-	const current = getCurrentCycle();
+	const current = currentCycleKey();
 	if (cycle === current) return "current";
 	if (cycle > current) return "next";
 	return "past";
@@ -109,8 +107,8 @@ async function getJson<T>(path: string): Promise<T> {
 /* ------------------------------------------------------------------ */
 
 function CycleSelector({ cycle, onChange }: { cycle: string; onChange: (c: string) => void }) {
-	const current = getCurrentCycle();
-	const nextCycle = offsetCycle(current, 1);
+	const current = currentCycleKey();
+	const nextCycle = nextCycleKey(current);
 	const mode = viewModeFor(cycle);
 	return (
 		<div className="flex items-center gap-1">
@@ -118,7 +116,7 @@ function CycleSelector({ cycle, onChange }: { cycle: string; onChange: (c: strin
 				type="button"
 				className="btn btn-ghost btn-xs"
 				aria-label="Earlier cycle"
-				onClick={() => onChange(offsetCycle(cycle, -1))}
+				onClick={() => onChange(previousCycleKey(cycle))}
 			>
 				&larr;
 			</button>
@@ -132,7 +130,7 @@ function CycleSelector({ cycle, onChange }: { cycle: string; onChange: (c: strin
 					type="button"
 					className="btn btn-ghost btn-xs"
 					aria-label="Later cycle"
-					onClick={() => onChange(offsetCycle(cycle, 1))}
+					onClick={() => onChange(nextCycleKey(cycle))}
 				>
 					&rarr;
 				</button>
@@ -204,7 +202,7 @@ export default function BadgesSection() {
 	const [actionLoading, setActionLoading] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(null);
-	const [selectedCycle, setSelectedCycle] = useState(getCurrentCycle());
+	const [selectedCycle, setSelectedCycle] = useState(currentCycleKey());
 
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);

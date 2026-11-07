@@ -54,15 +54,15 @@ const EXPECTATIONS: Record<keyof typeof STRIPE_RETURN_PATHS, (page: Page) => Pro
 	},
 
 	/**
-	 * The Badges & Purchases tab on Settings. Either heading proves the page matched, and which
-	 * one appears depends on whether the fixture creator has a billing account, which is not
-	 * this test's subject. ⚠️ **The tab must be the selected one**, not merely present: the path
-	 * now carries `?tab=purchases`, and a page that ignored it would land on Account instead —
+	 * The Badges tab on Settings. Either heading proves the page matched, and which one
+	 * appears depends on whether the fixture creator has a billing account, which is not this
+	 * test's subject. ⚠️ **The tab must be the selected one**, not merely present: the path
+	 * now carries `?tab=badges`, and a page that ignored it would land on Account instead —
 	 * which is the quieter half of this guard's defect (see the header above).
 	 */
 	billingPortalReturn: async (page) => {
 		await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
-		await expect(page.getByRole("tab", { name: "Badges & Purchases" })).toHaveAttribute(
+		await expect(page.getByRole("tab", { name: "Badges", exact: true })).toHaveAttribute(
 			"aria-selected",
 			"true",
 		);

@@ -21,7 +21,7 @@ describe("modeForPath", () => {
 	});
 
 	it("no longer treats /purchases as a page of its own", () => {
-		// Badges & Purchases is a tab on /settings now; the old address is a redirect whose
+		// Badges and Purchases are tabs on /settings now; the old address is a redirect whose
 		// pathname (/purchases) is not one this list has any reason to know.
 		expect(modeForPath("/purchases", "studio")).toBe("studio");
 	});
