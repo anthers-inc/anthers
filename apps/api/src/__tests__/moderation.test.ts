@@ -29,7 +29,7 @@ import { purgeFixtureAccounts } from "./cleanup.js";
 import { handleOf } from "./handles.js";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
-import { CREATED_CREDIT } from "./work-fixtures.js";
+import { CREATED_CREDIT, consumeWork } from "./work-fixtures.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -106,7 +106,8 @@ beforeAll(async () => {
 	);
 	creator = await signUp(creatorName);
 	await enablePayouts(creatorName);
-	userA = await signUp(userAName);
+	const a = await createAccount(userAName);
+	userA = a.cookie;
 	await enablePayouts(userAName);
 	const b = await createAccount(userBName);
 	userB = b.cookie;
@@ -147,6 +148,10 @@ beforeAll(async () => {
 		}),
 	});
 	expect(release.status).toBe(200);
+
+	// Both reviewers have watched the Work, so their reviews are allowed.
+	await consumeWork(a.userId, workId);
+	await consumeWork(b.userId, workId);
 
 	const c1 = await post(`/api/content/posts/${slug}/comments`, userA, {
 		body: "buy cheap followers at example.com",

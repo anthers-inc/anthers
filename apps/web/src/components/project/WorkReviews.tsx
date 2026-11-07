@@ -96,7 +96,14 @@ function ReviewBody({ body }: { body: string }) {
  * two verdicts read like the two answers they are rather than like two flavors of one
  * choice.
  */
-export default function WorkReviews({ workId }: { workId: number }) {
+export default function WorkReviews({
+	workId,
+	creatorId,
+}: {
+	workId: number;
+	/** The Work's creator, so the reader's own Work is known without another read. */
+	creatorId: number | null;
+}) {
 	const { isAuthenticated, user } = useAuth();
 	// A review is a record in the reviewer's own repository, refused without the permission.
 	const permissionMissing = useInteractionPermissionMissing(isAuthenticated) === true;
@@ -111,7 +118,11 @@ export default function WorkReviews({ workId }: { workId: number }) {
 	const [appliedVersion, setAppliedVersion] = useState<VersionFilter>("all");
 	const [draftVerdict, setDraftVerdict] = useState<string | null>(null);
 	const [draftBody, setDraftBody] = useState("");
+	// An existing review is shown as the reader's own; the composer opens only when they
+	// choose to change it, rather than standing open and inviting a second one.
+	const [editing, setEditing] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
+	const [removing, setRemoving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [reportingReview, setReportingReview] = useState<number | null>(null);
 	const [stickerKey, setStickerKey] = useState<string | null>(null);
@@ -139,22 +150,60 @@ export default function WorkReviews({ workId }: { workId: number }) {
 		fetchReviews(window, versionFilter);
 	}, [fetchReviews, window, versionFilter]);
 
-	// The composer stands open always now; a returning reviewer opens on what they already
-	// said, so editing is a correction rather than a retype (the same intent the verdict
-	// click carried, always on). A review left without words opens empty.
-	useEffect(() => {
-		if (!agg || agg.userVerdict == null || draftVerdict !== null) return;
-		setDraftVerdict(agg.userVerdict);
-		setDraftBody((current) => current || agg.userReview || "");
-	}, [agg, draftVerdict]);
-
-	// Choosing a verdict opens the form; if they have reviewed before, open it on what they
-	// already said so editing is a correction rather than a retype.
+	// Choosing a verdict opens the form. An existing review opens on what they already
+	// said, so editing is a correction rather than a retype.
 	const startReview = (verdict: string) => {
 		if (!isAuthenticated) return;
 		setDraftVerdict(verdict);
 		setDraftBody((current) => current || (agg?.userReview ?? ""));
 		setError(null);
+	};
+
+	/** Open the composer on the review already written, words and verdict together. */
+	const startEdit = () => {
+		if (!agg?.userVerdict) return;
+		setDraftVerdict(agg.userVerdict);
+		setDraftBody(agg.userReview ?? "");
+		setEditing(true);
+		setError(null);
+	};
+
+	const cancelEdit = () => {
+		setEditing(false);
+		setDraftVerdict(null);
+		setDraftBody("");
+		setError(null);
+		setStickerKey(null);
+	};
+
+	const remove = async () => {
+		if (removing) return;
+		if (
+			!confirm(
+				"Remove your review? Your verdict and words go, along with the helpfulness votes on them. A Sticker you gave stays with the creator.",
+			)
+		) {
+			return;
+		}
+		setRemoving(true);
+		setError(null);
+		try {
+			const res = await client.api.content.works[":id"].reviews.$delete({
+				param: { id: String(workId) },
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				throw new Error(body?.error ?? "That review couldn't be removed. Please try again.");
+			}
+			cancelEdit();
+			fetchReviews(window, versionFilter);
+		} catch (err) {
+			setError(
+				err instanceof Error ? err.message : "That review couldn't be removed. Please try again.",
+			);
+		} finally {
+			setRemoving(false);
+		}
 	};
 
 	const submit = async (e: React.FormEvent) => {
@@ -168,7 +217,10 @@ export default function WorkReviews({ workId }: { workId: number }) {
 				json: { verdict: draftVerdict, body: draftBody.trim() },
 			});
 			if (!res.ok) {
-				setError("That review couldn't be saved. Please try again.");
+				// The server's own refusal names the state (own Work, unlocked, unseen);
+				// a generic failure message would hide the one thing the reader can act on.
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				setError(body?.error ?? "That review couldn't be saved. Please try again.");
 				return;
 			}
 			const { review } = (await res.json()) as { review: { id: number } };
@@ -180,6 +232,7 @@ export default function WorkReviews({ workId }: { workId: number }) {
 			}
 			setDraftVerdict(null);
 			setDraftBody("");
+			setEditing(false);
 			fetchReviews(window, versionFilter);
 		} catch {
 			setError("That review couldn't be saved. Please try again.");
@@ -205,6 +258,12 @@ export default function WorkReviews({ workId }: { workId: number }) {
 	if (!agg) return null;
 
 	const chosen = draftVerdict ?? agg.userVerdict;
+	const isOwnWork = isAuthenticated && user?.id === creatorId;
+	const hasReview = agg.userVerdict !== null;
+	const locked = !hasReview && agg.eligibility !== null && !agg.eligibility.canReview;
+	// The gate is the composer's; an existing review stays editable unless it was never
+	// this reader's to write (their own Work), where Remove is the way out.
+	const canEdit = agg.eligibility?.code !== "own_work";
 	// True only while the payload really is the current version's: a Work with a single
 	// version never offers the control, and the label follows the scope the server answered.
 	const narrowed = appliedVersion === "current" && agg.versionSince !== null;
@@ -259,92 +318,141 @@ export default function WorkReviews({ workId }: { workId: number }) {
 
 			{isAuthenticated && (
 				<div className="mb-6">
-					<div className="flex items-center gap-2 flex-wrap">
-						{/* Two buttons and no third: somebody who feels neither is meant to post
-						    nothing, because posting a review is an action and having it mean
-						    something is the point. The split is even — each verdict takes half
-						    this row's width — and the non-recommendation wears its own answer's
-						    color, red, when it is the one chosen. */}
-						<div className="flex flex-1 min-w-64 basis-56 items-center gap-2">
-							<button
-								type="button"
-								className={`btn btn-sm ${chosen === "recommended" ? "btn-primary" : "btn-outline"} flex-1`}
-								onClick={() => startReview("recommended")}
-								aria-pressed={chosen === "recommended"}
-							>
-								<HandThumbUpIcon className="w-4 h-4" />
-								Recommend
-							</button>
-							<button
-								type="button"
-								className={`btn btn-sm ${chosen === "not-recommended" ? "btn-error" : "btn-outline"} flex-1`}
-								onClick={() => startReview("not-recommended")}
-								aria-pressed={chosen === "not-recommended"}
-							>
-								<HandThumbDownIcon className="w-4 h-4" />
-								Don't Recommend
-							</button>
+					{hasReview && !editing ? (
+						<div className="rounded-box border border-base-300 p-3" data-testid="your-review">
+							<div className="flex flex-wrap items-center gap-2 text-sm">
+								<span className="font-medium">Your review</span>
+								<span
+									className={
+										agg.userVerdict === "recommended"
+											? "text-success text-xs font-medium"
+											: "text-base-content/60 text-xs font-medium"
+									}
+								>
+									{verdictLabel(agg.userVerdict ?? "")}
+								</span>
+								<div className="ml-auto flex items-center gap-2">
+									{canEdit && (
+										<button
+											type="button"
+											className="btn btn-ghost btn-xs"
+											disabled={removing}
+											onClick={startEdit}
+										>
+											Edit
+										</button>
+									)}
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs text-error"
+										disabled={removing}
+										onClick={() => void remove()}
+									>
+										{removing ? "Removing…" : "Remove"}
+									</button>
+								</div>
+							</div>
+							{agg.userReview && (
+								<p className="mt-1 whitespace-pre-line text-sm">{agg.userReview}</p>
+							)}
+							{error && <p className="mt-1 text-sm text-error">{error}</p>}
 						</div>
-					</div>
-					{/* The field is not gated behind a verdict: it reads with the buttons. Text is
-					    optional, so the post button enables on the verdict alone — the words are
-					    what put the review in the list below. */}
-					<form onSubmit={submit} className="mt-3">
-						<textarea
-							className="textarea textarea-bordered w-full"
-							rows={3}
-							maxLength={REVIEW_MAX}
-							placeholder="Say more if you like. A verdict on its own still counts."
-							value={draftBody}
-							onChange={(e) => {
-								setDraftBody(e.target.value);
-								if (draftVerdict === null && agg?.userVerdict != null) {
-									setDraftVerdict(agg.userVerdict);
-								}
-							}}
-						/>
-						{error && <p className="mt-1 text-sm text-error">{error}</p>}
-						{permissionMissing && (
-							<p className="mt-1 text-xs text-warning">{INTERACTION_PERMISSION_HINT}</p>
-						)}
-						<div className="mt-2 flex items-center gap-2">
-							<button
-								type="submit"
-								className="btn btn-primary btn-sm"
-								disabled={submitting || chosen === null || permissionMissing}
-							>
-								{submitting ? (
-									<span className="loading loading-spinner loading-sm" />
-								) : (
-									"Post review"
+					) : (
+						<>
+							<div className="flex items-center gap-2 flex-wrap">
+								{/* Two buttons and no third: somebody who feels neither is meant to post
+								    nothing, because posting a review is an action and having it mean
+								    something is the point. The split is even — each verdict takes half
+								    this row's width — and the non-recommendation wears its own answer's
+								    color, red, when it is the one chosen. */}
+								<div className="flex flex-1 min-w-64 basis-56 items-center gap-2">
+									<button
+										type="button"
+										className={`btn btn-sm ${chosen === "recommended" ? "btn-primary" : "btn-outline"} flex-1`}
+										onClick={() => startReview("recommended")}
+										aria-pressed={chosen === "recommended"}
+										disabled={locked}
+									>
+										<HandThumbUpIcon className="w-4 h-4" />
+										Recommend
+									</button>
+									<button
+										type="button"
+										className={`btn btn-sm ${chosen === "not-recommended" ? "btn-error" : "btn-outline"} flex-1`}
+										onClick={() => startReview("not-recommended")}
+										aria-pressed={chosen === "not-recommended"}
+										disabled={locked}
+									>
+										<HandThumbDownIcon className="w-4 h-4" />
+										Don't Recommend
+									</button>
+								</div>
+							</div>
+							{/* The field is not gated behind a verdict: it reads with the buttons. Text is
+							    optional, so the post button enables on the verdict alone — the words are
+							    what put the review in the list below. */}
+							<form onSubmit={submit} className="mt-3">
+								<textarea
+									className="textarea textarea-bordered w-full"
+									rows={3}
+									maxLength={REVIEW_MAX}
+									placeholder="Say more if you like. A verdict on its own still counts."
+									value={draftBody}
+									disabled={locked}
+									onChange={(e) => {
+										setDraftBody(e.target.value);
+										if (draftVerdict === null && agg?.userVerdict != null) {
+											setDraftVerdict(agg.userVerdict);
+										}
+									}}
+								/>
+								{error && <p className="mt-1 text-sm text-error">{error}</p>}
+								{permissionMissing && (
+									<p className="mt-1 text-xs text-warning">{INTERACTION_PERMISSION_HINT}</p>
 								)}
-							</button>
-							<button
-								type="button"
-								className="btn btn-ghost btn-sm"
-								onClick={() => {
-									setDraftVerdict(null);
-									setDraftBody("");
-									setError(null);
-									setStickerKey(null);
-								}}
-								disabled={submitting}
-							>
-								Cancel
-							</button>
-							<StickerChooser
-								value={stickerKey}
-								onChange={setStickerKey}
-								label="your review"
-								recipientOf={{ subjectType: "work", subjectId: workId }}
-							/>
-						</div>
-						{stickerProblem && (
-							<p className="mt-1 text-xs text-error" role="alert">
-								Your review is posted, but the Sticker could not be given: {stickerProblem}
-							</p>
-						)}
-					</form>
+								{locked ? (
+									/* The reason takes the button's place rather than arriving after a
+									   refused post. */
+									<p className="mt-2 text-sm text-base-content/60">{agg.eligibility?.reason}</p>
+								) : (
+									<div className="mt-2 flex items-center gap-2">
+										<button
+											type="submit"
+											className="btn btn-primary btn-sm"
+											disabled={submitting || chosen === null || permissionMissing}
+										>
+											{submitting ? (
+												<span className="loading loading-spinner loading-sm" />
+											) : editing ? (
+												"Save changes"
+											) : (
+												"Post review"
+											)}
+										</button>
+										<button
+											type="button"
+											className="btn btn-ghost btn-sm"
+											onClick={cancelEdit}
+											disabled={submitting}
+										>
+											Cancel
+										</button>
+										<StickerChooser
+											value={stickerKey}
+											onChange={setStickerKey}
+											label="your review"
+											recipientOf={{ subjectType: "work", subjectId: workId }}
+										/>
+									</div>
+								)}
+								{stickerProblem && (
+									<p className="mt-1 text-xs text-error" role="alert">
+										Your review is posted, but the Sticker could not be given: {stickerProblem}
+									</p>
+								)}
+							</form>
+						</>
+					)}
 				</div>
 			)}
 
@@ -490,6 +598,9 @@ export default function WorkReviews({ workId }: { workId: number }) {
 												score={review.score}
 												userVote={review.userVote}
 												label={`${review.handle}'s review`}
+												disabledReason={
+													isOwnWork ? "You can't vote on reviews of your own Work." : undefined
+												}
 												onChange={({ score, userVote }) =>
 													setAgg((current) =>
 														current

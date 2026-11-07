@@ -297,7 +297,11 @@ describe("a review takes votes, as helpfulness", () => {
 	it("accepts an up or down on a review, one per person", async () => {
 		const cookie = await signUp(`votes_rv_${id}`);
 		const voter = { id: await userIdByName(`votes_rv_${id}`) };
-		const work = await insertWork({ creatorId: voter.id, type: "text", title: `Reviews ${id}` });
+		// The Work belongs to somebody else: a creator no longer votes on reviews of
+		// their own Work, and this case is about the helpfulness door itself.
+		await signUp(`votes_rv_owner_${id}`);
+		const owner = { id: await userIdByName(`votes_rv_owner_${id}`) };
+		const work = await insertWork({ creatorId: owner.id, type: "text", title: `Reviews ${id}` });
 		const [review] = await db
 			.insert(reviews)
 			.values({ userId: voter.id, workId: work.id, verdict: "recommended", body: "it holds up" })

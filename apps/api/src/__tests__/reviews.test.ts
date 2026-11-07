@@ -20,7 +20,7 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { reviews, users, votes, works } from "@anthers/db/schema";
+import { attentionEvents, reviews, users, votes, works } from "@anthers/db/schema";
 import { REVIEW_MAX } from "@anthers/shared/content";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -51,8 +51,34 @@ function post(path: string, cookie: string, body: unknown) {
 	});
 }
 
+/**
+ * A fresh account that has watched the fixture Work, so the review gate sees the same
+ * evidence a real page does. Accounts made before the Work exists (its creator) are left
+ * alone; a test that needs an unconsumed reader uses `createAccount` directly.
+ */
+async function consume(userId: number): Promise<void> {
+	const [work] = await db
+		.select({ creatorId: works.creatorId })
+		.from(works)
+		.where(eq(works.id, workId))
+		.limit(1);
+	await db.insert(attentionEvents).values({
+		userId,
+		creatorId: work.creatorId!,
+		workId,
+		eventType: "watch",
+		durationSeconds: 60,
+		startedAt: new Date(Date.now() - 60_000),
+		endedAt: new Date(),
+		clientId: `reviews-fixture-${userId}-${crypto.randomUUID()}`,
+		viaShareLink: false,
+	});
+}
+
 async function signUp(username: string): Promise<string> {
-	return (await createAccount(username)).cookie;
+	const account = await createAccount(username);
+	if (workId > 0) await consume(account.userId);
+	return account.cookie;
 }
 
 interface ReviewList {
@@ -68,6 +94,11 @@ interface ReviewList {
 	};
 	userVerdict: string | null;
 	userReview: string | null;
+	eligibility: {
+		canReview: boolean;
+		code: string | null;
+		reason: string | null;
+	} | null;
 	reviews: {
 		id: number;
 		verdict: string;
@@ -97,17 +128,22 @@ const _FREE = [{ threshold: 0, allow: true, price: "0" }];
 let creator: string;
 let userA: string;
 let _userB: string;
-let workId: number;
+// Zero until the fixture Work exists; `signUp` reads it to decide whether a new account
+// should be given consumption evidence.
+let workId = 0;
 
 beforeAll(async () => {
 	await db.execute(
 		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${userAName}@example.com`}`, sql`${`${userBName}@example.com`}`], sql`, `)})`,
 	);
-	creator = await signUp(creatorName);
+	const creatorAccount = await createAccount(creatorName);
+	creator = creatorAccount.cookie;
 	await enablePayouts(creatorName);
-	userA = await signUp(userAName);
+	const userAAccount = await createAccount(userAName);
+	userA = userAAccount.cookie;
 	await enablePayouts(userAName);
-	_userB = await signUp(userBName);
+	const userBAccount = await createAccount(userBName);
+	_userB = userBAccount.cookie;
 	await enablePayouts(userBName);
 
 	const itemRes = await post("/api/content/works", creator, {
@@ -132,6 +168,12 @@ beforeAll(async () => {
 		}),
 	});
 	expect(release.status).toBe(200);
+
+	// The reviewers whose posts every block below exercises watched the Work before the
+	// accounts existed, so their consumption evidence is seeded here rather than by
+	// `signUp` (which handles the accounts created later).
+	await consume(userAAccount.userId);
+	await consume(userBAccount.userId);
 }, DB_SETUP_TIMEOUT);
 
 describe("A review can stand on its verdict alone", () => {
@@ -627,5 +669,134 @@ describe("Narrowing the reviews to the current media version", () => {
 				.where(eq(works.id, workId));
 			await db.update(reviews).set({ createdAt: new Date() }).where(inArray(reviews.id, moved));
 		}
+	});
+});
+
+describe("Who may write a review", () => {
+	const write = (cookie: string) =>
+		post(`/api/content/works/${workId}/reviews`, cookie, {
+			verdict: "recommended",
+			body: "a verdict from somebody who never opened it",
+		});
+
+	it("refuses a reader who has not consumed the Work, and says so before the button", async () => {
+		const fresh = await createAccount(`rv_unseen_${id}`);
+		const list = await readReviews(fresh.cookie);
+		expect(list.eligibility).toEqual({
+			canReview: false,
+			code: "unconsumed",
+			reason: "Spend some time with this Work before reviewing it.",
+		});
+
+		const res = await write(fresh.cookie);
+		expect(res.status).toBe(403);
+		const body = (await res.json()) as { code?: string; eligibility?: { code?: string } };
+		expect(body.code).toBe("unconsumed");
+		expect(body.eligibility?.code).toBe("unconsumed");
+	});
+
+	it("opens the composer once the reader has spent time with it", async () => {
+		const account = await createAccount(`rv_seen_${id}`);
+		await consume(account.userId);
+		const list = await readReviews(account.cookie);
+		expect(list.eligibility).toEqual({ canReview: true, code: null, reason: null });
+		expect((await write(account.cookie)).status).toBe(201);
+	});
+
+	it("states the gate before the consumption question on a Work the reader cannot unlock", async () => {
+		const fresh = await createAccount(`rv_locked_${id}`);
+		const [original] = await db
+			.select({ access: works.access })
+			.from(works)
+			.where(eq(works.id, workId));
+		await db
+			.update(works)
+			.set({ access: [{ threshold: 0, allow: false, price: "0" }] })
+			.where(eq(works.id, workId));
+		try {
+			const list = await readReviews(fresh.cookie);
+			expect(list.eligibility).toMatchObject({ canReview: false, code: "locked" });
+			const res = await write(fresh.cookie);
+			expect(res.status).toBe(403);
+			expect(((await res.json()) as { code?: string }).code).toBe("locked");
+		} finally {
+			await db.update(works).set({ access: original.access }).where(eq(works.id, workId));
+		}
+	});
+
+	it("refuses the Work's own creator, whose access would otherwise say yes", async () => {
+		const list = await readReviews(creator);
+		expect(list.eligibility).toMatchObject({ canReview: false, code: "own_work" });
+		const res = await write(creator);
+		expect(res.status).toBe(403);
+		expect(((await res.json()) as { code?: string }).code).toBe("own_work");
+	});
+
+	it("refuses a creator's vote on a review of their own Work", async () => {
+		const list = await readReviews();
+		const review = list.reviews[0];
+		expect(review, "a visible written review to vote on").toBeDefined();
+		const res = await req("/api/content/votes", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creator },
+			body: JSON.stringify({ subjectType: "review", subjectId: review.id, direction: "up" }),
+		});
+		expect(res.status).toBe(403);
+		expect(((await res.json()) as { code?: string }).code).toBe("own_work");
+	});
+});
+
+describe("Taking a review back", () => {
+	it("removes the review and the votes on it, and leaves the rest alone", async () => {
+		const author = await createAccount(`rv_remove_${id}`);
+		await consume(author.userId);
+		const posted = await post(`/api/content/works/${workId}/reviews`, author.cookie, {
+			verdict: "not-recommended",
+			body: "removed before anybody could agree",
+		});
+		expect(posted.status).toBe(201);
+		const reviewId = (await posted.json()).review.id as number;
+
+		const voter = await createAccount(`rv_remvoter_${id}`);
+		const voted = await req("/api/content/votes", {
+			method: "PUT",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: voter.cookie },
+			body: JSON.stringify({ subjectType: "review", subjectId: reviewId, direction: "up" }),
+		});
+		expect(voted.status).toBe(200);
+
+		const gone = await req(`/api/content/works/${workId}/reviews`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: author.cookie },
+		});
+		expect(gone.status).toBe(200);
+
+		const [row] = await db.select({ id: reviews.id }).from(reviews).where(eq(reviews.id, reviewId));
+		expect(row).toBeUndefined();
+		const voteRows = await db
+			.select({ id: votes.id })
+			.from(votes)
+			.where(and(eq(votes.subjectType, "review"), eq(votes.subjectId, reviewId)));
+		expect(voteRows).toHaveLength(0);
+	});
+
+	it("keeps an existing review editable after its consumption evidence is gone", async () => {
+		// Raw attention rows prune after the retention window, so a review must not become
+		// uneditable when the evidence behind its first write ages out.
+		const author = await createAccount(`rv_pruned_${id}`);
+		await consume(author.userId);
+		const first = await post(`/api/content/works/${workId}/reviews`, author.cookie, {
+			verdict: "recommended",
+			body: "written while the record still existed",
+		});
+		expect(first.status).toBe(201);
+
+		await db.delete(attentionEvents).where(eq(attentionEvents.userId, author.userId));
+
+		const again = await post(`/api/content/works/${workId}/reviews`, author.cookie, {
+			verdict: "recommended",
+			body: "edited after the record aged out",
+		});
+		expect(again.status).toBe(201);
 	});
 });

@@ -1669,7 +1669,7 @@ export default function OwnerWorkEditor({
 			label: "Reviews",
 			// The Sticker for a Work rides a review, added from the review editor itself
 			// (Parker, 2026-09-13) — there is no give on the Work page.
-			content: <WorkReviews workId={current.id} />,
+			content: <WorkReviews workId={current.id} creatorId={current.creatorId ?? null} />,
 		},
 		{
 			key: "showings",

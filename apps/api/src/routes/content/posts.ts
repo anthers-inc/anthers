@@ -68,7 +68,11 @@ import {
 } from "../../services/account-visibility.js";
 import { notifyPostComment, notifyReply, notifyReview } from "../../services/activity-notify.js";
 import { interactionPermissionRefusal } from "../../services/atproto.js";
-import { POST_COLLECTION, VOTE_COLLECTION } from "../../services/atproto-record-plan.js";
+import {
+	POST_COLLECTION,
+	REVIEW_COLLECTION,
+	VOTE_COLLECTION,
+} from "../../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../../services/atproto-record-removal.js";
 import { recordUrlFor } from "../../services/atproto-repo.js";
 import { blockedUserIds, isBlocked, notBlockedBy } from "../../services/blocks.js";
@@ -88,6 +92,7 @@ import {
 } from "../../services/post-markdown.js";
 import { publishRefusal } from "../../services/publish-refusal.js";
 import { queueRecordSync } from "../../services/record-sync.js";
+import { reviewEligibilityFor } from "../../services/review-eligibility.js";
 import {
 	allowanceSpent,
 	authorUpvote,
@@ -874,6 +879,29 @@ const postsRoutes = new Hono()
 			return c.json({ error: "Nothing to vote on" }, 404);
 		}
 
+		// 🚨 **A creator does not vote on reviews of their own Work.** Reviews exist to be
+		// the reader's side of a Work; the creator's say is the Work itself, and a helpful
+		// mark from its maker would be the author moderating their own reception. Read the
+		// review's Work before accepting the vote, because the subject is the review rather
+		// than the Work. Withdrawing a vote is never refused, above this branch.
+		if (subjectType === "review") {
+			const [reviewed] = await db
+				.select({ creatorId: works.creatorId })
+				.from(reviews)
+				.innerJoin(works, eq(reviews.workId, works.id))
+				.where(eq(reviews.id, subjectId))
+				.limit(1);
+			if (reviewed?.creatorId != null && reviewed.creatorId === user.id) {
+				return c.json(
+					{
+						error: "You can't vote on reviews of your own Work.",
+						code: "own_work",
+					},
+					403,
+				);
+			}
+		}
+
 		// Withdrawing a vote is never refused; casting or flipping one writes a record.
 		const unwritable = await interactionPermissionRefusal(user.id);
 		if (unwritable) return c.json(unwritable.body, unwritable.status);
@@ -1116,6 +1144,11 @@ const postsRoutes = new Hono()
 
 			let userVerdict: string | null = null;
 			let userReview: string | null = null;
+			// The composer's answer, read once here rather than discovered by a refused
+			// post. Anonymous readers get null: there is no composer to open.
+			const eligibility = currentUserId
+				? await reviewEligibilityFor(currentUserId, work, await workAccessFor(c, work))
+				: null;
 			if (currentUserId) {
 				// Deliberately unfiltered by moderation status: the verdict and words a
 				// user submitted shouldn't silently change under them. Their review
@@ -1148,6 +1181,7 @@ const postsRoutes = new Hono()
 				},
 				userVerdict,
 				userReview,
+				eligibility,
 				// Every listed row carries text — the query above excludes a verdict left on its
 				// own — so `body` reaches the client as words rather than an empty quote. The
 				// fallback is for the type, not for a shape the query can produce. Newest first
@@ -1177,16 +1211,39 @@ const postsRoutes = new Hono()
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
-		// You may only review what you can actually consume. This is stricter than the old
-		// post route, which let anyone who could reach the page leave a verdict on content
-		// they had never seen.
-		const access = await workAccessFor(c, work);
-		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		// 🚨 **A creator never reviews their own Work.** Compared here rather than left to
+		// the access ladder, which answers `canAccess: true` for the owner.
+		if (work.creatorId === user.id) {
+			return c.json(
+				{
+					error: "You can't review your own Work.",
+					code: "own_work",
+				},
+				403,
+			);
+		}
 
 		const unwritable = await interactionPermissionRefusal(user.id);
 		if (unwritable) return c.json(unwritable.body, unwritable.status);
 
 		const { verdict, body } = c.req.valid("json");
+
+		// ⭐ **An existing review is its author's to change and take back.** The eligibility
+		// gate below decides whether a NEW review may be written; an edit stays available
+		// after the raw attention evidence ages out or access lapses, because the words are
+		// already the reader's.
+		const existing = await db
+			.select({ id: reviews.id })
+			.from(reviews)
+			.where(and(eq(reviews.userId, user.id), eq(reviews.workId, work.id)))
+			.limit(1);
+
+		if (existing.length === 0) {
+			const eligibility = await reviewEligibilityFor(user.id, work, await workAccessFor(c, work));
+			if (!eligibility.canReview) {
+				return c.json({ error: eligibility.reason, code: eligibility.code, eligibility }, 403);
+			}
+		}
 		// A textless review stores NULL rather than "", the same absence a record carries:
 		// an empty string would say the reviewer wrote nothing, where NULL says they left
 		// the words out. Editing one to add text fills it in place.
@@ -1199,11 +1256,6 @@ const postsRoutes = new Hono()
 		//
 		// ⚠️ Editing rewrites the published record at the same address rather than writing
 		// a second one, so a link to a review keeps working.
-		const existing = await db
-			.select({ id: reviews.id })
-			.from(reviews)
-			.where(and(eq(reviews.userId, user.id), eq(reviews.workId, work.id)))
-			.limit(1);
 		const [review] = await db
 			.insert(reviews)
 			.values({ userId: user.id, workId: work.id, verdict, body: bodyText })
@@ -1234,6 +1286,47 @@ const postsRoutes = new Hono()
 		void queueRecordSync("review", review.id);
 
 		return c.json({ review }, 201);
+	})
+
+	/**
+	 * Take a review back.
+	 *
+	 * ⚠️ **Never refused, and never gated on consumption.** Taking something back is the
+	 * author's to do whatever the Work's state; the same rule a withdrawn vote follows.
+	 * The review row goes, its helpfulness votes go with it (they are about words that no
+	 * longer exist), and the published record is removed from its author's repository.
+	 *
+	 * A Sticker given on the review stays: the money has already moved to the Work's
+	 * creator, and a financial record does not disappear because its subject did.
+	 */
+	.delete("/works/:id/reviews", requireAuth, async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const [existing] = await db
+			.select({ id: reviews.id, atprotoUri: reviews.atprotoUri })
+			.from(reviews)
+			.where(and(eq(reviews.userId, user.id), eq(reviews.workId, work.id)))
+			.limit(1);
+		if (!existing) return c.json({ error: "You haven't reviewed this Work." }, 404);
+
+		await db
+			.delete(votes)
+			.where(and(eq(votes.subjectType, "review"), eq(votes.subjectId, existing.id)));
+		await db.delete(reviews).where(eq(reviews.id, existing.id));
+
+		// The address travels with the job: the row that knew where the record went is
+		// gone as of the line above.
+		if (existing.atprotoUri) {
+			await queueRecordRemoval({
+				ownerId: user.id,
+				collection: REVIEW_COLLECTION,
+				uri: existing.atprotoUri,
+			});
+		}
+
+		return c.json({ removed: true });
 	});
 
 /*
