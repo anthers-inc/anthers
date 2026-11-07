@@ -18,7 +18,7 @@
 import { db } from "@anthers/db/client";
 import { attentionEvents } from "@anthers/db/schema";
 import { splitOverlappingRanges } from "@anthers/shared/attention";
-import { and, eq, type SQL, sql } from "drizzle-orm";
+import { and, eq, ne, type SQL, sql } from "drizzle-orm";
 
 /** A stored range, reduced to what the split needs plus its attribution. */
 interface RangeRow {
@@ -123,7 +123,14 @@ export async function creditedSecondsByCreator(
 	windowEnd: Date,
 	extra: SQL[] = [],
 ): Promise<Array<{ creatorId: number; viaShareLink: boolean; totalSeconds: number }>> {
-	const rows = await rangesOverlapping(userId, windowStart, windowEnd, extra);
+	// 🚨 **A creator's own watching is not audience time.** The intake drops it now, but
+	// historic rows still carry it, and this is the read the Time Pool distributes from —
+	// so the exclusion is repeated here rather than waiting for the retention window to
+	// take the old rows.
+	const rows = await rangesOverlapping(userId, windowStart, windowEnd, [
+		ne(attentionEvents.creatorId, userId),
+		...extra,
+	]);
 	const credited = splitRows(rows, windowStart, windowEnd);
 	const byPair = new Map<
 		string,
@@ -291,7 +298,17 @@ export async function creatorAnalyticsRanges<K extends string>(
 			viaShareLink: attentionEvents.viaShareLink,
 		})
 		.from(attentionEvents)
-		.where(and(eq(attentionEvents.creatorId, creatorId), sql`${RANGE_END} > ${iso(since)}`));
+		.where(
+			and(
+				eq(attentionEvents.creatorId, creatorId),
+				// 🚨 **A creator's own attention is not an audience.** The write side drops
+				// these events now, but historic rows still carry them, and the analytics
+				// surfaces read this range — so the exclusion is applied here as well rather
+				// than waiting out a month of old data.
+				ne(attentionEvents.userId, creatorId),
+				sql`${RANGE_END} > ${iso(since)}`,
+			),
+		);
 
 	// Group rows by user, split each user's ranges against their own, then fold
 	// into the caller's buckets. Splitting across users would divide seconds that

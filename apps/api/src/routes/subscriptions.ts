@@ -1329,6 +1329,11 @@ const subscriptionRoutes = new Hono()
 				const work = eligibility.get(e.workId);
 				if (!work) return false;
 				if (work.creatorId !== e.creatorId) return false;
+				// 🚨 **A creator does not earn themselves time.** The attributed account (the
+				// viewer, or the sharer behind a share-link view) must not be the Work's own
+				// creator; otherwise watching one's own Work pays its maker from the Time Pool
+				// for being its maker.
+				if (work.creatorId === attributedTo) return false;
 				if (!work.released && work.creatorId !== userId) return false;
 				return work.accessible && work.earns.has(e.eventType);
 			});
