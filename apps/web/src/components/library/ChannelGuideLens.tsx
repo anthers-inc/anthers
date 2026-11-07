@@ -13,12 +13,15 @@
  * (newer). Selecting a video opens it with that video's channel beside or beneath it —
  * the playlist-player arrangement.
  *
- * ⭐ **Next is toward the newer end** — see `lib/channel-guide.ts`, which carries the
- * whole model in pure form: the never-temporal-never-alignment rule (ranks are
+ * ⭐ **Next is toward the newer end by default** — see `lib/channel-guide.ts`, which
+ * carries the whole model in pure form: the never-temporal-never-alignment rule (ranks are
  * per-creator, so "latest plus one" aligns across channels without agreeing on a real
  * time), the next arithmetic, and the autoplay preference, which is deliberately **off by
  * default** and a user's choice to flip. Next is one rank more recent, which is *upward*
  * in columns and *rightward* in rows, and every arrow and label follows the axis.
+ * **Autoplay's step can be flipped to the older end from the guide's own arrows**
+ * (Parker, 2026-11-07): the sort never changes, and the choice resets rather than being
+ * stored.
  *
  * ⭐ **The guide is drawn as a guide, not as a list of cards.** Every channel is a column
  * (or a row) under a fixed-height bug — avatar, name, handle, program count — every
@@ -56,14 +59,16 @@ import {
 } from "@heroicons/react/24/solid";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+	advanceProgramIndex,
+	channelGridPlacement,
 	compareChannelNames,
 	compareRecencyLatestFirst,
 	type GuideChannel,
+	type GuideDirection,
 	type GuideOrientation,
-	nextProgramIndex,
-	previousProgramIndex,
 	readAutoplay,
 	readOrientation,
+	rowGridPlacement,
 	writeAutoplay,
 	writeOrientation,
 } from "../../lib/channel-guide";
@@ -172,6 +177,15 @@ export default function ChannelGuideLens({
 	};
 	const rows = orientation === "rows";
 
+	/**
+	 * Which way autoplay steps. It is a choice made in the interface and resets with the
+	 * lens — never a stored preference, and never a change to the guide's own order. The
+	 * arrows all read this one value, so the glyphs and the step cannot disagree.
+	 */
+	const [direction, setDirection] = useState<GuideDirection>("newer");
+	const flipDirection = () => setDirection((d) => (d === "newer" ? "older" : "newer"));
+	const toward = direction === "newer" ? "newer" : "older";
+
 	const selectedEntry = useMemo(() => {
 		if (selected == null) return null;
 		for (const channel of channels) {
@@ -224,9 +238,23 @@ export default function ChannelGuideLens({
 
 	if (selectedEntry) {
 		const { channel, index, work } = selectedEntry;
-		const nextUp = nextProgramIndex(index);
-		const prevDown = previousProgramIndex(index, channel.programs.length);
-		const nextWork = nextUp != null ? channel.programs[nextUp] : null;
+		// The program autoplay will reach for, and the one the opposite arrow would take.
+		// The guide's order is untouched either way; only the step changes.
+		const advanceIndex = advanceProgramIndex(index, channel.programs.length, direction);
+		const advanceWork = advanceIndex != null ? channel.programs[advanceIndex] : null;
+		const oppositeDirection: GuideDirection = direction === "newer" ? "older" : "newer";
+		const oppositeIndex = advanceProgramIndex(index, channel.programs.length, oppositeDirection);
+		const oppositeWork = oppositeIndex != null ? channel.programs[oppositeIndex] : null;
+		const nextMessage = advanceWork
+			? advanceWork.title || "Untitled"
+			: direction === "newer"
+				? rows
+					? "Nothing further right — this is the newest"
+					: "Nothing above — this is the newest"
+				: rows
+					? "Nothing further left — this is the oldest"
+					: "Nothing below — this is the oldest";
+		const oppositeLabel = direction === "newer" ? "Earlier" : "Newer";
 		const locked = isAccessResult(work.access) && work.access.canAccess === false;
 		const playable =
 			!locked && (work.transcoding?.hlsManifestUrl || work.originalUrl) ? work : null;
@@ -255,10 +283,10 @@ export default function ChannelGuideLens({
 							attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 							publicAccess={work.publicAccess ?? false}
 							onEnded={
-								autoplay && nextWork
+								autoplay && advanceWork
 									? () => {
 											setPlayIntent(true);
-											select(nextWork.id);
+											select(advanceWork.id);
 										}
 									: undefined
 							}
@@ -319,59 +347,75 @@ export default function ChannelGuideLens({
 							Autoplay
 						</label>
 					</div>
-					{/* The axis made hard to miss: next lives toward the newer end, so the
-					    buttons point up in columns and right in rows before anyone has to
-					    learn the direction the hard way. */}
-					<div className="mt-3 flex items-center gap-2 border-t border-base-300 pt-3">
-						<button
-							type="button"
-							className="group flex min-w-0 max-w-full items-center gap-2.5 rounded-full border border-base-300 bg-base-100 py-1.5 pl-1.5 pr-4 text-left transition enabled:hover:border-primary/40 enabled:hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-							disabled={nextUp == null}
-							onClick={() => {
-								if (nextWork) {
-									setPlayIntent(true);
-									select(nextWork.id);
+					{/* The axis made hard to miss: the circle shows which way autoplay travels,
+					    and clicking it flips that direction without changing the guide's sort.
+					    The text beside it is the navigation — the two jobs are separate
+					    controls so the arrow can mean one thing. */}
+					<div className="mt-3 flex flex-wrap items-center gap-2 border-t border-base-300 pt-3">
+						<div className="flex min-w-0 max-w-full items-center gap-2.5 rounded-full border border-base-300 bg-base-100 py-1.5 pl-1.5 pr-3">
+							<button
+								type="button"
+								onClick={flipDirection}
+								className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition hover:bg-primary/20"
+								aria-label="Flip autoplay direction"
+								title={`Autoplay heads toward the ${toward} end. Click to flip.`}
+							>
+								<DirectionArrow direction={direction} rows={rows} className="size-4" />
+							</button>
+							<button
+								type="button"
+								className="min-w-0 text-left disabled:cursor-not-allowed disabled:opacity-60"
+								disabled={advanceWork == null}
+								onClick={() => {
+									if (advanceWork) {
+										setPlayIntent(true);
+										select(advanceWork.id);
+									}
+								}}
+								data-testid="guide-next"
+								title={
+									advanceWork
+										? `${direction === "newer" && !rows ? "Up next" : "Next"}: ${advanceWork.title || "Untitled"}`
+										: nextMessage
 								}
-							}}
-							data-testid="guide-next"
-							title={
-								nextWork
-									? `${rows ? "Next" : "Up next"}: ${nextWork.title || "Untitled"}`
-									: rows
-										? "Nothing further right on this channel"
-										: "Nothing further up this channel"
-							}
-						>
-							<span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-								{rows ? <ArrowRightIcon className="size-4" /> : <ArrowUpIcon className="size-4" />}
-							</span>
-							<span className="min-w-0">
+							>
 								<span className="block text-[10px] font-semibold uppercase tracking-wider text-base-content/45">
-									{rows ? "Next" : "Up next"}
+									{direction === "newer" && !rows ? "Up next" : "Next"}
 								</span>
 								<span className="block truncate text-sm font-semibold text-base-content">
-									{nextWork
-										? nextWork.title || "Untitled"
-										: rows
-											? "Nothing further right — this is the newest"
-											: "Nothing above — this is the newest"}
+									{nextMessage}
 								</span>
-							</span>
-						</button>
-						<button
-							type="button"
-							className="btn btn-ghost btn-sm"
-							disabled={prevDown == null}
-							onClick={() => {
-								if (prevDown != null) {
-									setPlayIntent(true);
-									select(channel.programs[prevDown].id);
+							</button>
+						</div>
+						<div className="flex items-center gap-1">
+							<button
+								type="button"
+								onClick={flipDirection}
+								className="btn btn-ghost btn-xs btn-circle"
+								aria-label={`Set autoplay toward the ${oppositeDirection} end`}
+								title={`Autoplay toward the ${oppositeDirection} end`}
+							>
+								<DirectionArrow direction={oppositeDirection} rows={rows} className="size-4" />
+							</button>
+							<button
+								type="button"
+								className="btn btn-ghost btn-sm"
+								disabled={oppositeWork == null}
+								onClick={() => {
+									if (oppositeWork) {
+										setPlayIntent(true);
+										select(oppositeWork.id);
+									}
+								}}
+								title={
+									oppositeWork
+										? `${oppositeLabel}: ${oppositeWork.title || "Untitled"}`
+										: `Nothing ${oppositeDirection} on this channel`
 								}
-							}}
-						>
-							{rows ? <ArrowLeftIcon className="size-4" /> : <ArrowDownIcon className="size-4" />}{" "}
-							Earlier
-						</button>
+							>
+								{oppositeLabel}
+							</button>
+						</div>
 					</div>
 				</div>
 				<aside
@@ -436,7 +480,10 @@ export default function ChannelGuideLens({
 						/>
 						{railPrograms.map(({ program: p, programIndex: idx }) => {
 							const isCurrent = idx === index;
-							const isNext = idx === index - 1;
+							const isNext = direction === "newer" ? idx === index - 1 : idx === index + 1;
+							// The arrowhead sits at the end autoplay is heading toward, so the
+							// glyph and the end it marks agree even after a flip.
+							const arrowAt = direction === "newer" ? 0 : channel.programs.length - 1;
 							const dotClass = isCurrent
 								? "size-2 rounded-full bg-primary ring-2 ring-primary/25"
 								: isNext
@@ -457,20 +504,28 @@ export default function ChannelGuideLens({
 									}
 								>
 									<span
-										aria-hidden="true"
 										className={
 											rows
 												? "relative flex h-8 items-center justify-center"
 												: "relative flex w-3 shrink-0 items-center justify-center"
 										}
 									>
-										{idx === 0 &&
-											(rows ? (
-												<ArrowRightIcon className="absolute right-0 top-1/2 size-2.5 -translate-y-1/2 text-base-content/40" />
-											) : (
-												<ArrowUpIcon className="absolute top-0 left-1/2 size-2.5 -translate-x-1/2 text-base-content/40" />
-											))}
-										<span className={dotClass} />
+										{idx === arrowAt && (
+											<button
+												type="button"
+												onClick={flipDirection}
+												className={`absolute flex size-5 items-center justify-center rounded-full text-base-content/40 transition hover:bg-base-200 hover:text-primary ${
+													rows
+														? `top-1/2 -translate-y-1/2 ${direction === "newer" ? "right-0" : "left-0"}`
+														: `left-1/2 -translate-x-1/2 ${direction === "newer" ? "top-0" : "bottom-0"}`
+												}`}
+												aria-label="Flip autoplay direction"
+												title={`Autoplay heads toward the ${toward} end. Click to flip.`}
+											>
+												<DirectionArrow direction={direction} rows={rows} className="size-2.5" />
+											</button>
+										)}
+										<span aria-hidden="true" className={dotClass} />
 									</span>
 									<div className={rows ? "min-w-0" : "min-w-0 flex-1"}>
 										<ProgramBlock
@@ -480,6 +535,8 @@ export default function ChannelGuideLens({
 											next={isNext}
 											variant="rail"
 											orientation={orientation}
+											direction={direction}
+											onFlipDirection={flipDirection}
 											onSelect={(id) => {
 												setPlayIntent(true);
 												select(id);
@@ -496,8 +553,11 @@ export default function ChannelGuideLens({
 	}
 
 	return (
-		<section aria-label="Channel guide" className="space-y-3">
-			<div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-base-300 pb-2">
+		<section
+			aria-label="Channel guide"
+			className="overflow-hidden rounded-xl border border-base-300 bg-base-200/25"
+		>
+			<div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-base-300 bg-base-200/60 px-3 py-2">
 				<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
 					Channel Guide
 				</h2>
@@ -509,137 +569,152 @@ export default function ChannelGuideLens({
 					<OrientationToggle value={orientation} onChange={toggleOrientation} />
 				</div>
 			</div>
-			{rows ? (
-				/* Rows: creators stack down the left, and each one's programs run left
-				   (older) to right (newer). Every row carries the same column template and
-				   a program is placed by its rank, so each channel's newest block lands in
-				   the same column across rows. */
-				<div className="overflow-x-auto pb-3">
-					<div className="w-max">
-						<div
-							aria-hidden="true"
-							className="grid items-end gap-x-1.5"
-							style={{ gridTemplateColumns: `13rem repeat(${rowCount}, 15rem)` }}
-						>
-							<div className="sticky left-0 z-10 flex h-7 items-end justify-end bg-base-100 pr-1">
-								<span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-base-content/55">
-									Newer
-									<ArrowRightIcon className="size-3 text-primary" />
-								</span>
-							</div>
-							{Array.from({ length: rowCount }, (_, column) => {
-								const rank = rowCount - 1 - column;
-								return (
-									<div
-										key={rank}
-										className="flex h-7 items-end justify-end border-b border-base-300 pb-1"
+			<div className="p-2">
+				{rows ? (
+					/* Rows: creators stack down the left, and each one's programs run left
+					   (older) to right (newer). Every cell below names its column AND row, so
+					   a channel's programs share one horizontal line; `rowGridPlacement`
+					   carries that rule and its unit test. */
+					<div className="overflow-x-auto">
+						<div className="w-max min-w-full">
+							<div
+								className="grid items-end gap-x-1.5 rounded-t-lg border-b border-base-300 bg-base-200/70"
+								style={{ gridTemplateColumns: `13rem repeat(${rowCount}, 15rem)` }}
+							>
+								<div className="sticky left-0 z-10 flex h-7 items-end justify-end gap-1 bg-base-200 pr-1">
+									<span className="text-[10px] font-semibold uppercase tracking-wider text-base-content/55">
+										Newer
+									</span>
+									<button
+										type="button"
+										onClick={flipDirection}
+										className="flex size-5 items-center justify-center rounded-full text-primary transition hover:bg-base-300/60"
+										aria-label="Flip autoplay direction"
+										title={`Autoplay heads toward the ${toward} end. Click to flip.`}
 									>
-										<span className="pr-1 text-[10px] font-medium uppercase tracking-wider tabular-nums text-base-content/45">
+										<DirectionArrow direction={direction} rows className="size-3" />
+									</button>
+								</div>
+								{Array.from({ length: rowCount }, (_, column) => {
+									const rank = rowCount - 1 - column;
+									return (
+										<div
+											key={rank}
+											className="flex h-7 items-end justify-end border-l border-base-300/50 pb-1 pr-1"
+										>
+											<span className="text-[10px] font-medium uppercase tracking-wider tabular-nums text-base-content/45">
+												{rank === 0 ? "Latest" : `${rank} back`}
+											</span>
+											<span className="ml-1 h-1.5 w-px bg-base-300" />
+										</div>
+									);
+								})}
+							</div>
+							<ul aria-label="Channels" className="mt-1 flex flex-col" data-testid="guide-channels">
+								{channels.map((channel, rowIndex) => (
+									<li
+										key={channel.id}
+										className={`grid items-start gap-x-1.5 border-b border-base-300/60 py-0.5 ${
+											rowIndex % 2 === 0 ? "bg-base-100/50" : "bg-base-200/20"
+										}`}
+										style={{ gridTemplateColumns: `13rem repeat(${rowCount}, 15rem)` }}
+										data-testid="guide-channel"
+									>
+										<div
+											className="sticky left-0 z-10 bg-base-200 p-0.5"
+											style={channelGridPlacement()}
+										>
+											<ChannelBug channel={channel} />
+										</div>
+										{channel.programs.map((p, idx) => (
+											<div key={p.id} className="p-0.5" style={rowGridPlacement(idx, rowCount)}>
+												<ProgramBlock
+													work={p}
+													ordinal={idx}
+													current={false}
+													variant="row"
+													orientation={orientation}
+													direction={direction}
+													onFlipDirection={flipDirection}
+													onSelect={(id) => {
+														setPlayIntent(true);
+														select(id);
+													}}
+												/>
+											</div>
+										))}
+									</li>
+								))}
+							</ul>
+						</div>
+					</div>
+				) : (
+					/* Columns: a solid ruler panel at the left, then one bordered channel
+					   column each. The panel's own padding and gaps match the channel's, so
+					   a rank label sits level with the block it names. */
+					<div className="overflow-x-auto scroll-pl-16">
+						<div className="flex w-max snap-x snap-proximity items-start gap-2">
+							<div className="sticky left-0 z-10 flex shrink-0 flex-col gap-1.5 rounded-lg border border-base-300 bg-base-200 py-1 pl-1 pr-0.5">
+								<div className="flex h-12 items-end justify-end gap-1 px-1 pb-2">
+									<span className="text-[10px] font-semibold uppercase tracking-wider text-base-content/55">
+										Newer
+									</span>
+									<button
+										type="button"
+										onClick={flipDirection}
+										className="flex size-5 items-center justify-center rounded-full text-primary transition hover:bg-base-300/60"
+										aria-label="Flip autoplay direction"
+										title={`Autoplay heads toward the ${toward} end. Click to flip.`}
+									>
+										<DirectionArrow direction={direction} rows={false} className="size-3" />
+									</button>
+								</div>
+								{Array.from({ length: rowCount }, (_, rank) => (
+									// biome-ignore lint/suspicious/noArrayIndexKey: the ruler's rows are positional and never reorder, so the rank IS the identity.
+									<div key={rank} className="flex h-[76px] items-center justify-end pr-0.5">
+										<span className="pr-2 text-[10px] font-medium uppercase tracking-wider tabular-nums text-base-content/45">
 											{rank === 0 ? "Latest" : `${rank} back`}
 										</span>
-										<span className="h-1.5 w-px bg-base-300" />
+										<span className="h-px w-1.5 bg-base-300" />
 									</div>
-								);
-							})}
-						</div>
-						<ul
-							aria-label="Channels"
-							className="mt-2 flex flex-col gap-2"
-							data-testid="guide-channels"
-						>
-							{channels.map((channel) => (
-								<li
-									key={channel.id}
-									className="grid items-start gap-x-1.5"
-									style={{ gridTemplateColumns: `13rem repeat(${rowCount}, 15rem)` }}
-									data-testid="guide-channel"
-								>
-									<div className="sticky left-0 z-10 bg-base-100" style={{ gridColumn: 1 }}>
-										<ChannelBug channel={channel} />
-									</div>
-									{channel.programs.map((p, idx) => (
-										<div key={p.id} style={{ gridColumn: 2 + (rowCount - 1 - idx) }}>
-											<ProgramBlock
-												work={p}
-												ordinal={idx}
-												current={false}
-												variant="row"
-												orientation={orientation}
-												onSelect={(id) => {
-													setPlayIntent(true);
-													select(id);
-												}}
-											/>
-										</div>
-									))}
-								</li>
-							))}
-						</ul>
-					</div>
-				</div>
-			) : (
-				<div className="overflow-x-auto scroll-pl-16 pb-3">
-					<div className="flex w-max snap-x snap-proximity items-start gap-2">
-						{/* The guide's ruler. A schedule prints times down its left edge; here the
-						    only honest ordinals are ranks back from the newest, so the ruler says
-						    that instead of inventing a clock. It stays put while channels scroll. */}
-						<div
-							aria-hidden="true"
-							className="sticky left-0 z-10 flex shrink-0 flex-col gap-1.5 border-r border-base-300 bg-base-100"
-						>
-							<div className="flex h-12 items-end justify-end pb-2 pr-2">
-								<span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-base-content/55">
-									Newer
-									<ArrowUpIcon className="size-3 text-primary" />
-								</span>
+								))}
 							</div>
-							{Array.from({ length: rowCount }, (_, rank) => (
-								// biome-ignore lint/suspicious/noArrayIndexKey: the ruler's rows are positional and never reorder, so the rank IS the identity.
-								<div key={rank} className="flex h-[76px] items-center justify-end">
-									<span className="pr-2 text-[10px] font-medium uppercase tracking-wider tabular-nums text-base-content/45">
-										{rank === 0 ? "Latest" : `${rank} back`}
-									</span>
-									<span className="h-px w-1.5 bg-base-300" />
-								</div>
-							))}
+							<ul aria-label="Channels" className="flex w-max gap-2" data-testid="guide-channels">
+								{channels.map((channel) => (
+									<li
+										key={channel.id}
+										className="w-60 shrink-0 snap-start rounded-lg border border-base-300 bg-base-200/50 p-1"
+										data-testid="guide-channel"
+									>
+										<section className="flex flex-col gap-1.5">
+											<ChannelBug channel={channel} />
+											<ul className="flex flex-col gap-1.5">
+												{channel.programs.map((p, idx) => (
+													<li key={p.id}>
+														<ProgramBlock
+															work={p}
+															ordinal={idx}
+															current={false}
+															variant="column"
+															orientation={orientation}
+															direction={direction}
+															onFlipDirection={flipDirection}
+															onSelect={(id) => {
+																setPlayIntent(true);
+																select(id);
+															}}
+														/>
+													</li>
+												))}
+											</ul>
+										</section>
+									</li>
+								))}
+							</ul>
 						</div>
-						<ul
-							aria-label="Channels"
-							className="flex w-max gap-2 pl-2"
-							data-testid="guide-channels"
-						>
-							{channels.map((channel) => (
-								<li
-									key={channel.id}
-									className="w-60 shrink-0 snap-start"
-									data-testid="guide-channel"
-								>
-									<section className="flex flex-col gap-1.5">
-										<ChannelBug channel={channel} />
-										<ul className="flex flex-col gap-1.5">
-											{channel.programs.map((p, idx) => (
-												<li key={p.id}>
-													<ProgramBlock
-														work={p}
-														ordinal={idx}
-														current={false}
-														variant="column"
-														orientation={orientation}
-														onSelect={(id) => {
-															setPlayIntent(true);
-															select(id);
-														}}
-													/>
-												</li>
-											))}
-										</ul>
-									</section>
-								</li>
-							))}
-						</ul>
 					</div>
-				</div>
-			)}
+				)}
+			</div>
 		</section>
 	);
 }
@@ -740,6 +815,26 @@ function workUrlFor(work: Work): string | null {
 		: null;
 }
 
+/** The chevron for one autoplay direction, in the guide's current axis. */
+function DirectionArrow({
+	direction,
+	rows,
+	className,
+}: {
+	direction: GuideDirection;
+	rows: boolean;
+	className?: string;
+}) {
+	const Icon = rows
+		? direction === "newer"
+			? ArrowRightIcon
+			: ArrowLeftIcon
+		: direction === "newer"
+			? ArrowUpIcon
+			: ArrowDownIcon;
+	return <Icon aria-hidden="true" className={className} />;
+}
+
 /**
  * One programming block — the guide's widget. A row: thumbnail with the duration on it,
  * title beside, the date it arrived here beneath, and the guide's own marks (gated,
@@ -753,17 +848,23 @@ function ProgramBlock({
 	next,
 	variant,
 	orientation,
+	direction = "newer",
+	onFlipDirection,
 	onSelect,
 }: {
 	work: Work;
 	/** The block's rank in its channel, latest-first — for a future "latest plus one" label. */
 	ordinal: number;
 	current: boolean;
-	/** The rail's node immediately toward the newer end — the program that plays next. */
+	/** The rail's node immediately toward the autoplay end — the program that plays next. */
 	next?: boolean;
 	variant: "column" | "row" | "rail";
 	/** The guide's axis, which decides the direction the next marker points. */
 	orientation: GuideOrientation;
+	/** Which way autoplay steps; the next marker and its chevron read it. */
+	direction?: GuideDirection;
+	/** Flip autoplay's direction — the next marker is one of the guide's direction controls. */
+	onFlipDirection?: () => void;
 	onSelect: (id: number) => void;
 }) {
 	const rows = orientation === "rows";
@@ -773,11 +874,11 @@ function ProgramBlock({
 	// are the same shape at two sizes, and the fixed heights are what keep the axes aligned.
 	const rowClass =
 		variant === "rail"
-			? "h-[64px] gap-2 rounded-lg border border-transparent p-1.5 hover:bg-base-200"
-			: "h-[76px] gap-2 rounded-lg border border-base-300 bg-base-100 p-1.5 shadow-sm hover:border-primary/40 hover:shadow";
+			? "h-[64px] gap-2 rounded-md border border-transparent p-1.5 hover:bg-base-200"
+			: "h-[76px] gap-2 rounded-md border border-base-300 bg-base-100 p-1.5 hover:border-primary/40 hover:bg-base-200/40";
 	const thumbClass = variant === "rail" ? "w-20" : "w-24";
-	const inner = (
-		<span className={`flex w-full items-center text-left transition ${rowClass}`}>
+	const content = (
+		<>
 			<span
 				className={`relative aspect-video shrink-0 self-center overflow-hidden rounded-md bg-base-300 ${thumbClass}`}
 			>
@@ -819,16 +920,6 @@ function ProgramBlock({
 							On now
 						</span>
 					)}
-					{next && (
-						<span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-px font-semibold uppercase tracking-wide text-primary">
-							{rows ? (
-								<ArrowRightIcon className="size-2.5" />
-							) : (
-								<ArrowUpIcon className="size-2.5" />
-							)}
-							{rows ? "Next" : "Up next"}
-						</span>
-					)}
 					{locked && (
 						<span className="shrink-0 rounded bg-base-200 px-1 text-[9px] font-semibold uppercase tracking-wide text-base-content/55">
 							Gated
@@ -836,7 +927,7 @@ function ProgramBlock({
 					)}
 				</span>
 			</span>
-		</span>
+		</>
 	);
 
 	if (locked) {
@@ -846,22 +937,54 @@ function ProgramBlock({
 		return to ? (
 			<Link
 				to={to}
-				className="group block rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+				className="group block rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
 			>
-				{inner}
+				<span className={`flex w-full items-center text-left transition ${rowClass}`}>
+					{content}
+				</span>
 			</Link>
 		) : (
-			<span className="group block cursor-default rounded-lg">{inner}</span>
+			<span className={`group flex w-full cursor-default items-center text-left ${rowClass}`}>
+				{content}
+			</span>
 		);
 	}
+
+	// The rail's "next" marker is a control of its own, so it sits beside the block's
+	// button rather than inside it: clicking the block tunes, clicking the marker flips
+	// the direction autoplay will take.
+	if (variant === "rail" && next) {
+		return (
+			<div className={`flex items-center gap-2 ${rowClass}`}>
+				<button
+					type="button"
+					onClick={() => onSelect(work.id)}
+					data-testid="guide-rail-block"
+					className="group flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+				>
+					{content}
+				</button>
+				<button
+					type="button"
+					onClick={() => onFlipDirection?.()}
+					title={`Autoplay heads toward the ${direction === "newer" ? "newer" : "older"} end. Click to flip.`}
+					className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-primary hover:bg-primary/20"
+				>
+					<DirectionArrow direction={direction} rows={rows} className="size-2.5" />
+					{direction === "newer" && !rows ? "Up next" : "Next"}
+				</button>
+			</div>
+		);
+	}
+
 	return (
 		<button
 			type="button"
 			onClick={() => onSelect(work.id)}
 			data-testid={variant === "rail" ? "guide-rail-block" : "guide-block"}
-			className="group block w-full cursor-pointer rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+			className={`group flex w-full cursor-pointer items-center text-left transition ${rowClass} focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary`}
 		>
-			{inner}
+			{content}
 		</button>
 	);
 }

@@ -10,6 +10,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Work } from "@anthers/web-shared/types";
 import {
+	advanceProgramIndex,
+	channelGridPlacement,
 	compareChannelNames,
 	compareRecencyLatestFirst,
 	type GuideChannel,
@@ -17,6 +19,7 @@ import {
 	previousProgramIndex,
 	readAutoplay,
 	readOrientation,
+	rowGridPlacement,
 	writeAutoplay,
 	writeOrientation,
 } from "./channel-guide";
@@ -126,6 +129,35 @@ describe("next is toward the newer end", () => {
 	test("previous steps toward older, and the oldest has none", () => {
 		expect(previousProgramIndex(0, 5)).toBe(1);
 		expect(previousProgramIndex(4, 5)).toBeNull();
+	});
+});
+
+describe("autoplay direction is a chosen step, not a sort", () => {
+	test("newer steps toward the newest, older steps toward the oldest", () => {
+		expect(advanceProgramIndex(2, 4, "newer")).toBe(1);
+		expect(advanceProgramIndex(2, 4, "older")).toBe(3);
+	});
+
+	test("each end is the other direction's end", () => {
+		expect(advanceProgramIndex(0, 4, "newer")).toBeNull();
+		expect(advanceProgramIndex(3, 4, "older")).toBeNull();
+	});
+});
+
+describe("the row grid keeps a channel on one line", () => {
+	test("rank 0 sits at the right and every rank shares row 1", () => {
+		expect(rowGridPlacement(0, 3)).toEqual({ gridColumn: 4, gridRow: 1 });
+		expect(rowGridPlacement(1, 3)).toEqual({ gridColumn: 3, gridRow: 1 });
+		expect(rowGridPlacement(2, 3)).toEqual({ gridColumn: 2, gridRow: 1 });
+	});
+
+	test("the bug sits in the first column, on the programs' row", () => {
+		const placements = [
+			channelGridPlacement(),
+			...Array.from({ length: 4 }, (_, rank) => rowGridPlacement(rank, 4)),
+		];
+		expect(placements.every((p) => p.gridRow === 1)).toBe(true);
+		expect(placements.map((p) => p.gridColumn)).toEqual([1, 5, 4, 3, 2]);
 	});
 });
 
