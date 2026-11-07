@@ -43,6 +43,7 @@ import {
 import {
 	embedUrlProblem,
 	isListened,
+	isPreRelease,
 	processingFor,
 	supportsPreviewMedia,
 } from "@anthers/shared/content";
@@ -635,6 +636,7 @@ export async function serializeWork(
 		/** Owner-facing: the window the dialog reopens at. */
 		thumbnailCrop: item.thumbnailCrop,
 		scheduledReleaseAt: item.scheduledReleaseAt,
+		preReleaseAt: item.preReleaseAt,
 		sourceKey: item.sourceKey,
 		// The owner's own original, at the access-checked route, for the same ruling the
 		// user shape carries (70.06 — playable from the moment the Work exists): an
@@ -1396,6 +1398,8 @@ export async function serializeWorkForUser(
 		estimatedReadMinutes: work.estimatedReadMinutes,
 		visibility: work.visibility,
 		releasedAt: work.releasedAt,
+		scheduledReleaseAt: work.scheduledReleaseAt,
+		preReleaseAt: work.preReleaseAt,
 		// A buyer of a withdrawn Work needs the date to know how long the rescue window
 		// has left — it is the only warning they currently get, and it was reaching the
 		// old Library through the purchases endpoint rather than through the Work.
@@ -1807,8 +1811,10 @@ export async function workReachability(
 		// A withdrawn Work is out of public circulation but still owed to the people
 		// who bought it — that is the whole point of the state, so this is the one
 		// place a non-released Work is served to someone other than its creator.
-		// `private` still 404s for everyone else: it was never anyone's to buy.
-		if (work.visibility !== "withdrawn" || !(await stillOwed(userId))) {
+		// `private` still 404s for everyone else: it was never anyone's to buy — with
+		// the pre-release exception, where the page is public while the Work stays closed.
+		const preRelease = isPreRelease(work);
+		if (!preRelease && (work.visibility !== "withdrawn" || !(await stillOwed(userId)))) {
 			return { refusal: c.json({ error: "Work not found" }, 404) };
 		}
 	}

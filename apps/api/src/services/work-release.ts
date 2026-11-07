@@ -92,6 +92,30 @@ export async function releaseRefusal(
 	work: WorkRow,
 	creator: { id: number; creatorMode: boolean | null },
 ): Promise<ReleaseRefusal | null> {
+	return refusalFor(work, creator, { media: true });
+}
+
+/**
+ * Whether a Work may open its page at its pre-release date.
+ *
+ * ⭐ **The media is the one deferrable thing** (Parker, 2026-11-07): pre-release exists to
+ * build an audience while the Work is still being made, so the file, its processing and its
+ * scan are not asked about. Everything else the release needs still holds — the creator's
+ * standing and payout setup, the rating, a human credit, and a title for the page — because
+ * those are what make a public page honest rather than what makes the bytes deliverable.
+ */
+export async function preReleaseRefusal(
+	work: WorkRow,
+	creator: { id: number; creatorMode: boolean | null },
+): Promise<ReleaseRefusal | null> {
+	return refusalFor(work, creator, { media: false });
+}
+
+async function refusalFor(
+	work: WorkRow,
+	creator: { id: number; creatorMode: boolean | null },
+	opts: { media: boolean },
+): Promise<ReleaseRefusal | null> {
 	// 🚨 **The first condition, and the only one that is about the CREATOR rather than the Work.**
 	// Releasing takes a fully set-up creator — creator mode, a permission Anthers can write their
 	// listing with, and completed payout setup — and `publishRefusal` carries the reasons: the
@@ -106,7 +130,7 @@ export async function releaseRefusal(
 	// no source is an upload in flight or one that never finished — and `unreadyWorks` reads only
 	// transcoding jobs, which a Work with no file never has, so without this it would read as ready
 	// and release as a page with nothing on it.
-	if (workNeedsFile(work.type) && !work.sourceKey) {
+	if (opts.media && workNeedsFile(work.type) && !work.sourceKey) {
 		return {
 			status: 409,
 			body: {
@@ -119,7 +143,7 @@ export async function releaseRefusal(
 
 	// The same for a piece of writing, which is its body the way a video is its file. Unlike a
 	// file it is not on its way anywhere, so this is the creator's to fix rather than to wait for.
-	if (work.type === "text" && isEmptyWriting(work.bodyHtml)) {
+	if (opts.media && work.type === "text" && isEmptyWriting(work.bodyHtml)) {
 		return {
 			status: 409,
 			body: {
@@ -131,7 +155,7 @@ export async function releaseRefusal(
 	}
 
 	// A Work whose file is processed asynchronously waits for the processing to finish.
-	if (processingFor(work.type)) {
+	if (opts.media && processingFor(work.type)) {
 		const unready = await unreadyWorks([work.id]);
 		if (unready.length > 0) {
 			// ⚠️ A failed encode is unready too, and is not something to wait for: nothing will
@@ -153,6 +177,20 @@ export async function releaseRefusal(
 				resolves: creatorStalled ? "creator" : "waiting",
 			};
 		}
+	}
+
+	// A page needs a name whether or not its bytes are ready. The release path has never
+	// refused an untitled Work; the pre-release page would be a public document with no
+	// title, so it asks here.
+	if (!opts.media && !work.title?.trim()) {
+		return {
+			status: 409,
+			body: {
+				error: "Name this Work before its page can open.",
+				code: "title_missing",
+			},
+			resolves: "creator",
+		};
 	}
 
 	// The rating, and the only condition a creator can satisfy instantly. A Work is born `unrated`
@@ -225,6 +263,8 @@ export async function releaseRefusal(
 	// because a detection vendor's outage must not stop everyone on Anthers from publishing.
 	// `services/safety-scan.ts` carries the full reasoning, including why quarantine reaching a
 	// released Work is what makes the trade honest.
+	if (!opts.media) return null;
+
 	const gate = await scanReleaseGate(work);
 	if (gate.blocked) {
 		return {

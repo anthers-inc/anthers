@@ -43,6 +43,7 @@ import ProjectPricing from "../components/project/ProjectPricing";
 import WorkReviews from "../components/project/WorkReviews";
 import LockedWorkComposition from "../components/work/LockedWorkComposition";
 import OwnerWorkEditor, { CaptionsSummary } from "../components/work/OwnerWorkEditor";
+import PreReleaseComposition from "../components/work/PreReleaseComposition";
 import PreviewCarousel from "../components/work/PreviewCarousel";
 import SharedWorkNotice from "../components/work/SharedWorkNotice";
 import ShareLinkButton from "../components/work/ShareLinkButton";
@@ -407,6 +408,26 @@ export default function WorkPage() {
 									workType={work.type}
 								/>
 							</div>
+						</WorkMediaFrame>
+					)
+				) : access?.reason === "pre_release" ? (
+					// The page is public while the Work is not: the coming-soon composition takes the
+					// locked page's place, the preview media stays behind it, and no purchase,
+					// download or play door exists.
+					supportsPreviewMedia(work.type) && (work.previewMedia?.length ?? 0) > 0 ? (
+						<PreviewCarousel
+							workTitle={work.title}
+							thumbnail={work.thumbnail}
+							previews={work.previewMedia ?? []}
+							slideZeroFill={work.type === "video"}
+							slideZeroLabel="Coming soon"
+							slideZero={
+								<PreReleaseComposition work={work} access={access} creatorName={creatorName} />
+							}
+						/>
+					) : (
+						<WorkMediaFrame fill={work.type === "video"} overlay={shareNotice}>
+							<PreReleaseComposition work={work} access={access} creatorName={creatorName} />
 						</WorkMediaFrame>
 					)
 				) : !canAccess ? (

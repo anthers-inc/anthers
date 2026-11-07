@@ -46,6 +46,7 @@ import {
 	isListened,
 	isOwnThumbnail,
 	isPaged,
+	isPreRelease,
 	supportsPreviewMedia,
 } from "@anthers/shared/content";
 import {
@@ -375,6 +376,7 @@ export default function OwnerWorkEditor({
 			? (current.releasedAt ?? current.scheduledReleaseAt)
 			: current.scheduledReleaseAt,
 	);
+	const preReleaseSaved = isoToLocalInput(current.preReleaseAt);
 
 	/** Whether payouts are set up, so the release control can say so before it is clicked. */
 	const payoutsReady = usePayoutsReady();
@@ -1037,17 +1039,36 @@ export default function OwnerWorkEditor({
 	 * rides the same commit.
 	 */
 	const datesField = (
-		<InlineField<{ release: string; original: string }>
+		<InlineField<{ release: string; original: string; preRelease: string }>
 			label="Release"
-			saved={{ release: releaseSaved, original: originalDate }}
+			saved={{ release: releaseSaved, original: originalDate, preRelease: preReleaseSaved }}
 			pencilPlacement="corner"
 			disabledSave={(draft) => {
+				const pre = localInputToIso(draft.preRelease);
+				const release = localInputToIso(draft.release);
+				if (pre && release && Date.parse(pre) >= Date.parse(release)) {
+					return "The pre-release date has to be before the release date.";
+				}
 				if (draft.release === releaseSaved) return undefined;
 				const iso = localInputToIso(draft.release);
 				return iso && Date.parse(iso) <= Date.now() ? releaseNowRefusal : undefined;
 			}}
 			renderRead={() => (
-				<WorkDateLine work={current} scheduled={current.scheduledReleaseAt ?? null} />
+				<div className="flex flex-col gap-1">
+					<WorkDateLine work={current} scheduled={current.scheduledReleaseAt ?? null} />
+					{current.preReleaseAt && !isPreRelease(current) && current.visibility !== "released" && (
+						<p className="text-xs text-base-content/45">
+							Pre-release page opens{" "}
+							{new Date(current.preReleaseAt).toLocaleString("en-US", {
+								month: "long",
+								day: "numeric",
+								year: "numeric",
+								hour: "numeric",
+								minute: "2-digit",
+							})}
+						</p>
+					)}
+				</div>
 			)}
 			renderEdit={(draft, setDraft) => {
 				const draftIso = localInputToIso(draft.release);
@@ -1055,6 +1076,33 @@ export default function OwnerWorkEditor({
 					draft.release !== releaseSaved && draftIso !== null && Date.parse(draftIso) <= Date.now();
 				return (
 					<div className="flex flex-col gap-3 text-left">
+						<div className="flex flex-col gap-2">
+							<div className="flex items-center gap-1.5">
+								<label className="text-sm" htmlFor="owner-anthers-pre-release">
+									Pre-Release Date
+								</label>
+								<InfoTip text="Opens this Work's page to everyone on this date, with its preview media and its coming-soon card. Buying, downloading, streaming and reviews stay closed until the Anthers Release Date." />
+							</div>
+							<div className="flex flex-wrap items-center gap-2 py-1">
+								<input
+									id="owner-anthers-pre-release"
+									type="datetime-local"
+									aria-label="Pre-Release Date"
+									className="input input-bordered w-full max-w-56"
+									value={draft.preRelease}
+									onChange={(e) => setDraft({ ...draft, preRelease: e.target.value })}
+								/>
+								{draft.preRelease && (
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs"
+										onClick={() => setDraft({ ...draft, preRelease: "" })}
+									>
+										Clear
+									</button>
+								)}
+							</div>
+						</div>
 						<div className="flex flex-col gap-2">
 							<div className="flex items-center gap-1.5">
 								<label className="text-sm" htmlFor="owner-anthers-release">
@@ -1198,38 +1246,28 @@ export default function OwnerWorkEditor({
 			save={async (draft) => {
 				const originalIso = draft.original ? `${draft.original}T00:00:00.000Z` : null;
 				const originalChanged = originalIso !== (current.originallyReleased ?? null);
-				if (draft.release === releaseSaved) {
-					if (originalChanged) {
-						setOriginalDate(draft.original);
-						await saveFields({ originallyReleased: originalIso });
+				const preIso = localInputToIso(draft.preRelease);
+				const preChanged = preIso !== (current.preReleaseAt ?? null);
+				const updates: Partial<WorkInput> = {};
+				if (preChanged) updates.preReleaseAt = preIso;
+				if (originalChanged) {
+					setOriginalDate(draft.original);
+					updates.originallyReleased = originalIso;
+				}
+				if (draft.release !== releaseSaved) {
+					const iso = localInputToIso(draft.release);
+					if (!iso) {
+						if (current.visibility === "released") updates.visibility = "private";
+						else if (current.scheduledReleaseAt) updates.scheduledReleaseAt = null;
+					} else if (Date.parse(iso) <= Date.now()) {
+						updates.visibility = "released";
+						updates.scheduledReleaseAt = null;
+					} else {
+						updates.visibility = "private";
+						updates.scheduledReleaseAt = iso;
 					}
-					return;
 				}
-				setOriginalDate(draft.original);
-				const iso = localInputToIso(draft.release);
-				if (!iso) {
-					if (current.visibility === "released") {
-						await saveFields({ visibility: "private", originallyReleased: originalIso });
-					} else if (current.scheduledReleaseAt) {
-						await saveFields({ scheduledReleaseAt: null, originallyReleased: originalIso });
-					} else if (originalChanged) {
-						await saveFields({ originallyReleased: originalIso });
-					}
-					return;
-				}
-				if (Date.parse(iso) <= Date.now()) {
-					await saveFields({
-						visibility: "released",
-						scheduledReleaseAt: null,
-						originallyReleased: originalIso,
-					});
-					return;
-				}
-				await saveFields({
-					visibility: "private",
-					scheduledReleaseAt: iso,
-					originallyReleased: originalIso,
-				});
+				if (Object.keys(updates).length > 0) await saveFields(updates);
 			}}
 		/>
 	);

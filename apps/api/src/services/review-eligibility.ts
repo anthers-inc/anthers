@@ -26,12 +26,13 @@
  */
 import { db } from "@anthers/db/client";
 import { attentionEvents, type works } from "@anthers/db/schema";
+import { isPreRelease } from "@anthers/shared/content";
 import { and, eq, gt } from "drizzle-orm";
 
 type WorkRow = typeof works.$inferSelect;
 
 /** Why a reader cannot write a review. */
-export type ReviewRefusalCode = "own_work" | "unreleased" | "locked" | "unconsumed";
+export type ReviewRefusalCode = "own_work" | "pre_release" | "unreleased" | "locked" | "unconsumed";
 
 /** The composer's answer: open, or the one reason it is not. */
 export interface ReviewEligibility {
@@ -43,6 +44,7 @@ export interface ReviewEligibility {
 
 const REASONS: Record<ReviewRefusalCode, string> = {
 	own_work: "You can't review your own Work.",
+	pre_release: "This Work isn't out yet — you can review it once it's released.",
 	unreleased: "This Work hasn't been released yet.",
 	locked: "Unlock this Work to review it.",
 	unconsumed: "Spend some time with this Work before reviewing it.",
@@ -86,9 +88,11 @@ export async function reviewEligibilityFor(
 	access: { canAccess: boolean },
 ): Promise<ReviewEligibility> {
 	if (work.creatorId === userId) return refusal("own_work");
+	// The page can be public while the Work is not (pre-release). Reviews open only at the
+	// release, so this case is stated before the generic unreleased one.
+	if (isPreRelease(work)) return refusal("pre_release");
 	// `releasedAt` is when the Work went public HERE; a Work scheduled for the future is
-	// still private. The sneak-preview state will make the page readable early, and this
-	// line is why its reviews stay closed until the release it names.
+	// still private. This is why a scheduled Work's reviews stay closed until its release.
 	if (work.releasedAt == null) return refusal("unreleased");
 	if (!access.canAccess) return refusal("locked");
 	if (!(await hasConsumed(userId, work.id))) return refusal("unconsumed");

@@ -237,7 +237,10 @@ export interface AccessResult {
 		| "login_required"
 		| "takedown"
 		| "quarantined"
-		| "adult_gated";
+		| "adult_gated"
+		| "pre_release"
+		| "blocked_creator"
+		| "blocked_type";
 	isFree: boolean;
 	requiresPurchase: boolean;
 	price: string | null;
@@ -548,6 +551,8 @@ export interface Work {
 	visibility?: WorkVisibility;
 	/** When a private Work is due to be released, if its creator scheduled one. Owner-facing. */
 	scheduledReleaseAt?: string | null;
+	/** When this Work's page goes public before the Work does — see `isPreRelease`. */
+	preReleaseAt?: string | null;
 	releasedAt?: string | null;
 	/** When it left public circulation. Only ever set alongside `visibility: "withdrawn"`. */
 	withdrawnAt?: string | null;
@@ -737,6 +742,8 @@ export interface WorkInput {
 	visibility?: Exclude<WorkVisibility, "withdrawn">;
 	/** A release time for a private Work; null clears it. */
 	scheduledReleaseAt?: string | null;
+	/** When this Work's page goes public before the Work does — see `isPreRelease`. */
+	preReleaseAt?: string | null;
 	/**
 	 * The rating matrix; a complete one decides the rating and the notes. It is the only way a
 	 * creator rates a Work, and the API refuses a request naming `maturity` or `maturityNotes`
@@ -1093,7 +1100,7 @@ export interface Review {
 }
 
 /** Why a reader cannot write a review, as the server decides it. */
-export type ReviewRefusalCode = "own_work" | "unreleased" | "locked" | "unconsumed";
+export type ReviewRefusalCode = "own_work" | "pre_release" | "unreleased" | "locked" | "unconsumed";
 
 export interface ReviewEligibility {
 	canReview: boolean;

@@ -33,12 +33,12 @@
 
 import { db } from "@anthers/db";
 import { users, works } from "@anthers/db/schema";
-import { and, eq, isNotNull, lte, ne } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { notifyCreditedAccounts } from "../services/credit-acceptance.js";
 import { syncAccountRoles } from "../services/discord.js";
 import { notify } from "../services/notifications.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
-import { releaseRefusal } from "../services/work-release.js";
+import { preReleaseRefusal, releaseRefusal } from "../services/work-release.js";
 
 export interface ReleaseScheduledResult {
 	released: number;
@@ -46,11 +46,90 @@ export interface ReleaseScheduledResult {
 	cleared: number;
 	/** Due Works still waiting on their file, processing or scan. */
 	waiting: number;
+	/** Pre-release pages whose listing was queued by this run. */
+	preReleased: number;
+}
+
+/**
+ * Queue the public listing for every Work whose pre-release date has arrived.
+ *
+ * ⭐ **The page is public without this; the listing is what this adds.** `isPreRelease`
+ * derives the page state from the date, so a reader can already reach it. This sweep writes
+ * the network record at the moment the page opens, which is the half of pre-release that
+ * reaches an audience beyond Anthers.
+ *
+ * The media is deliberately not a condition (`preReleaseRefusal` says why); the creator's
+ * standing, the rating, the credits and a title are. A refusal leaves the date in place and
+ * tells the creator once — the page simply stays private until they fix it, rather than the
+ * schedule being thrown away.
+ */
+async function publishDuePreReleases(now: Date): Promise<number> {
+	const retryBefore = new Date(now.getTime() - 15 * 60_000);
+	const due = await db
+		.select({ work: works, creatorMode: users.creatorMode })
+		.from(works)
+		.leftJoin(users, eq(works.creatorId, users.id))
+		.where(
+			and(
+				isNotNull(works.preReleaseAt),
+				lte(works.preReleaseAt, now),
+				eq(works.visibility, "private"),
+				isNull(works.releasedAt),
+				ne(works.quarantineStatus, "quarantined"),
+				// The record's existence is the success signal. A failed sync is retried on
+				// the throttle rather than on every tick, so a broken vendor cannot turn the
+				// minute sweep into a queue full of duplicates.
+				isNull(works.atprotoUri),
+				or(isNull(works.preReleaseQueuedAt), lt(works.preReleaseQueuedAt, retryBefore)),
+			),
+		);
+
+	let published = 0;
+	for (const { work, creatorMode } of due) {
+		const preReleaseAt = work.preReleaseAt as Date;
+		if (work.creatorId === null) {
+			await db
+				.update(works)
+				.set({ preReleaseAt: null, preReleaseQueuedAt: null, updatedAt: now })
+				.where(eq(works.id, work.id));
+			continue;
+		}
+		const refusal = await preReleaseRefusal(work, { id: work.creatorId, creatorMode });
+		if (refusal) {
+			console.log(
+				`[release-scheduled] Pre-release of Work ${work.id} is not ready: ${refusal.body.code}`,
+			);
+			await notify({
+				userId: work.creatorId,
+				category: "essential",
+				kind: "pre_release_refused",
+				title: `“${work.title || "Your Work"}” hasn't opened its pre-release page`,
+				body: `${refusal.body.error} The page stays private until this is fixed; the pre-release date is still set.`,
+				linkPath: `/studio/works/${work.publicId}/edit`,
+				// Per pre-release date rather than per Work: moving the date and being refused
+				// again is news; the minute sweep retrying is not.
+				dedupeKey: `pre-release-refused:${work.id}:${preReleaseAt.toISOString()}`,
+			});
+			continue;
+		}
+		const [queued] = await db
+			.update(works)
+			.set({ preReleaseQueuedAt: now, updatedAt: now })
+			.where(and(eq(works.id, work.id), eq(works.preReleaseAt, preReleaseAt)))
+			.returning({ id: works.id });
+		if (!queued) continue;
+		await queueWorkListingSync(work.id);
+		published += 1;
+	}
+	return published;
 }
 
 /** Release every due scheduled Work that is ready, and settle the ones that cannot go. */
 export async function releaseScheduled(now: Date = new Date()): Promise<ReleaseScheduledResult> {
-	const result: ReleaseScheduledResult = { released: 0, cleared: 0, waiting: 0 };
+	const result: ReleaseScheduledResult = { released: 0, cleared: 0, waiting: 0, preReleased: 0 };
+	// The same minute sweep opens pre-release pages, because both are clock-driven public
+	// transitions on a Work and a second timer would be a second thing to keep in step.
+	result.preReleased = await publishDuePreReleases(now);
 	const due = await db
 		.select({ work: works, creatorMode: users.creatorMode })
 		.from(works)

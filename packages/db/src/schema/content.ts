@@ -231,6 +231,27 @@ export const works = pgTable(
 		// uploading or processing goes out as soon as it is ready rather than on the clock. A
 		// condition only the creator can fix clears it — see `jobs/release-scheduled.ts`.
 		scheduledReleaseAt: timestamp("scheduled_release_at", { withTimezone: true }),
+		/**
+		 * The moment this Work's page goes public while the Work itself stays closed.
+		 *
+		 * ⭐ **Pre-release is a page state, not a release** (Parker, 2026-11-07): at this
+		 * date the page and its preview media become readable and its listing record is
+		 * written, while purchase, download, streaming and reviews stay closed until the
+		 * real release. `visibility` stays `private` and `releasedAt` stays null; the state
+		 * is DERIVED by `isPreRelease` from this column, so no catalog or access predicate
+		 * has to learn a new visibility value.
+		 *
+		 * Null means no pre-release. Clearing it returns the page to private and removes
+		 * the listing; the release schedule, if any, is untouched.
+		 */
+		preReleaseAt: timestamp("pre_release_at", { withTimezone: true }),
+		/**
+		 * When the pre-release sweep last queued this Work's first listing, so a failing
+		 * sync is retried on a throttle rather than every minute. Cleared when the
+		 * pre-release is cleared; irrelevant once `pre_release_at` is past and the record
+		 * exists (`atproto_uri` is the success signal the sweep reads).
+		 */
+		preReleaseQueuedAt: timestamp("pre_release_queued_at", { withTimezone: true }),
 		// When it left public circulation. Recorded rather than derived because it is
 		// what the buyer-facing notice and the Library card state, and because a
 		// withdrawn Work's listing has to say when it went.

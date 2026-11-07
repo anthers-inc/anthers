@@ -107,6 +107,42 @@ describe("what may be published at all", () => {
 		expect(workToRecord(work, { baseUrl: BASE })).toBeNull();
 	});
 
+	it("publishes a pre-release page with a status and no release date", () => {
+		const at = new Date(Date.now() - 60_000);
+		const planned = new Date(Date.now() + 24 * 60 * 60_000);
+		const work = openWork({
+			visibility: "private",
+			releasedAt: null,
+			preReleaseAt: at,
+			scheduledReleaseAt: planned,
+		});
+		expect(unpublishableReason(work)).toBeNull();
+		const record = workToRecord(work, { baseUrl: BASE })!;
+		expect(record.status).toBe("pre_release");
+		expect(record.preReleaseAt).toBe(at.toISOString());
+		expect(record.plannedReleaseAt).toBe(planned.toISOString());
+		expect(record.releasedAt).toBeUndefined();
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("does not publish a pre-release page before its date arrives", () => {
+		const work = openWork({
+			visibility: "private",
+			releasedAt: null,
+			preReleaseAt: new Date(Date.now() + 60_000),
+			scheduledReleaseAt: null,
+		});
+		expect(unpublishableReason(work)).toBe("not_released");
+	});
+
+	it("publishes a released Work with an explicit status", () => {
+		const record = workToRecord(openWork(), { baseUrl: BASE })!;
+		expect(record.status).toBe("released");
+		expect(record.releasedAt).toBe(RELEASED.toISOString());
+		expect(record.preReleaseAt).toBeUndefined();
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
 	it("fails closed on a visibility value it does not recognize", () => {
 		// A record, once public, cannot be recalled by deleting it — the firehose already
 		// carried it — so an unknown state must not default to publishable.

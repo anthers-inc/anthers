@@ -89,6 +89,10 @@ export async function syncWorkListing(
 			slug: works.slug,
 			publicId: works.publicId,
 			releasedAt: works.releasedAt,
+			// The pre-release page and its planned date, for the listing record and the
+			// `unpublishableReason` check that decides whether this Work may have one.
+			preReleaseAt: works.preReleaseAt,
+			scheduledReleaseAt: works.scheduledReleaseAt,
 			// The public listing carries the original release date when the Work has one, and
 			// `PublishableWork` requires the column here for the same reason as the rest.
 			originallyReleased: works.originallyReleased,

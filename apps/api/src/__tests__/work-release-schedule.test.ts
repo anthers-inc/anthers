@@ -249,6 +249,111 @@ describe("scheduling a release", () => {
 	});
 });
 
+describe("a pre-release page", () => {
+	const past = () => new Date(Date.now() - 60 * 60_000).toISOString();
+	const future = (hours = 1) => new Date(Date.now() + hours * HOUR).toISOString();
+
+	async function pageAs(idOrPublicId: string | number, cookie?: string) {
+		return app.fetch(
+			new Request(`http://localhost/api/content/works/${idOrPublicId}`, {
+				headers: cookie ? { Cookie: cookie } : undefined,
+			}),
+		);
+	}
+
+	it("stores the date and opens the page to a stranger, with pre_release as the verdict", async () => {
+		const workId = await stage(creator.id, { title: "Coming soon" });
+		const at = past();
+		const res = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
+			preReleaseAt: at,
+		});
+		expect(res.status).toBe(200);
+		expect(Date.parse((await res.json()).work.preReleaseAt)).toBe(Date.parse(at));
+
+		const work = await row(workId);
+		const page = await pageAs(work.publicId);
+		expect(page.status).toBe(200);
+		const body = (await page.json()) as { work: { access: { reason: string } } };
+		expect(body.work.access.reason).toBe("pre_release");
+	});
+
+	it("keeps the page private until its date", async () => {
+		const workId = await stage(creator.id, { title: "Not yet" });
+		const res = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
+			preReleaseAt: future(),
+		});
+		expect(res.status).toBe(200);
+		const work = await row(workId);
+		expect((await pageAs(work.publicId)).status).toBe(404);
+	});
+
+	it("refuses a pre-release after the release date", async () => {
+		const workId = await stage(creator.id);
+		const res = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
+			scheduledReleaseAt: future(1),
+			preReleaseAt: future(2),
+		});
+		expect(res.status).toBe(400);
+		expect((await res.json()).code).toBe("pre_release_after_release");
+	});
+
+	it("refuses a pre-release on a released Work", async () => {
+		const workId = await stage(creator.id, { visibility: "released" });
+		const res = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
+			preReleaseAt: past(),
+		});
+		expect(res.status).toBe(409);
+		expect((await res.json()).code).toBe("pre_release_not_private");
+	});
+
+	it("refuses a creator whose payout setup is not ready", async () => {
+		const workId = await stage(unpaid.id);
+		const res = await call("PATCH", `/api/content/works/${workId}`, unpaid.cookie, {
+			preReleaseAt: past(),
+		});
+		expect(res.status).toBe(409);
+		expect((await res.json()).code).toBe("payouts_required");
+	});
+
+	it("closes the reviews while the page is pre-release", async () => {
+		const workId = await stage(creator.id);
+		await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
+			preReleaseAt: past(),
+		});
+		const res = await app.fetch(
+			new Request(`http://localhost/api/content/works/${workId}/reviews`, {
+				headers: { Cookie: unpaid.cookie },
+			}),
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { eligibility: { code: string } | null };
+		expect(body.eligibility?.code).toBe("pre_release");
+	});
+
+	it("queues the listing when the date arrives, and again on a clear", async () => {
+		const workId = await stage(creator.id, { title: "Sweep me" });
+		await db
+			.update(works)
+			.set({ preReleaseAt: new Date(Date.now() - 60_000) })
+			.where(eq(works.id, workId));
+		sent = [];
+		const result = await releaseScheduled();
+		expect(result.preReleased).toBeGreaterThanOrEqual(1);
+		expect(
+			sent.some((entry) => entry.name === QUEUES.SYNC_WORK_LISTING && entry.data.workId === workId),
+		).toBe(true);
+
+		// Clearing the date returns the page to private and asks the listing to go.
+		const cleared = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
+			preReleaseAt: null,
+		});
+		expect(cleared.status).toBe(200);
+		const work = await row(workId);
+		expect((await pageAs(work.publicId)).status).toBe(404);
+		expect((await db.select().from(works).where(eq(works.id, workId)))[0].preReleaseAt).toBeNull();
+	});
+});
+
 describe("the release-scheduled sweep", () => {
 	it("releases a due Work that is ready, and asks for its listing", async () => {
 		const workId = await stage(creator.id);

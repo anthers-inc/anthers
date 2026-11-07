@@ -202,6 +202,7 @@ describe("the drift report", () => {
 			kind: "game",
 			title: w.title,
 			url: `https://anthers.org/works/${w.slug}-${w.publicId}`,
+			status: "released",
 			releasedAt: (w.releasedAt ?? new Date()).toISOString(),
 			access: { state: "gated" },
 			credits: [
