@@ -102,6 +102,10 @@ export function processingText(job: Work["transcoding"]): string | null {
 		return status && eta ? `${status} · ${eta}` : status;
 	}
 	if (job?.status === "processing") {
+		// Past the encode, uploads and the master rewrite run with no ffmpeg ticks, so a
+		// time left would be the last tick's figure standing through work it never saw.
+		// The stage is named instead, and the estimate is absent by construction.
+		if ((job.progress ?? 0) >= 80) return `${status} · Finishing up`;
 		const eta = etaLeft(job.etaSeconds);
 		return status && eta ? `${status} · ${eta}` : status;
 	}

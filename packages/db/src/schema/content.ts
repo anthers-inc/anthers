@@ -1194,6 +1194,16 @@ export const workTranscodingJobs = pgTable(
 		// estimates — "about an hour" gets truer as jobs record their real shape. Body
 		// keys are camelCase (`totalMs`), like the jsonb elsewhere.
 		timings: jsonb("timings"),
+		/**
+		 * The ladder the run planned, in encoding order (smallest first) — `planLadderFor`'s
+		 * answer, written once the source has been probed. The media chips render every rung
+		 * from this list, grayed until its manifest entry appears, so a creator watching a
+		 * long encode sees what is still coming rather than one placeholder that only becomes
+		 * a ladder at the end.
+		 *
+		 * Null before the probe (a pending row) and on rows that never plan a ladder.
+		 */
+		plannedDepths: jsonb("planned_depths").$type<number[]>(),
 		errorMessage: text("error_message").default(""),
 		// The moment this job's tree first played: written at the smallest rung's master
 		// upload, and the reason the release gate can open while the tall rungs are still

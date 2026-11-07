@@ -568,8 +568,21 @@ export function masterPlaylistLines(variants: Variant[]): string[] {
 async function generateMasterPlaylist(outputDir: string, variants: Variant[]) {
 	await Bun.write(join(outputDir, "master.m3u8"), `${masterPlaylistLines(variants).join("\n")}\n`);
 }
+/**
+ * A stage boundary's write.
+ *
+ * 🚨 **The estimate is cleared here, always.** These writes are the moments the job leaves
+ * ffmpeg's ticks — the probe, the remux, the upload-and-free tail — and the last tick's
+ * `eta_seconds` would otherwise stand through them, claiming "less than a minute" for the
+ * minutes an upload takes. A row that has left the encode has no honest estimate; the
+ * display says "Finishing up" rather than inventing one. The smooth in-encode figures are
+ * the tick writer's own, and it keeps them.
+ */
 async function updateJobProgress(jobId: number, progress: number) {
-	await db.update(workTranscodingJobs).set({ progress }).where(eq(workTranscodingJobs.id, jobId));
+	await db
+		.update(workTranscodingJobs)
+		.set({ progress, etaSeconds: null })
+		.where(eq(workTranscodingJobs.id, jobId));
 }
 
 /**
@@ -815,6 +828,12 @@ async function runTranscode(
 		// 2. Determine variants based on source resolution — smallest first (the release
 		// gate opens at the first rung; see the loop below and `planLadderFor`).
 		const variants = planLadderFor(sourceHeight, sourceWidth);
+		// The plan is written before the first encode so the chips can show every rung the
+		// run intends, not only the ones whose manifest entry has landed.
+		await db
+			.update(workTranscodingJobs)
+			.set({ plannedDepths: variants.map((variant) => variant.height) })
+			.where(eq(workTranscodingJobs.id, jobId));
 
 		// 3. Transcode the ladder in its two passes.
 
