@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { MeadowBackdrop } from "@anthers/web-shared/decor/MeadowBackdrop";
 import { MeadowFloor } from "@anthers/web-shared/decor/MeadowFloor";
 import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";
 import { FONTS } from "@anthers/web-shared/fonts";
@@ -95,7 +96,7 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 	},
 ];
 
-export default function LoggedOutLayout() {
+export default function LoggedOutLayout({ quiet = false }: { quiet?: boolean }) {
 	const { currentTrack } = useMediaPlayer();
 	const { pathname } = useLocation();
 	// The sign-in page renders stripped down: header and meadow stay (the header keeps
@@ -129,10 +130,16 @@ export default function LoggedOutLayout() {
 	if (bareFrontDoor) return <Outlet />;
 
 	return (
-		// `relative isolate` scopes the decor z-order: content + footer (z-10) sit
-		// below the side vines (z-20), which sit below the grassy floor (z-30). The
-		// sticky nav stays on top (z-40).
+		// `relative isolate` scopes the decor z-order. The marketing shell's decor is
+		// composed in front of the page — content and footer (z-10) below the side vines
+		// (z-20), which sit below the grassy floor (z-30) — while the quiet Work-page shell
+		// mounts the signed-in `MeadowBackdrop` behind everything at `-z-10`. The sticky nav
+		// stays on top either way (z-40).
 		<div className="relative isolate min-h-dvh flex flex-col safe-bottom safe-sides">
+			{/* A Work read signed out uses the app's quiet meadow rather than the marketing
+			    composition's full-strength vines and floor (Parker, 2026-11-06). The blurred
+			    layer paints beneath the page; the marketing chrome above and below is unchanged. */}
+			{quiet && <MeadowBackdrop />}
 			<header className="py-1 nav-edge bg-base-200/50 backdrop-blur-md sticky top-0 z-40">
 				{/* The status bar and camera cutout sit over the page in a packaged shell. The
 				    strip is inside the header so the header's own backdrop paints underneath
@@ -356,11 +363,12 @@ export default function LoggedOutLayout() {
 			)}
 
 			{/* Climbing side vines spanning the whole page — in front of the content and
-				footer (z-20), behind the grassy floor below (z-30). Wide screens only. */}
-			<MeadowVines />
+				footer (z-20), behind the grassy floor below (z-30). Wide screens only.
+				The quiet Work-page shell mounts the backdrop version instead. */}
+			{!quiet && <MeadowVines />}
 
 			{/* The grassy meadow every logged-out page ends on. */}
-			<MeadowFloor />
+			{!quiet && <MeadowFloor />}
 		</div>
 	);
 }

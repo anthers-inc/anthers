@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useAuth } from "@anthers/web-shared/auth";
+import { useLocation } from "@anthers/web-shared/router";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import LoggedInLayout from "./LoggedInLayout";
 import LoggedOutLayout from "./LoggedOutLayout";
@@ -43,6 +44,7 @@ import LoggedOutLayout from "./LoggedOutLayout";
  */
 export default function PublicShell({ forceMarketing = false }: { forceMarketing?: boolean }) {
 	const { isAuthenticated, isLoading } = useAuth();
+	const { pathname } = useLocation();
 
 	if (isLoading) {
 		return (
@@ -52,5 +54,15 @@ export default function PublicShell({ forceMarketing = false }: { forceMarketing
 		);
 	}
 
-	return forceMarketing || !isAuthenticated ? <LoggedOutLayout /> : <LoggedInLayout />;
+	// ⭐ **A Work read signed out carries the app's quiet meadow, not the marketing
+	// composition's full-strength vines.** The share link is what raised it, but the same
+	// page is where a search result lands, so the rule follows the surface rather than the
+	// `?share=` parameter; the marketing header and footer stay around it (Parker, 2026-11-06).
+	const quietDecor = !forceMarketing && pathname.startsWith("/works/");
+
+	return forceMarketing || !isAuthenticated ? (
+		<LoggedOutLayout quiet={quietDecor} />
+	) : (
+		<LoggedInLayout />
+	);
 }
