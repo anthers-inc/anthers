@@ -282,23 +282,28 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 		timeout: 15_000,
 	});
 
-	// 🚨 **Cancel must not save the art draft.** The retired editor wrote shape, color and
-	// the composition on click, so a creator who changed their mind still got the emblem
-	// they had just rejected. Change both choices here, cancel, and read the stored row.
+	// 🚨 **An empty rung saves.** A Badge with no perks and no unlocked Work is a support
+	// payment, so removing every perk and pressing Save must land rather than refuse — and
+	// the stored row is what proves the write. Support is what the tax fallback reads.
 	await editButton.click();
-
-	// 🚨 **An empty rung cannot be saved.** Empty means unfinished, not "support": remove
-	// every perk, press Save, and the dialog refuses before any write. Support is a kind the
-	// creator chooses, and this refusal is what keeps the absence from meaning anything.
 	await dialog.getByRole("tab", { name: "Perks" }).click();
 	await expect(dialog.getByLabel("Perk type").first()).toBeVisible();
 	const removePerk = dialog.getByRole("button", { name: "Remove perk" });
 	const perkRows = await removePerk.count();
 	for (let i = 0; i < perkRows; i++) await removePerk.first().click();
 	await dialog.getByRole("button", { name: "Save" }).click();
-	await expect(dialog.getByText("Add a perk, or open at least one Work.")).toBeVisible();
-	await expect(dialog).toBeVisible();
+	await expect(dialog).toBeHidden();
 
+	const [emptied] = await db
+		.select({ perks: badges.perks })
+		.from(badges)
+		.where(eq(badges.id, badgeId));
+	expect(emptied?.perks).toEqual([]);
+
+	// ⭐ **Cancel must not save the art draft.** The retired editor wrote shape, color and
+	// the composition on click, so a creator who changed their mind still got the emblem
+	// they had just rejected. Change both choices here, cancel, and read the stored row.
+	await editButton.click();
 	await dialog.getByRole("tab", { name: "Emblem" }).click();
 	await control.getByRole("button", { name: "Circle" }).click();
 	await control.getByRole("button", { name: "Moss" }).click();

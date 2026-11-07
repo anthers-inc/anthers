@@ -18,10 +18,11 @@
  * the Works list then sat under the perks table, where it was the one thing on the tab that
  * the creator did not type.
  *
- * 🚨 **A rung must name a perk kind or open a Work before Save.** An empty perks table means
- * the creator has not finished, not that the rung is a support payment: Support is a kind
- * they choose, and the guard reads both tabs. A failed read of either list never counts as
- * an empty one.
+ * ⭐ **A rung may be saved with nothing in its perks table and no Work unlocked.** It is
+ * then a support payment, which is what an empty rung has always meant to a supporter;
+ * `taxCodeForBadge` falls back to `SUPPORT_TAX_CODE` for it. The editor used to refuse
+ * that save, and a more nuanced rule is intended once the tax codes and the gating
+ * behavior have settled.
  *
  * 🚨 **Every art change is a draft until Save.** The first cut wrote shape, color, uploads
  * and compositions to the server the moment they were clicked, so Cancel still saved the
@@ -780,18 +781,6 @@ export default function BadgeMaker({
 			}
 			if (!creating && perksLoaded && perks.some((p) => p.label.trim() && !p.kind)) {
 				throw new Error("Choose a type for each perk that has a name.");
-			}
-			// 🚨 **A rung that names no kind and opens no Work is unfinished, not a support
-			// payment.** Support is a kind a creator chooses. Only a successful read of both
-			// lists can prove the rung carries nothing, so a failed load skips the guard.
-			if (
-				!creating &&
-				perksLoaded &&
-				gatedWorks !== null &&
-				gatedWorks.length === 0 &&
-				!perks.some((p) => p.kind && p.label.trim())
-			) {
-				throw new Error("Add a perk, or open at least one Work.");
 			}
 
 			if (creating) {
