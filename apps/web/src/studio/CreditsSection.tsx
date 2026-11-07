@@ -22,6 +22,9 @@
  *   name, legal for a contributor who is not on-network, added with Enter.
  * - **Role suggestions** — the §-category vocabulary as a soft list under the field: a prompt
  *   to pick from, never a gate, because roles are freeform by the settled design.
+ * - **A card is three rows** (Parker, 2026-11-06): the role with the red bin at its end, then
+ *   the Created/Generated boxes, then the people attributed to the credit. The people are the
+ *   row that gets the width.
  * - **Guidance lives above the table and in hovers**, not in paragraphs through the flow. The
  *   policy link is the one line above the table, matching the Rating tab; each control's
  *   specific ask is an (i) beside it, in the Rating table's own tooltip treatment.
@@ -34,7 +37,7 @@
 
 import { client } from "@anthers/web-shared/rpc";
 import type { WorkCredit, WorkCreditType } from "@anthers/web-shared/types";
-import { InformationCircleIcon, UserIcon } from "@heroicons/react/24/outline";
+import { InformationCircleIcon, TrashIcon, UserIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { CREDITS_WIKI_URL } from "../lib/wiki";
 
@@ -253,8 +256,8 @@ export default function CreditsSection({
 						key={i}
 						className="rounded-md border border-base-300"
 					>
-						{/* Row one — the contribution and what made it. */}
-						<div className="flex flex-wrap items-center gap-3 border-b border-base-300 p-3">
+						{/* Row one — what the credit is called, and the way to take it off. */}
+						<div className="flex items-center gap-3 border-b border-base-300 p-3">
 							<div className="min-w-40 flex-1">
 								<RoleInput
 									ariaLabel={`Credit ${i + 1} role`}
@@ -262,29 +265,32 @@ export default function CreditsSection({
 									onChange={(role) => setCard(i, { ...card, role, awaiting: [] })}
 								/>
 							</div>
-							<div className="flex flex-wrap items-center gap-2">
-								{CREDIT_TYPES.map((t) => (
-									<TypeBox
-										key={t.value}
-										label={t.label}
-										tip={TYPE_TIPS[t.value]}
-										ariaLabel={`Credit ${i + 1} ${t.label}`}
-										checked={card.types.includes(t.value)}
-										onChange={(e) => toggleType(i, t.value, e.target.checked)}
-									/>
-								))}
-							</div>
 							<button
 								type="button"
-								className="btn btn-ghost btn-xs ml-auto"
+								className="btn btn-ghost btn-xs ml-auto text-error"
 								aria-label={`Remove credit ${i + 1}`}
+								title="Remove this credit"
 								onClick={() => commit(cards.filter((_, j) => j !== i))}
 							>
-								Remove
+								<TrashIcon className="size-4" />
 							</button>
 						</div>
 
-						{/* Row two — who made it. */}
+						{/* Row two — the kinds of contribution this credit covers. */}
+						<div className="flex flex-wrap items-center gap-2 border-b border-base-300 p-3">
+							{CREDIT_TYPES.map((t) => (
+								<TypeBox
+									key={t.value}
+									label={t.label}
+									tip={TYPE_TIPS[t.value]}
+									ariaLabel={`Credit ${i + 1} ${t.label}`}
+									checked={card.types.includes(t.value)}
+									onChange={(e) => toggleType(i, t.value, e.target.checked)}
+								/>
+							))}
+						</div>
+
+						{/* Row three — who made it. */}
 						<div className="flex flex-col gap-2 p-3">
 							<ContributorPicker
 								ariaLabel={`Credit ${i + 1} contributors`}
