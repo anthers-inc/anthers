@@ -3,8 +3,8 @@
  * A Work's tags, in the Details tab below its description.
  *
  * The read view is the same chips a visitor sees. The edit view is the creator's: up to
- * five tags, picked from the **directory of tags released Works actually carry**, each
- * shown with how many Works use it, or typed as a new one when the specific word a
+ * `MAX_WORK_TAGS` tags, picked from the **directory of tags released Works actually carry**,
+ * each shown with how many Works use it, or typed as a new one when the specific word a
  * creator wants does not exist yet.
  *
  * ⭐ **The count is the decision aid.** A creator choosing between `rpg` and
@@ -14,8 +14,8 @@
  * this component never invents a count.
  *
  * ⚠️ **The client refuses past the cap too, but the API is the authority** — the server
- * normalizes and enforces the same five, so a second client or a stale page cannot save a
- * sixth.
+ * normalizes and enforces the same `MAX_WORK_TAGS`, so a second client or a stale page
+ * cannot save one past it.
  */
 
 import { MAX_WORK_TAGS, normalizeTag, tagProblem } from "@anthers/shared/tags";
@@ -174,7 +174,8 @@ export function WorkTagPicker({
 				/>
 			</label>
 			<p className="text-xs text-base-content/50">
-				Tags help people find this Work. Five at most; you can change them whenever you like.
+				Tags help people find this Work. {MAX_WORK_TAGS} at most; you can change them whenever
+				you like.
 			</p>
 			{note && <p className="text-xs text-error">{note}</p>}
 			{shapeProblem && <p className="text-xs text-error">{shapeProblem}</p>}
