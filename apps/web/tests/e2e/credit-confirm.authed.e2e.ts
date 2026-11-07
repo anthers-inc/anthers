@@ -195,6 +195,11 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	await contributor.fill(userDid);
 	await contributor.press("Enter");
 
+	// The card's remove control is the app's red bin, not a ghost word in the text color.
+	const remove = page.getByRole("button", { name: "Remove credit 1" });
+	await expect(remove).toHaveClass(/text-error/);
+	await expect(remove.locator("svg")).toHaveCount(1);
+
 	// The Studio does NOT yet know whether the person has confirmed — the credit is new —
 	// but the marker appears the moment the save returns the owner overlay's flag.
 	await expect(page.getByText(/waiting on/i)).toHaveCount(0);
