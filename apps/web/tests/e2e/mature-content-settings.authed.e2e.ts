@@ -69,7 +69,7 @@ test("the Adult warning names both proofs, and the (i) explains the check", asyn
 		.filter({ has: page.getByRole("heading", { name: "Rating Controls" }) });
 
 	await expect(ratings).toContainText(
-		"Adult content needs a credit card on file or a completed creator payout account — either one is a non-intrusive age check.",
+		"Save payment info in Account settings to unlock Adult content, or complete creator payouts.",
 	);
 
 	const info = ratings.getByRole("button", { name: "About age verification" });
@@ -90,8 +90,17 @@ test("the Adult warning names both proofs, and the (i) explains the check", asyn
 	await expect(explanation).toContainText(/Debit and prepaid cards/i);
 	await expect(explanation).toContainText(/no other way to do this today/i);
 
-	// The door exists and is off by default.
-	await expect(ratings.getByRole("button", { name: /turn on adult content/i })).toBeVisible();
+	// Without a saved credit card or a creator payout standing, the whole card is locked
+	// with the reason — the old "Turn on Adult content" button and its card dialog are gone.
+	await expect(ratings.getByText(/Save payment info in Account settings/)).toBeVisible();
+	await expect(ratings.getByRole("button", { name: /turn on adult content/i })).toHaveCount(0);
+
+	// The reason links to the one settings surface that saves the proof, and that surface
+	// is the card-plus-address block now — the old address-only card is gone.
+	await page.getByRole("link", { name: "Account settings" }).click();
+	await expect(page.getByRole("heading", { name: "Save payment info" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Add payment info" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Billing Address" })).toHaveCount(0);
 });
 
 test("Content Controls carries the flags as their own card", async ({ page }) => {

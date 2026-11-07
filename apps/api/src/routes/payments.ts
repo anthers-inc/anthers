@@ -631,11 +631,10 @@ function purchaseSession(params: {
 	 */
 	customerEmail: string;
 	/**
-	 * 🚨 **Set ONLY when a Badge's recurrence awaits and no active subscription exists**
-	 * (the checkout computes it — see the basket route's note). A purchase checkout keeps
-	 * `payment_method_save: "disabled"` and never offers a save; this is the one payment
-	 * a checkout is allowed to leave a card behind for, because a Badge line created on
-	 * the platform charge has to renew against something on file.
+	 * A Badge's recurrence awaits on this charge when no active subscription exists (the
+	 * checkout computes it — see the basket route's note); the card save is no longer the
+	 * Badge lane's alone, because a normal purchase now leaves the account's one saved
+	 * payment method behind as well.
 	 *
 	 * ⚠️ PROBE at implementation (2026-10-15): whether `setup_future_usage` on a
 	 * `mode: "payment"` session saves the confirming card WITHOUT re-introducing Link's
@@ -712,7 +711,10 @@ function purchaseSession(params: {
 					customer: params.customerId,
 					customer_update: { address: "auto" as const },
 					saved_payment_method_options: {
-						payment_method_save: "disabled",
+						// A purchase saves the card for the account's one saved payment method
+						// (the settings card and the Adult control's proof). Removal stays on
+						// the settings surface, where a live subscription can block it.
+						payment_method_save: "enabled",
 						payment_method_remove: "disabled",
 					},
 				}
