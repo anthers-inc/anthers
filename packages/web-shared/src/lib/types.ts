@@ -345,12 +345,6 @@ export interface TranscodingJob {
 	 */
 	playableAt: string | null;
 	hlsManifestUrl: string | null;
-	/**
-	 * The audio-only rendition of a video (`audio.m3u8`), serialized on the user
-	 * shape only, and only when the rendition exists — the Podcast-This affordance
-	 * keys on its presence.
-	 */
-	audioManifestUrl?: string | null;
 	outputFileUrl: string | null;
 	waveformData: number[] | null;
 	createdAt: string;

@@ -778,16 +778,6 @@ export function WorkDeliverable({
 						captions={work.captions}
 						chapters={chapters}
 						startSeconds={startSeconds}
-						// The Podcast-This row: only a video whose audio rendition really shipped
-						// gets one — serialization nulls the URL when `audio.m3u8` is absent.
-						podcast={
-							work.transcoding.audioManifestUrl
-								? {
-										audioManifestUrl: work.transcoding.audioManifestUrl,
-										track: trackFromWork(work),
-									}
-								: undefined
-						}
 					/>,
 					true,
 				)}

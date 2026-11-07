@@ -22,7 +22,6 @@ import {
 	Cog6ToothIcon,
 	PauseIcon,
 	PlayIcon,
-	SpeakerWaveIcon,
 } from "@heroicons/react/24/solid";
 import { useEffect, useRef, useState } from "react";
 import { useWorkTheater } from "@/lib/work-theater";
@@ -66,11 +65,6 @@ export default function VideoControls({
 	onCaption,
 	onToggleFullscreen,
 	chapters,
-	/**
-	 * The Podcast-This hand-off, present only on a video whose audio rendition exists —
-	 * the `audioManifestUrl` gate lives in VideoPlayer, which owns the unload.
-	 */
-	onPodcastThis,
 }: {
 	playing: boolean;
 	position: number;
@@ -108,7 +102,6 @@ export default function VideoControls({
 	onToggleFullscreen: () => void;
 	/** The Work's chapters, for the segmented rail and the now-playing name. */
 	chapters: WorkChapter[];
-	onPodcastThis?: () => void;
 }) {
 	const theater = useWorkTheater();
 	const [settingsOpen, setSettingsOpen] = useState(false);
@@ -305,28 +298,6 @@ export default function VideoControls({
 										))}
 									</ul>
 								</div>
-							)}
-							{onPodcastThis && (
-								<>
-									<p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
-										Listen
-									</p>
-									<ul className="menu menu-sm w-full">
-										<li>
-											<button
-												type="button"
-												data-testid="podcast-this"
-												onClick={() => {
-													setSettingsOpen(false);
-													onPodcastThis();
-												}}
-											>
-												<SpeakerWaveIcon className="size-4" />
-												Listen as podcast
-											</button>
-										</li>
-									</ul>
-								</>
 							)}
 						</div>
 					)}

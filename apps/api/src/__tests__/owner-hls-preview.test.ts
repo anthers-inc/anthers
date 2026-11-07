@@ -22,10 +22,9 @@
  * runs the assertions that matter.
  *
  * The child's storage is pointed at a loopback HTTP server this file itself hosts, which
- * answers HEAD for the paths `confirmRendition` marks and 404 for everything else — that is
- * where `userTranscoding`'s "does the audio rendition exist?" probe arrives, so the
- * report-it-only-when-confirmable rule is exercised both ways. Byte-accurate playlists are
- * share-link-hls.test.ts's subject; this file is about who is handed the route URL.
+ * answers HEAD for the objects a PUT wrote and 404 for everything else. Byte-accurate
+ * playlists are share-link-hls.test.ts's subject; this file is about who is handed the
+ * route URL.
  *
  * The save routes are held to the same rewrite (Parker, 2026-10-16 — the Studio's video
  * player flipped to the raw URL the moment a thumbnail save adopted the response, and the
@@ -83,8 +82,8 @@ async function runDeliveryModeSuite(): Promise<void> {
 
 	// A bare HTTP server standing in for object storage: a storage existence probe
 	// (HeadObject under path-style addressing, bucket as the first path segment) is
-	// answered 200 only for the paths `confirmRendition` marks, 404 otherwise. Nothing is
-	// stored anywhere — every `STORAGE_*` value is fake.
+	// answered 200 only for the paths a PUT wrote, 404 otherwise. Nothing is stored
+	// anywhere — every `STORAGE_*` value is fake.
 	const confirmedPaths = new Set<string>();
 	/** Bytes the run's own PUTs wrote, by path — the frame route reads its source this way. */
 	const storedBytes = new Map<string, ArrayBuffer>();
@@ -143,14 +142,6 @@ async function runDeliveryModeSuite(): Promise<void> {
 		return `https://cdn.anthers.org/creators/x/videos/hls/${workId}/master.m3u8?fixture=${id}`;
 	}
 
-	/**
-	 * Marks the path whose stand-in storage answers 200 — the audio-only rendition at
-	 * `workId`'s manifest prefix, exactly where a real transcode parks it.
-	 */
-	function confirmRendition(workId: number): void {
-		confirmedPaths.add(`/${BUCKET}/creators/x/videos/hls/${workId}/audio.m3u8`);
-	}
-
 	// Every account this suite creates is taken back afterward, on success or failure —
 	// and the Works and their transcode rows cascade with the creator. Nothing was stored.
 	purgeAccountsCreatedHere();
@@ -161,10 +152,8 @@ async function runDeliveryModeSuite(): Promise<void> {
 
 	let creatorCookie: string;
 	let creatorId: number;
-	/** A video whose audio-only rendition the stand-in storage confirms. */
-	let withRenditionId: number;
-	/** A video whose audio-only rendition nothing confirms. */
-	let withoutRenditionId: number;
+	/** A finished video, whose manifest is served from the access-checked route. */
+	let videoId: number;
 	/** An audio Work, whose processed file rides its own access-checked endpoint. */
 	let audioId: number;
 	/** A video with real source bytes, so the frame-thumbnail route can extract from it. */
@@ -201,37 +190,20 @@ async function runDeliveryModeSuite(): Promise<void> {
 			creatorId = creator.userId;
 			creatorCookie = creator.cookie;
 
-			withRenditionId = (
+			videoId = (
 				await insertWork({
 					creatorId,
 					type: "video",
-					title: "Finished video, with podcast rendition",
-					streamEnabled: true,
-					access: [{ threshold: 0, allow: true, price: "0" }],
-				})
-			).id;
-			confirmRendition(withRenditionId);
-			await db.insert(workTranscodingJobs).values({
-				workId: withRenditionId,
-				mediaType: "video",
-				status: "completed",
-				hlsManifestUrl: storedHlsUrl(withRenditionId),
-			});
-
-			withoutRenditionId = (
-				await insertWork({
-					creatorId,
-					type: "video",
-					title: "Finished video, no podcast rendition",
+					title: "Finished video",
 					streamEnabled: true,
 					access: [{ threshold: 0, allow: true, price: "0" }],
 				})
 			).id;
 			await db.insert(workTranscodingJobs).values({
-				workId: withoutRenditionId,
+				workId: videoId,
 				mediaType: "video",
 				status: "completed",
-				hlsManifestUrl: storedHlsUrl(withoutRenditionId),
+				hlsManifestUrl: storedHlsUrl(videoId),
 			});
 
 			audioId = (
@@ -267,7 +239,7 @@ async function runDeliveryModeSuite(): Promise<void> {
 		}, DB_SETUP_TIMEOUT);
 
 		it("serves the owner's video manifest from the access-checked route, never the bare bucket URL", async () => {
-			const res = await req(`/api/content/works/${withRenditionId}`, {
+			const res = await req(`/api/content/works/${videoId}`, {
 				headers: { Cookie: creatorCookie },
 			});
 			expect(res.status).toBe(200);
@@ -277,27 +249,10 @@ async function runDeliveryModeSuite(): Promise<void> {
 			// is what the Studio's editor round-trips.
 			expect(Array.isArray(work.access)).toBe(true);
 			expect(work.transcoding.hlsManifestUrl).toBe(
-				`${ORIGIN}/api/content/works/${withRenditionId}/hls/master.m3u8`,
-			);
-			// The rendition the storage layer confirms rides the same route.
-			expect(work.transcoding.audioManifestUrl).toBe(
-				`${ORIGIN}/api/content/works/${withRenditionId}/hls/audio.m3u8`,
+				`${ORIGIN}/api/content/works/${videoId}/hls/master.m3u8`,
 			);
 			// Every address the transcode carries reaches a browser only after the rewrite,
 			// which is the whole property: the stored URL names the private bucket.
-			expect(JSON.stringify(work.transcoding)).not.toContain("cdn.");
-		});
-
-		it("withholds a rendition nothing confirms, while keeping the manifest rewrite", async () => {
-			const res = await req(`/api/content/works/${withoutRenditionId}`, {
-				headers: { Cookie: creatorCookie },
-			});
-			expect(res.status).toBe(200);
-			const { work } = await res.json();
-			expect(work.transcoding.hlsManifestUrl).toBe(
-				`${ORIGIN}/api/content/works/${withoutRenditionId}/hls/master.m3u8`,
-			);
-			expect(work.transcoding.audioManifestUrl).toBeNull();
 			expect(JSON.stringify(work.transcoding)).not.toContain("cdn.");
 		});
 
@@ -314,7 +269,7 @@ async function runDeliveryModeSuite(): Promise<void> {
 		it("a save's response runs the same rewrite, so the player never flips to the raw URL", async () => {
 			// The edit route passes the job row through `serializeWork` whole, and the
 			// Studio adopts the response — this save is where the leak showed.
-			const res = await req(`/api/content/works/${withRenditionId}`, {
+			const res = await req(`/api/content/works/${videoId}`, {
 				method: "PATCH",
 				headers: { Cookie: creatorCookie, "Content-Type": "application/json", Origin: ORIGIN },
 				body: JSON.stringify({ description: `Save-rewritten row ${id}` }),
@@ -322,10 +277,7 @@ async function runDeliveryModeSuite(): Promise<void> {
 			expect(res.status).toBe(200);
 			const { work } = await res.json();
 			expect(work.transcoding.hlsManifestUrl).toBe(
-				`${ORIGIN}/api/content/works/${withRenditionId}/hls/master.m3u8`,
-			);
-			expect(work.transcoding.audioManifestUrl).toBe(
-				`${ORIGIN}/api/content/works/${withRenditionId}/hls/audio.m3u8`,
+				`${ORIGIN}/api/content/works/${videoId}/hls/master.m3u8`,
 			);
 			expect(JSON.stringify(work.transcoding)).not.toContain("cdn.");
 		});

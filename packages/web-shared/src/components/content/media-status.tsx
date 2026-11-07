@@ -191,7 +191,6 @@ export function VideoMediaStatusChips({
 				menuAlign={menuAlign}
 				actions={originalActions}
 			/>
-			<VariantChip name="Audio" ready={job?.audioManifestUrl ?? ""} running={running} />
 			{depths.length > 0 ? (
 				// Largest first (Parker, 2026-10-13): the ladder reads as what it offers,
 				// best at the left.
