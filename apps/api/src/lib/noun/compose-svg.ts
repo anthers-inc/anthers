@@ -25,10 +25,10 @@
 import {
 	BADGE_COLORS,
 	BADGE_COMPOSE_PX,
-	BADGE_EDGE,
 	BADGE_EDGE_WIDTH,
 	BADGE_SHAPES,
 	type BadgeComposeParams,
+	badgeEdgeColor,
 } from "@anthers/shared/badge-art";
 import { formatHex } from "culori";
 
@@ -166,7 +166,7 @@ export function composeBadgeSvg(input: {
 	// because the fixture SVG carried no fills. The fill-carrying fixture test below is
 	// the regression lock.)
 	const fieldHex = cssColorToHex(field.fill);
-	const edgeHex = cssColorToHex(BADGE_EDGE);
+	const edgeHex = cssColorToHex(badgeEdgeColor(placement.edgeColor).fill);
 	const emblemHex = cssColorToHex(placement.emblemColor);
 	const emblemInner = recolorEmblem(inner, emblemHex);
 

@@ -55,6 +55,7 @@ const EMOJI_FONT_SIZE = 0.8;
 export function BadgeMark({
 	shape,
 	color,
+	edgeColor,
 	label,
 	emoji,
 	emblem,
@@ -73,6 +74,11 @@ export function BadgeMark({
 	shape?: string | null;
 	/** A color id from the same library. */
 	color?: string | null;
+	/**
+	 * The edging's fill, as a CSS color (the library converts an id with
+	 * `badgeEdgeColor(id).fill`). Omitted draws the default brown.
+	 */
+	edgeColor?: string | null;
 	/** Named for a screen reader; the layers themselves are decorative. */
 	label: string;
 	/** Anthers' badges put an emoji on the patch. */
@@ -139,7 +145,7 @@ export function BadgeMark({
 					<path
 						d={s.path}
 						fill={c.fill}
-						stroke={BADGE_EDGE}
+						stroke={edgeColor ?? BADGE_EDGE}
 						strokeWidth={BADGE_EDGE_WIDTH * 2}
 						strokeLinejoin="round"
 					/>

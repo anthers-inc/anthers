@@ -317,6 +317,7 @@ export default function BadgesSection() {
 				hasComposedArt: h.hasComposedArt,
 				artShape: h.artShape,
 				artColor: h.artColor,
+				artEdgeColor: h.artEdgeColor ?? null,
 				sortOrder: 0,
 				createdAt: h.createdAt,
 				updatedAt: h.updatedAt ?? h.createdAt,

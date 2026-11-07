@@ -46,10 +46,13 @@
 
 import {
 	BADGE_COLORS,
+	BADGE_EDGE_COLORS,
 	BADGE_EMBLEM_COLORS,
 	BADGE_PERK_KINDS,
 	BADGE_SHAPES,
 	type BadgePerkKind,
+	badgeEdgeColor,
+	DEFAULT_BADGE_EDGE,
 	DEFAULT_BADGE_SHAPE,
 	defaultEmblemColor,
 } from "@anthers/shared/badge-art";
@@ -495,8 +498,13 @@ export default function BadgeMaker({
 	onChanged?: () => void;
 	onClose: () => void;
 }) {
-	const creating = badge === null;
-	const badgeId = badge?.id ?? null;
+	// The dialog starts on the row it was opened for, or on nothing for a new Badge. A
+	// successful add swaps in the created row rather than closing: the creator lands on the
+	// full editor, with the tabs, for the Badge they just made.
+	const [saved, setSaved] = useState<CreatorBadge | null>(null);
+	const current = saved ?? badge;
+	const creating = current === null;
+	const badgeId = current?.id ?? null;
 	const fallback = fallbackBadgeDesign(index);
 
 	const [tab, setTab] = useState<Tab>("basics");
@@ -524,9 +532,13 @@ export default function BadgeMaker({
 	// show the fallback's color and the saved composition would use a different one.
 	const initialShape = badge?.artShape ?? DEFAULT_BADGE_SHAPE;
 	const initialColor = badge?.artColor ?? fallback.color;
+	const initialEdge = badge?.artEdgeColor ?? DEFAULT_BADGE_EDGE;
 	const [shape, setShape] = useState(initialShape);
 	const [color, setColor] = useState(initialColor);
-	const [emblemMode, setEmblemMode] = useState<EmblemMode>(null);
+	const [edge, setEdge] = useState(initialEdge);
+	// "Find an Emblem" is the default mode, so the picker opens on the catalog rather than
+	// on a placeholder that asks the creator to choose a mode first.
+	const [emblemMode, setEmblemMode] = useState<EmblemMode>("find");
 	const [upload, setUpload] = useState<StagedUpload | null>(null);
 	const [selection, setSelection] = useState<EmblemPlacement | null>(null);
 	const [removed, setRemoved] = useState(false);
@@ -544,9 +556,9 @@ export default function BadgeMaker({
 	// new shape or background only reaches the art through a recomposition. The server can
 	// rebuild it from the stored icon and emblem color when it still has that color; a row it
 	// cannot rebuild keeps the old refusal instead of writing a shape the PNG does not carry.
-	const composedArt = Boolean(badge?.hasComposedArt);
-	const artChoiceChanged = shape !== initialShape || color !== initialColor;
-	const canRecomposeArt = composedArt && Boolean(badge?.canRecompose);
+	const composedArt = Boolean(current?.hasComposedArt);
+	const artChoiceChanged = shape !== initialShape || color !== initialColor || edge !== initialEdge;
+	const canRecomposeArt = composedArt && Boolean(current?.canRecompose);
 	const needsNewEmblemForChoice =
 		composedArt && artChoiceChanged && !canRecomposeArt && !selection && !upload && !removed;
 	// The save that changes nothing but the background and keeps the emblem: the server
@@ -750,6 +762,7 @@ export default function BadgeMaker({
 		const common = {
 			shape,
 			color,
+			edgeColor: badgeEdgeColor(edge).fill,
 			label: previewLabel,
 			clipId: "badge-maker-preview",
 			size: "h-16 w-16",
@@ -769,13 +782,13 @@ export default function BadgeMaker({
 				/>
 			);
 		}
-		if (badge?.hasArt && !removed) {
+		if (current?.hasArt && !removed) {
 			return (
 				<CreatorBadgeMark
-					badgeId={badge.id}
+					badgeId={current.id}
 					index={index}
 					label={previewLabel}
-					art={{ ...badge, artShape: shape, artColor: color }}
+					art={{ ...current, artShape: shape, artColor: color, artEdgeColor: edge }}
 					size="h-16 w-16"
 				/>
 			);
@@ -809,13 +822,19 @@ export default function BadgeMaker({
 					},
 				});
 				if (!res.ok) throw new Error("Couldn't add this Badge.");
+				const { badge: created } = (await res.json()) as { badge: CreatorBadge };
+				// The rung exists; the dialog stays open as its editor rather than closing on
+				// the basics-only modal. `onChanged` refreshes the grid behind it.
+				setSaved(created);
+				setTab("emblem");
 				onChanged?.();
-				onClose();
 				return;
 			}
 
+			const stored = current;
+			if (!stored) return;
 			const res = await client.api.subscriptions.badges[":id"].$patch({
-				param: { id: String(badge.id) },
+				param: { id: String(stored.id) },
 				json: {
 					threshold: rungAmount(threshold),
 					label: label.trim(),
@@ -824,12 +843,12 @@ export default function BadgeMaker({
 			});
 			if (!res.ok) throw new Error("Couldn't save this Badge.");
 
-			await saveArt(badge);
+			await saveArt(stored);
 
 			// A failed read leaves the stored perks alone rather than replacing them with the
 			// empty list the creator saw. The whole-list route makes an absent read destructive.
 			if (perksLoaded) {
-				const perksRes = await apiFetch(`/api/subscriptions/badges/${badge.id}/perks`, {
+				const perksRes = await apiFetch(`/api/subscriptions/badges/${stored.id}/perks`, {
 					method: "PUT",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
@@ -868,7 +887,7 @@ export default function BadgeMaker({
 			const res = await apiFetch(`/api/subscriptions/badges/${stored.id}/recompose`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ shape, fieldColor: color }),
+				body: JSON.stringify({ shape, fieldColor: color, edgeColor: edge }),
 			});
 			if (!res.ok) throw new Error(await responseError(res, "Couldn't rebuild that emblem."));
 			return;
@@ -883,6 +902,7 @@ export default function BadgeMaker({
 					placement: {
 						shape,
 						fieldColor: color,
+						edgeColor: edge,
 						emblemColor,
 						scale: selection.scale,
 						offsetX: selection.offsetX,
@@ -898,7 +918,7 @@ export default function BadgeMaker({
 			const res = await apiFetch(`/api/subscriptions/badges/${stored.id}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ artShape: shape, artColor: color }),
+				body: JSON.stringify({ artShape: shape, artColor: color, artEdgeColor: edge }),
 			});
 			if (!res.ok) throw new Error("Couldn't save that choice.");
 		}
@@ -923,12 +943,12 @@ export default function BadgeMaker({
 	};
 
 	const handleDelete = async () => {
-		if (!badge) return;
+		if (!current) return;
 		setSaving(true);
 		setError(null);
 		try {
 			const res = await client.api.subscriptions.badges[":id"].$delete({
-				param: { id: String(badge.id) },
+				param: { id: String(current.id) },
 			});
 			if (!res.ok) {
 				// The refusal that matters is a rung a Work still gates on (409): the server's
@@ -1019,12 +1039,31 @@ export default function BadgeMaker({
 					))}
 				</PickerRow>
 
+				<PickerRow label="Edge Color">
+					{BADGE_EDGE_COLORS.map((choice) => (
+						<button
+							key={choice.id}
+							type="button"
+							aria-label={`Edge ${choice.label}`}
+							aria-pressed={edge === choice.id}
+							className={`h-5 w-5 rounded-full border-2 ${
+								edge === choice.id
+									? "border-primary ring-2 ring-primary/40 ring-offset-2 ring-offset-base-100"
+									: "border-base-300"
+							}`}
+							style={{ backgroundColor: choice.fill }}
+							onClick={() => setEdge(choice.id)}
+							disabled={saving}
+						/>
+					))}
+				</PickerRow>
+
 				<PickerRow label="Background Color">
 					{BADGE_COLORS.map((col) => (
 						<button
 							key={col.id}
 							type="button"
-							aria-label={col.label}
+							aria-label={`Background ${col.label}`}
 							aria-pressed={color === col.id}
 							className={`h-5 w-5 rounded-full border-2 ${
 								color === col.id
@@ -1056,22 +1095,22 @@ export default function BadgeMaker({
 				<div className="join">
 					<button
 						type="button"
-						className={`btn btn-xs join-item ${emblemMode === "upload" ? "btn-primary" : "btn-outline"}`}
-						aria-pressed={emblemMode === "upload"}
-						onClick={() => setEmblemMode("upload")}
-					>
-						Upload an Emblem
-					</button>
-					<button
-						type="button"
 						className={`btn btn-xs join-item ${emblemMode === "find" ? "btn-primary" : "btn-outline"}`}
 						aria-pressed={emblemMode === "find"}
 						onClick={() => setEmblemMode("find")}
 					>
 						Find an Emblem
 					</button>
+					<button
+						type="button"
+						className={`btn btn-xs join-item ${emblemMode === "upload" ? "btn-primary" : "btn-outline"}`}
+						aria-pressed={emblemMode === "upload"}
+						onClick={() => setEmblemMode("upload")}
+					>
+						Upload an Emblem
+					</button>
 				</div>
-				{badge?.hasArt && !removed && !upload && !selection && (
+				{current?.hasArt && !removed && !upload && !selection && (
 					<button
 						type="button"
 						className="btn btn-ghost btn-xs ml-auto text-error"
@@ -1233,13 +1272,6 @@ export default function BadgeMaker({
 									{label.trim() || "Untitled"} ·{" "}
 									{threshold.trim() ? `$${Number(threshold).toFixed(2)}/mo` : "No amount yet"}
 								</p>
-								<button
-									type="button"
-									className="btn btn-ghost btn-xs -ml-2 mt-1"
-									onClick={() => setTab("emblem")}
-								>
-									{badge?.hasArt ? "Change the emblem" : "Give it your own emblem"}
-								</button>
 							</>
 						)}
 					</div>

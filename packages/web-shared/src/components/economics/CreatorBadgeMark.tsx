@@ -26,6 +26,7 @@
  * deliberately a stopgap the Badge Maker's own encourage-line calls out.
  */
 
+import { badgeEdgeColor } from "@anthers/shared/badge-art";
 import { useState } from "react";
 import { apiBaseUrl } from "../../lib/rpc";
 import { BadgeMark } from "./BadgeMark";
@@ -56,6 +57,8 @@ export interface BadgeArtChoice {
 	artShape?: string | null;
 	/** A color id from the library; null draws the default. */
 	artColor?: string | null;
+	/** An edge id from the library; null draws the default brown. */
+	artEdgeColor?: string | null;
 	/** A library emblem for the foreground; ignored when the creator uploaded art. */
 	artEmblem?: string | null;
 	/**
@@ -131,6 +134,7 @@ export function CreatorBadgeMark({
 		<BadgeMark
 			shape={art.artShape}
 			color={art.artColor ?? fallback.color}
+			edgeColor={badgeEdgeColor(art.artEdgeColor).fill}
 			label={label}
 			emblem={art.artEmblem ?? fallback.emblem}
 			// 🚨 `imageSrc` is rooted on `apiBaseUrl()` rather than written as `/api/...`. The

@@ -45,6 +45,7 @@ import {
 	badgePerkKind,
 	isBadgeColor,
 	isBadgeComposeParams,
+	isBadgeEdgeColor,
 	isBadgeShape,
 } from "@anthers/shared/badge-art";
 import {
@@ -1791,6 +1792,7 @@ const subscriptionRoutes = new Hono()
 				description: r.badge.description,
 				artShape: r.badge.artShape,
 				artColor: r.badge.artColor,
+				artEdgeColor: r.badge.artEdgeColor,
 				hasArt: Boolean(r.badge.artKey),
 				// A composed Badge is a finished whole image, so a holding's mark needs the
 				// same distinction the creator's own ladder carries.
@@ -1938,6 +1940,7 @@ const subscriptionRoutes = new Hono()
 					// retirement could otherwise hide.
 					artShape: z.string().refine(isBadgeShape).nullable().optional(),
 					artColor: z.string().refine(isBadgeColor).nullable().optional(),
+					artEdgeColor: z.string().refine(isBadgeEdgeColor).nullable().optional(),
 				})
 				.strict(),
 		),
@@ -2242,19 +2245,21 @@ const subscriptionRoutes = new Hono()
 				.object({
 					shape: z.string().refine(isBadgeShape),
 					fieldColor: z.string().refine(isBadgeColor),
+					edgeColor: z.string().refine(isBadgeEdgeColor),
 				})
 				.strict(),
 		),
 		async (c) => {
 			const user = c.get("user");
 			const badgeId = Number(c.req.param("id"));
-			const { shape, fieldColor } = c.req.valid("json");
+			const { shape, fieldColor, edgeColor } = c.req.valid("json");
 
 			const outcome = await recomposeBadgeArt({
 				creatorId: user.id,
 				badgeId,
 				shape,
 				fieldColor,
+				edgeColor,
 			});
 			if (!outcome.ok) {
 				if (outcome.code === "not_found") {

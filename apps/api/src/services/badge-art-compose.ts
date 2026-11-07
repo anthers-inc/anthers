@@ -175,6 +175,7 @@ export async function composeBadgeArt(input: {
 				artKey: key,
 				artShape: placement.shape,
 				artColor: placement.fieldColor,
+				artEdgeColor: placement.edgeColor,
 				artFingerprint: fingerprint,
 				artEmblemColor: placement.emblemColor,
 				artEmblemScale: String(placement.scale),
@@ -221,8 +222,9 @@ export async function recomposeBadgeArt(input: {
 	badgeId: number;
 	shape: string;
 	fieldColor: string;
+	edgeColor: string;
 }): Promise<ComposeOutcome> {
-	const { creatorId, badgeId, shape, fieldColor } = input;
+	const { creatorId, badgeId, shape, fieldColor, edgeColor } = input;
 
 	const [badge] = await db
 		.select()
@@ -274,6 +276,7 @@ export async function recomposeBadgeArt(input: {
 	const placement: BadgeComposeParams = {
 		shape,
 		fieldColor,
+		edgeColor,
 		emblemColor: badge.artEmblemColor,
 		scale: Number(badge.artEmblemScale),
 		offsetX: Number(badge.artEmblemOffsetX),

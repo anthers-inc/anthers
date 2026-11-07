@@ -76,6 +76,7 @@ describe("composeBadgeSvg", () => {
 	const placement = {
 		shape: "circle",
 		fieldColor: "moss",
+		edgeColor: "brown",
 		emblemColor: "#ffffff",
 		scale: 1,
 		offsetX: 0,
