@@ -199,6 +199,16 @@ export async function createSubscription(
 	return (await getStripe()?.subscriptions.create(params)) ?? null;
 }
 
+/** Mirrors `stripe.setupIntents.retrieve` — a saved-card SetupIntent by id. */
+export async function retrieveSetupIntent(id: string): Promise<Stripe.SetupIntent | null> {
+	return (await getStripe()?.setupIntents.retrieve(id)) ?? null;
+}
+
+/** Mirrors `stripe.paymentMethods.detach` — remove a card from its customer. */
+export async function detachPaymentMethod(id: string): Promise<Stripe.PaymentMethod | null> {
+	return (await getStripe()?.paymentMethods.detach(id)) ?? null;
+}
+
 /** Mirrors `stripe.paymentMethods.list` — the cards on file for a customer. */
 export async function listCardPaymentMethods(
 	params: Stripe.PaymentMethodListParams,

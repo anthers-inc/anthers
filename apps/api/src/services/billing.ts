@@ -47,11 +47,14 @@ import {
 	cancelSubscription,
 	createCustomer,
 	createProduct,
+	createSetupIntent,
 	createSubscription,
+	detachPaymentMethod,
 	listActiveProducts,
 	listCardPaymentMethods,
 	paymentsConfigured,
 	retrieveCustomer,
+	retrieveSetupIntent,
 	retrieveSubscription,
 	updateCustomer,
 	updateProduct,
@@ -654,13 +657,162 @@ export async function linkCheckoutCustomer(
 		});
 }
 
-/** The customer's saved card, if one is on file (attached when a payment is confirmed). */
-export async function savedCardFor(
-	customerId: string,
-): Promise<{ id: string; brand: string; last4: string } | null> {
+/** The card a reader has saved, with the funding type the adult check reads. */
+export interface SavedCard {
+	id: string;
+	brand: string;
+	last4: string;
+	funding: string | null;
+}
+
+/** The customer's saved card, if one is on file. */
+export async function savedCardFor(customerId: string): Promise<SavedCard | null> {
 	const pms = await listCardPaymentMethods({ customer: customerId, type: "card", limit: 1 });
 	const pm = pms?.data[0];
-	return pm?.card ? { id: pm.id, brand: pm.card.brand, last4: pm.card.last4 } : null;
+	return pm?.card
+		? {
+				id: pm.id,
+				brand: pm.card.brand,
+				last4: pm.card.last4,
+				funding: pm.card.funding ?? null,
+			}
+		: null;
+}
+
+/** The account's one saved payment method, as the settings card and the Adult control read it. */
+export interface PaymentInfo {
+	address: SavedBillingAddress | null;
+	card: SavedCard | null;
+	/** Whether the account's live subscription renews on this card. */
+	subscriptionAttached: boolean;
+}
+
+/**
+ * Read the one saved payment method. The address and the card are one object on the settings
+ * surface even though Stripe stores them on different records (the Customer and the
+ * PaymentMethod); the subscription read answers whether this card is the one a live renewal
+ * uses, which is what the chip states and what blocks removal.
+ */
+export async function paymentInfoFor(userId: number): Promise<PaymentInfo> {
+	const address = await savedBillingAddress(userId);
+	const customerId = await stripeCustomerIdFor(userId);
+	if (!customerId) return { address, card: null, subscriptionAttached: false };
+	const card = await savedCardFor(customerId);
+	if (!card) return { address, card: null, subscriptionAttached: false };
+
+	const [acct] = await db
+		.select({ subscriptionId: stripeCustomers.stripeSubscriptionId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
+		.limit(1);
+	let subscriptionAttached = false;
+	if (acct?.subscriptionId) {
+		const sub = await retrieveSubscription(acct.subscriptionId);
+		if (sub) {
+			const subPm = sub.default_payment_method;
+			const subPmId = typeof subPm === "string" ? subPm : subPm?.id;
+			if (subPmId) {
+				subscriptionAttached = subPmId === card.id;
+			} else {
+				// A subscription with no explicit card uses the customer's invoice default.
+				const customer = await retrieveCustomer(customerId);
+				const defaultPm =
+					customer && !customer.deleted ? customer.invoice_settings?.default_payment_method : null;
+				const defaultId = typeof defaultPm === "string" ? defaultPm : defaultPm?.id;
+				subscriptionAttached = defaultId === card.id;
+			}
+		}
+	}
+	return { address, card, subscriptionAttached };
+}
+
+/** Start the SetupIntent that attaches the reader's card, with the address collected beside it. */
+export async function beginPaymentInfoSetup(
+	userId: number,
+	email: string,
+): Promise<{ clientSecret: string }> {
+	if (!paymentsConfigured()) throw new Error("Stripe not configured");
+	const customerId = await ensureStripeCustomer(userId, email);
+	const intent = await createSetupIntent({
+		customer: customerId,
+		usage: "off_session",
+		metadata: { purpose: "save_payment_method", userId: String(userId) },
+	});
+	if (!intent?.client_secret) throw new Error("Stripe not configured");
+	return { clientSecret: intent.client_secret };
+}
+
+/**
+ * Finish a saved-card setup: make the new card the customer's default, move a live
+ * subscription onto it, and drop every other card so the account keeps one saved method.
+ *
+ * 🚨 **A subscription is never left on a detached card.** Replacing the card updates the
+ * subscription's own `default_payment_method` first; only then are the other cards removed.
+ * The card on file is the renewal's card, which is exactly why the settings surface offers
+ * replace but not remove while the subscription is live.
+ */
+export async function finalizePaymentInfo(
+	userId: number,
+	setupIntentId: string,
+): Promise<PaymentInfo> {
+	if (!paymentsConfigured()) throw new Error("Stripe not configured");
+	const [acct] = await db
+		.select({
+			customerId: stripeCustomers.stripeCustomerId,
+			subscriptionId: stripeCustomers.stripeSubscriptionId,
+		})
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
+		.limit(1);
+	if (!acct?.customerId) throw new Error("No payment account");
+
+	const intent = await retrieveSetupIntent(setupIntentId);
+	const intentCustomer =
+		typeof intent?.customer === "string" ? intent.customer : intent?.customer?.id;
+	const paymentMethod =
+		typeof intent?.payment_method === "string" ? intent.payment_method : intent?.payment_method?.id;
+	if (
+		!intent ||
+		intentCustomer !== acct.customerId ||
+		intent.status !== "succeeded" ||
+		!paymentMethod
+	) {
+		throw new Error("That card setup did not complete.");
+	}
+
+	await updateCustomer(acct.customerId, {
+		invoice_settings: { default_payment_method: paymentMethod },
+	});
+	if (acct.subscriptionId) {
+		await updateSubscription(acct.subscriptionId, { default_payment_method: paymentMethod });
+	}
+
+	// One saved method: the old cards go now that nothing renews on them.
+	const pms = await listCardPaymentMethods({ customer: acct.customerId, type: "card", limit: 100 });
+	for (const pm of pms?.data ?? []) {
+		if (pm.id !== paymentMethod) await detachPaymentMethod(pm.id).catch(() => null);
+	}
+	return paymentInfoFor(userId);
+}
+
+/**
+ * Remove the saved card, unless a live subscription renews on it. The settings surface
+ * disables the button when that is true; the server refuses it as well, because the
+ * browser's disabled attribute is not a guarantee.
+ */
+export async function clearPaymentInfo(
+	userId: number,
+): Promise<"cleared" | "none" | "subscription_attached" | "failed"> {
+	if (!paymentsConfigured()) return "none";
+	const info = await paymentInfoFor(userId);
+	if (info.subscriptionAttached) return "subscription_attached";
+	if (!info.card) return "none";
+	try {
+		await detachPaymentMethod(info.card.id);
+		return "cleared";
+	} catch {
+		return "failed";
+	}
 }
 
 /**

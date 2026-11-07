@@ -314,19 +314,13 @@ export default function BasketCheckout(props: BasketCheckoutProps) {
 			stripe={getStripe()}
 			options={{
 				clientSecret: secret,
-				// 🚨 **Link's save consent is NEVER offered, and that is load-bearing.** The
-				// Payment Element's default (`auto`, Stripe-decided) shows "Save my
-				// information for faster checkout" with an email + MOBILE NUMBER sub-form —
-				// and the checkbox arrives CHECKED. A buyer who ignores it left the phone
-				// field empty and Stripe held `canConfirm` false forever: the fully-filled
-				// form with a greyed Pay button (2026-10-06). `never` removes the block —
-				// Link saved-payment-methods are a future decision, and Anthers' checkout
-				// asks for exactly what the charge needs. (The Badge checkout's own save —
-				// a recurrence needing a card on file — is `setup_future_usage` on the
-				// session, which saves without this sub-form; the probe records the exact
-				// behavior. See the basket checkout's server-side note.)
+				// The purchase saves the account's one payment method and offers the saved
+				// card back on the next checkout. The 2026-10-06 Link sub-form that made this
+				// "never" is why the save is a normal part of the payment info settings now;
+				// if the sub-form reappears and holds `canConfirm`, the card is still saved by
+				// the session's own `payment_method_save` and the display can fall back.
 				elementsOptions: {
-					savedPaymentMethod: { enableSave: "never", enableRedisplay: "never" },
+					savedPaymentMethod: { enableSave: "auto", enableRedisplay: "auto" },
 				},
 			}}
 		>

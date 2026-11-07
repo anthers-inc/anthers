@@ -112,7 +112,11 @@ import { buildAtprotoExport } from "../services/atproto-export.js";
 import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import {
+	beginPaymentInfoSetup,
+	clearPaymentInfo,
 	clearSavedBillingAddress,
+	finalizePaymentInfo,
+	paymentInfoFor,
 	saveBillingAddress,
 	savedBillingAddress,
 } from "../services/billing.js";
@@ -150,6 +154,7 @@ import {
 	setPin,
 	updateParentalControls,
 } from "../services/parental-controls.js";
+import { payoutStanding } from "../services/payouts.js";
 import { postContentExcerpt } from "../services/post-markdown.js";
 import { releasesByWorkId } from "../services/project-releases.js";
 import { checkRate, clearRate, clientIp, limitResponse } from "../services/rate-limit.js";
@@ -2129,7 +2134,21 @@ const accountRoutes = new Hono()
 
 	.get("/me/adult-access", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
-		return c.json(await adultAccessFor(sessionUser.id));
+		const [access, info, standing] = await Promise.all([
+			adultAccessFor(sessionUser.id),
+			paymentInfoFor(sessionUser.id),
+			payoutStanding(sessionUser.id),
+		]);
+		const cardIsCredit = info.card?.funding === "credit";
+		return c.json({
+			...access,
+			paymentProof: {
+				savedCard: Boolean(info.card),
+				cardIsCredit,
+				payoutReady: standing.ready,
+				canVerify: cardIsCredit || standing.ready,
+			},
+		});
 	})
 
 	// 🚨 **A card check, not a charge.** No money moves and nothing lands on a statement —
@@ -2255,6 +2274,69 @@ const accountRoutes = new Hono()
 			);
 		}
 		return c.json({ address: null });
+	})
+
+	// ── The one saved payment method ─────────────────────────────────────────
+	//
+	// The settings card is "Save payment info": a card and the full US billing address
+	// together, on the Stripe Customer the app already keeps. This is the only place a
+	// card is saved outside a purchase (the purchase checkout saves one too); the Adult
+	// control reads the card's funding type from here.
+	.get("/me/payment-info", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		return c.json(await paymentInfoFor(sessionUser.id));
+	})
+
+	.post("/me/payment-info/setup", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		try {
+			return c.json(await beginPaymentInfoSetup(sessionUser.id, sessionUser.email ?? ""));
+		} catch {
+			return c.json(
+				{ error: "We can't start the card setup right now. Please try again shortly." },
+				503,
+			);
+		}
+	})
+
+	.post(
+		"/me/payment-info/finalize",
+		requireAuth,
+		zValidator("json", z.object({ setupIntentId: z.string().min(1) })),
+		async (c) => {
+			const sessionUser = c.get("user");
+			try {
+				return c.json(await finalizePaymentInfo(sessionUser.id, c.req.valid("json").setupIntentId));
+			} catch (err) {
+				return c.json(
+					{
+						error:
+							err instanceof Error
+								? err.message
+								: "That card setup didn't complete. Please try again.",
+					},
+					409,
+				);
+			}
+		},
+	)
+
+	.delete("/me/payment-info", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const result = await clearPaymentInfo(sessionUser.id);
+		if (result === "subscription_attached") {
+			return c.json(
+				{
+					error: "Your subscription renews on this card, so it can be replaced but not removed.",
+					code: "subscription_attached",
+				},
+				409,
+			);
+		}
+		if (result === "failed") {
+			return c.json({ error: "We couldn't remove the saved card right now." }, 503);
+		}
+		return c.json({ status: result });
 	})
 
 	.get("/me/content-preferences", async (c) => {
