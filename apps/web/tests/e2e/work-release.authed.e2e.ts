@@ -166,16 +166,14 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// to a loaded machine, which was plausible, unverified and wrong.
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 
-	// Release appears on the far side of create, in the Details tab, at a URL that can
-	// be linked to — the Work's own page is the editing surface (the kinds pass).
-	await expect(page.getByRole("heading", { name: "Release", exact: true })).toBeVisible();
-	// The tab leads with what the Work is and the tags that describe it, and puts when
-	// it came out under them (Parker, 2026-10-19) — the creator's Details tab carries
-	// those three sections.
+	// Release appears on the far side of create, in the byline under the media, at a URL
+	// that can be linked to — the Work's own page is the editing surface (the kinds pass).
+	await expect(page.getByText("Unreleased", { exact: true })).toBeVisible();
+	// The Details tab carries what the Work is and the tags that describe it; the dates
+	// live in the byline now (Parker, 2026-11-06).
 	await expect(page.getByRole("tabpanel", { name: "Details" }).locator("h3")).toHaveText([
 		"Description",
 		"Tags",
-		"Release",
 	]);
 
 	// ── Unrated, and therefore unreleasable ─────────────────────────────────
@@ -262,13 +260,12 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await page.keyboard.type("A release walk's only sentence.");
 	await page.getByRole("button", { name: "Save Body" }).click();
 
-	// The original release date, in its own field beside Release. Its whole reason for
-	// existing is back-dating a catalog, which is what a creator arriving with years of
-	// work actually does.
-	await page.getByRole("tab", { name: "Details" }).click();
-	await page.getByRole("button", { name: "Edit Original release date" }).click();
+	// The original release date, edited with the release date in the byline. Its whole
+	// reason for existing is back-dating a catalog, which is what a creator arriving with
+	// years of work actually does.
+	await page.getByRole("button", { name: "Edit Release" }).click();
 	await page.getByRole("textbox", { name: "Original release date" }).fill("2015-01-15");
-	await page.getByRole("button", { name: "Save Original release date" }).click();
+	await page.getByRole("button", { name: "Save Release" }).click();
 	await page.goto("/studio/works");
 
 	// ── Release ─────────────────────────────────────────────────────────────
