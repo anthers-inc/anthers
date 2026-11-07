@@ -34,6 +34,7 @@ import { SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/solid";
 import type HlsInstance from "hls.js";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
+import { useExclusivePlayback } from "../../lib/playback";
 import { previewOriginalSourceFor, previewSourceFor } from "../../lib/tile-preview";
 import { setPreviewAudio, usePreviewAudio } from "../../lib/tile-preview-settings";
 import { effectiveVolume, useVolume } from "../media/transport/volume";
@@ -144,6 +145,7 @@ function PreviewAudioButton({ audioOn }: { audioOn: boolean }) {
 /** Video: HLS over the same ladder the Work page plays, with the original-file fallback beneath it. */
 function TileVideoPreview({ work, onDone }: TileHoverPreviewProps) {
 	const videoRef = useRef<HTMLVideoElement>(null);
+	useExclusivePlayback(videoRef);
 	const hlsRef = useRef<HlsInstance | null>(null);
 	const [playing, setPlaying] = useState(false);
 	// The hover-audio preference and the shared media volume: the preview starts
@@ -294,6 +296,7 @@ function TileVideoPreview({ work, onDone }: TileHoverPreviewProps) {
  */
 function TileAudioPreview({ work, onDone }: TileHoverPreviewProps) {
 	const audioRef = useRef<HTMLAudioElement>(null);
+	useExclusivePlayback(audioRef);
 	const [playing, setPlaying] = useState(false);
 	const audioOn = useHoverPreviewSound(audioRef);
 

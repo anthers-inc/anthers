@@ -135,6 +135,7 @@ import {
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { useExclusivePlayback } from "../../lib/playback";
 import CreditsSection from "../../studio/CreditsSection";
 import PanelEditor from "../../studio/PanelEditor";
 import RatingMatrix from "../../studio/RatingMatrix";
@@ -1902,6 +1903,7 @@ function ThumbFramePicker({
 	onClose: () => void;
 }) {
 	const videoRef = useRef<HTMLVideoElement | null>(null);
+	useExclusivePlayback(videoRef);
 
 	// Escape closes, for the keyboard half of the door (the pattern ReportDialog set);
 	// the pointer half is the ✕.

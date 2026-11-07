@@ -16,7 +16,8 @@
 
 import type { PreviewMediaItem, WorkCaptionTrack } from "@anthers/web-shared/types";
 import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useCallback, useRef, useState } from "react";
+import { useExclusivePlayback } from "../../lib/playback";
 import Lightbox from "../media/Lightbox";
 import WorkMediaFrame from "./WorkMediaFrame";
 
@@ -49,6 +50,10 @@ export default function PreviewCarousel({
 }) {
 	const [active, setActive] = useState(0);
 	const [lightbox, setLightbox] = useState<number | null>(null);
+	const videoRef = useRef<HTMLVideoElement>(null);
+	// The element is replaced as the strip moves between trailers, so the registrations
+	// follow the active slide rather than the stable ref.
+	useExclusivePlayback(videoRef, active);
 
 	const images = previews.filter((p) => p.kind === "image");
 	const activeItem = active > 0 ? previews[active - 1] : null;
@@ -110,6 +115,7 @@ export default function PreviewCarousel({
 						// under the viewer.
 						// biome-ignore lint/a11y/useMediaCaption: captions are the creator's to attach, and a trailer may legitimately have none yet.
 						<video
+							ref={videoRef}
 							key={activeItem.id}
 							controls
 							playsInline
