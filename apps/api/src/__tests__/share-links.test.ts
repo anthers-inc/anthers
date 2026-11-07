@@ -455,10 +455,12 @@ describe("Share links", () => {
 
 	it("🚨 a creator's own Work earns them nothing through their own link", async () => {
 		// A share context has a null user, so the owner branch never fires and `isFree` comes
-		// back true — the same refusal has to be made at the stamp instead, or the sharer's
-		// Time Pool would pay the sharer. The seconds are still recorded, because the relay
-		// budget bounds how much viewing one account may fund and this is the case most in
-		// need of a bound.
+		// back true — the same refusal has to be made at the intake. The row is now dropped
+		// outright rather than recorded with `public_access: false`: time attributed to the
+		// Work's own creator is self-viewing, not an audience, and the intake refuses it
+		// before it can reach the pool or the analytics (2026-11-06). There is no relay
+		// budget to bound either, because the creator is not funding a stranger's view of
+		// somebody else's Work.
 		const mine = await insertWork({
 			creatorId: sharerId,
 			type: "text",
@@ -495,8 +497,7 @@ describe("Share links", () => {
 			.select({ publicAccess: attentionEvents.publicAccess })
 			.from(attentionEvents)
 			.where(eq(attentionEvents.workId, mine.id));
-		expect(rows.length).toBe(1);
-		expect(rows[0].publicAccess).toBe(false);
+		expect(rows.length, "the creator's own view through their own link was recorded").toBe(0);
 	});
 
 	it("bounds the relay at a flat budget that the Public Access price does not lift", async () => {

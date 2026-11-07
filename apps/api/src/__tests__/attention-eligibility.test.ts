@@ -223,6 +223,17 @@ describe("attention eligibility is decided server-side", () => {
 		expect(body.ineligible).toBe(1);
 	});
 
+	it("refuses time a creator claims on their own Work", async () => {
+		// The account the seconds would be recorded against is the Work's own creator, so
+		// this is a creator paying themselves out of the Time Pool for watching themselves.
+		const before = await creditedTo(creator.id, creator.id);
+		const body = await claim(creator.cookie, [
+			{ creatorId: creator.id, eventType: "watch", durationSeconds: 60, workId: videoWorkId },
+		]);
+		expect(body.ineligible).toBe(1);
+		expect(await creditedTo(creator.id, creator.id)).toBe(before);
+	});
+
 	it("still records zero-duration visit pings, with or without a Work", async () => {
 		// These carry no time so they cannot over-credit, and they are deliberately the
 		// analytics signal for surfaces that earn nothing. Dropping them would lose that.

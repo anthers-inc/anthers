@@ -126,8 +126,11 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	// ⚠️ **Wait for the profile's own tab row before asking about the sidebar.** The URL changes
 	// before React renders the new page, so asking straight away read the Studio's sidebar off
 	// the page being left, and passed with the mode broken. "All Content" exists only in that
-	// row, and the sidebar renders in the same pass.
-	await expect(page.getByRole("button", { name: "All Content", exact: true })).toBeVisible();
+	// row, and the sidebar renders in the same pass. The allowance is generous because the row
+	// waits on the profile fetch, and a loaded CI runner can be slow to answer it.
+	await expect(page.getByRole("button", { name: "All Content", exact: true })).toBeVisible({
+		timeout: 30_000,
+	});
 	await expect(studioSidebar).toBeVisible();
 	await expect(userSidebar).toHaveCount(0);
 

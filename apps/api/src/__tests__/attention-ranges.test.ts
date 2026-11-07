@@ -23,6 +23,7 @@ import { attentionEvents } from "@anthers/db/schema";
 import { MAX_RANGE_SECONDS, RANGE_LOOKBACK_SECONDS } from "@anthers/shared/attention";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { creatorAnalyticsRanges, creditedSecondsByCreator } from "../services/attention-ranges.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -258,5 +259,69 @@ describe("attention range intake", () => {
 			body: JSON.stringify({ events: [rangeEvent(30)] }),
 		});
 		expect(res.status).toBe(401);
+	});
+});
+
+describe("a creator's own attention is not audience", () => {
+	let selfCreator: { cookie: string; id: number };
+	let viewer: { cookie: string; id: number };
+	let now: number;
+
+	beforeAll(async () => {
+		// Historic rows, written before the intake dropped self-views — both read paths have
+		// to exclude them too, or a creator's own watching shows in their analytics and pays
+		// them from the Time Pool until the retention window happens to take the old rows.
+		const stamp = Date.now().toString(36);
+		selfCreator = await signUp(`selfrangecreator${stamp}`);
+		viewer = await signUp(`selfrangeviewer${stamp}`);
+		const ownWork = (
+			await insertWork({
+				creatorId: selfCreator.id,
+				type: "video",
+				title: "Own Ranges",
+				access: [{ threshold: 0, allow: true, price: "0" }],
+			})
+		).id;
+		now = Date.now();
+		const range = (userId: number, seconds: number, clientId: string) => ({
+			userId,
+			creatorId: selfCreator.id,
+			workId: ownWork,
+			eventType: "watch",
+			durationSeconds: seconds,
+			startedAt: new Date(now - seconds * 1_000 - 1_000),
+			endedAt: new Date(now - 1_000),
+			publicAccess: true,
+			clientId,
+		});
+		await db
+			.insert(attentionEvents)
+			.values([
+				range(selfCreator.id, 30, `self-${stamp}`),
+				range(viewer.id, 20, `viewer-${stamp}`),
+			]);
+	});
+
+	it("keeps the creator's own rows out of the analytics ranges", async () => {
+		const groups = await creatorAnalyticsRanges(
+			selfCreator.id,
+			new Date(now - 3_600_000),
+			() => "all",
+		);
+		const bucket = groups.find((g) => g.key === "all");
+		expect(bucket?.totalSeconds, "the creator's own seconds reached their analytics").toBe(20);
+		expect(bucket?.users.has(selfCreator.id), "the creator counted as a viewer").toBe(false);
+		expect(bucket?.users.has(viewer.id), "the real viewer was dropped").toBe(true);
+	});
+
+	it("keeps the creator's own seconds out of the Time Pool's read", async () => {
+		// The pool distributes from `creditedSecondsByCreator`, so the same exclusion has to
+		// hold there or historic self-views still pay the creator who watched themselves.
+		const poolRows = await creditedSecondsByCreator(
+			selfCreator.id,
+			new Date(now - 3_600_000),
+			new Date(now + 60_000),
+		);
+		expect(poolRows, "the creator's own row reached the Time Pool").toEqual([]);
 	});
 });
