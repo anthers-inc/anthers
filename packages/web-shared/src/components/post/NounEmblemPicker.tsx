@@ -279,17 +279,18 @@ export function NounEmblemPicker({
 						Searching…
 					</p>
 				) : results && results.length > 0 ? (
-					/* ⭐ Five across with tight gaps, and a bigger emblem in each cell (Parker,
-					   2026-10-27): six across with `gap-2` spent the pane's width on air and kept
-					   every icon at 24px. */
-					<div className="grid grid-cols-5 gap-1">
+					/* ⭐ Five across with tight gaps, and the emblem sized by the cell rather than
+					   fixed (Parker, 2026-11-06): six across with `gap-2` spent the pane's width on
+					   air, and a fixed 44px button left most of a 3xl dialog's cell empty. The
+					   button now fills up to a cap and the icon is half of it. */
+					<div className="grid grid-cols-5 gap-0.5">
 						{results.map((icon) => {
 							const selected = selection?.nounIcon.id === icon.id;
 							return (
-								<div key={icon.id} className="flex flex-col items-center gap-0.5">
+								<div key={icon.id} className="flex min-w-0 flex-col items-center gap-0.5">
 									<button
 										type="button"
-										className={`btn btn-square h-11 min-h-11 w-11 ${selected ? "btn-primary" : "btn-ghost"}`}
+										className={`btn btn-square aspect-square h-auto min-h-0 w-full max-w-24 p-0 ${selected ? "btn-primary" : "btn-ghost"}`}
 										title={`${icon.term} by ${icon.artistName}`}
 										aria-label={`${icon.term} by ${icon.artistName}`}
 										aria-pressed={selected}
@@ -310,7 +311,7 @@ export function NounEmblemPicker({
 										<Thumb
 											icon={icon}
 											color={selected ? emblemColor : "currentColor"}
-											className={`h-7 w-7 ${selected ? "" : "text-base-content/70"}`}
+											className={`size-1/2 ${selected ? "" : "text-base-content/70"}`}
 										/>
 									</button>
 									<button
