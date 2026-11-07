@@ -47,7 +47,7 @@ Allow: /
 Disallow: /studio
 Disallow: /settings
 Disallow: /notifications
-Disallow: /basket
+Disallow: /cart
 Disallow: /library
 Disallow: /network
 Disallow: /dashboard

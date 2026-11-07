@@ -78,7 +78,7 @@ describe("previewRoute", () => {
 	});
 
 	it("leaves every other document route alone", () => {
-		for (const pathname of ["/", "/for-creators", "/about", "/release-notes", "/basket"]) {
+		for (const pathname of ["/", "/for-creators", "/about", "/release-notes", "/cart"]) {
 			expect(previewRoute(pathname)).toBeNull();
 		}
 	});

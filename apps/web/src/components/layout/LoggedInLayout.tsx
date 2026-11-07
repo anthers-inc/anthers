@@ -7,9 +7,9 @@ import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useLocation } from "@anthers/web-shared/router";
 import { SidebarProvider, useSidebar } from "@anthers/web-shared/sidebar";
 import Logo from "@anthers/web-shared/ui/Logo";
-import { ChevronLeftIcon, Cog6ToothIcon, ShoppingBagIcon } from "@heroicons/react/24/outline";
+import { ChevronLeftIcon, Cog6ToothIcon, ShoppingCartIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo } from "react";
-import { useBasket } from "../../lib/basket";
+import { useCart } from "../../lib/cart";
 import { useMediaPlayer } from "../../lib/media-player";
 import { isApplePlatform } from "../../lib/platform";
 import { studioUrl } from "../../lib/studio";
@@ -216,7 +216,7 @@ function LoggedInLayoutInner() {
 	const { currentTrack } = useMediaPlayer();
 	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent, sharedContent } = useSidebar();
 	const { pathname, search } = useLocation();
-	const { count: basketCount } = useBasket();
+	const { count: cartCount } = useCart();
 	const creatorMode = Boolean(user?.creatorMode);
 	const mode = useAppMode(creatorMode);
 	const studio = mode === "studio";
@@ -315,7 +315,7 @@ function LoggedInLayoutInner() {
 			>
 				{/* Top bar: brand and the mode switch on the left, search in the middle, the
 		    reader's notifications on the right. It is the one header in both modes; studio
-		    mode leaves out search and the basket, which belong to user mode. The sidebar's
+		    mode leaves out search and the cart, which belong to user mode. The sidebar's
 		    own toggle used to live here too and moved onto the sidebar's edge (2026-10-16),
 		    and the account menu left on 2026-10-26 — the sidebar is the door to Settings and
 		    Badges and Purchases live in the account pages' sidebar rows.
@@ -355,27 +355,27 @@ function LoggedInLayoutInner() {
 						</div>
 
 						<div className="navbar-end gap-1">
-							{/* Basket — only rendered when it has items, so an empty basket costs no
+							{/* Cart — only rendered when it has items, so an empty cart costs no
 					    header space. The header is tight on mobile and a permanent "0" badge
 					    would be noise; a control that appears when it has content is strictly
 					    better than one that is always there. The count is a `badge` so a
 					    buyer who navigates away from the Work page can always get back to
 					    the one surface where money changes hands. */}
-							{!studio && basketCount > 0 && (
+							{!studio && cartCount > 0 && (
 								<Link
-									to="/basket"
+									to="/cart"
 									className="btn btn-ghost btn-sm btn-circle relative"
-									aria-label={`Basket (${basketCount} item${basketCount > 1 ? "s" : ""})`}
+									aria-label={`Cart (${cartCount} item${cartCount > 1 ? "s" : ""})`}
 								>
-									<ShoppingBagIcon className="w-5 h-5" />
+									<ShoppingCartIcon className="w-5 h-5" />
 									<span className="badge badge-primary badge-xs absolute -top-1 -right-1">
-										{basketCount}
+										{cartCount}
 									</span>
 								</Link>
 							)}
-							{/* The bell — the same appear-when-there's-content rule as the basket, with the
+							{/* The bell — the same appear-when-there's-content rule as the cart, with the
 					    count riding the shared store so one poll serves every surface. Studio mode
-					    leaves it out with search and the basket: creator chrome, not reader chrome. */}
+					    leaves it out with search and the cart: creator chrome, not reader chrome. */}
 							{!studio && <NotificationBell />}
 						</div>
 					</div>
@@ -462,28 +462,6 @@ function LoggedInLayoutInner() {
 											{rail ? <span className="sr-only">{link.label}</span> : link.label}
 										</NavLink>
 									))}
-
-									{/* Basket — the sidebar entry mirrors the header icon, for the mobile
-								    case where the header is tight. Same conditional: only when non-empty. */}
-									{basketCount > 0 && (
-										<NavLink
-											to="/basket"
-											className={navLinkClass}
-											title={
-												rail
-													? `Basket (${basketCount} item${basketCount > 1 ? "s" : ""})`
-													: undefined
-											}
-										>
-											<ShoppingBagIcon className="w-5 h-5 shrink-0" />
-											{rail ? <span className="sr-only">Basket</span> : "Basket"}
-											<span
-												className={`badge badge-primary badge-sm ${rail ? "sr-only" : "ml-auto"}`}
-											>
-												{basketCount}
-											</span>
-										</NavLink>
-									)}
 
 									{/* Settings — the account's own door, below the three tabs (Parker, 2026-10-23).
 									    It is a row rather than a fourth entry in `USER_TABS`, deliberately: those

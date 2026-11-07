@@ -171,18 +171,17 @@ describe("Receipts: purchases", () => {
 		expect(await receiptRows(`purchase:${intentId}:creator:${creatorId}`)).toHaveLength(1);
 	});
 
-	it("a basket is one receipt per recipient with every Work on it, not one email per Work", async () => {
-		const intentId = `pi_rcp_${run}_basket`;
-		const secondWorkId = (await insertWork({ creatorId, type: "game", title: "Basket item two" }))
-			.id;
+	it("a cart is one receipt per recipient with every Work on it, not one email per Work", async () => {
+		const intentId = `pi_rcp_${run}_cart`;
+		const secondWorkId = (await insertWork({ creatorId, type: "game", title: "Cart item two" })).id;
 		createdWorkIds.push(secondWorkId);
-		await completedPurchase({ buyerId, creatorId, workId, intentId, title: "Basket item one" });
+		await completedPurchase({ buyerId, creatorId, workId, intentId, title: "Cart item one" });
 		await completedPurchase({
 			buyerId,
 			creatorId,
 			workId: secondWorkId,
 			intentId,
-			title: "Basket item two",
+			title: "Cart item two",
 			amount: "3.00",
 			tax: "0.12",
 			earnings: "3.00",

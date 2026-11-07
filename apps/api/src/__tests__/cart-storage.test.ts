@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The basket's server-side storage — the endpoints the buyer's basket is read and
+ * The cart's server-side storage — the endpoints the buyer's cart is read and
  * written through, and the account scoping that is the whole reason for it.
  *
- * The basket moved off the browser (Parker, 2026-10-03, live testing: a localStorage
- * basket followed the browser, so account B inherited account A's basket). What this
+ * The cart moved off the browser (Parker, 2026-10-03, live testing: a localStorage
+ * cart followed the browser, so account B inherited account A's cart). What this
  * suite pins is what that decision buys and what it must NOT weaken:
  *
- * - **Auth required** on every storage route — a basket is scoped to the CALLER.
+ * - **Auth required** on every storage route — a cart is scoped to the CALLER.
  * - **Round trips**: add is idempotent, remove is idempotent, clear empties.
- * - **Account scoping**: account B reads an empty basket on the browser-and-account
+ * - **Account scoping**: account B reads an empty cart on the browser-and-account
  *   shape the defect lived in (two accounts, one flow).
- * - **Multi-creator baskets**: a second creator's Work APPENDS — the basket carries any
+ * - **Multi-creator carts**: a second creator's Work APPENDS — the cart carries any
  *   number of creators and the merge folds a mixed scratch in without dropping anything
  *   (the replace-on-clash rule was removed with the 2026-10-15 split decision).
  * - **Untrusted storage**: quote and checkout re-resolve every id. A Work that is not
@@ -21,14 +21,14 @@
  *
  * Nothing here reaches the network — the Stripe calls quote and checkout make are fake
  * exactly as `payments-stripe.test.ts` fakes them, and the one checkout this file drives
- * stops at the `paymentsConfigured` 503, which is answered AFTER `resolveBasket` has
+ * stops at the `paymentsConfigured` 503, which is answered AFTER `resolveCart` has
  * already done its refusing. That is the point: the refusal paths run without Stripe.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { badges, basketItems, purchases, userBadges, users } from "@anthers/db/schema";
+import { badges, cartItems, purchases, userBadges, users } from "@anthers/db/schema";
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
-import { MAX_BASKET_ITEMS } from "@anthers/shared/constants";
+import { MAX_CART_ITEMS } from "@anthers/shared/constants";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -43,17 +43,17 @@ function req(path: string, options?: RequestInit) {
 	return testFetch(new Request(`http://localhost${path}`, options));
 }
 
-/** The buyer's basket as the server holds it — what the merge and add assertions read. */
-async function serverBasket(): Promise<{ count: number; workIds: number[] }> {
-	const res = await req("/api/payments/basket", authed(buyerCookie));
+/** The buyer's cart as the server holds it — what the merge and add assertions read. */
+async function serverCart(): Promise<{ count: number; workIds: number[] }> {
+	const res = await req("/api/payments/cart", authed(buyerCookie));
 	const body = (await res.json()) as { items: { workId: number }[]; count: number };
 	return { count: body.count, workIds: body.items.map((i) => i.workId) };
 }
 
-/** Empty the buyer's basket through the DELETE route, so a test starts from its own state. */
-async function clearBasketDirect(): Promise<void> {
-	const res = await req("/api/payments/basket", authed(buyerCookie, { method: "DELETE" }));
-	expect(res.status, "clearing the basket").toBe(200);
+/** Empty the buyer's cart through the DELETE route, so a test starts from its own state. */
+async function clearCartDirect(): Promise<void> {
+	const res = await req("/api/payments/cart", authed(buyerCookie, { method: "DELETE" }));
+	expect(res.status, "clearing the cart").toBe(200);
 }
 
 function authed(cookie: string, extra?: RequestInit): RequestInit {
@@ -79,7 +79,7 @@ const FOR_SALE = [{ threshold: 0, allow: true, price: "5.00" }];
 let buyerCookie: string;
 let otherCookie: string;
 let buyerId: number;
-/** A creator the buyer and the stranger are NOT — the works they basket are this account's. */
+/** A creator the buyer and the stranger are NOT — the works they cart are this account's. */
 let seller: { cookie: string; id: number };
 let workA = 0;
 let workB = 0;
@@ -101,14 +101,14 @@ beforeAll(async () => {
 	seller = { cookie: sellerAccount.cookie, id: sellerAccount.userId };
 
 	// Two purchasable Works by ONE creator. The buyer does not own them, so a quote
-	// resolves them — a creator's own Work in their own basket would be refused with
+	// resolves them — a creator's own Work in their own cart would be refused with
 	// "already have access", which is exactly what the stale-row test below needs and
 	// why the ownership stays off these two.
 	workA = (
 		await insertWork({
 			creatorId: seller.id,
 			type: "game",
-			title: `Basket storage A ${run}`,
+			title: `Cart storage A ${run}`,
 			streamEnabled: false,
 			downloadEnabled: true,
 			access: FOR_SALE,
@@ -118,7 +118,7 @@ beforeAll(async () => {
 		await insertWork({
 			creatorId: seller.id,
 			type: "game",
-			title: `Basket storage B ${run}`,
+			title: `Cart storage B ${run}`,
 			streamEnabled: false,
 			downloadEnabled: true,
 			access: FOR_SALE,
@@ -133,7 +133,7 @@ beforeAll(async () => {
 		await insertWork({
 			creatorId: clashingCreator.userId,
 			type: "game",
-			title: `Basket storage clash ${run}`,
+			title: `Cart storage clash ${run}`,
 			streamEnabled: false,
 			downloadEnabled: true,
 			access: FOR_SALE,
@@ -142,20 +142,20 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
-	await db.delete(basketItems).where(eq(basketItems.userId, buyerId));
+	await db.delete(cartItems).where(eq(cartItems.userId, buyerId));
 	// The ownership row the stale-item test staged — the purge takes the accounts, and
 	// this row names them both, so it goes with them explicitly.
 	await db.delete(purchases).where(eq(purchases.stripePaymentIntentId, `pi_bskt_store_${run}`));
 });
 
-describe("basket storage — auth is required", () => {
+describe("cart storage — auth is required", () => {
 	it("refuses an unauthenticated read", async () => {
-		const res = await req("/api/payments/basket");
+		const res = await req("/api/payments/cart");
 		expect(res.status).toBe(401);
 	});
 
 	it("refuses an unauthenticated add", async () => {
-		const res = await req("/api/payments/basket/items", {
+		const res = await req("/api/payments/cart/items", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN },
 			body: JSON.stringify({ workId: workA }),
@@ -164,7 +164,7 @@ describe("basket storage — auth is required", () => {
 	});
 
 	it("refuses an unauthenticated clear", async () => {
-		const res = await req("/api/payments/basket", {
+		const res = await req("/api/payments/cart", {
 			method: "DELETE",
 			headers: { Origin: ORIGIN },
 		});
@@ -172,10 +172,10 @@ describe("basket storage — auth is required", () => {
 	});
 });
 
-describe("basket storage — the round trips", () => {
+describe("cart storage — the round trips", () => {
 	it("adds a Work and lists it with its price", async () => {
 		const added = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: workA }),
@@ -187,34 +187,34 @@ describe("basket storage — the round trips", () => {
 		expect(items[0].workId).toBe(workA);
 		expect(items[0].price).toBe("5.00");
 
-		const list = await req("/api/payments/basket", authed(buyerCookie));
+		const list = await req("/api/payments/cart", authed(buyerCookie));
 		const listed = (await list.json()) as { items: unknown[]; count: number };
 		expect(listed.count).toBe(1);
 	});
 
 	it("add is idempotent — a second add of the same Work changes nothing", async () => {
 		await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: workA }),
 			}),
 		);
 		await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: workB }),
 			}),
 		);
 		await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: workA }),
 			}),
 		);
-		const list = await req("/api/payments/basket", authed(buyerCookie));
+		const list = await req("/api/payments/cart", authed(buyerCookie));
 		const { count, items } = (await list.json()) as { count: number; items: { workId: number }[] };
 		expect(count).toBe(2);
 		expect(items.map((i) => i.workId).sort()).toEqual([workA, workB].sort());
@@ -222,37 +222,37 @@ describe("basket storage — the round trips", () => {
 
 	it("removes one Work, and removing an absent one is a no-op", async () => {
 		const res = await req(
-			`/api/payments/basket/items/${workB}`,
+			`/api/payments/cart/items/${workB}`,
 			authed(buyerCookie, {
 				method: "DELETE",
 			}),
 		);
 		expect(res.status).toBe(200);
-		const listed = (await (await req("/api/payments/basket", authed(buyerCookie))).json()) as {
+		const listed = (await (await req("/api/payments/cart", authed(buyerCookie))).json()) as {
 			count: number;
 		};
 		expect(listed.count).toBe(1);
 
 		// Absence is already the goal — a stranger's WorkId changes nothing.
 		await req(
-			`/api/payments/basket/items/${workB}`,
+			`/api/payments/cart/items/${workB}`,
 			authed(buyerCookie, {
 				method: "DELETE",
 			}),
 		);
-		const again = (await (await req("/api/payments/basket", authed(buyerCookie))).json()) as {
+		const again = (await (await req("/api/payments/cart", authed(buyerCookie))).json()) as {
 			count: number;
 		};
 		expect(again.count).toBe(1);
 	});
 
-	it("clears the basket", async () => {
-		const res = await req("/api/payments/basket", {
+	it("clears the cart", async () => {
+		const res = await req("/api/payments/cart", {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: buyerCookie },
 		});
 		expect(res.status).toBe(200);
-		const listed = (await (await req("/api/payments/basket", authed(buyerCookie))).json()) as {
+		const listed = (await (await req("/api/payments/cart", authed(buyerCookie))).json()) as {
 			count: number;
 		};
 		expect(listed.count).toBe(0);
@@ -260,7 +260,7 @@ describe("basket storage — the round trips", () => {
 
 	it("refuses an add of a nonexistent Work with 404", async () => {
 		const res = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: 999999999 }),
@@ -271,7 +271,7 @@ describe("basket storage — the round trips", () => {
 
 	it("refuses a malformed add with 400", async () => {
 		const res = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: "nine" }),
@@ -281,57 +281,57 @@ describe("basket storage — the round trips", () => {
 	});
 });
 
-describe("basket storage — scoped to the account", () => {
-	it("account B sees an empty basket where account A holds items (Parker's case, server half)", async () => {
+describe("cart storage — scoped to the account", () => {
+	it("account B sees an empty cart where account A holds items (Parker's case, server half)", async () => {
 		await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: workA }),
 			}),
 		);
 		// A second account, same "browser" (this suite IS one browser): reads nothing.
-		const list = await req("/api/payments/basket", authed(otherCookie));
+		const list = await req("/api/payments/cart", authed(otherCookie));
 		const { count } = (await list.json()) as { count: number };
 		expect(count).toBe(0);
-		// And account A still holds its own — one account's basket is nobody else's.
-		const mine = (await (await req("/api/payments/basket", authed(buyerCookie))).json()) as {
+		// And account A still holds its own — one account's cart is nobody else's.
+		const mine = (await (await req("/api/payments/cart", authed(buyerCookie))).json()) as {
 			count: number;
 		};
 		expect(mine.count).toBe(1);
 	});
 
-	it("another account cannot mutate this one's basket through the same routes", async () => {
+	it("another account cannot mutate this one's cart through the same routes", async () => {
 		// The other account adds ITS choice and clears — scoped to ITS rows.
 		await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(otherCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: workB }),
 			}),
 		);
-		await req("/api/payments/basket", authed(otherCookie, { method: "DELETE" }));
-		const mine = (await (await req("/api/payments/basket", authed(buyerCookie))).json()) as {
+		await req("/api/payments/cart", authed(otherCookie, { method: "DELETE" }));
+		const mine = (await (await req("/api/payments/cart", authed(buyerCookie))).json()) as {
 			count: number;
 		};
 		expect(mine.count).toBe(1);
 	});
 });
 
-describe("basket storage — the untrusted-storage rules", () => {
+describe("cart storage — the untrusted-storage rules", () => {
 	it("a Work the buyer already owns is excluded from list — the badge counts what money can reach", async () => {
 		// Own workB outright: a completed purchase is permanent access, which
-		// `resolvePurchase` refuses with "already have access". The basket row survives —
+		// `resolvePurchase` refuses with "already have access". The cart row survives —
 		// the table does not self-clean — but the read leaves it out.
 		await db.insert(purchases).values(purchasesSafe());
 		await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: workB }),
 			}),
 		);
-		const list = (await (await req("/api/payments/basket", authed(buyerCookie))).json()) as {
+		const list = (await (await req("/api/payments/cart", authed(buyerCookie))).json()) as {
 			items: { workId: number }[];
 			count: number;
 		};
@@ -339,41 +339,41 @@ describe("basket storage — the untrusted-storage rules", () => {
 		expect(list.count).toBe(1);
 	});
 
-	it("a stored stale row does not fail checkout of the rest — quote prices the resolved basket", async () => {
+	it("a stored stale row does not fail checkout of the rest — quote prices the resolved cart", async () => {
 		// The buyer's email must be verified to reach checkout's money path at all
-		// (`requireVerified` sits BEFORE any basket resolution, which is why this suite's
+		// (`requireVerified` sits BEFORE any cart resolution, which is why this suite's
 		// other refusals test quote — the same resolution, minus the verify wall).
 		await db.update(users).set({ emailVerified: true }).where(eq(users.id, buyerId));
-		// The basket now holds workA (buyable) and workB (owned, stale). Checkout must
+		// The cart now holds workA (buyable) and workB (owned, stale). Checkout must
 		// reach its session-creation guard — not a 400 about workB.
 		const res = await req(
-			"/api/payments/basket/checkout",
+			"/api/payments/cart/checkout",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({}),
 			}),
 		);
 		// 503 = "payments not configured", which this test session is. It is answered
-		// AFTER resolveBasket — so reaching it proves no refusal fired on the stale row.
+		// AFTER resolveCart — so reaching it proves no refusal fired on the stale row.
 		expect(res.status).toBe(503);
 	});
 
 	it("the item cap is enforced at add, in the buyer's own words at the moment of the click", async () => {
-		await db.delete(basketItems).where(eq(basketItems.userId, buyerId));
+		await db.delete(cartItems).where(eq(cartItems.userId, buyerId));
 		// Fill to the cap with distinct Works created on the fly? Twenty inserts is the
-		// honest walk, but the cap's shape is what's pinned: a basket AT the cap refuses
-		// the next add with 409, and the rows are what make it so — seed MAX_BASKET_ITEMS
+		// honest walk, but the cap's shape is what's pinned: a cart AT the cap refuses
+		// the next add with 409, and the rows are what make it so — seed MAX_CART_ITEMS
 		// rows against a Work that exists, accepting the duplicate-id refusal is the
 		// point. The unique index stops duplicates, so the cap is seeded one-Work-per-row
 		// by inserting the SAME workId against DISTINCT... it cannot be. Direct rows
 		// against one Work would violate the unique pair — so this test inserts the cap's
 		// row count using the fixture generator's real Works, created in bulk.
 		const ids: number[] = [];
-		for (let i = 0; i < MAX_BASKET_ITEMS; i++) {
+		for (let i = 0; i < MAX_CART_ITEMS; i++) {
 			const w = await insertWork({
 				creatorId: seller.id,
 				type: "game",
-				title: `Basket cap ${run} ${i}`,
+				title: `Cart cap ${run} ${i}`,
 				streamEnabled: false,
 				downloadEnabled: true,
 				access: FOR_SALE,
@@ -382,7 +382,7 @@ describe("basket storage — the untrusted-storage rules", () => {
 		}
 		for (const id of ids) {
 			await req(
-				"/api/payments/basket/items",
+				"/api/payments/cart/items",
 				authed(buyerCookie, {
 					method: "POST",
 					body: JSON.stringify({ workId: id }),
@@ -391,7 +391,7 @@ describe("basket storage — the untrusted-storage rules", () => {
 		}
 		// One more, at the cap: refused.
 		const over = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: workB }),
@@ -399,13 +399,13 @@ describe("basket storage — the untrusted-storage rules", () => {
 		);
 		expect(over.status).toBe(409);
 		// And the quote/checkout path still refuses a table somehow past the cap, via
-		// `resolveBasket` — same constant, enforced twice.
+		// `resolveCart` — same constant, enforced twice.
 	});
 });
 
-describe("POST /auth/basket/merge — the scratch basket folds through the add", () => {
+describe("POST /auth/cart/merge — the scratch cart folds through the add", () => {
 	it("refuses an unauthenticated merge (a scratch belongs to whoever proved a session)", async () => {
-		const res = await req("/api/auth/basket/merge", {
+		const res = await req("/api/auth/cart/merge", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN },
 			body: JSON.stringify({ items: [{ workId: workA }] }),
@@ -413,10 +413,10 @@ describe("POST /auth/basket/merge — the scratch basket folds through the add",
 		expect(res.status).toBe(401);
 	});
 
-	it("refuses a scratch past the basket's cap with 400, in the schema", async () => {
-		const items = Array.from({ length: MAX_BASKET_ITEMS + 1 }, (_, i) => ({ workId: i + 1 }));
+	it("refuses a scratch past the cart's cap with 400, in the schema", async () => {
+		const items = Array.from({ length: MAX_CART_ITEMS + 1 }, (_, i) => ({ workId: i + 1 }));
 		const res = await req(
-			"/api/auth/basket/merge",
+			"/api/auth/cart/merge",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ items }),
@@ -425,10 +425,10 @@ describe("POST /auth/basket/merge — the scratch basket folds through the add",
 		expect(res.status).toBe(400);
 	});
 
-	it("merges scratch items through the add — an empty account basket takes every live Work", async () => {
-		await clearBasketDirect();
+	it("merges scratch items through the add — an empty account cart takes every live Work", async () => {
+		await clearCartDirect();
 		const res = await req(
-			"/api/auth/basket/merge",
+			"/api/auth/cart/merge",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ items: [{ workId: workA }, { workId: workB }] }),
@@ -440,14 +440,14 @@ describe("POST /auth/basket/merge — the scratch basket folds through the add",
 		// The list resolves live: workB is already OWNED here (the stale-row test's staged
 		// purchase is still in the books), so the read shows only what money can reach —
 		// the merge is by intent, the listing is by purchasability, and neither lies.
-		const basket = await serverBasket();
-		expect(basket.workIds).toEqual([workA]);
+		const cart = await serverCart();
+		expect(cart.workIds).toEqual([workA]);
 	});
 
 	it("a scratch item that is gone from the catalog is skipped, not refused", async () => {
-		await clearBasketDirect();
+		await clearCartDirect();
 		const res = await req(
-			"/api/auth/basket/merge",
+			"/api/auth/cart/merge",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ items: [{ workId: 999999999 }, { workId: workA }] }),
@@ -460,47 +460,47 @@ describe("POST /auth/basket/merge — the scratch basket folds through the add",
 		expect(body.added).toEqual([workA]);
 	});
 
-	it("a mixed-creator MERGE appends — the basket carries both creators (2026-10-15)", async () => {
-		await clearBasketDirect();
-		// The account's basket ALREADY holds A's creator's work.
+	it("a mixed-creator MERGE appends — the cart carries both creators (2026-10-15)", async () => {
+		await clearCartDirect();
+		// The account's cart ALREADY holds A's creator's work.
 		await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: workA }),
 			}),
 		);
 		// The scratch carries the OTHER creator's work: the merge appends it, because a
-		// basket carries any number of creators — the replace-on-clash rule this test
+		// cart carries any number of creators — the replace-on-clash rule this test
 		// used to pin is the behavior the multi-creator decision removed, on the client,
 		// in the service and here at the merge, all three agreeing.
 		const res = await req(
-			"/api/auth/basket/merge",
+			"/api/auth/cart/merge",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ items: [{ workId: otherCreatorWorkId }] }),
 			}),
 		);
 		expect(res.status).toBe(200);
-		const basket = await serverBasket();
-		expect(basket.workIds).toEqual([workA, otherCreatorWorkId]);
+		const cart = await serverCart();
+		expect(cart.workIds).toEqual([workA, otherCreatorWorkId]);
 	});
 
 	it("adding a second creator's Work keeps the first — no replace, no announcement", async () => {
-		await clearBasketDirect();
+		await clearCartDirect();
 		await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: workA }),
 			}),
 		);
 		// The dealbreaker this whole change exists to fix (Parker, 2026-10-15): the add
-		// used to wipe the basket for the new creator's Work. It appends now, and the
+		// used to wipe the cart for the new creator's Work. It appends now, and the
 		// response carries no replaced-creator field at all — the announcement's absence
 		// is pinned so the courtesy cannot quietly return.
 		const res = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(buyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ workId: otherCreatorWorkId }),
@@ -510,8 +510,8 @@ describe("POST /auth/basket/merge — the scratch basket folds through the add",
 		const body = (await res.json()) as { items: { workId: number }[] };
 		expect(body.items.map((i) => i.workId)).toEqual([workA, otherCreatorWorkId]);
 		expect("replacedCreator" in body).toBe(false);
-		const basket = await serverBasket();
-		expect(basket.workIds).toEqual([workA, otherCreatorWorkId]);
+		const cart = await serverCart();
+		expect(cart.workIds).toEqual([workA, otherCreatorWorkId]);
 	});
 });
 
@@ -533,9 +533,9 @@ function purchasesSafe() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The Badge line — the basket's second item kind (2026-10-15).
+// The Badge line — the cart's second item kind (2026-10-15).
 //
-// A Badge bought from a creator page is a purchase, and its basket line is the rung
+// A Badge bought from a creator page is a purchase, and its cart line is the rung
 // the buyer picked. What pins here is the storage shape and its ONE extra rule: a
 // second rung of the same issuer REPLACES the first (the pick replaces, one line per
 // ladder — a holding's own shape). Everything about MONEY — the ratchet, the delta,
@@ -544,7 +544,7 @@ function purchasesSafe() {
 // checks existence and nobody's own ladder, and listing a rung that stopped being
 // buyable between add and checkout is exactly as harmless as it is for a Work.
 
-describe("basket storage — the Badge line", () => {
+describe("cart storage — the Badge line", () => {
 	let secondBuyerCookie: string;
 	let secondBuyerId = 0;
 	let ladderIssuerId: number;
@@ -552,8 +552,8 @@ describe("basket storage — the Badge line", () => {
 	let rungB = 0;
 
 	beforeAll(async () => {
-		// A fresh buyer, so the describe owns its basket state (the module's shared
-		// buyer's basket is other describes' history).
+		// A fresh buyer, so the describe owns its cart state (the module's shared
+		// buyer's cart is other describes' history).
 		const second = await createAccount(`bskt_store_badge_${run}`);
 		secondBuyerCookie = second.cookie;
 		secondBuyerId = second.userId;
@@ -569,7 +569,7 @@ describe("basket storage — the Badge line", () => {
 					creatorId: ladderIssuerId,
 					threshold: "6.00",
 					label: "Route rung low",
-					description: "A fixture rung the badge basket tests hold.",
+					description: "A fixture rung the badge cart tests hold.",
 				})
 				.returning({ id: badges.id })
 		)[0].id;
@@ -580,7 +580,7 @@ describe("basket storage — the Badge line", () => {
 					creatorId: ladderIssuerId,
 					threshold: "9.00",
 					label: "Route rung high",
-					description: "A fixture rung the badge basket tests hold.",
+					description: "A fixture rung the badge cart tests hold.",
 				})
 				.returning({ id: badges.id })
 		)[0].id;
@@ -588,7 +588,7 @@ describe("basket storage — the Badge line", () => {
 
 	it("adds a Badge and lists it with the resolved first-transaction and monthly prices", async () => {
 		const added = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(secondBuyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ badgeId: rungA }),
@@ -617,7 +617,7 @@ describe("basket storage — the Badge line", () => {
 		expect(items[0].creatorHandle).not.toBe("");
 
 		// The row in the table, badge-keyed — the exactly-one-kind shape.
-		const rows = await db.select().from(basketItems).where(eq(basketItems.userId, secondBuyerId));
+		const rows = await db.select().from(cartItems).where(eq(cartItems.userId, secondBuyerId));
 		expect(rows).toHaveLength(1);
 		expect(rows[0].badgeId).toBe(rungA);
 		expect(rows[0].workId).toBeNull();
@@ -625,16 +625,16 @@ describe("basket storage — the Badge line", () => {
 
 	it("add is idempotent on the same rung, and a SECOND rung of the issuer REPLACES the first", async () => {
 		await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(secondBuyerCookie, { method: "POST", body: JSON.stringify({ badgeId: rungA }) }),
 		);
 		// The same rung again — a no-op, like a Work's repeat add.
 		const repeat = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(secondBuyerCookie, { method: "POST", body: JSON.stringify({ badgeId: rungA }) }),
 		);
 		expect(repeat.status).toBe(200);
-		let listed = (await (await req("/api/payments/basket", authed(secondBuyerCookie))).json()) as {
+		let listed = (await (await req("/api/payments/cart", authed(secondBuyerCookie))).json()) as {
 			count: number;
 			items: { badgeId?: number }[];
 		};
@@ -642,14 +642,14 @@ describe("basket storage — the Badge line", () => {
 		expect(listed.items[0].badgeId).toBe(rungA);
 
 		// 🚨 The pick replaces: a different rung of the SAME ladder leaves exactly one
-		// line — the newest — because the basket is the pick being carried, and one
+		// line — the newest — because the cart is the pick being carried, and one
 		// holding per issuer means one line per ladder everywhere.
 		const upgrade = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(secondBuyerCookie, { method: "POST", body: JSON.stringify({ badgeId: rungB }) }),
 		);
 		expect(upgrade.status).toBe(200);
-		listed = (await (await req("/api/payments/basket", authed(secondBuyerCookie))).json()) as {
+		listed = (await (await req("/api/payments/cart", authed(secondBuyerCookie))).json()) as {
 			count: number;
 			items: { badgeId?: number }[];
 		};
@@ -659,22 +659,22 @@ describe("basket storage — the Badge line", () => {
 
 	it("removes a Badge line through its own delete route, idempotently", async () => {
 		const res = await req(
-			`/api/payments/basket/badges/${rungB}`,
+			`/api/payments/cart/badges/${rungB}`,
 			authed(secondBuyerCookie, { method: "DELETE" }),
 		);
 		expect(res.status).toBe(200);
-		let listed = (await (await req("/api/payments/basket", authed(secondBuyerCookie))).json()) as {
+		let listed = (await (await req("/api/payments/cart", authed(secondBuyerCookie))).json()) as {
 			count: number;
 		};
 		expect(listed.count).toBe(0);
 
 		// Absence is already the goal.
 		const again = await req(
-			`/api/payments/basket/badges/${rungB}`,
+			`/api/payments/cart/badges/${rungB}`,
 			authed(secondBuyerCookie, { method: "DELETE" }),
 		);
 		expect(again.status).toBe(200);
-		listed = (await (await req("/api/payments/basket", authed(secondBuyerCookie))).json()) as {
+		listed = (await (await req("/api/payments/cart", authed(secondBuyerCookie))).json()) as {
 			count: number;
 		};
 		expect(listed.count).toBe(0);
@@ -686,7 +686,7 @@ describe("basket storage — the Badge line", () => {
 			.values({ creatorId: secondBuyerId, threshold: "4.00", label: "Own rung" })
 			.returning({ id: badges.id });
 		const res = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(secondBuyerCookie, { method: "POST", body: JSON.stringify({ badgeId: ownRung.id }) }),
 		);
 		expect(res.status).toBe(400);
@@ -695,7 +695,7 @@ describe("basket storage — the Badge line", () => {
 
 	it("refuses an add naming both or neither — a line names exactly one thing", async () => {
 		const both = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(secondBuyerCookie, {
 				method: "POST",
 				body: JSON.stringify({ badgeId: rungA, workId: workA }),
@@ -704,7 +704,7 @@ describe("basket storage — the Badge line", () => {
 		expect(both.status).toBe(400);
 
 		const neither = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(secondBuyerCookie, { method: "POST", body: "{}" }),
 		);
 		expect(neither.status).toBe(400);
@@ -714,12 +714,12 @@ describe("basket storage — the Badge line", () => {
 	 * 🚨 The table itself holds the shape nothing else defends — the CHECK, not the
 	 * service. A hand-rolled write (or a merge bug) must not be able to park a row that
 	 * names two kinds, because resolution drops unresolvable rows silently and a
-	 * doubly-named row dropped silently would mean money the basket never showed.
+	 * doubly-named row dropped silently would mean money the cart never showed.
 	 */
 	it("the database refuses a row naming both kinds — the CHECK, not the service", async () => {
 		let refused = false;
 		try {
-			await db.insert(basketItems).values({ userId: secondBuyerId, workId: workA, badgeId: rungA });
+			await db.insert(cartItems).values({ userId: secondBuyerId, workId: workA, badgeId: rungA });
 		} catch {
 			refused = true;
 		}
@@ -731,7 +731,7 @@ describe("basket storage — the Badge line", () => {
 	 * holds can still be carried — listing it is honest, and the money door
 	 * (`resolveBadgePurchase`) stays the one place that decides what is purchasable.
 	 * The refusal's shape, once the buyer reaches it, is the resolution's ABSENCE: the
-	 * basket read returns only what a checkout could charge, so the row is invisible
+	 * cart read returns only what a checkout could charge, so the row is invisible
 	 * rather than an error, and the quote refuses on the empty remainder.
 	 */
 	it("lets the add succeed on a rung the buyer already holds — the money door answers by absence", async () => {
@@ -741,27 +741,27 @@ describe("basket storage — the Badge line", () => {
 			billingCycle: cycleKeyFor(new Date()),
 		});
 		const res = await req(
-			"/api/payments/basket/items",
+			"/api/payments/cart/items",
 			authed(secondBuyerCookie, { method: "POST", body: JSON.stringify({ badgeId: rungA }) }),
 		);
 		expect(res.status).toBe(200);
 
-		// The basket read drops the rung the buyer already holds — the same resolution
-		// `/basket` has always answered with, badge lines under it.
-		const read = (await (await req("/api/payments/basket", authed(secondBuyerCookie))).json()) as {
+		// The cart read drops the rung the buyer already holds — the same resolution
+		// `/cart` has always answered with, badge lines under it.
+		const read = (await (await req("/api/payments/cart", authed(secondBuyerCookie))).json()) as {
 			count: number;
 		};
 		expect(read.count).toBe(0);
 
 		// And the quote — asked through the same resolution — refuses the empty remainder.
 		const quoted = await req(
-			"/api/payments/basket/quote",
+			"/api/payments/cart/quote",
 			authed(secondBuyerCookie, { method: "POST", body: "{}" }),
 		);
 		expect(quoted.status).toBe(400);
-		expect(((await quoted.json()) as { error?: string }).error).toBe("Your basket is empty");
+		expect(((await quoted.json()) as { error?: string }).error).toBe("Your cart is empty");
 	});
 
-	// The item cap is one line of shared arithmetic over `listBasket`'s union — the
+	// The item cap is one line of shared arithmetic over `listCart`'s union — the
 	// works-side capacity tests above cover it; no badge-specific cap case exists.
 });

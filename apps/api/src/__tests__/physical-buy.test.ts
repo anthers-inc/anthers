@@ -12,7 +12,7 @@
  * - **The storefront reads signed out and prices from the Work's own baseline row.** The
  *   page and its panel are public; the price is the "Everyone" door, never a supporter's
  *   rung.
- * - **The basket carries the count and the choices, and the quote prices them.** A line
+ * - **The cart carries the count and the choices, and the quote prices them.** A line
  *   added as two larges resolves to two larges, with the listing's shipping on it.
  */
 
@@ -345,8 +345,8 @@ describe("the shelf", () => {
 		await db.delete(purchases).where(eq(purchases.id, pending.id));
 	});
 
-	it("carries the count and the choices in the basket, and prices them", async () => {
-		const add = await call("POST", "/api/payments/basket/items", buyer.cookie, {
+	it("carries the count and the choices in the cart, and prices them", async () => {
+		const add = await call("POST", "/api/payments/cart/items", buyer.cookie, {
 			workId: physicalWork,
 			quantity: 2,
 			options: [
@@ -363,7 +363,7 @@ describe("the shelf", () => {
 		expect(line?.price).toBe("36.00");
 		expect(line?.shipping).toBe("6.50");
 
-		const quote = await call("POST", "/api/payments/basket/quote", buyer.cookie, {});
+		const quote = await call("POST", "/api/payments/cart/quote", buyer.cookie, {});
 		expect(quote.status).toBe(200);
 		const priced = (await quote.json()) as {
 			items: Array<{ workId: number; quantity: number; shipping: string }>;
@@ -376,12 +376,12 @@ describe("the shelf", () => {
 		expect(priced.subtotal).toBe("42.50");
 	});
 
-	it("re-prices the line when the basket's count changes", async () => {
-		const res = await call("PUT", `/api/payments/basket/items/${physicalWork}`, buyer.cookie, {
+	it("re-prices the line when the cart's count changes", async () => {
+		const res = await call("PUT", `/api/payments/cart/items/${physicalWork}`, buyer.cookie, {
 			quantity: 1,
 		});
 		expect(res.status).toBe(200);
-		const quote = await call("POST", "/api/payments/basket/quote", buyer.cookie, {});
+		const quote = await call("POST", "/api/payments/cart/quote", buyer.cookie, {});
 		const priced = (await quote.json()) as {
 			items: Array<{ workId: number; quantity: number; price: string }>;
 			subtotal: string;
@@ -393,19 +393,19 @@ describe("the shelf", () => {
 		expect(priced.subtotal).toBe("24.50");
 	});
 
-	it("refuses a basket line whose count outruns the shelf", async () => {
-		const add = await call("POST", "/api/payments/basket/items", buyer.cookie, {
+	it("refuses a cart line whose count outruns the shelf", async () => {
+		const add = await call("POST", "/api/payments/cart/items", buyer.cookie, {
 			workId: stockedWork,
 			quantity: 5,
 			options: [{ name: "Size", label: "One" }],
 		});
 		expect(add.status).toBe(200);
-		const quote = await call("POST", "/api/payments/basket/quote", buyer.cookie, {});
+		const quote = await call("POST", "/api/payments/cart/quote", buyer.cookie, {});
 		expect(quote.status).toBe(400);
 		const body = (await quote.json()) as { error?: string };
 		expect(body.error).toMatch(/left/i);
 
-		await call("DELETE", `/api/payments/basket/items/${stockedWork}`, buyer.cookie);
+		await call("DELETE", `/api/payments/cart/items/${stockedWork}`, buyer.cookie);
 	});
 
 	it("refuses checkout without charging when the processor is unconfigured", async () => {
@@ -413,7 +413,7 @@ describe("the shelf", () => {
 			.select()
 			.from(workPhysicalListings)
 			.where(eq(workPhysicalListings.workId, physicalWork));
-		const res = await call("POST", "/api/payments/basket/checkout", buyer.cookie, {});
+		const res = await call("POST", "/api/payments/cart/checkout", buyer.cookie, {});
 		// The processor guard runs before a session exists, so nothing is reserved and
 		// nothing is written — the refusal is the whole of the interaction.
 		expect(res.status).toBe(503);
@@ -479,8 +479,8 @@ describe("the shelf", () => {
 		expect(priced.unitPrice).toBe("14.00");
 		expect(priced.goods).toBe("14.00");
 
-		// And the basket charges the same figure, which is the one that matters.
-		const add = await call("POST", "/api/payments/basket/items", buyer.cookie, {
+		// And the cart charges the same figure, which is the one that matters.
+		const add = await call("POST", "/api/payments/cart/items", buyer.cookie, {
 			workId: tiered.id,
 			quantity: 1,
 		});
@@ -490,7 +490,7 @@ describe("the shelf", () => {
 		).items.find((i) => i.workId === tiered.id);
 		expect(line?.price).toBe("14.00");
 
-		await call("DELETE", `/api/payments/basket/items/${tiered.id}`, buyer.cookie);
+		await call("DELETE", `/api/payments/cart/items/${tiered.id}`, buyer.cookie);
 		await db.delete(userBadges).where(eq(userBadges.badgeId, rung.id));
 		await db.delete(badges).where(eq(badges.id, rung.id));
 	});

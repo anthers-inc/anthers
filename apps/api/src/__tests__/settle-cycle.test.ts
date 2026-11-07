@@ -635,7 +635,7 @@ describe("the month's rows and its marker", () => {
 
 /**
  * The Badge purchase rail settles beside the invoices (2026-10-15). A Badge bought through
- * the basket is this month's support money on a Checkout charge with no invoice row — its
+ * the cart is this month's support money on a Checkout charge with no invoice row — its
  * own record is `badge_charges`, its fee is the PINNED pro-rata share the charge apportioned
  * at checkout, and the credit the issuer receives is the charged amount net of that share:
  * never the model's recomputation, because the charge may also have carried Works whose
@@ -679,7 +679,7 @@ describe("settling the Badge purchase rail beside the invoices", () => {
 		const creator = await makeUser("creator");
 		const { userId, accountId } = await makeSupporter(6);
 		// The account's $6 Anthers rung is held, but the month's only paid money is a Badge
-		// bought through the basket: charged $6.00, pinned fee $0.48, and settled net.
+		// bought through the cart: charged $6.00, pinned fee $0.48, and settled net.
 		await badgeCharge(userId, creator, { charged: 6, threshold: 6, feeShare: 0.48 });
 		// The Sticker is the observable paid-ness: the allowance opens on a month
 		// something was collected, whatever rail carried it.
@@ -710,7 +710,7 @@ describe("settling the Badge purchase rail beside the invoices", () => {
 		const creatorB = await makeUser("creator");
 		const { userId } = await makeSupporter(6);
 		await paidInvoice(userId, { anthers: 6, directed: [{ creatorId: creatorA, amount: 4 }] });
-		// The badge rode a mixed basket, so its pinned share is a fraction of the charge's
+		// The badge rode a mixed cart, so its pinned share is a fraction of the charge's
 		// total fee — smaller than a lone-charge model fee on $6 by the amortized part.
 		await badgeCharge(userId, creatorB, { charged: 6, threshold: 6, feeShare: 0.24 });
 		await watch(userId, creatorA, 1800);

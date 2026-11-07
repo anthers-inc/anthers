@@ -9,16 +9,16 @@
  * page's `<form>`-shaped tree (hydration error, undefined submit behavior), a session
  * POST fired on mount for every user who merely scrolled past a price, and a dead end
  * whenever the session refused. Parker's decision the same day: **every purchase goes
- * through the basket.** Checkout exists once now, embedded on `/basket`
- * (`BasketCheckout`) — this component quotes the price, offers the two doors into that
+ * through the cart.** Checkout exists once now, embedded on `/cart`
+ * (`CartCheckout`) — this component quotes the price, offers the two doors into that
  * flow, and renders nothing that touches a card.
  */
 
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult } from "@anthers/web-shared/types";
 import { useEffect, useState } from "react";
-import AddToBasket from "../basket/AddToBasket";
-import BuyNow from "../basket/BuyNow";
+import AddToCart from "../cart/AddToCart";
+import BuyNow from "../cart/BuyNow";
 import PhysicalStorePanel from "../work/PhysicalStorePanel";
 
 interface ProjectPricingProps {
@@ -119,7 +119,7 @@ export default function ProjectPricing({
 	// The listed price arrives as a string in dollars — no client-side money arithmetic
 	// happens here; `toFixed(2)` formats, it never computes.
 	const price = Number(access?.price ?? "0");
-	const basketProps = {
+	const cartProps = {
 		workId,
 		slug,
 		title,
@@ -132,7 +132,7 @@ export default function ProjectPricing({
 		/* The purchase panel: one composed card, paired beside the locked preview on a wide
 		   display (`WorkPage`'s grid stretches it to the preview's height; on a phone it
 		   stacks). The price is the panel's headline — the row breakdown sits under it on
-		   its own quiet ground, and the two doors into the basket anchor the bottom. */
+		   its own quiet ground, and the two doors into the cart anchor the bottom. */
 		<div className="card bg-base-200 border border-base-300 h-full">
 			<div className="card-body p-5 gap-4 flex flex-col items-start text-start">
 				<div>
@@ -186,8 +186,8 @@ export default function ProjectPricing({
 						)}
 
 						<div className="grid gap-2 w-full mt-auto">
-							<BuyNow {...basketProps} />
-							<AddToBasket {...basketProps} />
+							<BuyNow {...cartProps} />
+							<AddToCart {...cartProps} />
 						</div>
 					</>
 				)}

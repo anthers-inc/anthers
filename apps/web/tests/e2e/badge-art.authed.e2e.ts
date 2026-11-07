@@ -504,7 +504,7 @@ test("a composed Badge saves a shape and background change by recomposing", asyn
 /**
  * The other half of the grid: a supporter's one action on a Badge card.
  *
- * ⭐ **There is no selection step and no basket pair** (Parker, 2026-11-06): the card says
+ * ⭐ **There is no selection step and no cart pair** (Parker, 2026-11-06): the card says
  * Upgrade, and that opens the one subscription-change modal. The walker is the gauntlet's
  * ordinary user — signed in, giving nothing — so the first rung is a plain upgrade.
  */

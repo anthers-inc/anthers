@@ -736,7 +736,7 @@ export const CARD_FLAT = 0.3;
  * pays varies with where they are and this figure is **not** it. It survives only where an
  * illustration is the point — the sample receipts and case studies `scenarios.ts` renders,
  * and the economics display — and `scripts/illustrative-tax-guard.test.ts` fails the build
- * if any charge path (checkout, basket, subscription) reaches for it. `calculateFees`
+ * if any charge path (checkout, cart, subscription) reaches for it. `calculateFees`
  * returns a zero `salesTax` and its callers record the tax Stripe actually collected.
  *
  * ⚠️ Kept as a rate rather than deleted, because the published sample receipts and case
@@ -934,18 +934,18 @@ export function supportBreakdownDisplay(
 export const REFUND_AUTO_CAP = 3;
 
 /**
- * How many Works one basket may hold.
+ * How many Works one cart may hold.
  *
- * A bound rather than a product limit: a basket is resolved item-by-item through the
+ * A bound rather than a product limit: a cart is resolved item-by-item through the
  * same access path a single purchase takes, so an unbounded list is an unbounded number
- * of queries on an unauthenticated-cost path. Twenty is far above any real basket — an
+ * of queries on an unauthenticated-cost path. Twenty is far above any real cart — an
  * album's worth of tracks is a dozen — and far below anything that hurts.
  *
- * 🚨 **One creator per basket**, which is not a number and so is not here: Stripe's
- * `transfer_data.destination` names a single connected account, so a basket spanning two
- * creators cannot be one destination charge. See `resolveBasket` in `routes/payments.ts`.
+ * 🚨 **One creator per cart**, which is not a number and so is not here: Stripe's
+ * `transfer_data.destination` names a single connected account, so a cart spanning two
+ * creators cannot be one destination charge. See `resolveCart` in `routes/payments.ts`.
  */
-export const MAX_BASKET_ITEMS = 20;
+export const MAX_CART_ITEMS = 20;
 /** The rolling window the cap is counted over, in months. */
 export const REFUND_CAP_WINDOW_MONTHS = 12;
 /**

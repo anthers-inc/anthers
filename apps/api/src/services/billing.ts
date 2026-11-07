@@ -1335,7 +1335,7 @@ export async function applyDirectedSupport(
  * subscription would record) — the mid-month posture of `21.02` arrives through two rails
  * instead of one, and the arithmetic a normal raise produces is what the buyer gets.
  *
- * 🚨 **One update for every pick on the charge, and every line stamped.** A basket can
+ * 🚨 **One update for every pick on the charge, and every line stamped.** A cart can
  * carry Badges from several creators, and `proration_behavior` — like the raise/drop
  * split `planItemChange` argues — is one setting for a whole call, so the lines travel
  * together. Every line carries `metadata.destination` (the stamp `itemsFromSub` reads

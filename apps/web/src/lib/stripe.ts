@@ -24,7 +24,7 @@ import { loadStripe } from "@stripe/stripe-js/pure";
  * Stripe says disabling raises fraud risk, **especially card testing**, and publishes no
  * number for it — so the trade was made on Anthers' own exposure rather than on evidence
  * Stripe supplied. What makes it affordable is that **payment is gated behind a verified
- * account**: `POST /checkout/:slug` and `/basket/checkout` both carry `requireVerified`, so
+ * account**: `POST /checkout/:slug` and `/cart/checkout` both carry `requireVerified`, so
  * card testing needs a distinct email-verified account per attempt rather than an open form
  * to hammer. That is the structural half of what device signals are usually bought for.
  *

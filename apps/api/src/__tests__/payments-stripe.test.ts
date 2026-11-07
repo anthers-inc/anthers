@@ -24,8 +24,8 @@ import { db } from "@anthers/db/client";
 import {
 	badgeCharges,
 	badges,
-	basketItems,
 	billingReductions,
+	cartItems,
 	charitableLedger,
 	purchaseReceipts,
 	purchases,
@@ -218,7 +218,7 @@ function fakeStripe() {
 					const canned = responses["checkout.sessions.list"];
 					return (canned !== undefined ? canned : asyncList([])) as never;
 				},
-				// The basket's resume read (Parker, 2026-10-19): a revisit to the basket
+				// The cart's resume read (Parker, 2026-10-19): a revisit to the cart
 				// asks Stripe whether the session an abandoned checkout left behind is
 				// still open. Default EXPIRED — the ordinary case for a test that never
 				// shaped one, which builds a fresh session exactly as it always did. A test
@@ -228,7 +228,7 @@ function fakeStripe() {
 					object: "checkout.session",
 					status: "expired",
 				})),
-				// Closing a session whose basket has since changed. Only the basket's
+				// Closing a session whose cart has since changed. Only the cart's
 				// resume path calls this, and only when `retrieve` answered `open`.
 				expire: record("checkout.sessions.expire", (id: string) => ({
 					id,
@@ -846,7 +846,7 @@ describe("Webhook: payment_intent.succeeded", () => {
 		expect(ledger).toHaveLength(0);
 
 		// The reader's space is owed a receipt: the row is the worklist the sweep drains, and
-		// a basket writes one per purchase. It is inserted beside the completion, not by the
+		// a cart writes one per purchase. It is inserted beside the completion, not by the
 		// job, so a webhook that lands is a receipt that will follow.
 		const owed = await db
 			.select()
@@ -959,7 +959,7 @@ describe("Webhook: payment_intent.succeeded", () => {
 		expect(ledger).toHaveLength(0);
 	});
 
-	it("apportions a basket session's tax across its rows by value", async () => {
+	it("apportions a cart session's tax across its rows by value", async () => {
 		// Three rows on one session, odd prices so the pro-rata split cannot divide
 		// evenly: the last row absorbs the rounding remainder, and the rows must sum to
 		// exactly what Stripe collected.
@@ -1166,11 +1166,11 @@ describe("Webhook: the per-creator split at completion", () => {
 
 	/**
 	 * One pending row per creator, keyed by the session id — exactly the state
-	 * `/basket/checkout` leaves behind, with the per-item fee shares already
+	 * `/cart/checkout` leaves behind, with the per-item fee shares already
 	 * apportioned by the route (the last row absorbing the rounding remainder, which
 	 * is why the two earnings figures sum to one charge's worth less one fee).
 	 */
-	async function seedSplitBasket(sessionId: string) {
+	async function seedSplitCart(sessionId: string) {
 		await db.insert(purchases).values([
 			{
 				buyerId,
@@ -1205,7 +1205,7 @@ describe("Webhook: the per-creator split at completion", () => {
 		const piId = `pi_${uid()}`;
 		const sessionId = `cs_${uid()}`;
 		const chargeId = `ch_${uid()}`;
-		await seedSplitBasket(sessionId);
+		await seedSplitCart(sessionId);
 
 		const session = fakeSessionFor(piId);
 		session.id = sessionId;
@@ -1258,7 +1258,7 @@ describe("Webhook: the per-creator split at completion", () => {
 		try {
 			const piId = `pi_${uid()}`;
 			const sessionId = `cs_${uid()}`;
-			await seedSplitBasket(sessionId);
+			await seedSplitCart(sessionId);
 			const session = fakeSessionFor(piId);
 			session.id = sessionId;
 			fake.responses["checkout.sessions.list"] = asyncList([session]);
@@ -1316,7 +1316,7 @@ describe("Webhook: the per-creator split at completion", () => {
 		try {
 			const piId = `pi_${uid()}`;
 			const sessionId = `cs_${uid()}`;
-			await seedSplitBasket(sessionId);
+			await seedSplitCart(sessionId);
 			const session = fakeSessionFor(piId);
 			session.id = sessionId;
 			fake.responses["checkout.sessions.list"] = asyncList([session]);
@@ -1825,20 +1825,20 @@ describe("Webhook: customer.subscription.*", () => {
 });
 
 /**
- * The basket — several Works, one charge, one card fee.
+ * The cart — several Works, one charge, one card fee.
  *
- * The whole reason a basket exists is the **fixed $0.30**, which is per charge rather
+ * The whole reason a cart exists is the **fixed $0.30**, which is per charge rather
  * than per item: five $1 tracks pay $1.65 in card fees separately and $0.45 together,
  * and every cent of that goes to the creator because Anthers keeps nothing either way.
  * So the assertions that matter are (a) the fee is charged ONCE, and (b) the per-row
- * money still sums to exactly what Stripe was asked for — the place a basket goes
+ * money still sums to exactly what Stripe was asked for — the place a cart goes
  * quietly wrong is rows that each carry their own $0.30 and no longer reconcile.
  *
  * Verified by sabotage before being committed: computing fees per item rather than on
  * the subtotal fails 3; dropping the mixed-creator guard fails 1; apportioning without
  * the last-row remainder fails 1 (a 3-way split of an odd cent is what exposes it).
  */
-describe("Basket checkout — one charge, one card fee", () => {
+describe("Cart checkout — one charge, one card fee", () => {
 	let items: { id: number; slug: string }[] = [];
 	let otherCreatorWorkId = 0;
 
@@ -1858,38 +1858,38 @@ describe("Basket checkout — one charge, one card fee", () => {
 	const ODD = [{ threshold: 0, allow: true, price: UNIT }];
 
 	/**
-	 * Put the given Works into the buyer's SERVER-side basket (one add per Work, through
-	 * the route the Work page's own button calls), then act on the basket the way the
-	 * client now does — with no body naming ids, because the stored basket is what is
+	 * Put the given Works into the buyer's SERVER-side cart (one add per Work, through
+	 * the route the Work page's own button calls), then act on the cart the way the
+	 * client now does — with no body naming ids, because the stored cart is what is
 	 * bought. `fresh` clears first; without it the adds append, which a mixed-creator
-	 * basket relies on: any number of creators coexist since the 2026-10-15 split.
+	 * cart relies on: any number of creators coexist since the 2026-10-15 split.
 	 */
-	async function seedBasket(newIds: number[], { fresh = false } = {}) {
-		if (fresh) await clearBasketDirect();
+	async function seedCart(newIds: number[], { fresh = false } = {}) {
+		if (fresh) await clearCartDirect();
 		for (const id of newIds) {
-			const res = await req("/api/payments/basket/items", {
+			const res = await req("/api/payments/cart/items", {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
 				body: JSON.stringify({ workId: id }),
 			});
-			expect(res.status, `seeding basket with ${id}`).toBe(200);
+			expect(res.status, `seeding cart with ${id}`).toBe(200);
 		}
 	}
 
-	async function clearBasketDirect() {
-		const res = await req("/api/payments/basket", {
+	async function clearCartDirect() {
+		const res = await req("/api/payments/cart", {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: buyerCookie },
 		});
-		expect(res.status, "clearing the basket").toBe(200);
+		expect(res.status, "clearing the cart").toBe(200);
 	}
 
-	async function basket(_workIds: number[], path = "checkout") {
+	async function cart(_workIds: number[], path = "checkout") {
 		// The legacy `workIds` argument is kept in the call sites unchanged but carries no
-		// meaning now: quote and checkout price the account's own stored basket. A test
-		// that wants a particular basket seeds it first (`seedBasket`).
+		// meaning now: quote and checkout price the account's own stored cart. A test
+		// that wants a particular cart seeds it first (`seedCart`).
 		fake.reset();
-		const res = await req(`/api/payments/basket/${path}`, {
+		const res = await req(`/api/payments/cart/${path}`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
 			body: JSON.stringify({}),
@@ -1904,7 +1904,7 @@ describe("Basket checkout — one charge, one card fee", () => {
 			const w = await insertWork({
 				creatorId,
 				type: "game",
-				title: `Basket item ${i} ${run}`,
+				title: `Cart item ${i} ${run}`,
 				streamEnabled: false,
 				downloadEnabled: true,
 				access: ODD,
@@ -1927,11 +1927,11 @@ describe("Basket checkout — one charge, one card fee", () => {
 	}, DB_SETUP_TIMEOUT);
 
 	it("charges the flat fee ONCE, not once per item", async () => {
-		await seedBasket(
+		await seedCart(
 			items.map((i) => i.id),
 			{ fresh: true },
 		);
-		const { res, body } = await basket(items.map((i) => i.id));
+		const { res, body } = await cart(items.map((i) => i.id));
 		expect(res.status).toBe(200);
 
 		const expected = calculateFees(new Decimal(UNIT).times(3), { type: "digital" });
@@ -1939,52 +1939,52 @@ describe("Basket checkout — one charge, one card fee", () => {
 		expect(body.processingFee).toBe(expected.processingFee.toFixed(2));
 
 		// The point of the whole feature, stated as an inequality rather than a figure:
-		// one basket fee must be strictly less than three separate ones.
+		// one cart fee must be strictly less than three separate ones.
 		const separately = cardFee(new Decimal(UNIT)).times(3);
 		expect(new Decimal(body.processingFee).lessThan(separately)).toBe(true);
 
-		// 🚨 **The basket SURVIVES the moment the charge is built** (Parker, 2026-10-19).
-		// This route runs when the basket page mounts — it is how the embedded checkout
-		// gets its client secret — and it used to empty the basket right here, so opening
+		// 🚨 **The cart SURVIVES the moment the charge is built** (Parker, 2026-10-19).
+		// This route runs when the cart page mounts — it is how the embedded checkout
+		// gets its client secret — and it used to empty the cart right here, so opening
 		// the page and walking away erased everything the buyer had chosen. The rows leave
 		// when the charge completes instead (`completeSessionPurchases`), and the next test
 		// walks that half.
-		const after = await req("/api/payments/basket", {
+		const after = await req("/api/payments/cart", {
 			headers: { Origin: ORIGIN, Cookie: buyerCookie },
 		});
 		expect(((await after.json()) as { count: number }).count).toBe(3);
 	});
 
 	it("resumes the open session a previous visit built, rather than a second one", async () => {
-		await seedBasket(
+		await seedCart(
 			items.map((i) => i.id),
 			{ fresh: true },
 		);
 		const workIds = items.map((i) => i.id).join(",");
 		// One session id shared by the create and the later retrieve, so the test reads the
-		// same session Stripe would have kept open for this basket.
+		// same session Stripe would have kept open for this cart.
 		const sessionId = `cs_${uid()}`;
 		fake.responses["checkout.sessions.create"] = {
 			id: sessionId,
 			client_secret: `${sessionId}_secret_test`,
 		};
 
-		const first = await basket(items.map((i) => i.id));
+		const first = await cart(items.map((i) => i.id));
 		expect(first.res.status).toBe(200);
 		expect(first.body.clientSecret).toBe(`${sessionId}_secret_test`);
 
 		// The revisit: Stripe answers that the session is still open and still carries this
-		// basket, so the route hands back its client secret instead of building another
+		// cart, so the route hands back its client secret instead of building another
 		// session (and another set of pending rows) for the same intent.
 		fake.responses["checkout.sessions.retrieve"] = {
 			id: sessionId,
 			object: "checkout.session",
 			status: "open",
 			client_secret: `${sessionId}_secret_test`,
-			metadata: { kind: "direct_purchase_basket", workIds, badgeIds: "" },
+			metadata: { kind: "direct_purchase_cart", workIds, badgeIds: "" },
 		};
 		try {
-			const second = await basket(items.map((i) => i.id));
+			const second = await cart(items.map((i) => i.id));
 			expect(second.res.status).toBe(200);
 			expect(second.body.clientSecret).toBe(`${sessionId}_secret_test`);
 			// No second session is built — this call resumed the first (the helper reset
@@ -1996,11 +1996,11 @@ describe("Basket checkout — one charge, one card fee", () => {
 		}
 	});
 
-	it("leaves a line added while the webhook is in flight in the basket at completion", async () => {
+	it("leaves a line added while the webhook is in flight in the cart at completion", async () => {
 		// Dedicated Works: this test completes a purchase, and the shared `items` are used
 		// by every other test in this describe against the same buyer. A completed purchase
 		// is access, so completing one of `items` here would silently remove it from every
-		// later basket read.
+		// later cart read.
 		const [boughtA, boughtB, addedLater] = await Promise.all(
 			[`Completion A`, `Completion B`, `Completion later`].map((title) =>
 				insertWork({
@@ -2013,19 +2013,19 @@ describe("Basket checkout — one charge, one card fee", () => {
 				}),
 			),
 		);
-		await seedBasket([boughtA.id, boughtB.id], { fresh: true });
+		await seedCart([boughtA.id, boughtB.id], { fresh: true });
 		const bought = `${boughtA.id},${boughtB.id}`;
 		const sessionId = `cs_${uid()}`;
 		fake.responses["checkout.sessions.create"] = {
 			id: sessionId,
 			client_secret: `${sessionId}_secret_test`,
 		};
-		const started = await basket([boughtA.id, boughtB.id]);
+		const started = await cart([boughtA.id, boughtB.id]);
 		expect(started.res.status).toBe(200);
 
 		// A second tab adds a third Work before the payment's webhook lands. It was not part
 		// of the charge, so the completion must leave it alone rather than clearing wholesale.
-		await seedBasket([addedLater.id]);
+		await seedCart([addedLater.id]);
 
 		const piId = `pi_${uid()}`;
 		const session = fakeSessionFor(piId, { taxCents: 0 });
@@ -2044,7 +2044,7 @@ describe("Basket checkout — one charge, one card fee", () => {
 			});
 			expect((await sendWebhook(event)).status).toBe(200);
 
-			const holding = await req("/api/payments/basket", {
+			const holding = await req("/api/payments/cart", {
 				headers: { Origin: ORIGIN, Cookie: buyerCookie },
 			});
 			const remaining = (await holding.json()) as {
@@ -2056,11 +2056,11 @@ describe("Basket checkout — one charge, one card fee", () => {
 			).toEqual([addedLater.id]);
 
 			// And the ROWS are gone, not merely resolved away as owned — the completion is
-			// the basket's clean-up, and a row left behind would sit in the table forever.
+			// the cart's clean-up, and a row left behind would sit in the table forever.
 			const rows = await db
-				.select({ workId: basketItems.workId })
-				.from(basketItems)
-				.where(eq(basketItems.userId, buyerId));
+				.select({ workId: cartItems.workId })
+				.from(cartItems)
+				.where(eq(cartItems.userId, buyerId));
 			expect(rows.map((r) => r.workId)).toEqual([addedLater.id]);
 		} finally {
 			delete fake.responses["checkout.sessions.create"];
@@ -2068,10 +2068,10 @@ describe("Basket checkout — one charge, one card fee", () => {
 		}
 	});
 
-	it("refuses rather than charge twice when the basket's payment is already confirming", async () => {
+	it("refuses rather than charge twice when the cart's payment is already confirming", async () => {
 		// The webhook window: the buyer paid, the completion has not run, the rows are still
-		// pending. A second session here would charge the same basket again.
-		await seedBasket(
+		// pending. A second session here would charge the same cart again.
+		await seedCart(
 			items.map((i) => i.id),
 			{ fresh: true },
 		);
@@ -2081,19 +2081,19 @@ describe("Basket checkout — one charge, one card fee", () => {
 			client_secret: `${sessionId}_secret_test`,
 		};
 		try {
-			await basket(items.map((i) => i.id));
+			await cart(items.map((i) => i.id));
 			fake.responses["checkout.sessions.retrieve"] = {
 				id: sessionId,
 				object: "checkout.session",
 				status: "complete",
 				payment_status: "paid",
 				metadata: {
-					kind: "direct_purchase_basket",
+					kind: "direct_purchase_cart",
 					workIds: items.map((i) => i.id).join(","),
 					badgeIds: "",
 				},
 			};
-			const again = await basket(items.map((i) => i.id));
+			const again = await cart(items.map((i) => i.id));
 			expect(again.res.status).toBe(409);
 			expect((again.body as { error?: string }).error).toMatch(/being confirmed/i);
 			expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
@@ -2103,12 +2103,12 @@ describe("Basket checkout — one charge, one card fee", () => {
 		}
 	});
 
-	it("builds one session for the whole basket, one line per Work, each coded", async () => {
-		await seedBasket(
+	it("builds one session for the whole cart, one line per Work, each coded", async () => {
+		await seedCart(
 			items.map((i) => i.id),
 			{ fresh: true },
 		);
-		const { body } = await basket(items.map((i) => i.id));
+		const { body } = await cart(items.map((i) => i.id));
 		const params = fake.lastCall("checkout.sessions.create")
 			?.args[0] as Stripe.Checkout.SessionCreateParams;
 
@@ -2124,7 +2124,7 @@ describe("Basket checkout — one charge, one card fee", () => {
 				unit_amount?: number;
 			};
 		}[]) {
-			// The basket fixture is three games — downloaded software.
+			// The cart fixture is three games — downloaded software.
 			expect(line.price_data.product_data.tax_code).toBe("txcd_10201000");
 			expect(line.price_data.tax_behavior).toBe("exclusive");
 			expect(line.price_data.unit_amount).toBe(333);
@@ -2141,14 +2141,14 @@ describe("Basket checkout — one charge, one card fee", () => {
 
 		// 🚨 The split shape (Parker, 2026-10-15): the session charges the PLATFORM — no
 		// `transfer_data` rides it, because a destination charge names exactly one
-		// connected account and that constraint is what this basket used to be refused
+		// connected account and that constraint is what this cart used to be refused
 		// over. The creator's share moves at completion, as one transfer per creator
 		// funded by the charge, pinned in the completion tests below.
 		expect(
 			(params.payment_intent_data as { transfer_data?: unknown }).transfer_data,
 		).toBeUndefined();
-		// The earnings the response reports are still the whole basket's, on the sum —
-		// the fee is per charge, which is the entire point of the basket.
+		// The earnings the response reports are still the whole cart's, on the sum —
+		// the fee is per charge, which is the entire point of the cart.
 		const expected = calculateFees(new Decimal(UNIT).times(3), { type: "digital" });
 		expect(body.creatorEarnings).toBe(expected.creatorEarnings.toFixed(2));
 		// No tax figure in the response: the rate is resolved at the session.
@@ -2157,11 +2157,11 @@ describe("Basket checkout — one charge, one card fee", () => {
 	});
 
 	it("writes one purchase row per Work, keyed by the session, and they reconcile", async () => {
-		await seedBasket(
+		await seedCart(
 			items.map((i) => i.id),
 			{ fresh: true },
 		);
-		const { body } = await basket(items.map((i) => i.id));
+		const { body } = await cart(items.map((i) => i.id));
 		// The fake records call ARGS, not return values, so the session id comes back off
 		// the response's own client secret — `cs_xxx_secret_test`.
 		const sessionId = String(body.clientSecret).split("_secret")[0];
@@ -2212,9 +2212,9 @@ describe("Basket checkout — one charge, one card fee", () => {
 			downloadEnabled: true,
 			access: [{ threshold: 0, allow: true, price: "10.00" }],
 		});
-		await seedBasket([expensive.id, cheap.id], { fresh: true });
+		await seedCart([expensive.id, cheap.id], { fresh: true });
 
-		const { res, body } = await basket([], "quote");
+		const { res, body } = await cart([], "quote");
 		expect(res.status).toBe(200);
 		const lines = body.items as { processingFee: string; price: string }[];
 		expect(lines.map((line) => line.processingFee)).toEqual(["29.30", "0.29"]);
@@ -2230,18 +2230,18 @@ describe("Basket checkout — one charge, one card fee", () => {
 	});
 
 	it("carries two creators on one charge — the dealbreaker, fixed (2026-10-15)", async () => {
-		// The behavior this whole change exists to deliver: a basket holding two
+		// The behavior this whole change exists to deliver: a cart holding two
 		// creators' Works checks out as ONE session, ONE charge, and never wiped the
 		// first creator's items on the second creator's add. The add is the ordinary
 		// route now — no seeded-table hack, because the mixed state is no longer a race
 		// only SQL could produce.
-		await seedBasket([items[0].id, otherCreatorWorkId], { fresh: true });
-		const added = await req("/api/payments/basket", {
+		await seedCart([items[0].id, otherCreatorWorkId], { fresh: true });
+		const added = await req("/api/payments/cart", {
 			headers: { Origin: ORIGIN, Cookie: buyerCookie },
 		});
 		expect(((await added.json()) as { count: number }).count).toBe(2);
 
-		const { res, body } = await basket([]);
+		const { res, body } = await cart([]);
 		expect(res.status).toBe(200);
 		const params = fake.lastCall("checkout.sessions.create")
 			?.args[0] as Stripe.Checkout.SessionCreateParams;
@@ -2261,9 +2261,9 @@ describe("Basket checkout — one charge, one card fee", () => {
 		expect(new Set(rows.map((r) => r.creatorId)).size).toBe(2);
 	});
 
-	it("refuses the basket when either creator cannot take the money", async () => {
+	it("refuses the cart when either creator cannot take the money", async () => {
 		// The precondition, now per creator: Anthers does not sell a creator's work
-		// when the money cannot reach them, and a mixed basket asks for several
+		// when the money cannot reach them, and a mixed cart asks for several
 		// creators' money to move at once — every one of them must be reachable
 		// before the buyer is charged. A third creator with no connected account.
 		const { id: unconnected } = await signUp(`bskt_unconnected_${run}`);
@@ -2277,30 +2277,30 @@ describe("Basket checkout — one charge, one card fee", () => {
 				access: ODD,
 			})
 		).id;
-		await seedBasket([items[0].id, strandedWorkId], { fresh: true });
-		const { res, body } = await basket([]);
+		await seedCart([items[0].id, strandedWorkId], { fresh: true });
+		const { res, body } = await cart([]);
 		expect(res.status).toBe(409);
 		expect(body.error).toBe("This creator can't accept payments yet.");
 		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
 	});
 
 	it("quotes the saving without creating anything", async () => {
-		await seedBasket(
+		await seedCart(
 			items.map((i) => i.id),
 			{ fresh: true },
 		);
-		const { res, body } = await basket(
+		const { res, body } = await cart(
 			items.map((i) => i.id),
 			"quote",
 		);
 		expect(res.status).toBe(200);
 		expect(body.items).toHaveLength(3);
-		// The saving is what makes the basket legible, so it has to be real and positive.
+		// The saving is what makes the cart legible, so it has to be real and positive.
 		expect(new Decimal(body.creatorGains).greaterThan(0)).toBe(true);
 		expect(new Decimal(body.feeSeparately).greaterThan(new Decimal(body.processingFee))).toBe(true);
 		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
 
-		// Each line carries its own share of the ONE fee (the Basket card's receives
+		// Each line carries its own share of the ONE fee (the Cart card's receives
 		// tooltip names it), and the shares sum to the whole — apportioned, never
 		// recomputed per item.
 		const shares = body.items.reduce(
@@ -2310,9 +2310,9 @@ describe("Basket checkout — one charge, one card fee", () => {
 		expect(shares.toFixed(2)).toBe(body.processingFee);
 	});
 
-	it("refuses an empty basket", async () => {
-		await clearBasketDirect();
-		const { res } = await basket([]);
+	it("refuses an empty cart", async () => {
+		await clearCartDirect();
+		const { res } = await cart([]);
 		expect(res.status).toBe(400);
 	});
 });
@@ -2634,7 +2634,7 @@ describe("Checkout — what isn't for sale", () => {
 		// lane for a physical Work and no fulfillment mechanism for a service one, so a
 		// buyer would pay for a thing that never arrives — and there is no tax code that
 		// honestly describes an undelivered thing. `resolvePurchase` is the door both
-		// the single and the basket path go through, so both refuse.
+		// the single and the cart path go through, so both refuse.
 		for (const type of ["physical", "service"] as const) {
 			const work = await insertWork({
 				creatorId,
@@ -2672,7 +2672,7 @@ describe("Webhook: the Badge first transaction's completion", () => {
 	let issuerId = 0;
 	let rungId = 0;
 	let workCreatorId = 0;
-	let basketWorkId = 0;
+	let cartWorkId = 0;
 
 	beforeAll(async () => {
 		issuerId = (await signUp(`badge_issuer_${run}`)).id;
@@ -2706,11 +2706,11 @@ describe("Webhook: the Badge first transaction's completion", () => {
 			payoutsEnabled: true,
 			onboardingComplete: true,
 		});
-		basketWorkId = (
+		cartWorkId = (
 			await insertWork({
 				creatorId: workCreatorId,
 				type: "game",
-				title: `Badge basket work ${run}`,
+				title: `Badge cart work ${run}`,
 				streamEnabled: false,
 				downloadEnabled: true,
 				access: FOR_SALE,
@@ -2734,7 +2734,7 @@ describe("Webhook: the Badge first transaction's completion", () => {
 		return (await signUp(`badge_${name}_${run}`)).id;
 	}
 
-	/** One pending badge charge, keyed to a session — the state `.post("/basket/checkout")` leaves. */
+	/** One pending badge charge, keyed to a session — the state `.post("/cart/checkout")` leaves. */
 	async function pendingBadgeCharge(
 		buyer: number,
 		sessionId: string,
@@ -2884,7 +2884,7 @@ describe("Webhook: the Badge first transaction's completion", () => {
 		await db.insert(purchases).values([
 			{
 				buyerId: buyer,
-				workId: basketWorkId,
+				workId: cartWorkId,
 				creatorId: workCreatorId,
 				workTitle: "Mixed row A",
 				workType: "game",
@@ -2897,7 +2897,7 @@ describe("Webhook: the Badge first transaction's completion", () => {
 			},
 			{
 				buyerId: buyer,
-				workId: basketWorkId,
+				workId: cartWorkId,
 				creatorId: workCreatorId,
 				workTitle: "Mixed row B",
 				workType: "game",
@@ -3040,7 +3040,7 @@ describe("Webhook: the Badge first transaction's completion", () => {
 });
 
 /**
- * The badge checkout surfaces — quote, basket checkout, buy-now — at the route level,
+ * The badge checkout surfaces — quote, cart checkout, buy-now — at the route level,
  * against the same recording fake: what the session was built WITH is the whole test.
  */
 describe("The badge checkout routes", () => {
@@ -3085,7 +3085,7 @@ describe("The badge checkout routes", () => {
 		delete fake.responses["subscriptions.retrieve"];
 	});
 
-	it("🚨 buy-now builds the one-line session: the rung's Product, the full fee pinned, the saved card — and the basket untouched", async () => {
+	it("🚨 buy-now builds the one-line session: the rung's Product, the full fee pinned, the saved card — and the cart untouched", async () => {
 		const res = await req("/api/payments/badges/checkout", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
@@ -3125,22 +3125,22 @@ describe("The badge checkout routes", () => {
 		expect(new Decimal(row.processingFee).toFixed(2)).toBe(cardFee(6).toFixed(2));
 		expect(row.billingCycle).toBe(cycleKeyFor(new Date()));
 
-		// Buy-now bypassed the basket: whatever the buyer had parked is still parked.
-		// (This buyer parked nothing; the invariant is the route never calls clearBasket —
+		// Buy-now bypassed the cart: whatever the buyer had parked is still parked.
+		// (This buyer parked nothing; the invariant is the route never calls clearCart —
 		// asserted by the counts below.)
-		const after = await req("/api/payments/basket", { headers: { Cookie: cookie } });
+		const after = await req("/api/payments/cart", { headers: { Cookie: cookie } });
 		expect(((await after.json()) as { count: number }).count).toBe(0);
 	});
 
 	it("🚨 quotes the badge line with the first transaction's price beside the monthly one", async () => {
-		const add = await req("/api/payments/basket/items", {
+		const add = await req("/api/payments/cart/items", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 			body: JSON.stringify({ badgeId: issuerRungId }),
 		});
 		expect(add.status).toBe(200);
 
-		const res = await req("/api/payments/basket/quote", {
+		const res = await req("/api/payments/cart/quote", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 			body: "{}",
@@ -3177,8 +3177,8 @@ describe("The badge checkout routes", () => {
 		expect(quote.creators[0].itemCount).toBe(1);
 		expect(quote.creators[0].receives).toBe("5.53");
 
-		// And the basket read answers the same shape the page renders from.
-		const read = await req("/api/payments/basket", { headers: { Cookie: cookie } });
+		// And the cart read answers the same shape the page renders from.
+		const read = await req("/api/payments/cart", { headers: { Cookie: cookie } });
 		const items = (
 			(await read.json()) as {
 				items: { kind: string; badgeId?: number; recurring?: string | null; price: string }[];
@@ -3189,8 +3189,8 @@ describe("The badge checkout routes", () => {
 		expect(items[0].recurring).toBe("6.00");
 	});
 
-	it("🚨 carries the badge line into the basket checkout — and saves the card, because a renewal awaits and nothing else does", async () => {
-		const res = await req("/api/payments/basket/checkout", {
+	it("🚨 carries the badge line into the cart checkout — and saves the card, because a renewal awaits and nothing else does", async () => {
+		const res = await req("/api/payments/cart/checkout", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 			body: "{}",
@@ -3208,11 +3208,11 @@ describe("The badge checkout routes", () => {
 		// purchase checkout may leave a card behind for.
 		expect(params.payment_intent_data?.setup_future_usage).toBe("off_session");
 		const metadata = params.payment_intent_data?.metadata as Record<string, string>;
-		expect(metadata.kind).toBe("direct_purchase_basket");
+		expect(metadata.kind).toBe("direct_purchase_cart");
 		expect(metadata.badgeIds).toBe(String(issuerRungId));
 
 		// The money's record is the Badge-charge row, keyed to the session the fake minted —
-		// still pending until the completion stamps it, whatever the basket does.
+		// still pending until the completion stamps it, whatever the cart does.
 		const [row] = await db
 			.select()
 			.from(badgeCharges)
@@ -3221,20 +3221,20 @@ describe("The badge checkout routes", () => {
 			.limit(1);
 		expect(row.status).toBe("pending");
 
-		// 🚨 The basket survives building the charge (Parker, 2026-10-19): the line stays
+		// 🚨 The cart survives building the charge (Parker, 2026-10-19): the line stays
 		// until the purchase completes, so leaving this page and coming back still shows
 		// what the buyer chose. The clear below is this describe's own housekeeping — the
-		// tests that follow share this buyer's basket — not a behavior under test.
-		const kept = await req("/api/payments/basket", { headers: { Cookie: cookie } });
+		// tests that follow share this buyer's cart — not a behavior under test.
+		const kept = await req("/api/payments/cart", { headers: { Cookie: cookie } });
 		expect(((await kept.json()) as { count: number }).count).toBe(1);
-		const cleared = await req("/api/payments/basket", {
+		const cleared = await req("/api/payments/cart", {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: cookie },
 		});
 		expect(cleared.status).toBe(200);
 	});
 
-	it("never saves a card on a plain works-only basket — the 2026-10-06 posture, not the badge's", async () => {
+	it("never saves a card on a plain works-only cart — the 2026-10-06 posture, not the badge's", async () => {
 		const fresh = await signUp(`route_work_buyer_${run}`);
 		const work = await insertWork({
 			creatorId: issuerId2,
@@ -3244,13 +3244,13 @@ describe("The badge checkout routes", () => {
 			downloadEnabled: true,
 			access: FOR_SALE,
 		});
-		await req("/api/payments/basket/items", {
+		await req("/api/payments/cart/items", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: fresh.cookie },
 			body: JSON.stringify({ workId: work.id }),
 		});
 
-		const res = await req("/api/payments/basket/checkout", {
+		const res = await req("/api/payments/cart/checkout", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: fresh.cookie },
 			body: "{}",

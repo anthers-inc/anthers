@@ -15,7 +15,7 @@ describe("robotsTxt", () => {
 	});
 
 	it("keeps the app's own surfaces out", () => {
-		for (const path of ["/studio", "/settings", "/basket", "/login", "/signup", "/api/"]) {
+		for (const path of ["/studio", "/settings", "/cart", "/login", "/signup", "/api/"]) {
 			expect(policy).toContain(`Disallow: ${path}`);
 		}
 	});
@@ -42,7 +42,7 @@ describe("sitemapXml", () => {
 	});
 
 	it("leaves the doors and the app out", () => {
-		for (const path of ["/login", "/signup", "/studio", "/basket"]) {
+		for (const path of ["/login", "/signup", "/studio", "/cart"]) {
 			expect(xml).not.toContain(`${ORIGIN}${path}<`);
 		}
 	});

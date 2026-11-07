@@ -5,7 +5,7 @@ import { useAuth } from "@anthers/web-shared/auth";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { mergeIntoServerBasket } from "../lib/basket";
+import { mergeIntoServerCart } from "../lib/cart";
 
 /**
  * Where an ATProto round trip lands (route: `/auth/atproto/callback`).
@@ -70,10 +70,10 @@ export default function ATProtoCallbackPage() {
 		// components on auth state — so it is the last thing before navigating, and nothing
 		// may be queued after. The same ordering bug cost `/signup` a real defect.
 		if (success === "login") {
-			// The anonymous scratch basket folds into the account's server-side basket
+			// The anonymous scratch cart folds into the account's server-side cart
 			// first — before the refresh that unmounts this page. A failed merge keeps the
-			// scratch for a later attempt rather than dropping the buyer's filled basket.
-			mergeIntoServerBasket()
+			// scratch for a later attempt rather than dropping the buyer's filled cart.
+			mergeIntoServerCart()
 				.catch(() => {})
 				.finally(() => {
 					// Every account carries its handle from creation now — there is no usernameless

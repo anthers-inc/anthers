@@ -85,7 +85,7 @@ export async function recordDisputeCreated(dispute: Stripe.Dispute): Promise<voi
 	const chargeId = refId(dispute.charge);
 
 	/**
-	 * The purchase path. 🚨 **Every** row on the intent, not the first — a basket puts
+	 * The purchase path. 🚨 **Every** row on the intent, not the first — a cart puts
 	 * several purchases on one charge, and a chargeback takes the whole charge, so every
 	 * item's access goes. The `completed` predicate is the idempotency latch: a refunded
 	 * sibling is left alone, and a redelivered event finds nothing to flip.

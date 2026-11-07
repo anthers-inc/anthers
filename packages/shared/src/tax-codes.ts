@@ -28,7 +28,7 @@ export type { WorkType };
 /**
  * The Stripe product tax code for a Work of `type`, or null when that type is not sold.
  *
- * Pure, so the checkout path, the basket path and the tests all read the one mapping — the
+ * Pure, so the checkout path, the cart path and the tests all read the one mapping — the
  * posture is a table, and a table that lives in more than one place is two tables the moment
  * one of them changes.
  */

@@ -25,12 +25,12 @@ export type AppMode = "user" | "studio";
 
 /**
  * The pages that belong to user mode, so that arriving on one leaves the Studio. The account
- * menu's pages are here, and so is the basket, because each is about the person as a user.
+ * menu's pages are here, and so is the cart, because each is about the person as a user.
  *
  * `/purchases` is not among them any more (2026-10-23): Badges and Purchases is a tab on
  * `/settings`, and the old address is a redirect that resolves to it.
  */
-const USER_PATHS = ["/network", "/library", "/discovery", "/basket", "/settings"] as const;
+const USER_PATHS = ["/network", "/library", "/discovery", "/cart", "/settings"] as const;
 
 const MODE_KEY = "anthers_mode";
 

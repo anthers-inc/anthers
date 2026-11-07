@@ -70,7 +70,7 @@ describe("the default-tab preference", () => {
 	it("refuses a tab the nav does not have", async () => {
 		// The ids are the client's nav vocabulary; the schema's enum is that refusal. The
 		// retired tab is in that set: it is a redirect now, not a place to open on.
-		expect((await patchMe({ homeDefaultTab: "basket" })).status).toBe(400);
+		expect((await patchMe({ homeDefaultTab: "cart" })).status).toBe(400);
 		expect((await patchMe({ homeDefaultTab: "network" })).status).toBe(400);
 	});
 

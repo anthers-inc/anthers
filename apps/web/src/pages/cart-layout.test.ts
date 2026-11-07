@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Two-column basket layout — the second checkout's layout change (2026-10-03).
+ * Two-column cart layout — the second checkout's layout change (2026-10-03).
  *
  * The first live checkout filled a `max-w-2xl` single column; the page's horizontal space
  * went unused and every part of the flow read as a thin strip. The layout contract:
@@ -21,17 +21,17 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const source = readFileSync(join(import.meta.dir, "BasketPage.tsx"), "utf8");
+const source = readFileSync(join(import.meta.dir, "CartPage.tsx"), "utf8");
 
-describe("the basket page's two-column layout", () => {
+describe("the cart page's two-column layout", () => {
 	it("widens the page container beyond the old single-column width", () => {
-		// The EMPTY basket's state keeps max-w-2xl deliberately (a centered empty state
+		// The EMPTY cart's state keeps max-w-2xl deliberately (a centered empty state
 		// reads right); only the FILLED page's container was widened — so the assertion
 		// anchors on the max-width that only the filled layout carries, and the retired
 		// one-column width must not sit beside the page's own container class where the
 		// two-column contract lives.
 		expect(source).not.toMatch(/max-w-2xl px-4 py-8/);
-		expect(source, "the basket page lost its widened container").toContain("max-w-6xl px-4 py-8");
+		expect(source, "the cart page lost its widened container").toContain("max-w-6xl px-4 py-8");
 	});
 
 	it("grids into two columns at lg", () => {
@@ -51,33 +51,33 @@ describe("the basket page's two-column layout", () => {
 		// Flip day: the checkout (form) column was visually right since the two-column
 		// layout landed; Parker turned it around the next day — the form belongs left,
 		// the pricing right. At `lg` the checkout is order-1 and the items order-2.
-		expect(source).toMatch(/className="order-3 lg:order-1" data-testid="basket-checkout-column"/);
-		expect(source).toMatch(/className="order-1 lg:order-2[^"]*" data-testid="basket-items-column"/);
+		expect(source).toMatch(/className="order-3 lg:order-1" data-testid="cart-checkout-column"/);
+		expect(source).toMatch(/className="order-1 lg:order-2[^"]*" data-testid="cart-items-column"/);
 		// And the old right-side placement of the checkout column is gone.
-		expect(source).not.toContain('order-3 lg:order-2" data-testid="basket-checkout-column"');
+		expect(source).not.toContain('order-3 lg:order-2" data-testid="cart-checkout-column"');
 	});
 
 	it("keeps the checkout and its column locatable — the e2e specs anchor on these", () => {
-		expect(source).toContain('data-testid="basket-checkout-column"');
-		expect(source).toContain('data-testid="basket-items-column"');
-		expect(source).toContain('data-testid="basket-items"');
+		expect(source).toContain('data-testid="cart-checkout-column"');
+		expect(source).toContain('data-testid="cart-items-column"');
+		expect(source).toContain('data-testid="cart-items"');
 	});
 
-	it("splits the pricing into a Payment card and a Basket card (2026-10-06)", () => {
+	it("splits the pricing into a Payment card and a Cart card (2026-10-06)", () => {
 		// 2026-10-06 (Parker): the receipt became TWO cards in the right column —
-		// Payment (subtotal + Sales Tax − discounts = Total) and Basket (the items
+		// Payment (subtotal + Sales Tax − discounts = Total) and Cart (the items
 		// grouped by creator, the receives headline at the top of the group). The card
 		// fee belongs to NEITHER card's buyer-facing total: it is the price's cost,
 		// named in the receives line's tooltip. Asserted on the JSX text nodes with
 		// surrounding punctuation so commentary cannot satisfy them.
 		expect(source).toContain("Payment");
-		expect(source).toContain('data-testid="basket-card"');
-		const paymentIdx = source.indexOf('data-testid="basket-receipt"');
-		const cardIdx = source.indexOf('data-testid="basket-card"');
+		expect(source).toContain('data-testid="cart-card"');
+		const paymentIdx = source.indexOf('data-testid="cart-receipt"');
+		const cardIdx = source.indexOf('data-testid="cart-card"');
 		// The tax line, by contrast, belongs to the Payment card — before its Total.
 		const taxIdx = source.indexOf("sessionTotals?.tax ?? 0");
-		const totalIdx = source.indexOf('data-testid="basket-total"');
-		// The receives figure headlines every one of the Basket card's creator groups —
+		const totalIdx = source.indexOf('data-testid="cart-total"');
+		// The receives figure headlines every one of the Cart card's creator groups —
 		// one per creator since the 2026-10-15 split, each read off the quote's
 		// server-computed group figure rather than derived here.
 		const earnsIdx = source.indexOf("group.receives");
@@ -85,7 +85,7 @@ describe("the basket page's two-column layout", () => {
 		expect(cardIdx).toBeGreaterThan(-1);
 		expect(taxIdx).toBeGreaterThan(-1);
 		expect(taxIdx).toBeLessThan(totalIdx);
-		// The receives figure headlines the Basket card's creator groups.
+		// The receives figure headlines the Cart card's creator groups.
 		expect(earnsIdx).toBeGreaterThan(cardIdx);
 		// The card fee's own line is gone from the page — it is tooltip material now.
 		expect(source).not.toContain("Card processing");

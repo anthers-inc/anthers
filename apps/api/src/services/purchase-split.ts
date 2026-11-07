@@ -5,7 +5,7 @@
  *
  * 🚨 **Purchases are platform charges, not destination charges.** A destination charge
  * pinned the creator's transfer inside the charge (`transfer_data[amount]`), which names
- * exactly one connected account — the constraint that forced the one-creator basket. The
+ * exactly one connected account — the constraint that forced the one-creator cart. The
  * split decision removed the constraint rather than accepting it: the buyer is charged
  * once, to the platform, and each distinct creator's share moves out **at completion** as
  * one transfer funded by the charge (`source_transaction`), for the exact sum of that

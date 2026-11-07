@@ -517,10 +517,10 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 }
 
 // ── The purchase rung ────────────────────────────────────────────────────────
-test("rung 5 — purchases go through the basket, and only a purchase unlocks the download", async ({
+test("rung 5 — purchases go through the cart, and only a purchase unlocks the download", async ({
 	page,
 }) => {
-	// The basket's session POST answers 503 in the browser session (no Stripe key in this
+	// The cart's session POST answers 503 in the browser session (no Stripe key in this
 	// harness — the real charge belongs to the Stripe walk), and Chromium logs every non-2xx
 	// response as a console error. That one refusal IS the state under test; anything else
 	// is not.
@@ -529,7 +529,7 @@ test("rung 5 — purchases go through the basket, and only a purchase unlocks th
 	// Even from the very top of the ladder, the purchase rung still quotes its price — asserted by
 	// every row so far. The Work page shows the price and NOTHING that takes it: no
 	// payment form of any kind (Parker, 2026-10-03 — every purchase goes through the
-	// basket, and the basket is where the money moves).
+	// cart, and the cart is where the money moves).
 	await page.goto(`/works/${walkPost(BUY).slug}`);
 	await expect(page.getByRole("heading", { name: "Pricing" })).toBeVisible();
 	await expect(page.locator("iframe[src*='stripe.com']")).toHaveCount(0);
@@ -538,7 +538,7 @@ test("rung 5 — purchases go through the basket, and only a purchase unlocks th
 	// The buy door itself can only render once the creator has connected Stripe, which is
 	// the fixture's own posture (the gauntlet creator is connect-less; seeding real
 	// Connect state is `GAUNTLET_STRIPE_ACCOUNT`'s business, unwalked here). The door
-	// WITH the checkout behind it is walked in `basket-checkout-flow.authed.e2e.ts`.
+	// WITH the checkout behind it is walked in `cart-checkout-flow.authed.e2e.ts`.
 	// Now the hop: the completed purchase the payment webhook would have written (the
 	// real charge belongs to the Stripe walk).
 	hop("--purchase", walkPost(BUY).slug);

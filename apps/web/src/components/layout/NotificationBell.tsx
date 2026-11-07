@@ -2,7 +2,7 @@
 /**
  * The bell — the header's way into the notifications feed, wearing the unread count.
  *
- * 🚨 **Rendered the way the basket is: only when it has something behind it.** A bell
+ * 🚨 **Rendered the way the cart is: only when it has something behind it.** A bell
  * with a `0` badge is furniture; the header is tight on mobile and a permanent control
  * that answers "nothing has happened" belongs behind something that has. **The first
  * notification opens it, and from then on it stays** — so the test is `total > 0`, not

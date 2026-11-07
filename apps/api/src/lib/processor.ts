@@ -125,9 +125,9 @@ export function listCheckoutSessions(
 }
 
 /**
- * Mirrors `stripe.checkout.sessions.retrieve` — one session by id, the read the basket
+ * Mirrors `stripe.checkout.sessions.retrieve` — one session by id, the read the cart
  * uses to decide whether the session an abandoned checkout left behind is still open
- * and still carrying the basket the buyer is looking at.
+ * and still carrying the cart the buyer is looking at.
  */
 export async function retrieveCheckoutSession(id: string): Promise<Stripe.Checkout.Session | null> {
 	return (await getStripe()?.checkout.sessions.retrieve(id)) ?? null;
@@ -135,7 +135,7 @@ export async function retrieveCheckoutSession(id: string): Promise<Stripe.Checko
 
 /**
  * Mirrors `stripe.checkout.sessions.expire` — closes an open session so nobody can pay
- * it after the basket it was built from has changed. A session that is already complete
+ * it after the cart it was built from has changed. A session that is already complete
  * or expired refuses here; the caller reads that as "nothing left to close".
  */
 export async function expireCheckoutSession(id: string): Promise<Stripe.Checkout.Session | null> {

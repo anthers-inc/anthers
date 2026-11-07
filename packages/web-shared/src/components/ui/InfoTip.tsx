@@ -7,7 +7,7 @@
  * share it rather than copying it.
  *
  * Shared here after living on `/subscription`, which still renders its own ladder copy
- * through it: the basket's Payment and creator cards ask the same question — show me how
+ * through it: the cart's Payment and creator cards ask the same question — show me how
  * this number was built — so the control is one control. A button rather than a bare
  * span, so the tip opens on focus as well as on hover and reads as `aria-describedby`
  * rather than vanishing on a keyboard pass.
