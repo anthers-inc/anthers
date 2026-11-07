@@ -185,33 +185,61 @@ function publishServer(next: ServerBasket | null) {
 	for (const fn of serverListeners) fn(next);
 }
 
-/** Ask the server for the account's basket, and publish it. */
-async function loadServer(): Promise<void> {
+/**
+ * A bump for every write that changes the server's basket. A read that started before the
+ * write must not publish over it: the optimistic empty basket after a purchase is correct,
+ * and the pre-clear GET still in flight is not.
+ */
+let serverGeneration = 0;
+
+/** Ask the server for the account's basket, and publish it if no write overtook the read. */
+async function loadServer(generation: number): Promise<void> {
 	try {
 		const res = await client.api.payments.basket.$get();
+		if (generation !== serverGeneration) return;
 		if (!res.ok) {
 			publishServer(null);
 			return;
 		}
 		const body = (await res.json()) as unknown as { items: ServerItem[] };
+		if (generation !== serverGeneration) return;
 		publishServer({ items: body.items });
 	} catch {
-		publishServer(null);
+		if (generation === serverGeneration) publishServer(null);
 	}
 }
 
 /**
  * Refresh the server basket NOW, deduplicated — every caller in one tick shares the fetch,
  * the way `refreshLibrary` works.
+ *
+ * ⚠️ **A refresh asked for while one is in flight is queued, never dropped.** The purchase
+ * completion asks for one immediately after clearing, and the clear's own DELETE can land
+ * behind a read that started before it; dropping the second request left the pre-clear
+ * answer as the last word and the header count stale.
  */
 export function refreshServerBasket(): void {
-	if (loadInFlight) return;
-	loadInFlight = loadServer().finally(() => {
+	if (loadInFlight) {
+		reloadQueued = true;
+		return;
+	}
+	const generation = serverGeneration;
+	loadInFlight = loadServer(generation).finally(() => {
 		loadInFlight = null;
+		if (reloadQueued) {
+			reloadQueued = false;
+			refreshServerBasket();
+		}
 	});
 }
 
 let loadInFlight: Promise<void> | null = null;
+let reloadQueued = false;
+
+/** Invalidate any read in flight, because a write has just changed what the server holds. */
+function beginServerWrite(): void {
+	serverGeneration += 1;
+}
 
 /**
  * Merge the anonymous scratch basket into the account's basket and clear the scratchpad.
@@ -226,6 +254,7 @@ let loadInFlight: Promise<void> | null = null;
 export async function mergeIntoServerBasket(): Promise<void> {
 	const scratch = read();
 	if (scratch.length > 0) {
+		beginServerWrite();
 		const res = await client.api.auth.basket.merge.$post({
 			json: { items: scratch.map((i) => ({ workId: i.workId })) },
 		});
@@ -294,6 +323,24 @@ export function useBasket(): BasketApi {
 		};
 	}, [authenticated]);
 
+	// 🚨 **The webhook can empty the server basket after the buyer left the checkout**, and
+	// a second tab can complete a purchase this tab never saw. Neither writes through this
+	// tab's module cache, so a tab coming back into view re-reads instead of trusting a
+	// cache that only reloads with the page. This is the half that makes the header count
+	// correct for a completion that did not happen on this page.
+	useEffect(() => {
+		if (!authenticated) return;
+		const reconcile = () => {
+			if (document.visibilityState === "visible") refreshServerBasket();
+		};
+		window.addEventListener("focus", reconcile);
+		document.addEventListener("visibilitychange", reconcile);
+		return () => {
+			window.removeEventListener("focus", reconcile);
+			document.removeEventListener("visibilitychange", reconcile);
+		};
+	}, [authenticated]);
+
 	// Signing out ends this tab's knowledge of the account's basket. Dropping the module
 	// cache is what stops the NEXT account signing in on this tab from rendering the last
 	// one's basket until its own fetch lands — the cross-account leak the server-side move
@@ -351,6 +398,7 @@ const SERVER_API = {
 		// is the server's resolution (a delta, known nowhere on the client), and the POST
 		// answers with the resolved basket anyway — showing a guessed price for the half
 		// second the POST takes would be a wrong number, which is worse than a spinner.
+		beginServerWrite();
 		if (item.kind === "badge") {
 			try {
 				const res = await client.api.payments.basket.items.$post({
@@ -412,6 +460,7 @@ const SERVER_API = {
 		quantity?: number;
 		options?: Array<{ name: string; label: string }>;
 	}) {
+		beginServerWrite();
 		const prev = serverCurrent;
 		// Optimistic, like the add: the stepper moves at once and the server's answer
 		// replaces the cache. A refusal (a count past the shelf) rolls back and says why,
@@ -450,6 +499,7 @@ const SERVER_API = {
 		}
 	},
 	async remove(id: { kind: "work"; workId: number } | { kind: "badge"; badgeId: number }) {
+		beginServerWrite();
 		const prev = serverCurrent;
 		if (prev)
 			publishServer({
@@ -475,6 +525,7 @@ const SERVER_API = {
 		refreshServerBasket();
 	},
 	async clear() {
+		beginServerWrite();
 		const prev = serverCurrent;
 		publishServer({ items: [] });
 		try {
