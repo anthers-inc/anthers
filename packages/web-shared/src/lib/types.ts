@@ -1296,6 +1296,8 @@ export interface AccountResponse {
 	anthersSupport: number;
 	badge: Badge;
 	badgeView: BadgeView;
+	/** The card a subscription change or a first Badge charges, when the account has one. */
+	savedCard?: { id: string; brand: string; last4: string } | null;
 }
 
 export interface AttentionSummary {

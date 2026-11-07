@@ -681,6 +681,19 @@ const subscriptionRoutes = new Hono()
 		const anthersSupport = await heldAnthersBadgeAmount(user.id);
 		const badge = heldBadgeName(anthersSupport);
 		const badgeView = badgeViewFor(anthersSupport);
+		// The card a plan change or a first Badge will charge. Read here rather than only
+		// in the preview route: the Badge cards open the same modal for a directed change,
+		// and a change must not fall back to asking for a card the account already has.
+		let savedCard: { id: string; brand: string; last4: string } | null = null;
+		if (acct?.stripeCustomerId) {
+			const pms = await listCardPaymentMethods({
+				customer: acct.stripeCustomerId,
+				type: "card",
+				limit: 1,
+			});
+			const pm = pms?.data[0];
+			if (pm?.card) savedCard = { id: pm.id, brand: pm.card.brand, last4: pm.card.last4 };
+		}
 
 		if (!acct) {
 			return c.json({
@@ -697,6 +710,7 @@ const subscriptionRoutes = new Hono()
 				// BadgeKey at all.
 				badge,
 				badgeView,
+				savedCard,
 			});
 		}
 
@@ -705,6 +719,7 @@ const subscriptionRoutes = new Hono()
 			anthersSupport,
 			badge,
 			badgeView,
+			savedCard,
 		});
 	})
 

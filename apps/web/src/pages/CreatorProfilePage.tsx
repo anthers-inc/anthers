@@ -149,7 +149,6 @@ export default function CreatorProfilePage() {
 
 	// ?tab=badges is a real entry point, not a nicety: a locked post's unlock panel sends the
 	// user here to act, and dropping them on the default tab loses the intent they arrived with.
-	// ?badge= beside it is the pick carried back across a sign-in detour from the same tab.
 	//
 	// ⭐ **Everyone lands on All Content** (Parker, 2026-11-06): the Dashboard tab is gone, so
 	// the creator's own profile and a visitor's open on the same timeline. The old
@@ -157,9 +156,6 @@ export default function CreatorProfilePage() {
 	const tabParam = searchParams.get("tab") as Tab | null;
 	const defaultTab: Tab = "all";
 	const tab: Tab = tabParam && TABS.includes(tabParam) ? tabParam : defaultTab;
-	const badgeParam = Number.isFinite(Number(searchParams.get("badge")))
-		? searchParams.get("badge")
-		: null;
 	// The default tab is the one with no parameter, so the address bar names a choice only
 	// where the viewer has made one.
 	const setTab = (next: Tab) => {
@@ -962,10 +958,8 @@ export default function CreatorProfilePage() {
 							unlockedBadges={creatorStatus?.unlockedBadges ?? []}
 							heldAmount={creatorStatus?.badgeAmount ?? "0.00"}
 							creatorName={creator.displayName || creator.handle}
-							creatorHandle={creator.handle}
 							canBuy={!isOwnProfile}
 							authenticated={isAuthenticated === true}
-							preselectedBadgeId={badgeParam != null ? Number(badgeParam) : null}
 							isOwner={isOwnProfile}
 							onEdit={(badge) => setEditingBadgeId(badge.id)}
 							onAdd={() => setEditingBadgeId("new")}

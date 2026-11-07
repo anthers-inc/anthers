@@ -502,19 +502,18 @@ test("a composed Badge saves a shape and background change by recomposing", asyn
 });
 
 /**
- * The other half of the grid: a supporter picking a rung.
+ * The other half of the grid: a supporter's one action on a Badge card.
  *
- * ⭐ **The pick is the card's own action now**, and the picked card says so in the same
- * surface rather than in a list row beside it. The walker is the gauntlet's ordinary user
- * — signed in, giving nothing — so every rung above their amount is selectable and the
- * first pick is a plain selection with no subscription behind it.
+ * ⭐ **There is no selection step and no basket pair** (Parker, 2026-11-06): the card says
+ * Upgrade, and that opens the one subscription-change modal. The walker is the gauntlet's
+ * ordinary user — signed in, giving nothing — so the first rung is a plain upgrade.
  */
-test("a supporter picks a rung and the card carries the highlight", async ({ page, context }) => {
+test("a supporter's Badge card opens the upgrade modal", async ({ page, context }) => {
 	const errors = trackErrorsStrict(page);
 	const label = `E2E pick ${RUN}`;
 
 	// The rung belongs to the creator, so it is made with the creator's session, not the
-	// browser's — then the browser signs in as the supporter who picks it.
+	// browser's — then the browser signs in as the supporter who upgrades.
 	const creatorToken = await signInAsCreator(context);
 	const created = await fetch(`${API_URL}/api/subscriptions/badges`, {
 		method: "POST",
@@ -534,17 +533,19 @@ test("a supporter picks a rung and the card carries the highlight", async ({ pag
 
 	const card = page.locator("article").filter({ hasText: label });
 	await expect(card).toBeVisible();
-	await card.getByRole("button", { name: "Select" }).click();
+	await card.getByRole("button", { name: "Upgrade" }).click();
 
-	// The picked card wears "Selected" and the action card under the grid appears — the
-	// purchase itself stays on the basket's one checkout.
-	await expect(card.getByRole("button", { name: "Selected" })).toHaveAttribute(
-		"aria-pressed",
-		"true",
-	);
-	await expect(page.getByTestId("badge-pick-actions")).toBeVisible();
+	// The one modal, headed with the rung's name and the charge it is about to take.
+	const dialog = page.getByRole("dialog");
+	await expect(dialog.getByRole("heading", { name: `Give ${label}` })).toBeVisible({
+		timeout: 15_000,
+	});
+	await expect(dialog).toContainText("Charged today");
+	await dialog.getByRole("button", { name: "Cancel" }).click();
+	await expect(dialog).toBeHidden();
+
 	await page.getByTestId("badge-grid").screenshot({
-		path: `.screenshots/badge-grid-selected-${RUN}.png`,
+		path: `.screenshots/badge-grid-upgrade-${RUN}.png`,
 	});
 
 	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
