@@ -38,7 +38,8 @@ import {
 	sortProjectItems,
 } from "@anthers/shared/project-sort";
 import { Bars3Icon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useDragReorder } from "../../lib/drag-reorder";
 import { client } from "../../lib/rpc";
 import type { Project, ProjectWork, Work } from "../../lib/types";
 import LoadingSpinner from "../ui/LoadingSpinner";
@@ -67,8 +68,6 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 	// view on every render — nothing below ever writes `works` from a sort.
 	const [sortMode, setSortMode] = useState<ProjectSortMode>("manual");
 	const [sortDirection, setSortDirection] = useState<ProjectSortDirection>("asc");
-	/** Where the drag started, in the stored list's own indices; cleared on every end. */
-	const dragFrom = useRef<number | null>(null);
 
 	useEffect(() => {
 		let live = true;
@@ -208,6 +207,17 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 		}
 	};
 
+	const manual = sortMode === "manual";
+	const displayed = sortProjectItems(works, sortMode, sortDirection);
+	// Dragging is Manual's alone: in a saved reading order the displayed indices are not
+	// the stored ones, and the list is not an arrangement to edit.
+	const drag = useDragReorder<ProjectWork, HTMLUListElement>({
+		items: displayed,
+		keyOf: (work) => String(work.id),
+		onReorder: (from, to) => move(from, to),
+		disabled: !manual,
+	});
+
 	if (loading) {
 		return (
 			<div className="flex justify-center py-6">
@@ -215,9 +225,6 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 			</div>
 		);
 	}
-
-	const manual = sortMode === "manual";
-	const displayed = sortProjectItems(works, sortMode, sortDirection);
 
 	return (
 		<div className="space-y-3">
@@ -284,43 +291,24 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 
 			{/* The list names itself for the tests' role-targeting and for a screen reader
 			    over a page whose other lists (menus) are not this one. */}
-			<ul aria-label="Works on this Project" className="space-y-2">
-				{displayed.map((work, i) => {
+			<ul ref={drag.containerRef} aria-label="Works on this Project" className="space-y-2">
+				{drag.items.map((work, i) => {
 					const preview = itemPreviewUrl(work);
-					// Manual renders the stored array in stored order, so the displayed index is
-					// the stored index — the claim `move`'s comment rests on.
-					const storedIndex = manual ? i : works.findIndex((w) => w.id === work.id);
 					return (
 						<li
 							key={work.id}
-							className="flex items-center gap-3 rounded-lg border border-base-300 bg-base-100 p-2"
-							onDragOver={(e) => e.preventDefault()}
-							onDrop={(e) => {
-								e.preventDefault();
-								const from = dragFrom.current;
-								dragFrom.current = null;
-								if (from !== null && from !== storedIndex) void move(from, storedIndex);
-							}}
+							{...drag.itemProps(i)}
+							className={`flex items-center gap-3 rounded-lg border border-base-300 bg-base-100 p-2 transition-[opacity,box-shadow] ${
+								drag.isDragging(i) ? "opacity-40 ring-2 ring-primary/30" : ""
+							}`}
 						>
 							{/* The grip is the drag source a native HTML5 drag needs (the sidebar
 							    nav's pattern). Keyboard reorder is not built; the gap is named in
 							    the task. */}
 							<span
+								{...drag.handleProps(i)}
 								title={manual ? "Drag to reorder" : "Sorting is Manual's — switch back to drag"}
 								aria-hidden="true"
-								draggable={manual}
-								onDragStart={(e) => {
-									if (!manual) {
-										e.preventDefault();
-										return;
-									}
-									e.dataTransfer.effectAllowed = "move";
-									e.dataTransfer.setData("text/plain", String(work.id));
-									dragFrom.current = storedIndex;
-								}}
-								onDragEnd={() => {
-									dragFrom.current = null;
-								}}
 								className={
 									manual
 										? "cursor-grab px-1.5 text-base-content/25 hover:text-base-content/50 transition-colors self-stretch flex items-center active:cursor-grabbing"

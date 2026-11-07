@@ -98,6 +98,21 @@ function projectRows(page: import("@playwright/test").Page) {
 	return page.getByRole("list", { name: "Works on this Project" });
 }
 
+/**
+ * Carry one row onto another with the browser's own drag events, and return the transfer
+ * so the caller can finish with `dragover`, `drop` and `dragend`. Playwright's mouse
+ * gestures do not synthesize HTML5 drag data, so the events are dispatched with a real
+ * `DataTransfer` — which is also what lets the test assert the live preview between them.
+ */
+async function startDrag(
+	page: import("@playwright/test").Page,
+	grip: import("@playwright/test").Locator,
+) {
+	const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+	await grip.dispatchEvent("dragstart", { dataTransfer });
+	return dataTransfer;
+}
+
 test("the editor is the page: the creator finds the shelves, the sort and the pencil there", async ({
 	page,
 	context,
@@ -238,6 +253,58 @@ test("a chosen sort persists across visits and leaves the Manual order untouched
 	await expect(rows).toHaveText([zulu, bravo]);
 	await expect(projectRows(page).locator("span.cursor-grab")).toHaveCount(2);
 	await expect(direction).toBeDisabled();
+});
+
+test("a dragged row carries its preview and saves the new place", async ({ page, context }) => {
+	session = await signInAsMediaFixture(context);
+	await page.goto(`/@${handle}/${SLUG}`);
+
+	const zulu = `${TITLE_PREFIX} Zulu`;
+	const bravo = `${TITLE_PREFIX} Bravo`;
+	const rows = projectRows(page).locator("li");
+	const titles = rows.locator(".truncate");
+	await expect(titles).toHaveText([zulu, bravo]);
+
+	// Bravo comes up off its grip: the row marks itself as the one being carried, and the
+	// list makes way underneath the pointer before anything is written.
+	const transfer = await startDrag(page, rows.nth(1).locator("span.cursor-grab"));
+	await expect(rows.nth(1)).toHaveAttribute("data-dragging", "true");
+	await rows.nth(0).dispatchEvent("dragover", { dataTransfer: transfer });
+	await expect(titles).toHaveText([bravo, zulu]);
+
+	// The drop commits the preview — one reorder request with the new order, not one per
+	// hover — and the page keeps the arrangement.
+	const saved = page.waitForResponse(
+		(res) =>
+			res.url().includes(`/api/content/projects/${SLUG}/works/reorder`) &&
+			res.request().method() === "POST" &&
+			res.ok(),
+	);
+	await rows.nth(0).dispatchEvent("drop", { dataTransfer: transfer });
+	await rows
+		.nth(0)
+		.locator("span.cursor-grab")
+		.dispatchEvent("dragend", { dataTransfer: transfer });
+	await saved;
+	await expect(titles).toHaveText([bravo, zulu]);
+
+	// And it is the Project's stored order, not a local rearrangement.
+	await page.reload();
+	await expect(titles).toHaveText([bravo, zulu]);
+
+	// Put the suite's shared order back for whatever reads it next.
+	const back = await startDrag(page, rows.nth(1).locator("span.cursor-grab"));
+	await rows.nth(0).dispatchEvent("dragover", { dataTransfer: back });
+	const restored = page.waitForResponse(
+		(res) =>
+			res.url().includes(`/api/content/projects/${SLUG}/works/reorder`) &&
+			res.request().method() === "POST" &&
+			res.ok(),
+	);
+	await rows.nth(0).dispatchEvent("drop", { dataTransfer: back });
+	await rows.nth(0).locator("span.cursor-grab").dispatchEvent("dragend", { dataTransfer: back });
+	await restored;
+	await expect(titles).toHaveText([zulu, bravo]);
 });
 
 test("a stranger reaching the URL sees the project, and none of the editor", async ({

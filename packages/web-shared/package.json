@@ -32,6 +32,7 @@
 		"./sidebar": "./src/lib/sidebar.tsx",
 		"./motion": "./src/lib/motion.ts",
 		"./flip": "./src/lib/flip.ts",
+		"./drag-reorder": "./src/lib/drag-reorder.ts",
 		"./decor/BrandGlyph": "./src/components/decor/BrandGlyph.tsx",
 		"./decor/LineArt": "./src/components/decor/LineArt.tsx",
 		"./decor/MeadowBackdrop": "./src/components/decor/MeadowBackdrop.tsx",
