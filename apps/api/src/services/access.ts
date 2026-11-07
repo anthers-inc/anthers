@@ -47,6 +47,7 @@ import type { AccessRow } from "@anthers/db/schema";
 import { badges, purchases, userBadges } from "@anthers/db/schema";
 import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { amountMeets, supportAmount } from "@anthers/shared/constants";
+import { isPreRelease } from "@anthers/shared/content";
 import { requiresAdultVerification } from "@anthers/shared/content-rating";
 import {
 	NO_PARENTAL_CONTROLS,
@@ -111,6 +112,11 @@ export interface AccessibleWork {
 	 */
 	quarantineStatus: string;
 	/**
+	 * When this Work's page goes public ahead of the Work itself. Read only by the
+	 * pre-release wrapper below; null means the ordinary private state.
+	 */
+	preReleaseAt?: Date | string | null;
+	/**
 	 * The Work's type, one of `WORK_TYPES` in `@anthers/shared/content`.
 	 *
 	 * Read only by the **parental** rules, which are the one user-side restriction that
@@ -171,6 +177,13 @@ export interface AccessContext {
 	 * the same shape: what runs out belongs to the account, not to the Work.
 	 */
 	parental: ParentalPolicy;
+	/**
+	 * Read the Work's eventual access even while it is pre-release — the public listing
+	 * needs to say `open` or `gated`. Never set by a delivery path.
+	 */
+	ignorePreRelease?: boolean;
+	/** The instant pre-release is judged against; defaults to now. */
+	now?: number;
 }
 
 /**
@@ -252,6 +265,7 @@ export type AccessReason =
 	| "takedown"
 	| "quarantined"
 	| "adult_gated"
+	| "pre_release"
 	| "blocked_creator"
 	| "blocked_type";
 
@@ -424,7 +438,7 @@ export function unlockRoute(
  * *What Is Free, and What Is Gated* § Goods Are Never Locked, and the verdicts are
  * pinned in `goods-works-access.test.ts`.
  */
-export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): AccessResult {
+function resolveAccessBase(work: AccessibleWork, ctx: AccessContext): AccessResult {
 	const base = {
 		isFree: false,
 		requiresPurchase: false,
@@ -639,6 +653,40 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		price: money(min),
 		isEntitled,
 	};
+}
+
+/**
+ * Reasons pre-release may override. A pre-release Work's page is public, so what a
+ * visitor would otherwise meet — free, owned, a price, a gate, a login wall — is replaced
+ * by "coming soon". A hard denial is not: quarantine, a takedown, the Adult gate and a
+ * guardian's block all still make the page invisible, exactly as they make it invisible
+ * for every other Work.
+ */
+const PRE_RELEASE_OVERRIDABLE = new Set<AccessReason>([
+	"free",
+	"purchased",
+	"entitled",
+	"payment_required",
+	"gated",
+	"login_required",
+]);
+
+/**
+ * Resolve a Work's access, with the pre-release state applied on top.
+ *
+ * ⭐ **The state is a page state, and this is where the Work itself stays closed.** The
+ * base resolution still runs, so the eventual verdict — free, priced, gated — is carried
+ * on the answer for the page's coming-soon card (and for `publicAccessState`'s listing),
+ * but `canAccess` is forced false with `reason: "pre_release"` until the Work is released.
+ * Every delivery route and the purchase ladder read `canAccess`, so none of them needs a
+ * second pre-release check.
+ */
+export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): AccessResult {
+	const result = resolveAccessBase(work, ctx);
+	if (ctx.ignorePreRelease || result.reason === "owner") return result;
+	if (!isPreRelease(work, ctx.now ?? Date.now())) return result;
+	if (!PRE_RELEASE_OVERRIDABLE.has(result.reason)) return result;
+	return { ...result, canAccess: false, reason: "pre_release" };
 }
 
 /**

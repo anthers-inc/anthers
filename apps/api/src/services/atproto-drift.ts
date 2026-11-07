@@ -275,6 +275,8 @@ export async function driftReport(
 			slug: works.slug,
 			publicId: works.publicId,
 			releasedAt: works.releasedAt,
+			preReleaseAt: works.preReleaseAt,
+			scheduledReleaseAt: works.scheduledReleaseAt,
 			originallyReleased: works.originallyReleased,
 			visibility: works.visibility,
 			takedownStatus: works.takedownStatus,

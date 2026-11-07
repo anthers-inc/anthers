@@ -29,9 +29,24 @@ type Main = { $type: "org.anthers.work";
   "url":l.UriString;
 
   /**
-   * When the work was released to the public here. This is the listing's own release date; where the work first came out somewhere else earlier, `originallyReleased` carries that. Record-creation time is already encoded in the record key, so a separate field for it would be a second, weaker answer to a question the key already answers.
+   * Whether this listing is for a work that is out, or for one whose page is public ahead of its release. Absence means `released`, which is what every record written before this field existed means; a pre-release listing always states it.
    */
-  "releasedAt":l.DatetimeString;
+  "status"?:"pre_release" | "released" | l.UnknownString;
+
+  /**
+   * When this work's page became public ahead of the work itself. Present only on a pre-release listing. It is not a release date: the work cannot be bought, downloaded, streamed or reviewed from this page, and `releasedAt` stays absent until it can.
+   */
+  "preReleaseAt"?:l.DatetimeString;
+
+  /**
+   * When the work is planned to be released, while it is in pre-release. A plan, not a fact: it can move or be cleared, which is why it is not `releasedAt`. Present only when the creator scheduled a release date.
+   */
+  "plannedReleaseAt"?:l.DatetimeString;
+
+  /**
+   * When the work was released to the public here. This is the listing's own release date; where the work first came out somewhere else earlier, `originallyReleased` carries that. Required on a released listing, absent on a pre-release one. Record-creation time is already encoded in the record key, so a separate field for it would be a second, weaker answer to a question the key already answers.
+   */
+  "releasedAt"?:l.DatetimeString;
 
   /**
    * When the work first came out, anywhere — asserted by its creator and optional. A companion to `releasedAt`, not a second meaning of it: Anthers is often not the first place a work came out, so this carries the earlier release (released here in 2026, first put out in 2021), and it is not when the work was made, which has several candidate answers where a release has a definite and often verifiable one. Only the date is recorded, so a creator who knows the year alone picks a date; the record never pretends to know more than it was told. Absent when the work first came out here, which `releasedAt` already answers.
@@ -51,7 +66,7 @@ type Main = { $type: "org.anthers.work";
 export type { Main };
 
 /** One entry in a creator's Catalog — a game, video, album, essay, or other work they have released. This record is the public LISTING for that work: it says what the work is and where to reach it, and it never carries the work itself. It exists only while the work is publicly listed, and whether a particular person may open the work is decided by the service hosting it, never by this record. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","music","audio","image","comic","ebook","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri"}),"releasedAt":/*#__PURE__*/ l.string({"format":"datetime"}),"originallyReleased":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"datetime"})),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Access>((() => access) as any)),"credits":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.array(/*#__PURE__*/ l.ref<Credit>((() => credit) as any), {"maxLength":100}))}));
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","music","audio","image","comic","ebook","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri"}),"status":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string<{"knownValues":["pre_release","released"],"maxLength":32}>({"maxLength":32})),"preReleaseAt":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"datetime"})),"plannedReleaseAt":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"datetime"})),"releasedAt":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"datetime"})),"originallyReleased":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"datetime"})),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Access>((() => access) as any)),"credits":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.array(/*#__PURE__*/ l.ref<Credit>((() => credit) as any), {"maxLength":100}))}));
 
 export { main };
 

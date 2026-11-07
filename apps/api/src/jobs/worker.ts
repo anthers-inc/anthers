@@ -424,10 +424,10 @@ async function start() {
 
 	await queue.work(QUEUES.RELEASE_SCHEDULED, async (jobs) => {
 		for (const job of jobs) {
-			const { released, cleared } = await releaseScheduled();
+			const { released, cleared, preReleased } = await releaseScheduled();
 			if (released > 0 || cleared > 0) {
 				console.log(
-					`[release-scheduled] job ${job.id}: released ${released}, cleared ${cleared} schedule(s)`,
+					`[release-scheduled] job ${job.id}: released ${released}, cleared ${cleared} schedule(s), ${preReleased} pre-release page(s)`,
 				);
 			}
 		}

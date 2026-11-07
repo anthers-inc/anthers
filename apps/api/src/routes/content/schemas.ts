@@ -214,6 +214,10 @@ export const workBaseSchema = z
 		// When a private Work is to be released; null clears it. Refused on create, like a
 		// release, and checked on a change by the edit route.
 		scheduledReleaseAt: z.string().datetime().nullable().optional(),
+		// When the page opens ahead of the Work; null clears it. A past date opens it at
+		// once; the edit route checks the ordering against the release date and the
+		// non-media pre-release conditions.
+		preReleaseAt: z.string().datetime().nullable().optional(),
 
 		// The content rating, as the matrix a creator answers row by row (`RATING_ROWS`). A
 		// complete one decides the rating and the notes; an incomplete one is only stored. Rows

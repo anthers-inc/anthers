@@ -13,6 +13,7 @@
  * Lexicon has no field capable of carrying them.
  */
 import type { WorkCredit } from "@anthers/db/schema";
+import { isPreRelease } from "@anthers/shared/content";
 import { requiresAdultVerification } from "@anthers/shared/content-rating";
 import { type AccessibleWork, buildPreviewContext, resolveAccessSync } from "./access.js";
 
@@ -24,6 +25,10 @@ export interface PublishableWork extends AccessibleWork {
 	slug: string;
 	publicId: number;
 	releasedAt: Date | null;
+	/** When the page goes public ahead of the Work; absent means no pre-release. */
+	preReleaseAt?: Date | null;
+	/** The planned release, while in pre-release; absent when no date is scheduled. */
+	scheduledReleaseAt?: Date | null;
 	/** When the work first came out anywhere; null means it first came out here. */
 	originallyReleased: Date | null;
 	visibility: string;
@@ -49,7 +54,14 @@ export interface WorkRecord {
 	kind: string;
 	title: string;
 	url: string;
-	releasedAt: string;
+	/** `pre_release` while the page is public and the Work is not; absence means released. */
+	status?: "pre_release" | "released";
+	/** When the page went public ahead of the Work, on a pre-release listing only. */
+	preReleaseAt?: string;
+	/** The planned release date, on a pre-release listing only. A plan, not a fact. */
+	plannedReleaseAt?: string;
+	/** When the work was released here; absent on a pre-release listing. */
+	releasedAt?: string;
 	originallyReleased?: string;
 	description?: string;
 	access?: { state: "open" | "gated"; space?: string; manifest?: string };
@@ -175,7 +187,11 @@ export function unpublishableReason(work: PublishableWork): UnpublishableReason 
 	// somebody decides otherwise rather than published until somebody notices.
 	if (requiresAdultVerification(work.maturity)) return "adult_rung";
 	if (work.takedownStatus !== "active") return "taken_down";
-	if (work.visibility !== "released") return "not_released";
+	// A pre-release page is public before the Work is, and it is the one non-released state
+	// allowed a listing. It is derived, not a visibility value: a private Work whose
+	// pre-release date has arrived. Anything else that is not released stays unlisted.
+	const preRelease = isPreRelease(work);
+	if (work.visibility !== "released" && !preRelease) return "not_released";
 	// A released Work with no release date is a state no current path produces — the update
 	// route stamps it on first release, and the seed script sets it too. Reporting it is
 	// therefore better than papering over it: if it ever appears in production it is a bug
@@ -188,7 +204,9 @@ export function unpublishableReason(work: PublishableWork): UnpublishableReason 
 	// release date below: a state no sensible path produces is better reported than papered
 	// over, and papering over this one puts an anonymous entry in somebody's public Catalog.
 	if (!work.title?.trim()) return "missing_title";
-	if (!work.releasedAt) return "missing_release_date";
+	// A pre-release listing has no release date by design; its own date is required instead,
+	// which `isPreRelease` has already established is present and past.
+	if (!preRelease && !work.releasedAt) return "missing_release_date";
 	return null;
 }
 
@@ -205,7 +223,10 @@ export function publicAccessState(work: PublishableWork): "open" | "gated" {
 		owned: false,
 		workIds: [],
 	});
-	return resolveAccessSync(work, ctx).isFree ? "open" : "gated";
+	// The listing describes the Work's eventual access; pre-release is a page state, not a
+	// price. Without this the resolver would answer the page refusal and every coming-soon
+	// listing would read `gated`.
+	return resolveAccessSync(work, { ...ctx, ignorePreRelease: true }).isFree ? "open" : "gated";
 }
 
 /** The canonical page for a Work. Mirrors the app's `/works/{slug}-{publicId}` route. */
@@ -238,7 +259,8 @@ export function workToRecord(
 	// `unpublishableReason` has already established this. Re-checking rather than asserting
 	// because a non-null assertion here would be a lie waiting to become true if the two
 	// ever drift apart, and the cost of the extra branch is nothing.
-	if (!work.releasedAt) return null;
+	const preRelease = isPreRelease(work);
+	if (!preRelease && !work.releasedAt) return null;
 
 	const state = publicAccessState(work);
 	const access: NonNullable<WorkRecord["access"]> = { state };
@@ -258,9 +280,16 @@ export function workToRecord(
 		kind: work.type,
 		title: work.title ?? "",
 		url: workUrl(work, opts.baseUrl),
-		releasedAt: work.releasedAt.toISOString(),
 		access,
 	};
+	if (preRelease) {
+		record.status = "pre_release";
+		record.preReleaseAt = work.preReleaseAt!.toISOString();
+		if (work.scheduledReleaseAt) record.plannedReleaseAt = work.scheduledReleaseAt.toISOString();
+	} else {
+		record.status = "released";
+		record.releasedAt = work.releasedAt!.toISOString();
+	}
 
 	// An empty string is not a value: writing `description: ""` into a public record says
 	// the creator wrote an empty description, where absence says they wrote none.
@@ -268,7 +297,9 @@ export function workToRecord(
 
 	// Absence says the work first came out here, which `releasedAt` already answers. The field
 	// is deliberately not nullable, so there is no way to write "asserted none" — absence is it.
-	if (work.originallyReleased) {
+	// A Work that has not come out here yet has not come out anywhere, so the asserted
+	// original date belongs to the release record rather than the coming-soon one.
+	if (!preRelease && work.originallyReleased) {
 		record.originallyReleased = work.originallyReleased.toISOString();
 	}
 

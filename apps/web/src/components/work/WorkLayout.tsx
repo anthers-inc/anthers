@@ -14,7 +14,7 @@
  */
 
 import { workChapters } from "@anthers/shared/chapters";
-import { isListened, isPaged } from "@anthers/shared/content";
+import { isListened, isPaged, isPreRelease } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import HostedEmbed from "@anthers/web-shared/content/HostedEmbed";
 import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
@@ -324,6 +324,16 @@ export function WorkDateLine({
 				minute: "2-digit",
 			})
 		: null;
+	if (isPreRelease(work)) {
+		return (
+			<div className="flex flex-col items-center gap-1">
+				<span className="flex items-center gap-1">
+					Coming soon{scheduledAt ? ` on ${scheduledAt}` : ""}
+					<RecordLinkButton recordUrl={work.recordUrl} />
+				</span>
+			</div>
+		);
+	}
 	return (
 		<div className="flex flex-col items-center gap-1">
 			<div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
@@ -540,6 +550,9 @@ export function WorkAccessChip({
 	access?: AccessResult | null;
 }) {
 	if (access) {
+		if (access.reason === "pre_release") {
+			return <span className="badge badge-sm badge-outline">Coming soon</span>;
+		}
 		if (access.isFree) {
 			return <span className="badge badge-sm badge-outline badge-success">Public Access</span>;
 		}

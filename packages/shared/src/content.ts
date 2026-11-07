@@ -216,6 +216,32 @@ export function hasSourceSet(type: string): boolean {
 export const PREVIEW_MEDIA_WORK_TYPES = ["video", "game"] as const satisfies readonly WorkType[];
 
 /** Whether a Work of this kind may carry a preview media set. */
+/**
+ * Whether a Work's page is in its pre-release state right now.
+ *
+ * ⭐ **The state is derived, never stored as a visibility value.** A Work is pre-release
+ * when it is still private, has never been released, and its pre-release date has arrived.
+ * The page and its preview media are public in that state; the Work itself is not — access
+ * resolution, purchase, delivery and reviews all refuse it until `releasedAt` is stamped.
+ *
+ * `visibility` must be exactly `private`: a withdrawn Work has no pre-release state left,
+ * and a released one is past it by definition. A `preReleaseAt` in the future is still
+ * private, so the page remains hidden until the date.
+ */
+export function isPreRelease(
+	work: {
+		visibility?: string | null;
+		preReleaseAt?: Date | string | null;
+		releasedAt?: Date | string | null;
+	},
+	now: number = Date.now(),
+): boolean {
+	if (work.visibility !== "private" || work.releasedAt != null || work.preReleaseAt == null) {
+		return false;
+	}
+	return new Date(work.preReleaseAt).getTime() <= now;
+}
+
 export function supportsPreviewMedia(type: string): boolean {
 	return (PREVIEW_MEDIA_WORK_TYPES as readonly string[]).includes(type);
 }

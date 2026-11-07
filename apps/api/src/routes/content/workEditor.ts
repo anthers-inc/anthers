@@ -51,7 +51,7 @@ import { sanitizePostHtml } from "../../services/sanitize.js";
 import { storage } from "../../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../../services/storage/keys.js";
 import { queueWorkListingSync } from "../../services/work-listing.js";
-import { releaseRefusal } from "../../services/work-release.js";
+import { preReleaseRefusal, releaseRefusal } from "../../services/work-release.js";
 import {
 	appendSourceFiles,
 	comicSourceProblem,
@@ -338,6 +338,70 @@ const workEditorRoutes = new Hono()
 			if (refusal?.resolves === "creator") return c.json(refusal.body, refusal.status);
 		}
 
+		// ── The pre-release page ────────────────────────────────────────────────
+		// Setting the date asks the conditions a public page needs and the media does not.
+		// Clearing it simply hides the page again and delists; the release schedule stays.
+		const preReleaseSent = data.preReleaseAt;
+		const preReleaseChanged =
+			preReleaseSent !== undefined &&
+			(preReleaseSent ? Date.parse(preReleaseSent) : null) !==
+				(work.preReleaseAt?.getTime() ?? null);
+		const effectivePreRelease =
+			preReleaseSent !== undefined
+				? preReleaseSent
+					? new Date(preReleaseSent)
+					: null
+				: work.preReleaseAt;
+		const effectiveRelease =
+			scheduleSent !== undefined
+				? scheduleSent
+					? new Date(scheduleSent)
+					: null
+				: work.scheduledReleaseAt;
+		if (preReleaseSent && preReleaseChanged) {
+			if ((data.visibility ?? work.visibility) !== "private") {
+				return c.json(
+					{
+						error: "Only a private Work can have a pre-release page.",
+						code: "pre_release_not_private",
+					},
+					409,
+				);
+			}
+			if (
+				effectiveRelease &&
+				effectivePreRelease &&
+				effectivePreRelease.getTime() >= effectiveRelease.getTime()
+			) {
+				return c.json(
+					{
+						error: "The pre-release date has to be before the release date.",
+						code: "pre_release_after_release",
+					},
+					400,
+				);
+			}
+			const refusal = await preReleaseRefusal(asLeft, user);
+			if (refusal) return c.json(refusal.body, refusal.status);
+		}
+		// A schedule moved ahead of an existing pre-release date is the same ordering
+		// question from the other side.
+		if (
+			scheduleChanged &&
+			scheduleSent &&
+			effectivePreRelease &&
+			effectiveRelease &&
+			effectivePreRelease.getTime() >= effectiveRelease.getTime()
+		) {
+			return c.json(
+				{
+					error: "The pre-release date has to be before the release date.",
+					code: "pre_release_after_release",
+				},
+				400,
+			);
+		}
+
 		// 🚨 **Every release condition lives in `services/work-release.ts`**, because this route
 		// and the `release-scheduled` sweep both release Works, and a condition written here alone
 		// would be one the sweep walks straight past. The rating is already stored above, so a
@@ -405,6 +469,12 @@ const workEditorRoutes = new Hono()
 
 		if (scheduleSent !== undefined) {
 			updates.scheduledReleaseAt = scheduleSent ? new Date(scheduleSent) : null;
+		}
+		if (preReleaseSent !== undefined) {
+			updates.preReleaseAt = preReleaseSent ? new Date(preReleaseSent) : null;
+			// A cleared date also clears the sweep's throttle, so setting a new one queues
+			// a listing at once rather than waiting out the old window.
+			if (!preReleaseSent) updates.preReleaseQueuedAt = null;
 		}
 		// Releasing now supersedes a schedule, whatever the request said about it.
 		if (data.visibility === "released") updates.scheduledReleaseAt = null;

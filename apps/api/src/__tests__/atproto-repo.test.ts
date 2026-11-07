@@ -221,6 +221,7 @@ describe("carrying the plan out against a repository", () => {
 			kind: "video",
 			title: "A Short Film",
 			url: `${BASE}/works/a-short-film-90210`,
+			status: "released",
 			releasedAt: "2026-07-01T00:00:00.000Z",
 			description: "Ten minutes of something.",
 			access: { state: "open" },
