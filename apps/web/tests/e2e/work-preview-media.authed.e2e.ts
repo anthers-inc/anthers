@@ -185,10 +185,17 @@ test("the locked page carries the carousel, its strip, its chevrons and a traile
 	await expect(page.getByAltText("A red frame").last()).toBeVisible();
 	await page.getByRole("button", { name: "Close" }).click();
 
-	// The trailer plays and its caption track is attached.
+	// The trailer plays and its caption track is attached. Selecting it is the user gesture
+	// that starts it — the viewer does not press the element's own play button as well.
 	await carousel.getByRole("button", { name: /Preview 2: trailer/ }).click();
 	await expect(carousel.locator("video")).toBeVisible();
 	await expect(carousel.locator("video track")).toHaveCount(1);
+	await expect
+		.poll(() => carousel.locator("video").evaluate((v) => (v as HTMLVideoElement).currentTime), {
+			timeout: 10_000,
+			message: "the trailer never started playing on selection",
+		})
+		.toBeGreaterThan(0);
 
 	// The chevrons clamp at the ends: forward from the trailer does nothing, back steps.
 	const next = carousel.getByRole("button", { name: "Next preview" });
@@ -196,6 +203,8 @@ test("the locked page carries the carousel, its strip, its chevrons and a traile
 	await expect(next).toBeDisabled();
 	await expect(prev).toBeEnabled();
 	await prev.click();
+	// Leaving the trailer unmounts its element, which is what stops it.
+	await expect(carousel.locator("video")).toHaveCount(0);
 	await expect(carousel.getByRole("button", { name: /Preview 1: screenshot/ })).toHaveAttribute(
 		"aria-pressed",
 		"true",
