@@ -22,9 +22,6 @@
  *   POST   /me/adult-access         — opt in, verifying adulthood by card funding type
  *   DELETE /me/adult-access         — opt back out (the verification is kept; never locked,
  *                                     because opting out only makes an account stricter)
- *   GET    /me/studio-panels        — the creator's Studio Dashboard layout (panels only;
- *                                     the attention worklist is never stored or hideable)
- *   PATCH  /me/studio-panels        — reorder or show/hide them
  *   GET    /me/storage              — the account's storage reading: allowance at the held
  *                                     Badge, bytes held this cycle, per-purpose lines
  *                                     (services/storage-reading.ts composes it)
@@ -85,7 +82,6 @@ import {
 	RIGHTS_RESPONSE_DAYS,
 } from "@anthers/shared/rights";
 import { searchTerms } from "@anthers/shared/search";
-import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { THEME_VALUES } from "@anthers/shared/theme";
 import { isUsState } from "@anthers/shared/us-states";
 import { zValidator } from "@hono/zod-validator";
@@ -2204,25 +2200,7 @@ const accountRoutes = new Hono()
 	// blurred stays listed for everyone else, stays searchable, stays earning, and is never
 	// demoted. The wiki's *Content Standards* is explicit that this is not platform-side suppression.
 
-	// ── The creator's Studio Dashboard layout ────────────────────────────────
-	//
-	// 🚨 **Only the panels, never the worklist.** The Dashboard's attention items — payout
-	// setup that blocks every release, a released Work nobody can open, a failed encode — are
-	// composed by the client from state it already holds and are not stored, not ordered and
-	// not hideable. A layout that could turn one off would be a warning a creator can remove,
-	// which is a warning that will be removed by exactly the person it was for.
-	.get("/me/studio-panels", requireAuth, async (c) => {
-		const sessionUser = c.get("user");
-		const [row] = await db
-			.select({ panels: userPreferences.studioPanels })
-			.from(userPreferences)
-			.where(eq(userPreferences.userId, sessionUser.id))
-			.limit(1);
-		// No row and a null column mean the same thing — never arranged — and
-		// `resolveStudioPanels` turns both into the defaults.
-		return c.json({ panels: resolveStudioPanels(row?.panels ?? null) });
-	})
-
+	// ── The creator's Storage reading ────────────────────────────────────────
 	.get("/me/storage", requireAuth, async (c) => {
 		// The reading is composed in the service, never here — the route is the thin
 		// door every other surface is. Deliberately not gated on `creatorMode`: the ladder
@@ -2278,32 +2256,6 @@ const accountRoutes = new Hono()
 		}
 		return c.json({ address: null });
 	})
-
-	.patch(
-		"/me/studio-panels",
-		requireAuth,
-		zValidator("json", z.object({ panels: z.array(z.string()).max(STUDIO_PANELS.length) })),
-		async (c) => {
-			const sessionUser = c.get("user");
-			const { panels } = c.req.valid("json");
-
-			// ⚠️ Narrowed to the panels that exist rather than stored as sent. The column is
-			// `jsonb` and would hold a typo forever, and the thing reading it back is a
-			// renderer that has never heard of it. Validating here rather than only in the
-			// browser is what keeps a second client from seeding one.
-			const clean = resolveStudioPanels(panels);
-
-			await db
-				.insert(userPreferences)
-				.values({ userId: sessionUser.id, studioPanels: clean })
-				.onConflictDoUpdate({
-					target: userPreferences.userId,
-					set: { studioPanels: clean, updatedAt: new Date() },
-				});
-
-			return c.json({ panels: clean });
-		},
-	)
 
 	.get("/me/content-preferences", async (c) => {
 		const userId = await getOptionalUserId(c);

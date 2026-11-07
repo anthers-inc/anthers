@@ -1,34 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useAuth } from "@anthers/web-shared/auth";
-import { profileUrl } from "@anthers/web-shared/profile";
-import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { Navigate } from "react-router-dom";
 
 /**
- * `/studio` itself, which used to be the Studio's Dashboard page.
+ * `/studio` itself, the Studio's root.
  *
- * ⭐ **The Dashboard is a tab on the creator's own profile now** (Parker, 2026-10-23), so the
- * Studio's root has no page of its own and sends a creator to that profile with the tab open.
- * It stays a route rather than being deleted because the address is a destination in the world:
- * `RootRedirect` sends a desktop app whose home is the Studio here, the creator side of the mode
- * switch goes through it, and `/dashboard/* → /studio/*` lands on it.
+ * ⭐ **The root lands on Works** (Parker, 2026-11-06). It used to be the Dashboard page, then a
+ * redirect to that page's tab on the creator's own profile; the tab is gone, so the Studio's
+ * front door is the creator's catalog. The widgets the Dashboard carried already have their
+ * own homes — analytics under Analytics, payments under Payments, orders under Orders.
  *
- * ⚠️ **The gate has already run** — this renders inside `StudioAuthGate`, so a signed-in
- * creator is the only case that arrives. The spinner covers the frame before auth resolves,
- * when the gate is still deciding, and a handle-less account falls back to the Studio's Works
- * page rather than composing a profile URL out of nothing.
+ * It stays a route rather than being deleted because the address is a destination in the
+ * world: `RootRedirect` sends a desktop app whose home is the Studio here, the creator side of
+ * the mode switch goes through it, and `/dashboard/* → /studio/*` lands on it. ⚠️ **The gate has
+ * already run** — this renders inside `StudioAuthGate`, so the Works page is only reached by a
+ * signed-in creator.
  */
 export default function StudioHomeRedirect() {
-	const { user, isLoading } = useAuth();
-
-	if (isLoading) {
-		return (
-			<div className="flex justify-center items-center min-h-[60vh]">
-				<LoadingSpinner size="lg" />
-			</div>
-		);
-	}
-
-	if (!user?.handle) return <Navigate to="/studio/works" replace />;
-	return <Navigate to={`${profileUrl(user.handle)}?tab=dashboard`} replace />;
+	return <Navigate to="/studio/works" replace />;
 }

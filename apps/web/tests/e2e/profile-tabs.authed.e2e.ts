@@ -34,27 +34,26 @@ async function rowShape(page: import("@playwright/test").Page): Promise<string[]
 		);
 }
 
-test("the creator's own profile opens on the Dashboard", async ({ page }) => {
+test("the creator's own profile opens on All Content", async ({ page }) => {
 	test.setTimeout(60_000);
 	const handle = await gauntletHandle(API_URL, GAUNTLET_WALKER_USERNAME);
 	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}`);
 
-	// The Dashboard's own heading is the strongest marker: the panel is mounted, not merely
-	// the tab highlighted.
-	await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
-	await expect(page.getByRole("button", { name: "Dashboard", exact: true })).toHaveClass(
+	// The timeline's own markers: the tab is selected and the all-content panel is mounted.
+	await expect(page.getByRole("button", { name: "All Content", exact: true })).toHaveClass(
 		/tab-active/,
 	);
+	await expect(page.getByRole("button", { name: "Dashboard", exact: true })).toHaveCount(0);
 
-	// And the group rules stand where the grouping says: after the Dashboard, and after
-	// Credits to open the content group.
+	// The group rules stand where the grouping says: the profile's own surfaces (Badges,
+	// Credits), then the rule, then the content.
 	const shape = await rowShape(page);
-	expect(shape.slice(0, 3), "the Dashboard is not alone in the leading group").toEqual([
-		"Dashboard",
-		"|",
+	expect(shape.slice(0, 4), "the profile's own surfaces do not lead the row").toEqual([
 		"Badges",
+		"Credits",
+		"|",
+		"All Content",
 	]);
-	expect(shape[shape.indexOf("Credits") + 1], "Credits does not close its group").toBe("|");
 });
 
 test("a visitor's profile opens on All Content, and the Dashboard is not a door", async ({
@@ -67,9 +66,10 @@ test("a visitor's profile opens on All Content, and the Dashboard is not a door"
 	await expect(page.getByRole("button", { name: "All Content", exact: true })).toHaveClass(
 		/tab-active/,
 	);
-	// The creator's own tab is absent from a visitor's row entirely, and the row therefore
-	// opens on Badges — with one rule, between the two content-side groups.
+	// The creator's Dashboard tab is absent from every row now, so a query parameter cannot
+	// conjure it either.
 	await expect(page.getByRole("button", { name: "Dashboard", exact: true })).toHaveCount(0);
+	// The profile's own surfaces lead the row, then one rule before the content group.
 	const shape = await rowShape(page);
 	expect(shape.slice(0, 3), "a visitor's row does not open on the profile's own group").toEqual([
 		"Badges",

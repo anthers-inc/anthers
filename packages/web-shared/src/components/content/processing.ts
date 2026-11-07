@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * How far along a Work's processing is, said the same way everywhere a creator waits on it —
- * the Catalog card's badge, the Work's own page, and the Dashboard's processing panel.
+ * How far along a Work's processing is, said the same way everywhere a creator waits on it:
+ * the Catalog card's badge and the Work's own page.
  *
  * ⚠️ **`etaSeconds` is an estimate for video alone.** The column is null for audio and ebooks,
  * so every sentence here reads well with a percentage and no estimate, and never renders an
  * empty "left" for a job that has no way to know.
  *
- * Pure and kept out of the components for the same reason `studio-worklist.ts` is: a condition
- * that stops matching renders an empty panel, and an empty panel is also what a creator with
- * nothing processing is supposed to see.
+ * Pure and kept out of the components because a condition that stops matching renders an empty
+ * panel, and an empty panel is also what a creator with nothing processing is supposed to see.
  */
 
 import type { Work } from "../../lib/types";

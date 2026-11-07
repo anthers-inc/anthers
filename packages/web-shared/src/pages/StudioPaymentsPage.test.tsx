@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Payments tab's derivations, kept out of the component for the same reason
- * `studio-worklist.ts` is: **the failure mode is a wrong state rendered quietly** — a
- * pending account offered a link the creator has already used, or an incomplete one told
- * to wait. Nothing here reaches the network or the DOM; the browser-level coverage of the
- * page is the e2e return-path walk and the Studio routes walk.
+ * The Payments tab's derivations, kept out of the component because **the failure mode is a
+ * wrong state rendered quietly** — a pending account offered a link the creator has already
+ * used, or an incomplete one told to wait. Nothing here reaches the network or the DOM; the
+ * browser-level coverage of the page is the e2e return-path walk and the Studio routes walk.
  */
 import { describe, expect, it } from "bun:test";
 import type { StripeAccountStatus } from "../lib/types";

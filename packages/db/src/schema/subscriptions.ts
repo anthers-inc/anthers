@@ -182,28 +182,11 @@ export const userPreferences = pgTable("user_preferences", {
 	 * family and a variant in one string; null = no account-level choice, so the client
 	 * falls back to the device (localStorage) setting / default.
 	 *
-	 * Moved here from `users` (2026-10-03) — the Studio Dashboard layout set the precedent:
-	 * which way the org's own UI paints is not part of a person's portable identity, it
-	 * means nothing on another PDS and travels with no repository, so it does not sit on
-	 * a `node`-tagged identity row.
+	 * It sits here rather than on `users` (2026-10-03): which way the org's own UI paints
+	 * is not part of a person's portable identity, it means nothing on another PDS and
+	 * travels with no repository, so it does not sit on a `node`-tagged identity row.
 	 */
 	themePreference: text("theme_preference"),
-
-	/**
-	 * The panels on the Studio Dashboard, in the creator's own order. Visibility and order
-	 * in one value: a panel that is off is simply absent.
-	 *
-	 * ⭐ **Null means "never arranged" and is NOT the same as `[]`.** An empty array is a
-	 * creator who hid everything, which is a thing they may do; null is a creator who has
-	 * never opened the control and should get the defaults. `resolveStudioPanels` in
-	 * `@anthers/shared/studio-panels` owns that distinction and is the only thing that
-	 * should read this column raw.
-	 *
-	 * 🚨 **Nothing that warns is ever stored here.** The Dashboard's worklist is composed by
-	 * the system and cannot be hidden, because payout setup blocks every release and a
-	 * released-but-locked Work is invisible from its creator's own side.
-	 */
-	studioPanels: jsonb("studio_panels").$type<string[]>(),
 
 	/**
 	 * How each kind of notification reaches this person, per delivery group.

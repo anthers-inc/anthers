@@ -2,10 +2,9 @@
 /**
  * The Works table's filtering and sorting derivation.
  *
- * Here for the same reason `studio-worklist.test.ts` is: **the failure mode is an empty
- * table rather than an error.** A filter that silently stops matching, and a sort that
- * wedges on an absent date, each render exactly what an empty Catalog renders — so the
- * suite has to prove they cannot.
+ * Here because **the failure mode is an empty table rather than an error.** A filter that
+ * silently stops matching, and a sort that wedges on an absent date, each render exactly what
+ * an empty Catalog renders — so the suite has to prove they cannot.
  */
 import { describe, expect, it } from "bun:test";
 import type { Work } from "../../lib/types";

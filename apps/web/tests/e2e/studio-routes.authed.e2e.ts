@@ -76,18 +76,15 @@ test("legacy /dashboard paths redirect into /studio", async ({ page }) => {
 	await expect(page).toHaveURL(/\/settings\?tab=account$/);
 });
 
-test("a creator's Studio root opens the Dashboard on their own profile", async ({
-	page,
-	context,
-}) => {
+test("a creator's Studio root opens the Works page", async ({ page, context }) => {
 	await signInAsCreator(context);
 
 	await page.goto("/studio");
-	// `/studio` has no page of its own since 2026-10-23: the Dashboard moved to a tab on the
-	// creator's profile, and the Studio's root forwards there with that tab open.
-	await expect(page).toHaveURL(/\/@[^/?]+\?tab=dashboard$/);
+	// The Studio's root is the catalog since 2026-11-06: the Dashboard tab is gone, and the
+	// creator's Works page is its front door.
+	await expect(page).toHaveURL(/\/studio\/works$/);
 	await expect(studioNav(page)).toBeVisible();
-	await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Works", exact: true })).toBeVisible();
 });
 
 /**
@@ -129,9 +126,7 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	// ⚠️ **Wait for the profile's own tab row before asking about the sidebar.** The URL changes
 	// before React renders the new page, so asking straight away read the Studio's sidebar off
 	// the page being left, and passed with the mode broken. "All Content" exists only in that
-	// row — the Dashboard heading is no proof any more, since the creator's own profile now
-	// defaults to it and the Studio was already showing it — and the sidebar renders in the
-	// same pass.
+	// row, and the sidebar renders in the same pass.
 	await expect(page.getByRole("button", { name: "All Content", exact: true })).toBeVisible();
 	await expect(studioSidebar).toBeVisible();
 	await expect(userSidebar).toHaveCount(0);
@@ -154,10 +149,9 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await expect(userSidebar).toBeVisible();
 	await expect(studioSidebar).toHaveCount(0);
 
-	// And back again, from the same switch. Creator mode's home is the profile's Dashboard
-	// since 2026-10-23 — `/studio` forwards here, and the switch goes straight to it.
+	// And back again, from the same switch. Creator mode's home is the Studio's Works page.
 	await modeSwitch.getByRole("link", { name: "Creator", exact: true }).click();
-	await expect(page).toHaveURL(/\/@[^/?]+\?tab=dashboard$/);
+	await expect(page).toHaveURL(/\/studio\/works$/);
 	await expect(studioSidebar).toBeVisible();
 });
 
@@ -253,31 +247,6 @@ test("every New button lands inside the Studio", async ({ page, context }) => {
 		await expect(page, `"${name}" did not land on its Studio route`).toHaveURL(url);
 		await expect(studioNav(page), `"${name}" left the Studio shell`).toBeVisible();
 	}
-});
-
-test("the Dashboard stopped being a copy of everything the creator owns", async ({
-	page,
-	context,
-}) => {
-	await signInAsCreator(context);
-	await page.goto("/studio");
-	await expect(studioNav(page)).toBeVisible();
-
-	// 🚨 **An absence, so it needs a test** — nothing else in the repository can tell that a
-	// section is gone rather than merely empty. The Dashboard listed "Your Projects" and
-	// "Your Posts" in two tables and never mentioned a Work, which is how the object carrying
-	// every gate, price and Time Pool minute came to be the one absent from the front door.
-	// Both moved to the tab that owns them on 2026-09-11.
-	await expect(page.getByRole("heading", { name: "Your Projects" })).toHaveCount(0);
-	await expect(page.getByRole("heading", { name: "Your Posts" })).toHaveCount(0);
-
-	// And they are reachable, at the tab that owns each. FIRST, because an empty Projects
-	// page carries two of the button — the header's and the empty state's — the same two
-	// doors PostsPage shows for zero posts.
-	await page.goto("/studio/projects");
-	await expect(page.getByRole("link", { name: "New Project", exact: true }).first()).toBeVisible();
-	await page.goto("/studio/posts");
-	await expect(page.getByRole("heading", { name: "Posts", exact: true })).toBeVisible();
 });
 
 test("the pre-rename paths redirect to the Works page rather than rendering", async ({
