@@ -32,6 +32,8 @@ const LABEL = `E2E rung ${RUN}`;
 let badgeId = 0;
 let pickBadgeId = 0;
 let recomposeBadgeId = 0;
+let gatedWorkId = 0;
+let gatedBadgeId = 0;
 let token = "";
 
 /**
@@ -99,6 +101,13 @@ function artwork(): Buffer {
 }
 
 test.afterAll(async () => {
+	if (gatedWorkId) {
+		await fetch(`${API_URL}/api/content/works/${gatedWorkId}?force=1`, {
+			method: "DELETE",
+			headers: { Cookie: `session=${token}`, Origin: WEB_ORIGIN },
+		});
+	}
+	if (gatedBadgeId) await db.delete(badges).where(eq(badges.id, gatedBadgeId));
 	if (badgeId) await db.delete(badges).where(eq(badges.id, badgeId));
 	if (pickBadgeId) await db.delete(badges).where(eq(badges.id, pickBadgeId));
 	if (recomposeBadgeId) await db.delete(badges).where(eq(badges.id, recomposeBadgeId));
@@ -152,9 +161,8 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	expect(created.status, "could not create the fixture rung").toBe(201);
 	badgeId = ((await created.json()) as { badge: { id: number } }).badge.id;
 
-	// 🚨 **A rung must name a perk kind or open a Work before the editor will save it**, so
-	// this fixture names Support. Without it the art save below is refused for a reason that
-	// has nothing to do with art, and the failure would read as the save being broken.
+	// Seed the Support row the fixed table walk reads: one kind already claimed, with the
+	// memo a creator would have typed, so the Perks tab opens with a row to compare against.
 	const perkSeed = await fetch(`${API_URL}/api/subscriptions/badges/${badgeId}/perks`, {
 		method: "PUT",
 		headers: {
@@ -184,26 +192,27 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	await dialog.getByRole("tab", { name: "Perks" }).click();
 	await dialog.screenshot({ path: `.screenshots/badge-maker-perks-${RUN}.png` });
 
-	// One Add button creates a row with both fields on it, and the one (i) beside the Type
-	// column explains every kind together rather than each on selection.
-	await expect(dialog.getByLabel("Perk description").first()).toHaveValue("Just backing the work");
-	await dialog.getByRole("button", { name: "Add a perk" }).click();
-	await expect(dialog.getByLabel("Perk type").nth(1)).toBeVisible();
-	await expect(dialog.getByLabel("Perk description").nth(1)).toBeVisible();
-	await dialog.getByRole("button", { name: "More Information" }).hover();
-	// The tip is portalled to the body as a top-layer popover, so it is no longer a
-	// descendant of the dialog even though it belongs to a control inside it.
-	await expect(page.getByRole("tooltip")).toContainText("Physical");
-	await expect(page.getByRole("tooltip")).toContainText("Digital");
-	await expect(page.getByRole("tooltip")).toContainText("Discount");
-	await expect(page.getByRole("tooltip")).toContainText("Support");
+	// The fixed table: one row per tax-code kind, the seeded Support row checked with its
+	// memo, and every other row waiting unchecked.
+	await expect(dialog.getByLabel("Support perk description")).toHaveValue("Just backing the work");
+	for (const kind of [
+		"Physical",
+		"Digital",
+		"Community Access",
+		"Service",
+		"Discount",
+		"Recognition",
+	]) {
+		await expect(dialog.getByRole("checkbox", { name: `Include ${kind} perks` })).not.toBeChecked();
+	}
+	await expect(dialog.getByRole("checkbox", { name: "Include Support perks" })).toBeChecked();
 
-	// ⭐ Rows reorder by hand. Fill the new row, then move it above the seeded one with the
-	// grip's own ArrowUp, which is the keyboard path rather than the drag the pointer takes.
-	await dialog.getByLabel("Perk type").nth(1).selectOption("recognition");
-	await dialog.getByLabel("Perk description").nth(1).fill("Name in the credits");
-	await dialog.getByRole("button", { name: "Reorder Name in the credits" }).press("ArrowUp");
-	await expect(dialog.getByLabel("Perk description").first()).toHaveValue("Name in the credits");
+	// Checking a type is the claim; it enables the memo, and the memo is the only thing the
+	// creator types. The rows keep the catalog's order rather than a dragged one.
+	await dialog.getByRole("checkbox", { name: "Include Recognition perks" }).check();
+	await expect(dialog.getByLabel("Recognition perk description")).toBeEnabled();
+	await dialog.getByLabel("Recognition perk description").fill("Name in the credits");
+	await expect(dialog.getByLabel("Support perk description")).toHaveValue("Just backing the work");
 	await dialog.screenshot({ path: `.screenshots/badge-maker-perk-row-${RUN}.png` });
 
 	await dialog.getByRole("tab", { name: "Unlocks" }).click();
@@ -287,10 +296,13 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	// the stored row is what proves the write. Support is what the tax fallback reads.
 	await editButton.click();
 	await dialog.getByRole("tab", { name: "Perks" }).click();
-	await expect(dialog.getByLabel("Perk type").first()).toBeVisible();
-	const removePerk = dialog.getByRole("button", { name: "Remove perk" });
-	const perkRows = await removePerk.count();
-	for (let i = 0; i < perkRows; i++) await removePerk.first().click();
+	// Uncheck every type the earlier passes left checked. The row is the claim now; there
+	// is no remove button to hunt for.
+	const perkBoxes = dialog.getByRole("checkbox", { name: /^Include .* perks$/ });
+	for (const box of await perkBoxes.all()) {
+		if (await box.isChecked()) await box.uncheck();
+	}
+	await expect(dialog.getByLabel("Support perk description")).toBeDisabled();
 	await dialog.getByRole("button", { name: "Save" }).click();
 	await expect(dialog).toBeHidden();
 
@@ -316,6 +328,80 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	expect(stored?.artShape).toBe("hexagon");
 	expect(stored?.artColor).toBe("amber");
 
+	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
+});
+
+/**
+ * A gated Work is a fact, not a claim: the Badge includes a digital good because it opens
+ * one, so the Digital row checks itself, refuses to be unticked, and arrives described.
+ */
+test("a gated Work locks its perk type and describes the fact", async ({ page, context }) => {
+	const errors = trackErrorsStrict(page);
+	token = await signInAsCreator(context);
+	const label = `E2E gated rung ${RUN}`;
+	const created = await fetch(`${API_URL}/api/subscriptions/badges`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${token}`,
+		},
+		body: JSON.stringify({ threshold: "8.00", label }),
+	});
+	expect(created.status, "could not create the gated rung").toBe(201);
+	gatedBadgeId = ((await created.json()) as { badge: { id: number } }).badge.id;
+
+	const title = `E2E gated perk ${RUN}`;
+	const made = await fetch(`${API_URL}/api/content/works`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${token}`,
+		},
+		body: JSON.stringify({ type: "service", title }),
+	});
+	const madeBody = await made.text();
+	expect(made.status, `could not create the gated Work: ${made.status} ${madeBody}`).toBe(201);
+	const { work } = JSON.parse(madeBody) as { work: { id: number } };
+	gatedWorkId = work.id;
+
+	const patched = await fetch(`${API_URL}/api/content/works/${work.id}`, {
+		method: "PATCH",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${token}`,
+		},
+		body: JSON.stringify({
+			access: [{ threshold: 8, allow: true, price: "0", badgeId: gatedBadgeId }],
+		}),
+	});
+	expect(patched.status, "could not gate the Work on the Badge").toBe(200);
+
+	const handle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
+	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}?tab=badges`);
+	await page.getByRole("button", { name: `Edit ${label}` }).click();
+	const dialog = page.getByRole("dialog");
+	await dialog.getByRole("tab", { name: "Perks" }).click();
+
+	const digital = dialog.getByRole("checkbox", { name: "Include Digital perks" });
+	await expect(digital).toBeChecked();
+	await expect(digital).toBeDisabled();
+	await expect(dialog.getByText("From Unlocks")).toBeVisible();
+	await expect(dialog.getByLabel("Digital perk description")).toHaveValue(
+		"Access to the digital Works this Badge opens",
+	);
+
+	await dialog.getByRole("button", { name: "Save" }).click();
+	await expect(dialog).toBeHidden();
+	const [row] = await db
+		.select({ perks: badges.perks })
+		.from(badges)
+		.where(eq(badges.id, gatedBadgeId));
+	expect(row?.perks).toEqual([
+		{ kind: "digital_good", label: "Access to the digital Works this Badge opens" },
+	]);
 	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
 });
 

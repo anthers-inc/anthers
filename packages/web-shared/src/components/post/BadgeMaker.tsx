@@ -54,16 +54,14 @@ import {
 	defaultEmblemColor,
 } from "@anthers/shared/badge-art";
 import { BADGE_ART_MAX_BYTES, STRIPE_MIN_CHARGE, supportAmount } from "@anthers/shared/constants";
-import { ArrowUpTrayIcon, Bars2Icon, TrashIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { ArrowUpTrayIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
-import { useDragReorder } from "../../lib/drag-reorder";
 import { apiFetch, client } from "../../lib/rpc";
 import { studioUrl } from "../../lib/studio";
 import type { CreatorBadge } from "../../lib/types";
 import { BadgeMark } from "../economics/BadgeMark";
 import { CreatorBadgeMark, fallbackBadgeDesign } from "../economics/CreatorBadgeMark";
 import { TakeHome } from "../economics/TakeHome";
-import InfoTip from "../ui/InfoTip";
 import { type EmblemPlacement, NounEmblemPicker } from "./NounEmblemPicker";
 
 /** Coerce to a monthly amount above zero — thresholds are dollars, cents included. */
@@ -202,203 +200,134 @@ function PickerRow({ label, children }: { label: string; children: React.ReactNo
 }
 
 /**
- * The perks table for one Badge — a whole-list editor over the fixed category list.
+ * The perks table for one Badge — one fixed row per perk tax-code type.
  *
- * ⭐ **One Add button creates a row with both fields on it** (Parker, 2026-10-26). The
- * retired control made a creator pick a type before a row existed, which hid the label
- * and made the type look like the only decision. Every kind's examples live in one (i)
- * beside the Type column, so comparing them does not mean selecting each in turn.
+ * ⭐ **The table is tax coding, not a product description** (Parker, 2026-11-06). The
+ * free-form rows it replaced let a creator add several of one type and left the type
+ * looking like the only decision; a fixed row makes the question "does this Badge
+ * include this kind?" and the memo says what it is. Every kind carries its Stripe tax
+ * code already, and `taxCodeForBadge` reads this array.
  *
- * ⭐ **A row is a type and a description, and nothing else** (Parker, 2026-10-27). The
- * description it used to autofill repeated the type's own explanation, which told the
- * creator nothing they had not just chosen; Patreon's benefit carries the same two fields.
+ * ⭐ **A gated Work makes its kind a fact.** A Badge that opens a digital Work includes a
+ * digital good whether or not the creator ticked the row, so that row is checked and
+ * locked until the Work leaves the Unlocks tab. A physical Work does the same for the
+ * Physical row. The rule lives in one place below, so the table and the save agree.
  *
- * ⭐ **Rows reorder by hand** (Parker, 2026-10-27): the grip drags with a pointer and takes
- * the up and down arrows for anyone without one, and the written order is the order a
- * supporter reads.
+ * The memo is required for a checked row — the route stores a non-empty label — and it is
+ * never shown to a supporter. Rows start unchecked; checking one enables its memo.
  */
 function PerkEditor({
 	perks,
 	onChange,
+	lockedKinds,
 }: {
 	perks: PerkDraft[];
 	onChange: (perks: PerkDraft[]) => void;
+	/** The kinds the Badge's gated Works make a fact rather than a claim. */
+	lockedKinds: ReadonlySet<BadgePerkKind>;
 }) {
-	const update = (i: number, patch: Partial<PerkDraft>) => {
-		onChange(perks.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+	const byKind = new Map(perks.map((perk) => [perk.kind, perk]));
+
+	/** Keep the stored array in the catalog's order, one entry per kind. */
+	const ordered = (next: Map<BadgePerkKind, PerkDraft>) =>
+		BADGE_PERK_KINDS.flatMap((kind) => {
+			const perk = next.get(kind.id);
+			return perk ? [perk] : [];
+		});
+
+	const setKind = (kind: BadgePerkKind, included: boolean) => {
+		const next = new Map(byKind);
+		if (included) {
+			if (!next.has(kind)) next.set(kind, { kind, label: "" });
+		} else {
+			next.delete(kind);
+		}
+		onChange(ordered(next));
 	};
 
-	const move = (from: number, to: number) => {
-		if (from === to || to < 0 || to >= perks.length) return;
-		const next = [...perks];
-		const [row] = next.splice(from, 1);
-		next.splice(to, 0, row);
-		onChange(next);
-	};
-
-	const drag = useDragReorder<PerkDraft, HTMLTableSectionElement>({
-		items: perks,
-		keyOf: (perk) => perk.key,
-		onReorder: (from, to) => move(from, to),
-	});
-
-	const remove = (i: number) => onChange(perks.filter((_, j) => j !== i));
-	const add = () => {
-		// The type starts unchosen, and the row shows it as a required field. A default would
-		// silently classify a new perk — and the type is what decides the sales-tax code.
-		onChange([...perks, { key: crypto.randomUUID(), kind: "", label: "" }]);
+	const setMemo = (kind: BadgePerkKind, label: string) => {
+		if (!byKind.has(kind)) return;
+		onChange(perks.map((perk) => (perk.kind === kind ? { ...perk, label } : perk)));
 	};
 
 	return (
 		<div className="rounded-lg border border-base-300">
-			<div className="flex flex-col gap-2 border-b border-base-300 px-3 py-2 sm:flex-row sm:items-start sm:justify-between">
-				<div className="min-w-0">
-					<div className="text-sm font-medium">Perks</div>
-					<p className="text-xs text-base-content/50">
-						What a supporter gets beside access. Access is set on the Work.
-					</p>
-				</div>
-				<button
-					type="button"
-					className="btn btn-outline btn-xs shrink-0 self-start"
-					onClick={add}
-					disabled={perks.length >= 10}
-				>
-					Add a perk
-				</button>
+			<div className="border-b border-base-300 px-3 py-2">
+				<div className="text-sm font-medium">Perks</div>
+				<p className="text-xs text-base-content/50">
+					Let us know what types of perks are included in this badge for tax purposes. This is not
+					something the user sees.
+				</p>
 			</div>
-
 			<div className="overflow-x-auto">
 				<table className="table table-sm">
 					<thead>
 						<tr>
-							<th className="w-6" aria-label="Reorder" />
-							<th className="w-44">
-								<span className="inline-flex items-center gap-1">
-									Type
-									<InfoTip wide unclipped>
-										<span className="block font-medium text-base-content">Perk types</span>
-										<table className="mt-1 w-full border-collapse text-left">
-											<tbody>
-												{BADGE_PERK_KINDS.map((k) => (
-													<tr key={k.id} className="align-top">
-														<th
-															scope="row"
-															className="whitespace-nowrap py-0.5 pr-3 font-medium text-base-content/80"
-														>
-															{k.label}
-														</th>
-														<td className="py-0.5 text-base-content/60">{k.examples}</td>
-													</tr>
-												))}
-											</tbody>
-										</table>
-										<span className="mt-1 block text-base-content/50">
-											A Badge carrying more than one type is taxed at its most-taxable type.
-										</span>
-										<span className="mt-1 block text-base-content/50">
-											Sales tax is added to the buyer's total. It is not taken from what you
-											receive.
-										</span>
-									</InfoTip>
-								</span>
-							</th>
-							<th>Description</th>
-							<th className="w-10" />
+							<th className="w-10" aria-label="Included" />
+							<th>Perk type</th>
+							<th>What it is</th>
 						</tr>
 					</thead>
-					<tbody ref={drag.containerRef}>
-						{perks.length === 0 ? (
-							<tr>
-								<td colSpan={4} className="py-6 text-center text-xs text-base-content/50">
-									No perks yet. Add one, or choose Support if this Badge offers nothing extra.
-								</td>
-							</tr>
-						) : (
-							drag.items.map((perk, i) => (
-								<tr
-									key={perk.key}
-									{...drag.itemProps(i)}
-									className={drag.isDragging(i) ? "opacity-40" : undefined}
-								>
-									<td className="w-6 pr-0">
-										<button
-											type="button"
-											{...drag.handleProps(i)}
-											className="cursor-grab rounded p-0.5 text-base-content/50 hover:text-base-content/80 active:cursor-grabbing"
-											aria-label={`Reorder ${perk.label.trim() || "this perk"}`}
-											title="Drag to reorder, or press the up and down arrows"
-											onKeyDown={(e) => {
-												if (e.key === "ArrowUp") {
-													e.preventDefault();
-													drag.moveBy(i, -1);
-												}
-												if (e.key === "ArrowDown") {
-													e.preventDefault();
-													drag.moveBy(i, 1);
-												}
-											}}
-										>
-											<Bars2Icon className="h-4 w-4" />
-										</button>
-									</td>
+					<tbody>
+						{BADGE_PERK_KINDS.map((kind) => {
+							const perk = byKind.get(kind.id);
+							const included = perk != null;
+							const locked = lockedKinds.has(kind.id);
+							return (
+								<tr key={kind.id} className={included ? undefined : "text-base-content/50"}>
 									<td>
-										<select
-											className="select select-bordered select-xs w-40"
-											value={String(perk.kind)}
-											onChange={(e) => update(i, { kind: e.target.value })}
-											aria-label="Perk type"
-										>
-											<option value="" disabled>
-												Choose a type
-											</option>
-											{BADGE_PERK_KINDS.map((k) => (
-												<option key={k.id} value={k.id}>
-													{k.label}
-												</option>
-											))}
-										</select>
+										<input
+											type="checkbox"
+											className="checkbox checkbox-sm checkbox-primary"
+											checked={included}
+											disabled={locked}
+											aria-label={`Include ${kind.label} perks`}
+											onChange={(event) => setKind(kind.id, event.target.checked)}
+										/>
 									</td>
+									<th scope="row" className="font-medium">
+										<span className="flex flex-wrap items-center gap-1.5">
+											{kind.label}
+											{locked && (
+												<span
+													className="badge badge-xs badge-ghost"
+													title="One of the Works this Badge opens is this kind, so the type is a fact rather than a claim. Remove the Work from Unlocks to change it."
+												>
+													From Unlocks
+												</span>
+											)}
+										</span>
+										<span className="mt-0.5 block text-[11px] font-normal text-base-content/50">
+											{kind.examples}
+										</span>
+									</th>
 									<td>
 										<input
 											type="text"
 											className="input input-bordered input-xs w-full min-w-36"
-											value={perk.label}
-											onChange={(e) => update(i, { label: e.target.value })}
-											placeholder="What's included in this perk"
-											aria-label="Perk description"
+											value={perk?.label ?? ""}
+											disabled={!included}
+											placeholder={included ? "What's included" : "Check the type first"}
+											aria-label={`${kind.label} perk description`}
+											onChange={(event) => setMemo(kind.id, event.target.value)}
 										/>
 									</td>
-									<td>
-										<button
-											type="button"
-											className="btn btn-ghost btn-xs btn-square text-error"
-											onClick={() => remove(i)}
-											title="Remove perk"
-											aria-label="Remove perk"
-										>
-											<TrashIcon className="h-3.5 w-3.5" />
-										</button>
-									</td>
 								</tr>
-							))
-						)}
+							);
+						})}
 					</tbody>
 				</table>
 			</div>
-
 			<p className="border-t border-base-300 px-3 py-2 text-[11px] text-base-content/50">
-				{perks.length >= 10
-					? "A Badge carries ten perks at most."
-					: "Not sure which applies? Write to support@anthers.org."}
+				Leave every type unchecked if this Badge offers nothing beyond access. The memo is tax
+				coding only; supporters never see it.
 			</p>
 		</div>
 	);
 }
 
 type PerkDraft = {
-	/** Stable within the editor session, for React keys on draft rows. */ key: string;
-	kind: BadgePerkKind | string;
+	kind: BadgePerkKind;
 	label: string;
 };
 
@@ -409,6 +338,19 @@ interface GatedWork {
 	title: string;
 	type: string;
 	visibility: string;
+}
+
+/**
+ * The perk kinds a Badge's gated Works prove it includes. Every Work kind is a digital
+ * good except a physical one — the split the tax codes use — and a Badge may open both,
+ * so the set can hold both kinds. The table locks these rows and the save keeps them.
+ */
+function perkKindsForGatedWorks(works: readonly GatedWork[]): Set<BadgePerkKind> {
+	const kinds = new Set<BadgePerkKind>();
+	for (const work of works) {
+		kinds.add(work.type === "physical" ? "physical_good" : "digital_good");
+	}
+	return kinds;
 }
 
 /**
@@ -547,6 +489,7 @@ export default function BadgeMaker({
 	const [gatedError, setGatedError] = useState<string | null>(null);
 	const [gatedBusyId, setGatedBusyId] = useState<number | null>(null);
 	const [gatedReload, setGatedReload] = useState(0);
+	const lockedPerkKinds = perkKindsForGatedWorks(gatedWorks ?? []);
 
 	// The art draft. Shape and color start from what the rung stored, and from the fallback
 	// design's own color when the rung has never chosen one — otherwise the preview would
@@ -583,11 +526,12 @@ export default function BadgeMaker({
 	// until the save lands.
 	const willRecompose =
 		composedArt && artChoiceChanged && canRecomposeArt && !selection && !upload && !removed;
-	// A row with no name is a blank the creator has not filled in yet, not a perk.
-	const namedPerkCount = perks.filter((p) => p.label.trim()).length;
+	// The checked rows are the Badge's claimed types; the memo names each one.
+	const checkedPerkCount = perks.length;
 
-	// Perks are stored rows; load them for the editor (minting keys for React). The editor
-	// stays mounted when a save refetches the ladder, so this reads once per Badge.
+	// Perks are stored rows; load them into the fixed table — one row per kind, in the
+	// catalog's order, with a duplicate or an unknown legacy kind dropped. The editor stays
+	// mounted when a save refetches the ladder, so this reads once per Badge.
 	useEffect(() => {
 		if (badgeId === null) return;
 		// A retry bumps this counter; reading it is what makes the dependency honest.
@@ -601,8 +545,13 @@ export default function BadgeMaker({
 					setPerksError(true);
 					return;
 				}
-				const body = (await res.json()) as { perks: Omit<PerkDraft, "key">[] };
-				setPerks((body.perks ?? []).map((p) => ({ ...p, key: crypto.randomUUID() })));
+				const body = (await res.json()) as { perks: PerkDraft[] };
+				setPerks(
+					BADGE_PERK_KINDS.flatMap((kind) => {
+						const row = (body.perks ?? []).find((p) => p.kind === kind.id);
+						return row ? [{ kind: kind.id, label: row.label }] : [];
+					}),
+				);
 				setPerksLoaded(true);
 			})
 			.catch(() => {
@@ -647,6 +596,34 @@ export default function BadgeMaker({
 			live = false;
 		};
 	}, [badgeId, gatedReload]);
+
+	// A gated Work makes its kind a fact, so the row is checked even before the creator
+	// touches the table. This runs after both reads land, so the perks load cannot
+	// overwrite it; a kind the Works no longer require stays checked as a claim.
+	useEffect(() => {
+		if (!gatedWorks || !perksLoaded) return;
+		const locked = perkKindsForGatedWorks(gatedWorks);
+		if (locked.size === 0) return;
+		setPerks((current) => {
+			if ([...locked].every((kind) => current.some((p) => p.kind === kind))) return current;
+			return BADGE_PERK_KINDS.flatMap((kind) => {
+				const existing = current.find((p) => p.kind === kind.id);
+				if (existing) return [existing];
+				if (!locked.has(kind.id)) return [];
+				// The memo is required by the route, so the fact arrives described; the
+				// creator can reword it, and the checkbox stays locked.
+				return [
+					{
+						kind: kind.id,
+						label:
+							kind.id === "physical_good"
+								? "The physical goods this Badge opens"
+								: "Access to the digital Works this Badge opens",
+					},
+				];
+			});
+		});
+	}, [gatedWorks, perksLoaded]);
 
 	const ungateWork = async (work: GatedWork) => {
 		if (badgeId === null) return;
@@ -759,8 +736,8 @@ export default function BadgeMaker({
 					"This Badge's emblem is a finished image, so a new shape or background needs a new emblem. Find or upload one below.",
 				);
 			}
-			if (!creating && perksLoaded && perks.some((p) => p.label.trim() && !p.kind)) {
-				throw new Error("Choose a type for each perk that has a name.");
+			if (!creating && perksLoaded && perks.some((p) => !p.label.trim())) {
+				throw new Error("Say what each checked perk is.");
 			}
 
 			if (creating) {
@@ -796,12 +773,7 @@ export default function BadgeMaker({
 					method: "PUT",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
-						perks: perks
-							.filter((p) => p.label.trim())
-							.map((p) => ({
-								kind: p.kind,
-								label: p.label.trim(),
-							})),
+						perks: perks.map((p) => ({ kind: p.kind, label: p.label.trim() })),
 					}),
 				});
 				if (!perksRes.ok) throw new Error("Couldn't save the perks.");
@@ -1153,7 +1125,7 @@ export default function BadgeMaker({
 					</button>
 				</div>
 			) : (
-				<PerkEditor perks={perks} onChange={setPerks} />
+				<PerkEditor perks={perks} onChange={setPerks} lockedKinds={lockedPerkKinds} />
 			)}
 		</div>
 	);
@@ -1241,7 +1213,9 @@ export default function BadgeMaker({
 							onClick={() => setTab(t.id)}
 						>
 							{t.label}
-							{t.id === "perks" && perksLoaded && namedPerkCount > 0 ? ` (${namedPerkCount})` : ""}
+							{t.id === "perks" && perksLoaded && checkedPerkCount > 0
+								? ` (${checkedPerkCount})`
+								: ""}
 							{t.id === "unlocks" && gatedWorks && gatedWorks.length > 0
 								? ` (${gatedWorks.length})`
 								: ""}
