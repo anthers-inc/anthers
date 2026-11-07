@@ -7,173 +7,206 @@
  * profile's own fields and the Work page already follow. The card carries the mark, the
  * Badge's name, its monthly amount, and the words the creator wrote about it; being the
  * creator adds one thing — the pencil that opens the Badge Maker for that card — and
- * nothing else changes shape. The old second list of the same rungs, always open above the
- * ladder, is gone with this: a Badge is edited one at a time, in a dialog.
+ * nothing else changes shape.
  *
- * ⭐ **Two highlights, and they mean different things.** The rung the viewer's monthly
- * amount currently reaches wears "Your Badge" — the highest rung their giving covers, not
- * every rung beneath it, which is why the rest of the covered rungs read "Included". The
- * rung they have picked to buy wears "Selected" until the pick is added or abandoned.
+ * ⭐ **Buying is direct, one button per card** (Parker, 2026-11-06). There is no selection
+ * step and no basket pair: a card above the rung the reader holds says **Upgrade**, one
+ * below says **Downgrade**, and the rung they hold says **Cancel**. A reader with no Badge
+ * sees Upgrade on every card. The action opens the one subscription-change modal, which
+ * prorates a raise and holds a decrease until the first of the month; the first Badge on an
+ * account with no subscription takes a card and address there like any first subscription.
  *
- * 🚨 **The ladder is a purchase surface on every creator's page, Anthers' own included**
- * — one flow, one basket: a pick adds the line to the basket, and Buy Now is the same add
- * plus the trip to the one checkout. The server prices the pick (the full threshold, or an
- * upgrade's delta); this surface never decides a gate.
+ * ⭐ **The cards read cheapest first** (Parker, 2026-11-06), and the rung held wears its
+ * outline around the card's edge with **Current Badge** above it, so the mark never pushes
+ * the contents it surrounds.
  */
 
+import { currentCycleKey, cycleEnd } from "@anthers/shared/billing-cycle";
 import { amountLabel, supportAmount } from "@anthers/shared/constants";
 import { withNextPath } from "@anthers/shared/next-path";
 import { CreatorBadgeMark } from "@anthers/web-shared/economics/CreatorBadgeMark";
-import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
-import type { CreatorBadge } from "@anthers/web-shared/types";
+import { useLocation, useNavigate } from "@anthers/web-shared/router";
+import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
+import type {
+	AccountResponse,
+	BadgeHoldingsResponse,
+	CreatorBadge,
+} from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import {
+	ArrowDownIcon,
 	BoltIcon,
-	CheckCircleIcon,
 	PencilSquareIcon,
 	PlusCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { currentRungId } from "../../lib/badge-ladder";
-import { useBasket } from "../../lib/basket";
+import SubscriptionPaymentModal, {
+	type SubscriptionPreview,
+} from "../subscribe/SubscriptionPaymentModal";
 
-/** What a card is for the person looking at it. */
-type CardState = "current" | "selected" | "included" | "selectable" | "locked";
+/** Which way one card moves the reader's support. */
+type BadgeAction = "upgrade" | "downgrade" | "cancel";
+
+/** What the one subscription-change modal needs, built from the account and this ladder. */
+interface CheckoutState {
+	anthersSupport: number;
+	directed: { creatorId: number; amount: number }[];
+	badgeName: string;
+	preview: SubscriptionPreview;
+}
 
 /**
  * One tall Badge card.
  *
- * The mark sits beside the name and the amount at the top, and everything the creator
- * wrote about the rung — its description, the artist behind its emblem — reads below. The
- * footer holds the card's one action: select it, say it is already in the basket, or, on
- * the creator's own page, invite them to give an artless rung its own emblem.
+ * The mark, the name and the amount sit on one centered line; the description is fenced
+ * by a soft rule above and below; the artist credit is the emblem's hover, not a line
+ * competing with the creator's own words. The footer is the card's one action.
  */
 function BadgeCard({
 	rung,
 	index,
-	state,
-	inBasket,
-	onPick,
+	current,
+	held,
+	busy,
+	onAction,
 	onEdit,
 }: {
 	rung: CreatorBadge;
-	/** The rung's position on the ladder, for a fallback mark. */
+	/** The rung's display position, for the fallback mark. */
 	index: number;
-	state: CardState;
-	inBasket: boolean;
-	onPick: () => void;
+	/** Whether this is the rung the reader's monthly amount currently holds. */
+	current: boolean;
+	/** What the reader gives this creator each month, for the direction. */
+	held: number;
+	busy: boolean;
+	onAction?: (action: BadgeAction) => void;
 	/** The creator's page only — the pencil that opens the Badge Maker. */
 	onEdit?: () => void;
 }) {
-	const ribbon =
-		state === "current"
-			? { label: "Your Badge", className: "bg-success/15 text-success" }
-			: state === "selected"
-				? { label: "Selected", className: "bg-primary text-primary-content" }
-				: null;
+	const target = Number(rung.threshold);
+	const action: BadgeAction = current
+		? "cancel"
+		: held === 0 || target > held
+			? "upgrade"
+			: "downgrade";
 
 	return (
 		<article
-			className={`card h-full overflow-hidden border bg-base-200 ${
-				state === "current"
-					? "border-success ring-2 ring-success/40"
-					: state === "selected"
-						? "border-primary ring-2 ring-primary/50"
-						: "border-base-content/10"
+			className={`relative flex h-full flex-col rounded-2xl border bg-base-200 p-4 ${
+				current ? "border-success/60" : "border-base-content/10"
 			}`}
 		>
-			{ribbon && (
-				<div
-					className={`px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide ${ribbon.className}`}
-				>
-					{ribbon.label}
-				</div>
+			{current && (
+				<>
+					<span
+						aria-hidden="true"
+						className="pointer-events-none absolute -inset-1.5 rounded-[1.15rem] ring-2 ring-success/40"
+					/>
+					<span className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-success px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-success-content shadow">
+						Current Badge
+					</span>
+				</>
 			)}
-			<div className="card-body gap-3 p-4">
-				<div className="flex items-start gap-3">
+
+			<div className="flex items-center gap-4">
+				<div className="group/emblem relative shrink-0">
 					<CreatorBadgeMark
 						badgeId={rung.id}
 						index={index}
 						label={`${rung.label} badge`}
 						art={rung}
-						size="h-14 w-14"
+						size="h-16 w-16"
 					/>
-					<div className="min-w-0 flex-1">
-						<h4 className="truncate font-semibold leading-tight">{rung.label}</h4>
-						<p className="text-sm text-base-content/60">
-							{amountLabel(rung.threshold)}
-							<span className="text-xs">/mo</span>
-						</p>
-					</div>
-					{onEdit && (
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs btn-square -mr-1 -mt-1 text-base-content/40 hover:text-base-content/80"
-							onClick={onEdit}
-							aria-label={`Edit ${rung.label}`}
-							title={`Edit ${rung.label}`}
-						>
-							<PencilSquareIcon className="w-4 h-4" />
-						</button>
+					{/* The artist credit the supporter reads on the Badge's back, now on the
+					    emblem's hover rather than in the card's own column. Every emblem has a
+					    named human behind it, and naming them is the promise made when the
+					    library was taken on. */}
+					{rung.artistCredit && (
+						<div className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-56 rounded-lg border border-base-300 bg-base-100 p-2 text-xs leading-relaxed text-base-content/60 shadow-lg group-hover/emblem:block">
+							Emblem by{" "}
+							{rung.artistCredit.artistPermalink ? (
+								<a
+									href={rung.artistCredit.artistPermalink}
+									target="_blank"
+									rel="noopener noreferrer"
+									className="underline decoration-dotted underline-offset-2"
+								>
+									{rung.artistCredit.artistName}
+								</a>
+							) : (
+								rung.artistCredit.artistName
+							)}{" "}
+							· Noun Project
+						</div>
 					)}
 				</div>
-
-				{rung.description && (
-					<p className="whitespace-pre-line text-sm text-base-content/60">{rung.description}</p>
-				)}
-
-				{/* 🚨 THE FLIP — the artist credit a supporter reads on a Badge's back. Every
-				    emblem has a named human behind it, and naming them here is the promise made
-				    when the library was taken on. It covers uploaded art's credit too when the
-				    creator names one. */}
-				{rung.artistCredit && (
-					<p className="text-xs text-base-content/40">
-						Emblem by{" "}
-						{rung.artistCredit.artistPermalink ? (
-							<a
-								href={rung.artistCredit.artistPermalink}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="underline decoration-dotted underline-offset-2"
-							>
-								{rung.artistCredit.artistName}
-							</a>
-						) : (
-							rung.artistCredit.artistName
-						)}{" "}
-						· Noun Project
+				<div className="min-w-0 flex-1">
+					<h4 className="text-xl font-bold leading-tight">{rung.label}</h4>
+					<p className="mt-1 text-2xl font-semibold leading-none">
+						{amountLabel(rung.threshold)}
+						<span className="ml-0.5 text-sm font-normal text-base-content/50">/mo</span>
 					</p>
+				</div>
+				{onEdit && (
+					<button
+						type="button"
+						className="btn btn-ghost btn-xs btn-square -mr-1 -mt-1 self-start text-base-content/40 hover:text-base-content/80"
+						onClick={onEdit}
+						aria-label={`Edit ${rung.label}`}
+						title={`Edit ${rung.label}`}
+					>
+						<PencilSquareIcon className="w-4 h-4" />
+					</button>
 				)}
+			</div>
 
-				<div className="mt-auto pt-1">
-					{onEdit ? (
-						!rung.hasArt && (
-							// The fallback is a start, not a design to settle for — said where the
-							// creator is scanning their own ladder. ⚠️ Name whose design it is: the
-							// card already draws an emblem, and a bare "give it your own" read as
-							// though the rung had none.
-							<p className="text-xs text-base-content/40">Anthers' design — make it yours</p>
-						)
-					) : state === "included" ? (
-						<p className="inline-flex items-center gap-1 text-sm text-base-content/50">
-							<CheckCircleIcon className="w-4 h-4" />
-							Included in your Badge
-						</p>
-					) : inBasket ? (
-						<button type="button" className="btn btn-sm btn-outline w-full" disabled>
-							In your basket
-						</button>
-					) : state === "selectable" || state === "selected" ? (
+			{rung.description && (
+				<p className="my-4 whitespace-pre-line border-y border-base-300/60 py-3 text-sm text-base-content/60">
+					{rung.description}
+				</p>
+			)}
+
+			<div className="mt-auto pt-1">
+				{onEdit ? (
+					!rung.hasArt && (
+						// The fallback is a start, not a design to settle for — said where the
+						// creator is scanning their own ladder. The card already draws an emblem,
+						// so the line names whose design it is.
+						<p className="text-xs text-base-content/40">Anthers' design — make it yours</p>
+					)
+				) : onAction ? (
+					action === "cancel" ? (
 						<button
 							type="button"
-							className={`btn btn-sm w-full ${state === "selected" ? "btn-primary" : "btn-outline"}`}
-							onClick={onPick}
-							aria-pressed={state === "selected"}
+							className="btn btn-error btn-outline btn-sm w-full"
+							disabled={busy}
+							onClick={() => onAction("cancel")}
 						>
-							{state === "selected" ? "Selected" : "Select"}
+							{busy ? "Opening…" : "Cancel"}
 						</button>
-					) : null}
-				</div>
+					) : action === "downgrade" ? (
+						<button
+							type="button"
+							className="btn btn-outline btn-sm w-full"
+							disabled={busy}
+							onClick={() => onAction("downgrade")}
+						>
+							<ArrowDownIcon className="size-4" />
+							{busy ? "Opening…" : "Downgrade"}
+						</button>
+					) : (
+						<button
+							type="button"
+							className="btn btn-primary btn-sm w-full"
+							disabled={busy}
+							onClick={() => onAction("upgrade")}
+						>
+							<BoltIcon className="size-4" />
+							{busy ? "Opening…" : "Upgrade"}
+						</button>
+					)
+				) : null}
 			</div>
 		</article>
 	);
@@ -185,13 +218,11 @@ function AddBadgeCard({ onClick }: { onClick: () => void }) {
 		<button
 			type="button"
 			onClick={onClick}
-			className="card h-full min-h-56 items-center justify-center border border-dashed border-base-content/20 bg-base-200/40 text-center transition-colors hover:border-primary/50"
+			className="flex h-full min-h-56 flex-col items-center justify-center rounded-2xl border border-dashed border-base-content/20 bg-base-200/40 p-4 text-center transition-colors hover:border-primary/50"
 		>
-			<div className="card-body items-center justify-center gap-1 p-4">
-				<PlusCircleIcon className="w-8 h-8 text-base-content/30" />
-				<span className="font-medium">Add a Badge</span>
-				<span className="text-xs text-base-content/50">Give supporters a level to give at.</span>
-			</div>
+			<PlusCircleIcon className="w-8 h-8 text-base-content/30" />
+			<span className="mt-1 font-medium">Add a Badge</span>
+			<span className="text-xs text-base-content/50">Give supporters a level to give at.</span>
 		</button>
 	);
 }
@@ -201,10 +232,8 @@ export default function BadgesTab({
 	unlockedBadges,
 	heldAmount,
 	creatorName,
-	creatorHandle,
 	canBuy,
 	authenticated,
-	preselectedBadgeId,
 	isOwner,
 	onEdit,
 	onAdd,
@@ -213,78 +242,96 @@ export default function BadgesTab({
 	unlockedBadges: number[];
 	heldAmount: string;
 	creatorName: string;
-	creatorHandle: string;
 	/** Looking at somebody else's profile — you can't buy your own ladder. */
 	canBuy: boolean;
 	authenticated: boolean;
-	/** A pick carried back across the sign-in detour, as `?badge=`. */
-	preselectedBadgeId: number | null;
 	/** The creator's own page, where each card carries its pencil. */
 	isOwner: boolean;
 	onEdit: (badge: CreatorBadge) => void;
 	onAdd: () => void;
 }) {
-	const { hasBadge, add } = useBasket();
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
-	const [pickId, setPickId] = useState<number | null>(preselectedBadgeId);
-	const [working, setWorking] = useState(false);
+	const [checkout, setCheckout] = useState<CheckoutState | null>(null);
+	const [busyId, setBusyId] = useState<number | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [added, setAdded] = useState<number | null>(null);
 
-	const unlockedSet = new Set(unlockedBadges);
 	const held = supportAmount(heldAmount);
 	const currentId = currentRungId(rungs, unlockedBadges);
-
-	// The pick carried back across the detour sticks only to a rung that survives the
-	// ratchet — a ladder edited between the click and the return re-picks clean.
-	const pick = rungs.find((r) => r.id === pickId && Number(r.threshold) > held) ?? null;
-
-	const pickIt = (rung: CreatorBadge) => {
-		setAdded(null);
-		setError(null);
-		setPickId(Number(rung.threshold) > held ? rung.id : null);
-	};
+	// Cheapest first (Parker, 2026-11-06): the display order is the price order, and the
+	// ladder's stored order stays the creator's own arrangement on their side.
+	const ladder = [...rungs].sort((a, b) => Number(a.threshold) - Number(b.threshold));
 
 	/**
-	 * Add the picked rung by way of the basket — the same add both buttons make, the
-	 * scratchpad never seeing a Badge (a signed-out pick goes through the doors below
-	 * before anything is held). Buy now is the add plus the trip: the basket page's
-	 * embedded Checkout is the one purchase form, and every kind of line pays in it.
+	 * Every directed amount this account already carries, as the subscription route needs
+	 * it. `my-badges` is the in-force truth for the cycle; the ladder read supplies the
+	 * creator id each holding's handle names. A Badge is the only directed support the app
+	 * sells, so the holdings are the whole set.
 	 */
-	const addThePick = async (thenBasket: boolean) => {
-		if (!pick) return;
-		setWorking(true);
-		setError(null);
-		try {
-			const result = await Promise.resolve(
-				add({
-					kind: "badge",
-					badgeId: pick.id,
-					title: pick.label,
-					price: "",
-					recurring: String(pick.threshold),
-					creatorHandle: creatorHandle,
-				}),
+	const loadDirected = async (): Promise<{ creatorId: number; amount: number }[]> => {
+		const res = await fetch(`${apiBaseUrl()}/api/subscriptions/my-badges`, {
+			credentials: "include",
+		});
+		if (!res.ok) throw new Error("Couldn't read your current Badges.");
+		const holdings = (await res.json()) as BadgeHoldingsResponse;
+		const byCreator = new Map<number, number>();
+		for (const holding of holdings.badges) {
+			const ladderRes = await fetch(
+				`${apiBaseUrl()}/api/subscriptions/badges?creator=${encodeURIComponent(holding.creator.handle)}`,
 			);
-			if (!result.ok) {
-				setError(result.error);
-				return;
-			}
-			if (thenBasket) {
-				navigate("/basket");
-				return;
-			}
-			setAdded(pick.id);
-		} finally {
-			setWorking(false);
+			if (!ladderRes.ok) continue;
+			const { badges } = (await ladderRes.json()) as { badges: CreatorBadge[] };
+			const creatorId =
+				badges.find((badge) => badge.id === holding.id)?.creatorId ?? badges[0]?.creatorId;
+			if (creatorId == null) continue;
+			byCreator.set(creatorId, Math.max(byCreator.get(creatorId) ?? 0, Number(holding.threshold)));
 		}
+		return [...byCreator].map(([creatorId, amount]) => ({ creatorId, amount }));
 	};
 
-	// The detour's return trip: back to this page, badges tab, pick carried. The rung's
-	// id in the URL is what survives the ceremony (signing in tears the page down — the
-	// shell unmounts on the auth flip), and the rung above re-picks it on return.
-	const back = `${pathname}?tab=badges&badge=${pick?.id ?? ""}`;
+	const act = async (rung: CreatorBadge, action: BadgeAction) => {
+		if (!authenticated) {
+			navigate(withNextPath("/login", pathname));
+			return;
+		}
+		setBusyId(rung.id);
+		setError(null);
+		try {
+			const meRes = await client.api.subscriptions.me.$get();
+			if (!meRes.ok) throw new Error("Couldn't read your account.");
+			const me = (await meRes.json()) as AccountResponse;
+			const directed = await loadDirected();
+			const nextDirected = directed.filter((item) => item.creatorId !== rung.creatorId);
+			if (action !== "cancel") {
+				nextDirected.push({ creatorId: rung.creatorId, amount: Number(rung.threshold) });
+			}
+			const recurring =
+				me.anthersSupport + nextDirected.reduce((sum, item) => sum + item.amount, 0);
+			const target = Number(rung.threshold);
+			// A raise is charged today in full — the delta when a rung is held, the whole
+			// first month when none is. A decrease or a cancellation waits for the 1st.
+			const chargeNow = action === "upgrade" ? Math.max(0, target - held) : 0;
+			const nextBillingUnix = me.account.currentPeriodEnd
+				? Math.floor(new Date(me.account.currentPeriodEnd).getTime() / 1000)
+				: Math.floor(cycleEnd(currentCycleKey()).getTime() / 1000);
+			setCheckout({
+				anthersSupport: me.anthersSupport,
+				directed: nextDirected,
+				badgeName: action === "cancel" ? `no Badge from ${creatorName}` : rung.label,
+				preview: {
+					isChange: Boolean(me.account.stripeSubscriptionId),
+					recurring: { amount: recurring.toFixed(2), interval: "month" },
+					chargeNow: chargeNow.toFixed(2),
+					nextBillingUnix,
+					savedCard: me.savedCard ?? null,
+				},
+			});
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Couldn't open the change.");
+		} finally {
+			setBusyId(null);
+		}
+	};
 
 	// A visitor on a ladder with nothing on it gets the sentence; the owner gets the add
 	// card, which is the invitation and the empty state in one.
@@ -306,109 +353,48 @@ export default function BadgesTab({
 						<p className="text-sm text-base-content/50">
 							{isOwner
 								? "The monthly levels supporters can give at. Each one clears the Work gates at or below its amount."
-								: `Badges set by ${creatorName}. Pick one and buy it here — it renews monthly until you stop.`}
+								: `Badges set by ${creatorName}. Choose a level — it renews monthly until you cancel.`}
 						</p>
 					</div>
-					{!isOwner && held > 0 && (
-						<p className="text-sm text-base-content/60">
-							You give {amountLabel(heldAmount)}/mo here.
-						</p>
-					)}
 				</div>
 
-				{/* The same uniform grid every listing surface uses, sized for a portrait card
-				    rather than a tile: four across on the page's desktop width. */}
+				{error && <p className="mb-3 text-sm text-error">{error}</p>}
+
+				{/* The same uniform grid every listing surface uses, with room around the
+				    cards for the current outline and its label to sit OUTSIDE the card. */}
 				<div
-					className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4 items-stretch"
+					className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-x-4 gap-y-8 px-1.5 py-2"
 					data-testid="badge-grid"
 				>
-					{rungs.map((rung, index) => {
-						const unlocked = unlockedSet.has(rung.id);
-						const selectable = canBuy && Number(rung.threshold) > held;
-						const state: CardState =
-							rung.id === currentId
-								? "current"
-								: pick?.id === rung.id
-									? "selected"
-									: unlocked
-										? "included"
-										: selectable
-											? "selectable"
-											: "locked";
-
-						return (
-							<BadgeCard
-								key={rung.id}
-								rung={rung}
-								index={index}
-								state={state}
-								inBasket={hasBadge(rung.id)}
-								onPick={() => pickIt(rung)}
-								onEdit={isOwner ? () => onEdit(rung) : undefined}
-							/>
-						);
-					})}
+					{ladder.map((rung, index) => (
+						<BadgeCard
+							key={rung.id}
+							rung={rung}
+							index={index}
+							current={!isOwner && rung.id === currentId}
+							held={isOwner ? 0 : held}
+							busy={busyId === rung.id}
+							onAction={canBuy ? (action) => void act(rung, action) : undefined}
+							onEdit={isOwner ? () => onEdit(rung) : undefined}
+						/>
+					))}
 					{isOwner && <AddBadgeCard onClick={onAdd} />}
 				</div>
 			</div>
 
-			{/*
-			 * The picked rung's action card — the whole purchase flow, in place: a signed-out
-			 * buyer gets the account doors (both of them, both of them coming back), a
-			 * signed-in buyer gets the two actions the Work page's buy row carries. The
-			 * signup hop the old upgrade prompt was is gone: the intent's pick happens HERE,
-			 * and the ceremony, when one exists, returns to it.
-			 */}
-			{pick && canBuy && (
-				<div className="card max-w-xl bg-base-200" data-testid="badge-pick-actions">
-					<div className="card-body gap-3 px-5 py-4">
-						{!authenticated ? (
-							<>
-								<p className="mb-0 text-center text-sm text-base-content/60">
-									Log in or make an account to buy {pick.label} — {amountLabel(pick.threshold)}/mo,
-									starting with the first Month at the basket.
-								</p>
-								<div className="flex justify-center gap-2">
-									<Link to={withNextPath("/signup", back)} className="btn btn-primary btn-sm">
-										Sign up
-									</Link>
-									<Link to={withNextPath("/login", back)} className="btn btn-ghost btn-sm">
-										Log in
-									</Link>
-								</div>
-							</>
-						) : (
-							<>
-								{error && <p className="text-xs text-error">{error}</p>}
-								{added === pick.id && (
-									<p className="text-xs text-success">
-										In your basket. It charges with everything else you've added — the card fee is
-										charged once per purchase.
-									</p>
-								)}
-								<div className="flex gap-2">
-									<button
-										type="button"
-										className="btn btn-outline btn-sm"
-										disabled={working || hasBadge(pick.id)}
-										onClick={() => void addThePick(false)}
-									>
-										{hasBadge(pick.id) ? "In your basket" : working ? "Adding…" : "Add to basket"}
-									</button>
-									<button
-										type="button"
-										className="btn btn-primary btn-sm flex-1"
-										disabled={working}
-										onClick={() => void addThePick(true)}
-									>
-										<BoltIcon className="w-4 h-4" />
-										{working ? "Adding…" : "Buy now"}
-									</button>
-								</div>
-							</>
-						)}
-					</div>
-				</div>
+			{checkout && (
+				<SubscriptionPaymentModal
+					open
+					anthersSupport={checkout.anthersSupport}
+					directed={checkout.directed}
+					badgeName={checkout.badgeName}
+					preview={checkout.preview}
+					onComplete={() => {
+						setCheckout(null);
+						navigate("/settings?tab=badges");
+					}}
+					onClose={() => setCheckout(null)}
+				/>
 			)}
 		</div>
 	);
