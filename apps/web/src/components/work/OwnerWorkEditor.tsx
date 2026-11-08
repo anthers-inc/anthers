@@ -730,7 +730,7 @@ export default function OwnerWorkEditor({
 			? null
 			: {
 					key: "permission",
-					label: "Authorize creator permissions for ATProto",
+					label: "Allow ATProto creator permissions",
 					state: permissionMissing ? "todo" : "done",
 					refusal:
 						"Give Anthers permission to publish before releasing — the notice below says where.",

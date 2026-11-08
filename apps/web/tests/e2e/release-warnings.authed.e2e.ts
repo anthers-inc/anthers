@@ -129,7 +129,7 @@ test("a creator whose own setup is unfinished sees that checklist instead of the
 	await expect(page.getByRole("heading", { name: "Works" })).toBeVisible();
 	const creatorCard = page.getByRole("region", { name: "Creator Setup Checklist" });
 	await expect(creatorCard).toBeVisible();
-	await expect(creatorCard.getByText("Authorize creator permissions for ATProto")).toBeVisible();
+	await expect(creatorCard.getByText("Allow ATProto creator permissions")).toBeVisible();
 	await expect(creatorCard.getByText("Complete your Stripe Payout Setup")).toBeVisible();
 
 	// The same draft Work shows that checklist, not its own, until the setup is done.

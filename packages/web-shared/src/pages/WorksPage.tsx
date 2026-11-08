@@ -77,7 +77,7 @@ export default function WorksPage() {
 	const creatorSetupItems: SetupChecklistItem[] = [
 		{
 			key: "permission",
-			label: "Authorize creator permissions for ATProto",
+			label: "Allow ATProto creator permissions",
 			state: permissionMissing ? "todo" : "done",
 			href: studioUrl("/settings"),
 		},
