@@ -91,7 +91,7 @@ test("the Work checklist starts open, names what is missing, and gets out of the
 	await expect(card.getByText("A full set of ratings")).toBeVisible();
 
 	// It collapses to a button that keeps the progress visible, and opens again from it.
-	await page.getByRole("button", { name: "Close the Work Setup Checklist" }).click();
+	await page.getByRole("button", { name: "Collapse the Work Setup Checklist" }).click();
 	await expect(card).toBeHidden();
 	const fab = page.getByRole("button", { name: /Open the Work Setup Checklist: \d+ of \d+ done/ });
 	await expect(fab).toBeVisible();

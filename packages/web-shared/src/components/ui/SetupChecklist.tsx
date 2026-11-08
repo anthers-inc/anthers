@@ -207,7 +207,7 @@ export default function SetupChecklist({
 				<button
 					type="button"
 					className="btn btn-ghost btn-xs btn-circle -mt-1 -mr-1"
-					aria-label={`Close the ${title}`}
+					aria-label={`Collapse the ${title}`}
 					onClick={() => setOpen(false)}
 				>
 					<ChevronDownIcon aria-hidden="true" className="size-4" />
