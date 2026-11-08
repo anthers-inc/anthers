@@ -27,7 +27,7 @@ import type HlsInstance from "hls.js";
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
 import { useExclusivePlayback } from "../../lib/playback";
-import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
+import { publicAccessSpent, refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { useBindPlayerSeek } from "../../lib/work-player";
 import { useWorkTheater } from "../../lib/work-theater";
 import ChapterList from "./ChapterList";
@@ -183,11 +183,6 @@ export default function VideoPlayer({
 	 * not exist yet. The manifest handler picks it up instead; `-1` rejoins as automatic.
 	 */
 	const pendingLevel = useRef<number | null>(null);
-	/**
-	 * Set when delivery itself refuses — the backstop for an allowance that empties
-	 * *between* attention flushes, where the store has not caught up yet.
-	 */
-	const [refused, setRefused] = useState(false);
 	const budget = useMeteredBudget();
 
 	/**
@@ -285,7 +280,7 @@ export default function VideoPlayer({
 	 * The budget arrives on every attention write, which for a playing video is every 30
 	 * seconds, so this is both earlier and more certain than the failure would be.
 	 */
-	const spent = publicAccess && (refused || (!!budget && !budget.allowed));
+	const spent = publicAccessSpent(publicAccess, budget);
 
 	// Video credits time only while it is actually playing — a paused player on an
 	// open tab earns nothing, whatever else is on the page.
@@ -408,7 +403,6 @@ export default function VideoPlayer({
 						// than trying to classify the error.
 						hls.on(Hls.Events.ERROR, (_evt, data) => {
 							if (data?.response?.code === 402) {
-								setRefused(true);
 								refreshBudget();
 								video.pause();
 							}

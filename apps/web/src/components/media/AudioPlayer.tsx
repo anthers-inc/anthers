@@ -38,7 +38,7 @@ import { useAttentionClaim } from "../../lib/attention";
 import { useMediaPlayer } from "../../lib/media-player";
 import type { QueueTrack } from "../../lib/music-queue";
 import { useExclusivePlayback } from "../../lib/playback";
-import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
+import { publicAccessSpent, refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { useBindPlayerSeek } from "../../lib/work-player";
 import ChapterList from "./ChapterList";
 import { AsideDrawer, AsideToggle } from "./ListenStage";
@@ -111,8 +111,6 @@ export default function AudioPlayer({
 	const [elPlaying, setElPlaying] = useState(false);
 	const [elProgress, setElProgress] = useState(0);
 	const [elDuration, setElDuration] = useState(0);
-	/** Delivery refused — the backstop for an allowance emptied between flushes. */
-	const [refused, setRefused] = useState(false);
 	const budget = useMeteredBudget();
 	const { volume, effective: effectiveVolume, setLevel, toggleMuted } = useVolume();
 
@@ -143,7 +141,7 @@ export default function AudioPlayer({
 	 * the player knows before the request is even made, and never mislabels an outage as
 	 * "you're out of hours".
 	 */
-	const spent = publicAccess && (refused || (!!budget && !budget.allowed));
+	const spent = publicAccessSpent(publicAccess, budget);
 
 	// The placeholder for a track whose waveform has not been computed yet. Held in a
 	// memo — without it every `timeupdate` rolls a new shape and the bar flickers.
@@ -182,7 +180,6 @@ export default function AudioPlayer({
 		// network blip.
 		const onError = () => {
 			if (!publicAccess) return;
-			setRefused(true);
 			refreshBudget();
 		};
 
@@ -237,8 +234,10 @@ export default function AudioPlayer({
 			audio.pause();
 			setElPlaying(false);
 		} else {
+			// The element's own `play` event is what flips the transport and starts the
+			// attention claim. Setting it here as well marked a refused `play()` as
+			// listening, so a load failure drew an allowance for time nobody heard.
 			audio.play().catch(() => {});
-			setElPlaying(true);
 		}
 	}, [startSeconds, elPlaying]);
 
