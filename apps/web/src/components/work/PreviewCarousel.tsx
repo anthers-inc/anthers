@@ -38,7 +38,6 @@ export default function PreviewCarousel({
 	thumbnail,
 	previews,
 	slideZero,
-	slideZeroFill,
 	slideZeroLabel = "The locked Work",
 }: {
 	workTitle: string | null;
@@ -46,8 +45,6 @@ export default function PreviewCarousel({
 	previews: PreviewMediaItem[];
 	/** Slide zero rendered exactly as the no-preview page renders it. */
 	slideZero: ReactNode;
-	/** The composition's mount shape — a video's gate fills the stage, every other kind composes in it. */
-	slideZeroFill: boolean;
 	/** What slide zero is, for its strip button and the status line. */
 	slideZeroLabel?: string;
 }) {
@@ -118,7 +115,7 @@ export default function PreviewCarousel({
 			}}
 		>
 			<div className="relative">
-				<WorkMediaFrame fill={active === 0 ? slideZeroFill : true}>
+				<WorkMediaFrame fill>
 					{active === 0 ? (
 						slideZero
 					) : activeItem?.kind === "video" ? (
