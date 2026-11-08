@@ -3,11 +3,12 @@
  * The store panel on a physical Work's page — the pictures, the pickers, the count, the
  * parcel facts, and what the buyer will pay for it.
  *
- * ⭐ **The buyer view is the editor** (Parker, 2026-10-29): a physical good does not open a
- * media manager. The creator's own view of this panel carries a pencil on each variant row,
- * one on the quantity row, and one on the carousel; the shipping, handling and tax facts sit
- * under the price box, and a buyer sees them without the pencils. The Manage tab keeps only
- * what a buyer never sees.
+ * ⭐ **The buyer view is the editor** (Parker, 2026-10-29): a physical good's variants and
+ * pictures are edited in the panel itself rather than in a media manager tab. The
+ * creator's own view carries a pencil on each variant row, one on the quantity row, and one
+ * on the carousel; the shipping, handling and tax facts sit under the price box, and a
+ * buyer sees them without the pencils. The fulfillment note a buyer never sees lives in
+ * the media management card instead.
  *
  * ⭐ **The composition is the pre-fulfillment one**: the product's pictures own the left
  * column, and the variants, the price box, the policy row and the buy door own the right.

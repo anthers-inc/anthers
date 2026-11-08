@@ -94,10 +94,9 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 	await page.goto(draft.url);
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+/, { timeout: 15_000 });
 
-	// The buyer-facing fields are not on the Manage tab any more: the creator's own
-	// storefront is where they are read and edited.
-	const manage = page.locator("#work-side-manage");
-	await expect(manage.getByRole("heading", { name: "Shipping" })).toHaveCount(0);
+	// The buyer-facing fields are not in a management tab: the creator's own storefront
+	// is where they are read and edited, and the Manage tab is gone (Parker, 2026-11-07).
+	await expect(page.getByRole("tab", { name: "Manage" })).toHaveCount(0);
 	await expect(page.getByTestId("physical-policies")).toBeVisible();
 	await expect(page.getByText("Work not found")).toHaveCount(0);
 
@@ -197,13 +196,12 @@ test("a kind that ships nothing carries no storefront policy block", async ({ pa
 	await page.goto(draft.url);
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+/, { timeout: 15_000 });
 
-	const manage = page.locator("#work-side-manage");
-	// The kind control is the byline's chip, not a Manage-tab select (Parker, 2026-10-29):
-	// this kind ships nothing, so the Selling section never appears beside it.
+	// The kind control is the byline's chip, not a management-tab select (Parker,
+	// 2026-10-29): this kind ships nothing, so the Selling section never appears beside it.
 	await expect(
 		page.getByRole("button", { name: /^Change the kind, currently Video/ }),
 	).toBeVisible();
-	await expect(manage.getByRole("heading", { name: "Shipping" })).toHaveCount(0);
+	await expect(page.getByRole("heading", { name: "Shipping" })).toHaveCount(0);
 	await expect(page.getByTestId("physical-policies")).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Edit photos" })).toHaveCount(0);
 });

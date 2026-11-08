@@ -9,8 +9,8 @@
  * the record's deliverable slot rendered nothing — while the editor's own page drew
  * the silhouette. The fix makes both ask the same shared question
  * (`deliverableIsEmpty`), and this walk pins the answer on both surfaces for both
- * kinds, settled by the View As row itself before each preview read (a snapshot taken
- * earlier read a mid-transition render and called the states wrong).
+ * kinds, settled by the top bar's View As control before each preview read (a snapshot
+ * taken earlier read a mid-transition render and called the states wrong).
  *
  * The locked-preview walk (same day, its own task) pins the gate states over the same
  * fileless drafts: the verdicts route them, so a locked user's preview of a gated
@@ -86,8 +86,8 @@ test("a fileless draft's editor draws its silhouette with the picker in it", asy
 		// The box, in the deliverable's slot, whatever the kind.
 		await expect(emptyBox).toBeVisible();
 		// And the box carries the picker for both kinds: the empty media card is where a
-		// Work's file arrives (the media-area task, 2026-10-23), rather than a section on
-		// the Manage tab beside it.
+		// Work's file arrives (the media-area task, 2026-10-23), rather than a section
+		// below or beside it.
 		await expect(emptyBox.getByRole("button", { name: /drop /i })).toBeVisible();
 
 		if (ARIA_DEBUG) {

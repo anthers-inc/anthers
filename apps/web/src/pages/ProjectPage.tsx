@@ -18,7 +18,7 @@ import { usePreviewQuery } from "../components/creator/preview";
 import SaveButton from "../components/library/SaveButton";
 import AlbumView from "../components/media/AlbumView";
 import OwnerProjectEditor from "../components/project/OwnerProjectEditor";
-import { WorkViewAsRow } from "../components/work/ViewAs";
+import { useTopBarViewAs } from "../components/work/ViewAs";
 import { isAlbum, tracksFrom } from "../lib/tracks";
 
 export default function ProjectPage() {
@@ -58,6 +58,14 @@ export default function ProjectPage() {
 	// here at all; only a Work has ever been able to earn — see the wiki's *What the Time Pool Pays For*.)
 	useReportVisit({ creatorId: project?.creatorId ?? null });
 
+	/**
+	 * The owner's View As control rides the top bar, where the search bar sits in user
+	 * mode (Parker, 2026-11-07), the same place it takes on a Work. It stays put across
+	 * the editor/preview branch because both are this one page.
+	 */
+	const isOwner = !!project && !!user && user.id === project.creatorId;
+	useTopBarViewAs("Project", isOwner);
+
 	if (loading) {
 		return (
 			<div className="flex justify-center items-center min-h-[60vh]">
@@ -77,12 +85,11 @@ export default function ProjectPage() {
 
 	const posts = project.posts ?? [];
 	const works = project.works ?? [];
-	const isOwner = !!user && user.id === project.creatorId;
 	/**
 	 * The Project's editing surface is its own page (the unified-editor pass, 2026-10-17
 	 * — the Work page's ruling extended): the owner of the page edits it right here, and
-	 * the View As row's modes are exactly the ways to look at it — while one is active
-	 * the page is the user's rendering, which the row itself says.
+	 * the top bar's View As control is exactly the way to look at it — while a mode is
+	 * active the page is the user's rendering, which the control itself says.
 	 */
 	const ownerEdits = isOwner && !preview.previewAs;
 
@@ -106,18 +113,6 @@ export default function ProjectPage() {
 
 	return (
 		<div className="container mx-auto px-4 py-8 max-w-5xl">
-			{/* A creator previewing their own Project reaches the user's rendering of it —
-			    the editor is not rendered at all here — and the View As row is what marks
-			    the mode and leaves it, the Work page's pair. */}
-			{isOwner && (
-				<div className="mb-4 flex flex-col gap-2">
-					<h3 className="text-xs font-medium uppercase tracking-wide text-base-content/40">
-						View As
-					</h3>
-					<WorkViewAsRow subject="Project" />
-				</div>
-			)}
-
 			{project.isPublished === false && isOwner && (
 				<div className="alert alert-warning mb-4">
 					<span>This Project is still a draft.</span>

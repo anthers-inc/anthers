@@ -294,7 +294,7 @@ test("a video Work takes its file on the page and edits while the file uploads",
 
 	// ── On the Work's own page, while the file is still going up ────────────
 	// The page is the editing surface a creator meets while the file is still on the
-	// wire, and the View As row is its one mode marker.
+	// wire, and the top bar's View As control is its one mode marker.
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/, { timeout: 15_000 });
 	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
 	await expect(page.locator("h1").filter({ hasText: STEM })).toBeVisible();
@@ -465,9 +465,10 @@ test("a Work's page and the Works list follow its processing", async ({ page, co
 	await expect(page.getByText("43%", { exact: true })).toBeVisible();
 	await expect(page.getByText("About 3 minutes left")).toBeVisible();
 
-	// The row shows the same chips the Manage tab does (Parker, 2026-10-17): the original
-	// and the ladder — each yellow while the run has not produced it — and the estimate a
-	// line of its own, because a chip has no room for it.
+	// The row shows the same chips the media manager's Source & Versions tab does
+	// (Parker, 2026-10-17): the original and the ladder — each yellow while the run has
+	// not produced it — and the estimate a line of its own, because a chip has no room
+	// for it.
 	await page.goto("/studio/works");
 	const row = page.locator("tbody tr").filter({ hasText: `${STEM} processing` });
 	await expect(row.getByText("Original", { exact: true })).toBeVisible();

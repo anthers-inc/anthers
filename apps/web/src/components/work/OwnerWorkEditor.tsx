@@ -12,9 +12,9 @@
  *
  * Below the deliverable the page is two columns: the left is the **Info tab group**
  * (Details · Credits · Rating · Accessibility) shared with the user's rendering
- * of the same page (`WorkInfoTabs`), the right is **Manage · Reviews · Showings**
- * (`WorkSideColumn`) — Manage first and active by default on the creator's own page
- * (Parker, 2026-10-16), and a visitor's column never renders it. Each editable thing the
+ * of the same page (`WorkInfoTabs`), the right is **Reviews · Showings**
+ * (`WorkSideColumn`). The creator's four ways to look at the page live in the **top bar's
+ * View As control**, not in a tab (Parker, 2026-11-07). Each editable thing the
  * user can see is an `InlineField` — pencil opens it, X cancels, checkmark saves the
  * field alone; there is no page-wide Save.
  *
@@ -30,7 +30,7 @@
  * own machinery lives in the **media management card** the corner pencil opens
  * (`WorkMediaManager`): the file kinds' delivery, thumbnail, pages, builds, source and
  * versions, and — for the kinds with no media of their own — a writing Work's body and a
- * good's fulfillment details. The **Manage tab** carries only the View As row.
+ * good's fulfillment details. The top bar's View As control carries the previewing.
  *
  * ⚠️ **Saves are narrow, one field per request, and adopt the response.** The server's
  * own rules (release gates, the rating re-declaration refusal, the media floors) are the
@@ -152,7 +152,6 @@ import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
 import PreviewMediaSection from "./PreviewMediaSection";
 import ShareLinkButton from "./ShareLinkButton";
-import { WorkViewAsSection } from "./ViewAs";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
 import {
 	DescriptionBody,
@@ -1348,7 +1347,7 @@ export default function OwnerWorkEditor({
 	/**
 	 * The kind, edited from the chip in the byline strip (Parker, 2026-10-29): the chip a
 	 * reader reads is the door a draft's kind is changed through, the same shape as the
-	 * access chip beside it, and the Manage tab carries no Kind control of its own.
+	 * access chip beside it, and no separate Kind control stands anywhere else.
 	 */
 	const kindField = (
 		<OwnerKindChipEditor
@@ -1486,9 +1485,9 @@ export default function OwnerWorkEditor({
 			</p>
 		);
 
-	// The thumbnail block is one object, placed by kind: the paged kinds carry it high in
-	// the Manage tab, under View As and above Pages (Parker, 2026-10-19), because the cover
-	// and the pages are the two things a comic is. Every other kind keeps it at the tab's end.
+	// The thumbnail block is one object, placed by kind: every file kind carries it after
+	// Delivery, and the paged kinds keep Pages directly after it (Parker, 2026-10-19),
+	// because the cover and the pages are the two things a comic is.
 	const thumbnailTab = !isOwnThumbnail(current.type) ? (
 		<div className="flex flex-col gap-2">
 			{/* The terms ride the (i) now (Parker, 2026-10-16) — a hoverable beside
@@ -1506,8 +1505,8 @@ export default function OwnerWorkEditor({
 		// composition — what it says, when it came out, who may open it — each under its
 		// own heading rather than a flat run of controls. The description leads the tab
 		// (Parker, 2026-10-19): what the Work is comes before when it came out. The kind
-		// is neither here nor on the Manage tab (Parker, 2026-10-29): its chip in the
-		// byline strip is the control, so no composition field names it.
+		// is not here (Parker, 2026-10-29): its chip in the byline strip is the control,
+		// so no composition field names it.
 		<div className="flex flex-col gap-6">
 			<section className="flex flex-col gap-2">
 				<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
@@ -1543,7 +1542,7 @@ export default function OwnerWorkEditor({
 	// ── The media area's two modes ──
 	// The intake is the empty card's content for a kind whose media is uploaded; the
 	// manager is the same card swapped to its controls. Both reuse the sections the
-	// Manage tab used to carry, so the two surfaces cannot drift apart.
+	// manager carries, so the two surfaces cannot drift apart.
 	const buildDownloadsSection = (
 		<section className="flex flex-col gap-2">
 			<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloadable Builds</h3>
@@ -1729,29 +1728,6 @@ export default function OwnerWorkEditor({
 
 	const sideTabs = [
 		{
-			// The creator's tab, FIRST on the right column and active by default on it
-			// (Parker, 2026-10-16) — the tab a creator lands on opens the page's machinery,
-			// and the visitor's column never renders it. A user's page keeps the visitor's
-			// order (the surface is the creator's alone and says so).
-			key: "manage",
-			label: "Manage",
-			content: (
-				<div className="flex flex-col gap-6">
-					{/* The tab's own machinery moved to the media management card (Parker,
-					    2026-11-07): a piece of writing's body and a good's fulfillment details
-					    live behind the media area's pencil with the file kinds' media. What is
-					    left here is the View As row — and no Kind control stands beside it
-					    (Parker, 2026-10-29): a draft's kind is changed through the kind chip in
-					    the byline strip below the deliverable, the same shape as the access chip
-					    beside it. The row's place on this tab is Parker's, 2026-10-16: the
-					    creator's four ways to look at the page — and since Manage opens by
-					    default, at the top of the page itself, standing where the editing
-					    banner stood. */}
-					<WorkViewAsSection />
-				</div>
-			),
-		},
-		{
 			key: "reviews",
 			label: "Reviews",
 			// The Sticker for a Work rides a review, added from the review editor itself
@@ -1769,7 +1745,7 @@ export default function OwnerWorkEditor({
 		<WorkColumn type={current.type} wide tight>
 			{/* The editing banner is gone (Parker, 2026-10-16): editing is inline, the
 			    pencil is the only edit affordance, and the mode a creator is in is what the
-			    page itself is — the View As row on the Manage tab carries the previewing. */}
+			    page itself is — the top bar's View As control carries the previewing. */}
 
 			{/* ── The Work itself, full width, inside the page's one media card
 			    (WorkMediaFrame — the media-frame task, 2026-10-16: the video layout is
@@ -2186,9 +2162,9 @@ export function AccessSummary({
 /**
  * The creator's kind chip (Parker, 2026-10-29): the Work's kind as the byline strip's
  * chip, and for a draft that could still be another kind the chip is the door — it
- * opens the kinds in a dialog, asked for deliberately. The Manage tab lost its Kind
- * select to this: the chip a reader reads is the control a creator changes it with,
- * the same shape as the access chip beside it.
+ * opens the kinds in a dialog, asked for deliberately. It replaced the Kind select: the
+ * chip a reader reads is the control a creator changes it with, the same shape as the
+ * access chip beside it.
  */
 function OwnerKindChipEditor({
 	type,

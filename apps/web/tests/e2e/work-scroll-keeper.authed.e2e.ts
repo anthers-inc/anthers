@@ -160,15 +160,7 @@ test("switching tabs changes nothing about the page's height", async ({ page, co
 
 	// Both groups, every tab: each switch holds the page's height and the reader's
 	// place in it exactly.
-	for (const tab of [
-		"Rating",
-		"Accessibility",
-		"Credits",
-		"Details",
-		"Reviews",
-		"Showings",
-		"Manage",
-	]) {
+	for (const tab of ["Rating", "Accessibility", "Credits", "Details", "Reviews", "Showings"]) {
 		await clickExpectingStillness(page, page.getByRole("tab", { name: tab, exact: true }));
 	}
 });

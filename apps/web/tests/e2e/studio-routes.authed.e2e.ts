@@ -295,8 +295,8 @@ test("a creator can create a Project and lands on its page, which is the editor"
 		await page.getByRole("button", { name: "Create Project" }).click();
 
 		// Creating ends on the Project's own page — which IS the editor now (the
-		// unified-editor pass, 2026-10-17): View As and both shelves live there, and the
-		// old studio edit route is a redirect to this place.
+		// unified-editor pass, 2026-10-17): both shelves live there, the View As control
+		// rides the top bar, and the old studio edit route is a redirect to this place.
 		await expect(page).toHaveURL(new RegExp(`/@[^/]+/${slug}$`));
 		await expect(page.getByRole("heading", { name: "Works" })).toBeVisible();
 		await expect(page.getByRole("heading", { name: "Posts" })).toBeVisible();
@@ -310,12 +310,14 @@ test("a creator can create a Project and lands on its page, which is the editor"
 		// ⚠️ **This asserts where the page ARRIVES, so it has to run before anything scrolls
 		// it.** The list walk below reaches the bottom of the form; putting it first made
 		// this fail for a reason that had nothing to do with the scroll behavior it guards.
-		await expect(page.getByRole("heading", { name: "View As" })).toBeInViewport();
+		// The View As control rides the top bar now (Parker, 2026-11-07), which is always in
+		// view; the group is still what marks the owner's page.
+		await expect(page.getByRole("group", { name: "View this Project as" })).toBeInViewport();
 
 		// The old studio edit route is a redirect now: the same Project's page.
 		await page.goto(`/studio/projects/${slug}/edit`);
 		await expect(page).toHaveURL(new RegExp(`/@[^/]+/${slug}$`));
-		await expect(page.getByRole("heading", { name: "View As" })).toBeInViewport();
+		await expect(page.getByRole("group", { name: "View this Project as" })).toBeInViewport();
 
 		// 🚨 **The absence of the picker's mint is a tested absence.** The Works list's
 		// picker minted a Work through a ghost "New Work" button until 2026-10-10, when

@@ -7,8 +7,8 @@
  *
  * ⭐ **Video and audio draw the same card** (Parker, 2026-10-19): the chips name what
  * each pipeline actually produces — a video's audio rendition and ladder, an audio
- * Work's MP3 and waveform — so the Manage tab's media section reads one way across
- * kinds rather than as a filename row here and a status card there.
+ * Work's MP3 and waveform — so the media manager reads one way across kinds rather than
+ * as a filename row here and a status card there.
  *
  * ⭐ **The variants are chips** (Parker's first redesign pass, 2026-10-13): greyed with an
  * X when a variant was never a product of this file (a video with no audio track has no

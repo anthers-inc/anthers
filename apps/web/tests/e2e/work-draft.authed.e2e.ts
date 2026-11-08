@@ -69,15 +69,13 @@ test("a Work is drafted from a kind and a name, and its kind changes on its page
 
 	// The kind control is the chip in the byline now (Parker, 2026-10-29): the chip a
 	// reader reads is the door a draft's kind is changed through, the same shape as the
-	// access chip beside it, and the Manage tab no longer carries a Kind select — a walk
-	// scoped to the panel pins that the control left it rather than only that it exists
+	// access chip beside it, and no Kind select stands anywhere else on the page — a
+	// page-level count pins that the control left rather than only that it exists
 	// elsewhere. The dialog saves at once and the row answers, so the page follows the
 	// row rather than a bar's save.
 	const kind = page.getByRole("button", { name: /^Change the kind/ });
 	await expect(kind).toHaveAccessibleName("Change the kind, currently Comic");
-	await expect(
-		page.locator("#work-side-manage").getByRole("combobox", { name: "Work kind" }),
-	).toHaveCount(0);
+	await expect(page.getByRole("combobox", { name: "Work kind" })).toHaveCount(0);
 	await kind.click();
 	await page
 		.getByRole("dialog")

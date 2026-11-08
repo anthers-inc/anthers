@@ -342,7 +342,7 @@ export function UploadProgress({ upload }: { upload: WorkUpload }) {
 /**
  * The dropper for a draft that has never arrived at a file, mounted in the Work
  * placeholder itself (the dropper task, 2026-10-17): the act of filling the Work
- * happens where the Work will be, rather than down in the Manage tab's form. The
+ * happens where the Work will be, rather than down in a form beside it. The
  * two states it carries are the ones a fileless page can be in — nothing yet, or
  * the upload a closed tab left failed — and an upload in flight gives way to its
  * own progress, in the box the file is arriving into.
@@ -350,9 +350,9 @@ export function UploadProgress({ upload }: { upload: WorkUpload }) {
  * Reads the upload store and the stored row, and never contributes a `sourceKey`
  * to a save — the same boundary its sibling `WorkFileSection` holds (see the
  * module head). The caller decides which kinds mount it: the paged kinds keep
- * their set editor on the Manage tab in every state, and a video's or a listened
+ * their set editor in the media manager in every state, and a video's or a listened
  * Work's source is the Media Status card's, so neither reaches this; the image
- * kind's set editor does (it is the Manage tab's form once pictures exist), but a
+ * kind's set editor does (it is the media manager's form once pictures exist), but a
  * draft's dropper lives in the box like every other non-paged file kind's.
  */
 export function WorkFileDropzone({
@@ -418,7 +418,7 @@ export function WorkFileDropzone({
 }
 
 /**
- * The file section of a Work's own page, for the arrived states — the Manage tab's
+ * The file section of a Work's own page, for the arrived states — the media manager's
  * form for a Work whose file exists or is climbing from this tab. The caller mounts
  * it only in those states: the never-arrived and failed upload live in the Work
  * placeholder itself now, carried by {@link WorkFileDropzone} (the dropper task,
