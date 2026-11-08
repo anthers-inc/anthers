@@ -33,6 +33,26 @@ async function layout(page: Page) {
 
 const toggle = (page: Page) => page.getByRole("button", { name: "Toggle sidebar" });
 
+/**
+ * The alpha channel `getComputedStyle` reports for a background color, as a number.
+ * Chrome serializes a themed oklch/oklab color either without an alpha (`oklch(…)`) or
+ * with the CSS Color 4 slash form (`oklab(… / 0.6)`); the legacy `rgba(r, g, b, a)` form
+ * is handled for a palette that stops going through oklch.
+ */
+function backgroundAlpha(color: string): number {
+	const slash = color.match(/\/\s*([\d.]+%?)\s*\)$/);
+	if (slash) {
+		const raw = slash[1] ?? "";
+		return raw.endsWith("%") ? Number.parseFloat(raw) / 100 : Number.parseFloat(raw);
+	}
+	const legacy = color.match(/^rgba?\(([^)]+)\)$/);
+	if (legacy) {
+		const parts = (legacy[1] ?? "").split(",");
+		return parts.length === 4 ? Number.parseFloat(parts[3] ?? "1") : 1;
+	}
+	return 1;
+}
+
 test.describe("on a phone", () => {
 	test.use({ viewport: PHONE, isMobile: true, hasTouch: true });
 
@@ -55,6 +75,18 @@ test.describe("on a phone", () => {
 			mainLeft: 0,
 			mainWidth: PHONE.width,
 		});
+
+		// 🚨 The drawer is OPAQUE because it is laid over readable page content. A
+		// translucent panel here lets the page's headings and rows read through the
+		// sidebar's own labels, which is how it shipped (2026-11-08, the phone report).
+		// The desktop sidebar is beside the page rather than over it, so the same tint
+		// there is deliberate and this assertion stays scoped to the phone.
+		const background = await page
+			.locator("aside")
+			.evaluate((el) => getComputedStyle(el).backgroundColor);
+		expect(backgroundAlpha(background), `the phone drawer must be opaque (saw ${background})`).toBe(
+			1,
+		);
 
 		// The page it covers is one tap away — on the part the drawer leaves showing, since the
 		// backdrop's own center is underneath the drawer.
