@@ -23,7 +23,7 @@
  * the creator to know what it meant.
  *
  * **Media Status is per-variant** (Parker, 2026-10-17): a video row shows the same
- * chips its Manage tab shows — the original, the audio rendition, the ladder — rather
+ * chips its media manager shows — the original, the audio rendition, the ladder — rather
  * than a badge that only says "Ready", so a back catalog's encoding state reads in place.
  * The other kinds keep the single processing badge, which for a one-file Work is the
  * whole truth.
@@ -167,7 +167,7 @@ export default function WorkRow({
 			</td>
 
 			{/* MEDIA STATUS — what is moving, what is missing, and what is owed before a
-			    release. A video shows the same chips its Manage tab shows; the other kinds
+			    release. A video shows the same chips its media manager shows; the other kinds
 			    keep the one badge that is their whole media state. */}
 			<td className="py-2.5 pr-4 align-middle border-r border-base-300/50">
 				{item.type === "video" ? (

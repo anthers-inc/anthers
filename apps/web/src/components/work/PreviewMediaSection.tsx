@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Manage tab's preview-media editor — the screenshots and trailer a locked viewer
+ * The media manager's preview-media editor — the screenshots and trailer a locked viewer
  * sees under the price or unlock card (Parker, 2026-10-19).
  *
  * Uploads ride `useWorkUploads`, the same module store a Work's own file and a game's

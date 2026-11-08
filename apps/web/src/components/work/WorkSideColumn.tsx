@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Work page's **side column** — Reviews, Showings, and (on the creator's own page,
- * handed in first) Manage, one tab group (Parker, 2026-10-13). The default tab is the
- * first one handed in: a visitor's Review tab, a creator's Manage (Parker, 2026-10-16).
- * Reviews is the visitor's default: a verdict on the work is what the column has always
- * been about, and Showings starts here as its stub — the places this Work can be found,
- * beginning with the creator's profile and any Project carrying it, with the wider
+ * The Work page's **side column** — Reviews and Showings, one tab group (Parker,
+ * 2026-10-13). Reviews is the default: a verdict on the work is what the column has
+ * always been about, and Showings starts here as its stub — the places this Work can be
+ * found, beginning with the creator's profile and any Project carrying it, with the wider
  * machinery (channels, collections, collaborations) stated as to-come rather than
  * promised.
  *
  * 🚨 Same tabs for owner and user, like the Info tabs: the shell does not know who is
- * looking; the contents do.
+ * looking; the contents do. The creator's own controls — the View As control — live in the
+ * top bar rather than in a tab here (Parker, 2026-11-07).
  *
  * ⭐ **A switch changes nothing about the page's height** (Parker, 2026-10-17): the
  * panels ride `TabPanels`, which holds the group at its tallest panel's height, so
@@ -32,36 +31,19 @@ export interface SideTab {
 	content: ReactNode;
 }
 
-export default function WorkSideColumn({
-	tabs,
-	work,
-	activeKey: controlledActive,
-	onActiveChange,
-}: {
-	tabs: SideTab[];
-	work: WorkDetail;
-	/** Controlled mode, when a sibling needs to open a tab — the release checklist's body item. */
-	activeKey?: string;
-	onActiveChange?: (key: string) => void;
-}) {
-	const [localActive, setActive] = useState(tabs[0]?.key ?? "");
-	const active = controlledActive ?? localActive;
+export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: WorkDetail }) {
+	const [active, setActive] = useState(tabs[0]?.key ?? "");
 	const current = tabs.find((t) => t.key === active) ?? tabs[0];
-	const select = (key: string) => {
-		setActive(key);
-		onActiveChange?.(key);
-	};
 
 	/**
 	 * 🚨 **A hash naming a tab opens it** — `#reviews` is a real address for this column,
 	 * not decoration.
 	 *
-	 * A "reviewed your Work" notification links to `#reviews` (`services/activity-notify.ts`),
-	 * and the recipient of that one is the CREATOR, whose column opens on Manage
-	 * (`2026-10-16`). Without this the click lands on the Work page with the review it was
-	 * announcing still one tab away — the link resolves, so nothing errors, and the promise
-	 * the row made quietly does not hold. The map is the tab's own key, so the URL a
-	 * notification writes is the label the person then sees.
+	 * A "reviewed your Work" notification links to `#reviews` (`services/activity-notify.ts`).
+	 * Reviews is the column's default, so that link lands where it promised without help;
+	 * the map stays because any tab's key is its address, and a future link naming another
+	 * tab must open that one rather than the default. The map is the tab's own key, so the
+	 * URL a notification writes is the label the person then sees.
 	 *
 	 * The effect runs on `hash` alone; `tabs` is an inline array rebuilt every render, and
 	 * depending on it would fire the set on every keystroke elsewhere on the page.
@@ -70,7 +52,7 @@ export default function WorkSideColumn({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `hash` is the trigger; the tab list is read, not watched
 	useEffect(() => {
 		const key = hash.startsWith("#") ? hash.slice(1) : "";
-		if (key && tabs.some((t) => t.key === key)) select(key);
+		if (key && tabs.some((t) => t.key === key)) setActive(key);
 	}, [hash]);
 
 	if (!current) return null;
@@ -78,8 +60,7 @@ export default function WorkSideColumn({
 	// The gap under the tab bar is the Info tabs' `gap-6` (Parker, 2026-10-16): the
 	// panel's first heading kept sitting too close to the bar. The labels name the
 	// column rather than any tab set, because the shell hands different tabs to
-	// different readers — Manage rides in for the creator and the previewing owner,
-	// never for a visitor.
+	// different readers.
 	return (
 		<aside aria-label="The Work's side tabs" className="flex flex-col gap-6">
 			<div
@@ -96,7 +77,7 @@ export default function WorkSideColumn({
 						aria-controls={`work-side-${tab.key}`}
 						id={`work-side-button-${tab.key}`}
 						className={`btn btn-xs sm:btn-sm join-item flex-1 ${tab.key === current.key ? "btn-active" : ""}`}
-						onClick={() => select(tab.key)}
+						onClick={() => setActive(tab.key)}
 					>
 						{tab.label}
 					</button>

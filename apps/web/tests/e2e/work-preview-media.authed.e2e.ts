@@ -9,7 +9,7 @@
  * opens the lightbox, a trailer plays with its caption track, and a Work with no preview
  * set renders exactly the old composition — no fieldset, no strip.
  *
- * The uploads go through the real API, the same two-step attach the Manage tab performs.
+ * The uploads go through the real API, the same two-step attach the media manager performs.
  * The trailer and screenshot are tiny committed fixtures (`fixtures/preview-trailer.mp4`,
  * `fixtures/preview-shot.png`); the VTT is built in the test.
  */
@@ -248,7 +248,7 @@ test("the media manager adds, reorders and removes a preview image", async ({ pa
 
 	await page.goto(`/works/${work.publicId}`);
 	await expect(page.locator("h1")).toBeVisible({ timeout: 15_000 });
-	// Preview media lives with the thumbnail in the media manager now, not on the Manage tab.
+	// Preview media lives with the thumbnail in the media manager, not in a management tab.
 	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Thumbnail & Preview Media" }).click();
 	const section = page.getByTestId("preview-media-section");

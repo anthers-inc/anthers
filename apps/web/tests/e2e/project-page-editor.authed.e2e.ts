@@ -139,8 +139,9 @@ test("the editor is the page: the creator finds the shelves, the sort and the pe
 	await page.goto(`/@${handle}/${SLUG}`);
 	await expect(page).toHaveURL(new RegExp(`/@[^/]+/${SLUG}$`));
 
-	// The editor's marks, on the page a user reads: View As, the pencil, the shelves.
-	await expect(page.getByRole("heading", { name: "View As" })).toBeVisible();
+	// The editor's marks, on the page a user reads: the top bar's View As control, the
+	// pencil, the shelves.
+	await expect(page.getByRole("group", { name: "View this Project as" })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Edit Title" })).toHaveCount(1);
 	await expect(page.getByRole("heading", { name: "Works" })).toBeVisible();
 	await expect(
@@ -327,7 +328,7 @@ test("a stranger reaching the URL sees the project, and none of the editor", asy
 	// the authed project's storageState is the walker's, who is not the creator either.
 	await context.clearCookies();
 	await page.goto(`/@${handle}/${SLUG}`);
-	await expect(page.getByRole("heading", { name: "View As" })).toHaveCount(0);
+	await expect(page.getByRole("group", { name: "View this Project as" })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Add a Work" })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Edit Title" })).toHaveCount(0);
 	// The released members render; the draft member does not.

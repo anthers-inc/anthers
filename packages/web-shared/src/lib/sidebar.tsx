@@ -52,6 +52,15 @@ interface SidebarContextValue {
 	sharedContent: ReactNode | null;
 	/** Same contract as `setPageContent`, for the shared sections. */
 	setSharedContent: (content: ReactNode | null) => void;
+	/**
+	 * The page's content for the header's CENTER — the slot the search bar occupies in
+	 * user mode (Parker, 2026-11-07). A subject's owner registers the View As control
+	 * here, so the same control lands in the same place on every subject page that has
+	 * one; a page that registers nothing leaves the search bar alone.
+	 */
+	topBarContent: ReactNode | null;
+	/** Called by pages to register their header content; returns a cleanup fn. */
+	setTopBarContent: (content: ReactNode | null) => void;
 }
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);
@@ -60,6 +69,7 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 	const [sidebarOpen, setSidebarOpen] = useState(sidebarFitsBeside);
 	const [pageContent, setPageContentState] = useState<ReactNode | null>(null);
 	const [sharedContent, setSharedContentState] = useState<ReactNode | null>(null);
+	const [topBarContent, setTopBarContentState] = useState<ReactNode | null>(null);
 	const { pathname } = useLocation();
 
 	const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
@@ -70,6 +80,10 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 	);
 	const setSharedContent = useCallback(
 		(content: ReactNode | null) => setSharedContentState(content),
+		[],
+	);
+	const setTopBarContent = useCallback(
+		(content: ReactNode | null) => setTopBarContentState(content),
 		[],
 	);
 
@@ -96,6 +110,8 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 				setPageContent,
 				sharedContent,
 				setSharedContent,
+				topBarContent,
+				setTopBarContent,
 			}}
 		>
 			{children}
@@ -112,6 +128,8 @@ const NOOP_SIDEBAR: SidebarContextValue = {
 	setPageContent: () => {},
 	sharedContent: null,
 	setSharedContent: () => {},
+	topBarContent: null,
+	setTopBarContent: () => {},
 };
 
 export function useSidebar() {

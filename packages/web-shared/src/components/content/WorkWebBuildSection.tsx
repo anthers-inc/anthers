@@ -195,7 +195,7 @@ export default function WebBuildSection({
 	};
 
 	return (
-		// No heading of its own: the Manage tab's section names it ("Hosted Build")
+		// No heading of its own: the media manager's section names it ("Hosted Build")
 		// already, and a second heading over one section read twice (Parker's conformance
 		// pass, 2026-10-16).
 		<section className="flex flex-col gap-3">

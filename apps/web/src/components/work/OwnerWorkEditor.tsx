@@ -12,9 +12,9 @@
  *
  * Below the deliverable the page is two columns: the left is the **Info tab group**
  * (Details · Credits · Ratings · Accessibility) shared with the user's rendering
- * of the same page (`WorkInfoTabs`), the right is **Manage · Reviews · Showings**
- * (`WorkSideColumn`) — Manage first and active by default on the creator's own page
- * (Parker, 2026-10-16), and a visitor's column never renders it. Each section the
+ * of the same page (`WorkInfoTabs`), the right is **Reviews · Showings**
+ * (`WorkSideColumn`). The creator's four ways to look at the page live in the **top bar's
+ * View As control**, not in a tab (Parker, 2026-11-07). Each section the
  * creator can edit has one pencil — the pair opens and closes the section's fields as
  * one act, and only the fields whose values moved are sent; there is no page-wide Save.
  *
@@ -24,6 +24,14 @@
  * The pencil's place is the pair's place: a tab's action column and the byline's action
  * slot both keep one rectangle across the read/edit switch, and the save check lands on
  * the pencil the creator just clicked.
+ *
+ * The deliverable is whatever the kind is: a rendered medium through `WorkDeliverable`,
+ * or the store through `ProjectPricing` for the goods kinds, exactly where every user
+ * meets the same Work — the creator's copy is that view with pencils in it. Each kind's
+ * own machinery lives in the **media management card** the corner pencil opens
+ * (`WorkMediaManager`): the file kinds' delivery, thumbnail, pages, builds, source and
+ * versions, and — for the kinds with no media of their own — a writing Work's body and a
+ * good's fulfillment details. The top bar's View As control carries the previewing.
  *
  * ⚠️ **Saves are narrow, and adopt the response.** A section's save diffs its draft
  * against the row and sends only what changed — the title and each date independently,
@@ -145,7 +153,6 @@ import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
 import PreviewMediaSection from "./PreviewMediaSection";
 import ShareLinkButton from "./ShareLinkButton";
-import { WorkViewAsSection } from "./ViewAs";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
 import {
 	DescriptionBody,
@@ -333,8 +340,6 @@ export default function OwnerWorkEditor({
 	const [thumbError, setThumbError] = useState<string | null>(null);
 	/** Which Info tab is open — lifted, because the header's *Change* rating link opens Rating. */
 	const [activeInfoTab, setActiveInfoTab] = useState("details");
-	/** The side column's tab, lifted so the release checklist can open Manage for a writing's body. */
-	const [activeSideTab, setActiveSideTab] = useState("manage");
 
 	/**
 	 * The Release field's draft, as the datetime input holds it: the Work's own release
@@ -740,7 +745,8 @@ export default function OwnerWorkEditor({
 			state: writingEmpty ? "todo" : "done",
 			refusal: "This piece of writing is empty.",
 			onOpen: () => {
-				setActiveSideTab("manage");
+				setMediaTab("body");
+				setMediaManaging(true);
 				requestAnimationFrame(() =>
 					document.getElementById("work-body-field")?.scrollIntoView({
 						behavior: "smooth",
@@ -868,20 +874,19 @@ export default function OwnerWorkEditor({
 	 * Whether the empty box is itself the intake — every media kind now, not only the
 	 * single-file ones. The paged kinds' set editor and the build kinds' embed/builds
 	 * moved into the box (Parker, 2026-10-23), so the act of filling the Work happens
-	 * where the Work will be. A writing's body and a good's details are page-level
-	 * fields and stay on the Manage tab; the box simply names that.
+	 * where the Work will be. A writing's body and a good's details live in the media
+	 * management card, and the corner pencil is already an affordance on the box, so the
+	 * box does not narrate them.
 	 */
 	const deliverableIntake = !writing && !isGoods(current.type);
 	/**
 	 * The silhouette's note, said per kind — what fills the box, and where. The intake's
 	 * own controls say what to do, so a media Work's note is silent; an upload in flight
-	 * says so, and the two kinds without an intake point at the Manage tab.
+	 * says so. A writing's empty article names itself and the pencil stands in its corner.
 	 */
-	const deliverableNote = writing
-		? "Its Manage tab is where the pen is."
-		: fileUploading
-			? "It's uploading now — keep this tab open until it lands."
-			: "";
+	const deliverableNote = fileUploading
+		? "It's uploading now — keep this tab open until it lands."
+		: "";
 	/** The kind, while a private draft could still be another kind. */
 	const kindChangeable =
 		current.visibility !== "released" &&
@@ -1306,13 +1311,15 @@ export default function OwnerWorkEditor({
 	);
 
 	// A piece of writing's body, in the editor it is written with — the article variant,
-	// set in the typography the read prints. It lives in the Manage tab: a rich surface
-	// among tabs, the one heavy control the unified page keeps off the user's read.
+	// set in the typography the read prints. It lives in the media management card, the
+	// card the pencil over the media area opens: a rich surface, the one heavy control
+	// the unified page keeps off the user's read.
 	const bodyField = (
 		<InlineField<string>
 			label="Body"
 			saved={bodyHtml}
 			className="w-full"
+			initiallyEditing
 			renderRead={() => {
 				const words = bodyText.trim() ? bodyText.trim().split(/\s+/).length : 0;
 				return (
@@ -1386,12 +1393,13 @@ export default function OwnerWorkEditor({
 	);
 
 	// A physical good or a service's fulfillment details — the one field of the kind's
-	// own, and a creator-only one: the user never sees it, which is why it is here and
-	// not in the Details tab.
+	// own, and a creator-only one: the user never sees it, which is why it lives in the
+	// media management card and not in the Details tab.
 	const detailsNoteField = (
 		<InlineField<string>
 			label="Details"
 			saved={current.note ?? ""}
+			initiallyEditing
 			renderRead={() =>
 				current.note ? (
 					<p className="whitespace-pre-wrap text-sm">{current.note}</p>
@@ -1499,7 +1507,7 @@ export default function OwnerWorkEditor({
 	/**
 	 * The kind, edited from the chip in the byline strip (Parker, 2026-10-29): the chip a
 	 * reader reads is the door a draft's kind is changed through, the same shape as the
-	 * access chip beside it, and the Manage tab carries no Kind control of its own.
+	 * access chip beside it, and no separate Kind control stands anywhere else.
 	 */
 	const kindField = (
 		<OwnerKindChipEditor
@@ -1633,9 +1641,9 @@ export default function OwnerWorkEditor({
 			</p>
 		);
 
-	// The thumbnail block is one object, placed by kind: the paged kinds carry it high in
-	// the Manage tab, under View As and above Pages (Parker, 2026-10-19), because the cover
-	// and the pages are the two things a comic is. Every other kind keeps it at the tab's end.
+	// The thumbnail block is one object, placed by kind: every file kind carries it after
+	// Delivery, and the paged kinds keep Pages directly after it (Parker, 2026-10-19),
+	// because the cover and the pages are the two things a comic is.
 	const thumbnailTab = !isOwnThumbnail(current.type) ? (
 		<div className="flex flex-col gap-2">
 			{/* The terms ride the (i) now (Parker, 2026-10-16) — a hoverable beside
@@ -1680,7 +1688,7 @@ export default function OwnerWorkEditor({
 	// ── The media area's two modes ──
 	// The intake is the empty card's content for a kind whose media is uploaded; the
 	// manager is the same card swapped to its controls. Both reuse the sections the
-	// Manage tab used to carry, so the two surfaces cannot drift apart.
+	// manager carries, so the two surfaces cannot drift apart.
 	const buildDownloadsSection = (
 		<section className="flex flex-col gap-2">
 			<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloadable Builds</h3>
@@ -1786,7 +1794,27 @@ export default function OwnerWorkEditor({
 		) : null;
 
 	const mediaManagerTabs: MediaManagerTab[] = [];
-	if (!writing && !isGoods(current.type)) {
+	if (writing) {
+		// A piece of writing has no media of its own — its body is the deliverable, and
+		// this card is the one surface heavy enough to hold the editor rather than the read.
+		mediaManagerTabs.push({
+			key: "body",
+			label: "Body",
+			content: (
+				<div id="work-body-field" className="flex flex-col gap-2">
+					{bodyField}
+				</div>
+			),
+		});
+	} else if (isGoods(current.type)) {
+		// A good keeps its storefront for everything a buyer sees; this card holds the
+		// fulfillment material a buyer never does.
+		mediaManagerTabs.push({
+			key: "details",
+			label: "Details",
+			content: <div className="flex flex-col gap-2">{detailsNoteField}</div>,
+		});
+	} else {
 		mediaManagerTabs.push({
 			key: "delivery",
 			label: "Delivery",
@@ -1850,37 +1878,6 @@ export default function OwnerWorkEditor({
 
 	const sideTabs = [
 		{
-			// The creator's tab, FIRST on the right column and active by default on it
-			// (Parker, 2026-10-16) — the tab a creator lands on opens the page's machinery,
-			// and the visitor's column never renders it. A user's page keeps the visitor's
-			// order (the surface is the creator's alone and says so).
-			key: "manage",
-			label: "Manage",
-			content: (
-				<div className="flex flex-col gap-6">
-					{/* The View As row leads the tab, and no Kind control stands beside it
-					    (Parker, 2026-10-29): a draft's kind is changed through the kind chip
-					    in the byline strip below the deliverable, the same shape as the access
-					    chip beside it, so the tab's machinery still follows the kind while the
-					    control that changes it stands where the page already names it. The
-					    row's place on this tab is Parker's, 2026-10-16: the creator's four
-					    ways to look at the page — and since Manage opens by default, at the
-					    top of the page itself, standing where the editing banner stood. */}
-					<WorkViewAsSection />
-					{isGoods(current.type) && (
-						// Same doubling rule: the InlineField names itself "Details".
-						<section className="flex flex-col gap-2">{detailsNoteField}</section>
-					)}
-					{writing && (
-						<section id="work-body-field" className="flex flex-col gap-2">
-							<h3 className={WORK_DETAILS_HEADING_CLASS}>Body</h3>
-							{bodyField}
-						</section>
-					)}
-				</div>
-			),
-		},
-		{
 			key: "reviews",
 			label: "Reviews",
 			// The Sticker for a Work rides a review, added from the review editor itself
@@ -1898,7 +1895,7 @@ export default function OwnerWorkEditor({
 		<WorkColumn type={current.type} wide tight>
 			{/* The editing banner is gone (Parker, 2026-10-16): editing is inline, the
 			    pencil is the only edit affordance, and the mode a creator is in is what the
-			    page itself is — the View As row on the Manage tab carries the previewing. */}
+			    page itself is — the top bar's View As control carries the previewing. */}
 
 			{/* ── The Work itself, full width, inside the page's one media card
 			    (WorkMediaFrame — the media-frame task, 2026-10-16: the video layout is
@@ -1923,13 +1920,26 @@ export default function OwnerWorkEditor({
 						<span className="sr-only">{RELEASE_WARNING}</span>
 					</span>
 				)}
-				{!writing && !isGoods(current.type) && !mediaManaging && (
+				{!mediaManaging && (
 					<div className="absolute right-4 top-4 z-10">
-						<SectionPencil label="Media" onClick={() => setMediaManaging((open) => !open)} />
+						<SectionPencil
+							label={writing ? "Body" : isGoods(current.type) ? "Details" : "Media"}
+							onClick={() => {
+								// The kinds with one concern open on it; the media kinds keep the
+								// last tab they were on, unless a kind change left that tab behind.
+								if (writing) setMediaTab("body");
+								else if (isGoods(current.type)) setMediaTab("details");
+								else if (!mediaManagerTabs.some((tab) => tab.key === mediaTab)) {
+									setMediaTab("delivery");
+								}
+								setMediaManaging((open) => !open);
+							}}
+						/>
 					</div>
 				)}
 				{mediaManaging ? (
 					<WorkMediaManager
+						title={writing ? "Body" : isGoods(current.type) ? "Fulfillment Details" : undefined}
 						tabs={mediaManagerTabs}
 						active={mediaTab}
 						onActive={setMediaTab}
@@ -2065,12 +2075,7 @@ export default function OwnerWorkEditor({
 				</div>
 				<div aria-hidden className="w-0.5 self-stretch bg-base-content/20 max-lg:hidden" />
 				<div className="lg:pl-4">
-					<WorkSideColumn
-						tabs={sideTabs}
-						work={current}
-						activeKey={activeSideTab}
-						onActiveChange={setActiveSideTab}
-					/>
+					<WorkSideColumn tabs={sideTabs} work={current} />
 				</div>
 			</div>
 
@@ -2294,9 +2299,9 @@ export function AccessSummary({
 /**
  * The creator's kind chip (Parker, 2026-10-29): the Work's kind as the byline strip's
  * chip, and for a draft that could still be another kind the chip is the door — it
- * opens the kinds in a dialog, asked for deliberately. The Manage tab lost its Kind
- * select to this: the chip a reader reads is the control a creator changes it with,
- * the same shape as the access chip beside it.
+ * opens the kinds in a dialog, asked for deliberately. It replaced the Kind select: the
+ * chip a reader reads is the control a creator changes it with, the same shape as the
+ * access chip beside it.
  */
 function OwnerKindChipEditor({
 	type,

@@ -8,7 +8,7 @@
  * ⭐ **The Studio ends at the Projects list.** Editing one Project happens on its page,
  * which is a place users can see; what a user never sees is the studio edit route, which
  * folds away to a redirect, and the editable shelves below — working lists, the same
- * exemption a Work's Manage tab carries.
+ * exemption a Work's media manager carries.
  *
  * Every editable thing is an `InlineField` — pencil opens it, X cancels, checkmark saves
  * the field alone; there is no page-wide Save. The one deliberate exception is the
@@ -44,7 +44,6 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { InlineField } from "../work/Editing";
-import { WorkViewAsRow } from "../work/ViewAs";
 
 export default function OwnerProjectEditor({
 	project,
@@ -224,15 +223,6 @@ export default function OwnerProjectEditor({
 
 	return (
 		<div className="container mx-auto px-4 py-8 max-w-5xl">
-			{/* The View As row stands where the Studio route's redirect left the creator: the
-			    page itself is the edit surface, and the modes are the ways to look at it. */}
-			<div className="mb-4 flex flex-col gap-2">
-				<h3 className="text-xs font-medium uppercase tracking-wide text-base-content/40">
-					View As
-				</h3>
-				<WorkViewAsRow subject="Project" />
-			</div>
-
 			{/* The thumbnail — the user's hero, with the acts on it. The blank frame holds the
 			    page's shape while no thumbnail exists, as the Work page's own does. */}
 			{thumbnail ? (
