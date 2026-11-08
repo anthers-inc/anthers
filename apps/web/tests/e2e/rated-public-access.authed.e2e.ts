@@ -77,7 +77,7 @@ test("a creator releasing rated work into Public Access is told who will see it"
 	const note = page.getByText(NOTE);
 
 	// A Mature Work in Public Access that is not being released says nothing yet.
-	await page.getByRole("button", { name: "Edit Release" }).click();
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
 	await expect(note).toHaveCount(0);
 
 	// A past date makes the draft a release-now — the act every note in the field qualifies.
@@ -86,19 +86,20 @@ test("a creator releasing rated work into Public Access is told who will see it"
 
 	// The rating alone never decides it: General is met by every user. The walk saves
 	// the rating, so the release field's next edit answers from the rows that stand.
-	await page.getByRole("tab", { name: "Rating" }).click();
-	// The tab IS the table, always open (Parker, 2026-10-16) — no edit state to enter.
+	await page.getByRole("tab", { name: "Ratings" }).click();
+	await page.getByRole("button", { name: "Edit Ratings" }).click();
 	await page.getByRole("radio", { name: "Violence: None" }).check();
-	await page.getByRole("button", { name: "Save Rating" }).click();
+	await page.getByRole("button", { name: "Save Ratings" }).click();
 	// ⭐ The tab flip leaves the open edit open (TabPanels keeps every panel mounted;
 	//    what mounts stays mounted). The open edit answers from the saved rows as they
 	//    land — the note is gone before anything is clicked again.
 	await expect(note).toHaveCount(0);
 	// General is met by every user; Adult is noted too — the Work goes back to Adult
 	// from its Sexual Content row, and the release edit notes it again.
-	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("tab", { name: "Ratings" }).click();
+	await page.getByRole("button", { name: "Edit Ratings" }).click();
 	await page.getByRole("radio", { name: "Sexual Content: Adult" }).check();
-	await page.getByRole("button", { name: "Save Rating" }).click();
+	await page.getByRole("button", { name: "Save Ratings" }).click();
 	// Back on the Details tab, the same still-open edit now shows the Adult note.
 	await page.getByRole("tab", { name: "Details" }).click();
 	await expect(note).toBeVisible();

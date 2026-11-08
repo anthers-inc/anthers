@@ -79,11 +79,11 @@ test("a creator opens a pre-release page, and a reader meets a coming-soon Work"
 
 	// The editor's own Release field carries the pre-release date beside the release date.
 	await page.goto(`/works/${work.slug}-${work.publicId}`);
-	await page.getByRole("button", { name: "Edit Release" }).click();
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
 	const preRelease = page.getByLabel("Pre-Release Date");
 	await expect(preRelease).toBeVisible();
 	await preRelease.fill(localInput(-1));
-	await page.getByRole("button", { name: "Save Release" }).click();
+	await page.getByRole("button", { name: "Save Title and Dates" }).click();
 
 	// The read line now says the page is coming soon, rather than unreleased.
 	await expect(page.getByText(/Coming soon/)).toBeVisible({ timeout: 15_000 });

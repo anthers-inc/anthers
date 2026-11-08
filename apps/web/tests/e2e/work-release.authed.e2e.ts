@@ -180,10 +180,10 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// A Work is born `unrated` and the server refuses to release one (`maturity_undeclared`),
 	// so the control refuses the click rather than earning the error. The release act is a
 	// date in the past, and that is what the field's check waits on.
-	await page.getByRole("button", { name: "Edit Release" }).click();
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
 	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
-	await expect(page.getByRole("button", { name: "Save Release" })).toBeDisabled();
-	await page.getByRole("button", { name: "Cancel editing Release" }).click();
+	await expect(page.getByRole("button", { name: "Save Title and Dates" })).toBeDisabled();
+	await page.getByRole("button", { name: "Cancel editing Title and Dates" }).click();
 
 	await page.goto("/studio/works");
 	// Born private. Not a detail — it is why a Release control has to exist at all.
@@ -211,15 +211,16 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// one while the editor had no URL, which is the smallest concrete thing the page bought.
 	await rowsFor(page).getByRole("link", { name: "Rate this" }).click();
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
-	// Rated through the table, in the tab itself (always open, Parker, 2026-10-16): every
+	// Rated through the table's edit state (Parker, 2026-11-07): every
 	// row answered None is a General Work.
-	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("tab", { name: "Ratings" }).click();
+	await page.getByRole("button", { name: "Edit Ratings" }).click();
 	await page
-		.getByRole("tabpanel", { name: "Rating" })
+		.getByRole("tabpanel", { name: "Ratings" })
 		.locator("table")
 		.getByRole("button", { name: "None", exact: true })
 		.click();
-	await page.getByRole("button", { name: "Save Rating" }).click();
+	await page.getByRole("button", { name: "Save Ratings" }).click();
 	await expect
 		.poll(
 			async () => {
@@ -234,7 +235,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 			{ message: "the rating save never reached the row" },
 		)
 		.toBe("general");
-	// The Rating tab is the badge and the table, with no line explaining what a
+	// The Ratings tab is the badge and the table, with no line explaining what a
 	// General rating means (Parker, 2026-10-19) — neither the visitor's wording nor
 	// the creator's shorter copy.
 	await expect(page.getByText(/users see no rating on a General Work/i)).toHaveCount(0);
@@ -263,9 +264,9 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// The original release date, edited with the release date in the byline. Its whole
 	// reason for existing is back-dating a catalog, which is what a creator arriving with
 	// years of work actually does.
-	await page.getByRole("button", { name: "Edit Release" }).click();
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
 	await page.getByRole("textbox", { name: "Original release date" }).fill("2015-01-15");
-	await page.getByRole("button", { name: "Save Release" }).click();
+	await page.getByRole("button", { name: "Save Title and Dates" }).click();
 	await page.goto("/studio/works");
 
 	// ── Release ─────────────────────────────────────────────────────────────

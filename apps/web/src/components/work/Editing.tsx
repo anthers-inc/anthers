@@ -3,11 +3,18 @@
  * The creator's **editing primitives** — the one set of parts that put a pencil beside
  * what a user reads.
  *
- * ⭐ **The model is per-field save** (Parker, 2026-10-13): if you are the creator, every
- * editable field shows a little pencil; clicking it opens that field for edit, at which
- * point the pencil is replaced by an X (cancel) and a checkmark (save). A field saves
- * itself — there is no page-wide Save button — so what "the user sees" and what is
- * stored never stand further apart than one control.
+ * ⭐ **A Work is edited by section** (Parker, 2026-11-07): one pencil opens a section's
+ * fields together, and the cancel/save pair that replaces it saves only the fields whose
+ * values actually changed. `useSectionEdit` carries that shape, and `WorkInfoTabs` pins
+ * its action to the panel's top-right; the byline puts the Title section's action in the
+ * library Save button's old slot. A section that is really one control — a post's title,
+ * the Manage tab's body — uses `InlineField` below, and both share the same pencil and
+ * the same pair.
+ *
+ * ⭐ **The model began as per-field save** (Parker, 2026-10-13): every editable thing shows
+ * a pencil; clicking it replaces the pencil with an X (cancel) and a checkmark (save); no
+ * page-wide Save exists, so what the user sees and what is stored never stand further
+ * apart than one control. The section is the unit now, but the rule is the same.
  *
  * The read state is the user's version rendered by the very same parts the page draws
  * (`WorkLayout.tsx`'s rule); only what opens when the pencil is clicked is a working
@@ -29,8 +36,10 @@ import { keepScroll } from "./scrollKeeper";
 const PENCIL =
 	// Always visible (Parker, 2026-10-16) — hover-reveal was the rule while an unfilled field
 	// could leave nothing to hover; every field now renders its structure at every value,
-	// so the pencil sits in the open as the edit affordance it is.
-	"btn btn-ghost btn-xs text-base-content/40 hover:text-base-content/80";
+	// so the pencil sits in the open as the edit affordance it is. A bordered, filled
+	// button at the pair's size (Parker, 2026-11-07): the pencil is the anchor the save
+	// pair replaces, so it has to be the same object as the pair's save half.
+	"btn btn-sm btn-ghost border border-base-content/25 bg-base-200/80 text-base-content/60 shadow-sm hover:text-base-content";
 
 /**
  * The bordered, filled wrapper a field's cancel-and-save pair rides in — shared by the
@@ -40,10 +49,156 @@ const PENCIL =
  */
 export function FieldActionJoin({ children }: { children: ReactNode }) {
 	return (
-		<div className="-mt-1 join shrink-0 rounded-lg border border-base-content/25 bg-base-200/80 shadow-sm">
+		<div className="join shrink-0 rounded-lg border border-base-content/25 bg-base-200/80 shadow-sm">
 			{children}
 		</div>
 	);
+}
+
+/** The pencil a section or a single field opens its edit state with. */
+export function SectionPencil({
+	label,
+	onClick,
+	disabledReason,
+}: {
+	label: string;
+	onClick: () => void;
+	disabledReason?: string;
+}) {
+	if (disabledReason) {
+		return (
+			<span className="text-xs text-base-content/40" title={disabledReason}>
+				{disabledReason}
+			</span>
+		);
+	}
+	return (
+		<button
+			type="button"
+			aria-label={`Edit ${label}`}
+			title={`Edit ${label}`}
+			className={PENCIL}
+			onClick={onClick}
+		>
+			<PencilSquareIcon className="size-4" />
+		</button>
+	);
+}
+
+export interface SectionEdit<V> {
+	/** True in both the edit and busy states; the content stays as the creator left it. */
+	editing: boolean;
+	busy: boolean;
+	draft: V;
+	setDraft: (next: V) => void;
+	/** Why the save was refused, shown under the section by the caller. */
+	error: string | null;
+	/** The pencil in the read state, the pair in the edit state, "Saving…" while busy. */
+	actions: ReactNode;
+	cancel: () => void;
+	save: () => void;
+}
+
+/**
+ * One section's edit state and its action node, for a section that owns several fields
+ * and commits them in one act (Parker, 2026-11-07). The caller places `actions` wherever
+ * the section's pencil belongs — a tab's top-right corner, the byline's action slot — and
+ * renders the read or edit body itself. On save the caller diffs the draft against what
+ * the row holds and sends only the changed fields.
+ */
+export function useSectionEdit<V>({
+	label,
+	saved,
+	save,
+	disabledSave,
+	disabledReason,
+}: {
+	label: string;
+	saved: V;
+	save: (draft: V) => Promise<void> | void;
+	disabledSave?: (draft: V) => string | undefined;
+	disabledReason?: string;
+}): SectionEdit<V> {
+	const [mode, setMode] = useState<"read" | "edit" | "busy">("read");
+	const [draft, setDraft] = useState<V>(saved);
+	const [error, setError] = useState<string | null>(null);
+	/** The action's own wrapper, the anchor `keepScroll` measures the page's scroller from. */
+	const anchorRef = useRef<HTMLDivElement | null>(null);
+	// The latest saved value and saver, so opening or committing after a re-render uses
+	// the row as it stands rather than the row as it stood at the first render.
+	const savedRef = useRef(saved);
+	savedRef.current = saved;
+	const saveRef = useRef(save);
+	saveRef.current = save;
+	const saveRefusal = mode === "busy" ? undefined : disabledSave?.(draft);
+
+	const open = () =>
+		keepScroll(anchorRef.current, () => {
+			setDraft(savedRef.current);
+			setError(null);
+			setMode("edit");
+		});
+	const cancel = () =>
+		keepScroll(anchorRef.current, () => {
+			setDraft(savedRef.current);
+			setError(null);
+			setMode("read");
+		});
+	const commit = async () => {
+		if (mode === "busy" || saveRefusal) return;
+		setMode("busy");
+		setError(null);
+		try {
+			await saveRef.current(draft);
+			keepScroll(anchorRef.current, () => setMode("read"));
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Couldn't save this just now.");
+			setMode("edit");
+		}
+	};
+
+	const actions = (
+		<div ref={anchorRef} className="inline-flex">
+			{mode === "read" ? (
+				<SectionPencil label={label} onClick={open} disabledReason={disabledReason} />
+			) : mode === "busy" ? (
+				<span className="px-1 text-xs text-base-content/60">Saving…</span>
+			) : (
+				<FieldActionJoin>
+					<button
+						type="button"
+						aria-label={`Cancel editing ${label}`}
+						title="Discard"
+						className="btn btn-ghost btn-sm join-item text-error hover:bg-error/10 hover:text-error"
+						onClick={cancel}
+					>
+						<XMarkIcon className="size-4" />
+					</button>
+					<button
+						type="button"
+						aria-label={`Save ${label}`}
+						title={saveRefusal ?? "Save"}
+						disabled={saveRefusal !== undefined}
+						className="btn btn-success btn-sm join-item"
+						onClick={() => void commit()}
+					>
+						<CheckIcon className="size-4" />
+					</button>
+				</FieldActionJoin>
+			)}
+		</div>
+	);
+
+	return {
+		editing: mode !== "read",
+		busy: mode === "busy",
+		draft,
+		setDraft,
+		error,
+		actions,
+		cancel,
+		save: () => void commit(),
+	};
 }
 
 /**
@@ -161,9 +316,7 @@ export function InlineField<V>({
 			aria-label={`Edit ${label}`}
 			title={`Edit ${label}`}
 			className={`${PENCIL} shrink-0 ${
-				pencilPlacement === "corner"
-					? "absolute -top-1 right-0"
-					: "-mt-1 self-start justify-self-end"
+				pencilPlacement === "corner" ? "absolute -top-1 right-0" : "self-start justify-self-end"
 			}`}
 			onClick={() =>
 				// Opening for edit usually makes the page taller — and whatever it
@@ -195,7 +348,7 @@ export function InlineField<V>({
 					type="button"
 					aria-label={`Cancel editing ${label}`}
 					title="Discard"
-					className="btn btn-ghost btn-sm join-item text-base-content/70 hover:text-base-content"
+					className="btn btn-ghost btn-sm join-item text-error hover:bg-error/10 hover:text-error"
 					onClick={cancel}
 				>
 					<XMarkIcon className="size-4" />

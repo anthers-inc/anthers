@@ -62,10 +62,10 @@ test("a Work is drafted from a kind and a name, and its kind changes on its page
 	await expect(page.getByText(/the pages open here/i)).toBeVisible();
 	const box = page.getByRole("status").filter({ hasText: /the pages open here/i });
 	await expect(box.getByRole("button", { name: /drop page images/i })).toBeVisible();
-	await page.getByRole("button", { name: "Edit Release" }).click();
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
 	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
-	await expect(page.getByRole("button", { name: "Save Release" })).toBeDisabled();
-	await page.getByRole("button", { name: "Cancel editing Release" }).click();
+	await expect(page.getByRole("button", { name: "Save Title and Dates" })).toBeDisabled();
+	await page.getByRole("button", { name: "Cancel editing Title and Dates" }).click();
 
 	// The kind control is the chip in the byline now (Parker, 2026-10-29): the chip a
 	// reader reads is the door a draft's kind is changed through, the same shape as the

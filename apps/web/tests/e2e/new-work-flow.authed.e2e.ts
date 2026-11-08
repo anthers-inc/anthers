@@ -85,7 +85,7 @@ test("the New Work flow walks name, category, type and delivery", async ({ page,
 	await page.screenshot({ path: `${SHOTS}/06-work-page.png`, fullPage: true });
 
 	// The pencil swaps the same card for the manager; the page below does not move.
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	await expect(page.getByRole("heading", { name: "Media Management" })).toBeVisible();
 	await page.waitForTimeout(300);
 	await page.screenshot({ path: `${SHOTS}/09-media-manager-delivery.png`, fullPage: true });
@@ -132,7 +132,7 @@ test("a game's empty media card carries the build intake", async ({ page, contex
 	await expect(page.getByRole("heading", { name: "Hosted Build" })).toHaveCount(0);
 	await page.screenshot({ path: `${SHOTS}/13-game-intake.png`, fullPage: true });
 
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Downloads" }).click();
 	await expect(page.getByRole("tab", { name: "Downloads" })).toHaveAttribute(
 		"aria-selected",

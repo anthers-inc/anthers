@@ -39,7 +39,7 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 	// media manager's Thumbnail section since the media-area pass (Parker, 2026-10-23).
 	await page.goto(`/studio/works/${CLIP.publicId}/edit`);
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Thumbnail" }).click();
 
 	// The section's shape: the (i) carries the terms beside the heading, and the edit menu

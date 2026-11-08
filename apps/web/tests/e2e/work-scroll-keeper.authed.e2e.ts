@@ -118,7 +118,7 @@ test("the creator's place survives every toggle that changes the page's height",
 }) => {
 	await signInAsMediaFixture(context);
 	await page.goto("/works/media-fixture-video-910000001");
-	await page.getByLabel("Edit Description").waitFor({ state: "visible", timeout: 15_000 });
+	await page.getByLabel("Edit Details").waitFor({ state: "visible", timeout: 15_000 });
 
 	// Deep enough that both the growth and the shrink of the edit state are real.
 	const scrollable = await page.evaluate(() => {
@@ -130,28 +130,28 @@ test("the creator's place survives every toggle that changes the page's height",
 	await page.waitForTimeout(400);
 
 	// Open the description for edit: much taller.
-	await clickHoldingPlace(page, page.getByLabel("Edit Description"));
+	await clickHoldingPlace(page, page.getByLabel("Edit Details"));
 
 	// Enter-activated close: the keyboard path.
 	const beforeEnter = await scrollTop(page);
-	await page.getByLabel("Cancel editing Description").focus({ preventScroll: true });
+	await page.getByLabel("Cancel editing Details").focus({ preventScroll: true });
 	await page.keyboard.press("Enter");
 	await page.waitForTimeout(900);
 	expect(await scrollTop(page), "the place survives the Enter close").toBe(beforeEnter);
 
 	// Re-open and close by pointer click, both directions.
-	await clickHoldingPlace(page, page.getByLabel("Edit Description"));
-	await clickHoldingPlace(page, page.getByLabel("Cancel editing Description"));
+	await clickHoldingPlace(page, page.getByLabel("Edit Details"));
+	await clickHoldingPlace(page, page.getByLabel("Cancel editing Details"));
 
 	// A save is a close too (the field's own save path, then the read).
-	await clickHoldingPlace(page, page.getByLabel("Edit Description"));
-	await clickHoldingPlace(page, page.getByRole("button", { name: "Save Description" }));
+	await clickHoldingPlace(page, page.getByLabel("Edit Details"));
+	await clickHoldingPlace(page, page.getByRole("button", { name: "Save Details" }));
 });
 
 test("switching tabs changes nothing about the page's height", async ({ page, context }) => {
 	await signInAsMediaFixture(context);
 	await page.goto("/works/media-fixture-video-910000001");
-	await page.getByLabel("Edit Description").waitFor({ state: "visible", timeout: 15_000 });
+	await page.getByLabel("Edit Details").waitFor({ state: "visible", timeout: 15_000 });
 
 	// Every panel of both groups is mounted from the start — let the page say its
 	// whole height before pinning it, so a late-arriving panel's data is never read
@@ -161,7 +161,7 @@ test("switching tabs changes nothing about the page's height", async ({ page, co
 	// Both groups, every tab: each switch holds the page's height and the reader's
 	// place in it exactly.
 	for (const tab of [
-		"Rating",
+		"Ratings",
 		"Accessibility",
 		"Credits",
 		"Details",
@@ -176,7 +176,7 @@ test("switching tabs changes nothing about the page's height", async ({ page, co
 test("the read view shows the line breaks the edit textarea holds", async ({ page, context }) => {
 	await signInAsMediaFixture(context);
 	await page.goto("/works/media-fixture-video-910000001");
-	await page.getByLabel("Edit Description").waitFor({ state: "visible", timeout: 15_000 });
+	await page.getByLabel("Edit Details").waitFor({ state: "visible", timeout: 15_000 });
 	// The fixture description carries a timestamped chapter list on separate lines;
 	// whitespace-pre-line is what keeps those breaks in the read view.
 	const wrapped = await page

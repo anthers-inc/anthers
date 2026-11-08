@@ -184,11 +184,12 @@ test("a field saves itself alone, and Cancel puts back what is saved", async ({
 	// what the page is, and the View As row on the Manage tab is its one marker.
 	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
 
-	// The title alone is centered, with its pencil hanging off the text's top-right corner
-	// (Parker, 2026-10-19): centering the two as a group is what pulled the title off the
-	// page's center, which no save, cancel or reload would ever catch.
+	// The title alone is centered, and the Title section's pencil rides the byline's action
+	// slot in the library Save button's place (Parker, 2026-11-07). Centering the title with
+	// the pencil as one group would pull the text off the page's center, which no save,
+	// cancel or reload would ever catch.
 	const titleHeading = page.locator("h1").filter({ hasText: STEM });
-	const titleEdit = page.getByRole("button", { name: "Edit Title" });
+	const titleEdit = page.getByRole("button", { name: "Edit Title and Dates" });
 	const byline = titleHeading.locator("xpath=ancestor::header[1]");
 	const [headingBox, pencilBox, bylineBox] = await Promise.all([
 		titleHeading.boundingBox(),
@@ -197,38 +198,38 @@ test("a field saves itself alone, and Cancel puts back what is saved", async ({
 	]);
 	expect(
 		headingBox && pencilBox && bylineBox,
-		"the title, its pencil and the byline are all drawn",
+		"the title, the section pencil and the byline are all drawn",
 	).toBeTruthy();
 	expect(
 		Math.abs(headingBox!.x + headingBox!.width / 2 - (bylineBox!.x + bylineBox!.width / 2)),
-		"the title text itself is what the page centers",
+		"the title's block is what the page centers",
 	).toBeLessThanOrEqual(2);
 	expect(
-		pencilBox!.x,
-		"the pencil is off the title's right edge, not inside the centered group",
-	).toBeGreaterThanOrEqual(headingBox!.x + headingBox!.width - 1);
+		await titleHeading.evaluate((el) => getComputedStyle(el).textAlign),
+		"the title text itself is centered inside that block",
+	).toBe("center");
 	expect(
-		Math.abs(pencilBox!.y - headingBox!.y),
-		"the pencil sits at the title's top",
-	).toBeLessThanOrEqual(8);
+		pencilBox!.y >= bylineBox!.y && pencilBox!.y <= bylineBox!.y + bylineBox!.height,
+		"the section pencil rides the byline's action slot",
+	).toBe(true);
 
-	// The title field, opened: the pencil opens, the X cancels, the check saves.
-	await page.getByRole("button", { name: "Edit Title" }).click();
+	// The title field, opened with the dates: the pencil opens, the X cancels, the check saves.
+	await titleEdit.click();
 	const title = page.getByRole("textbox", { name: "Title" });
 	await expect(title).toHaveValue(STEM);
 
 	// ── Cancel ──
 	await title.fill(`${STEM} renamed`);
-	await page.getByRole("button", { name: "Cancel editing Title" }).click();
+	await page.getByRole("button", { name: "Cancel editing Title and Dates" }).click();
 	await expect(
 		page.locator("h1").filter({ hasText: STEM }),
 		"cancel did not put back what is saved",
 	).toBeVisible();
 
 	// ── Save, and the page stays where it is ──
-	await page.getByRole("button", { name: "Edit Title" }).click();
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
 	await title.fill(`${STEM} renamed`);
-	await page.getByRole("button", { name: "Save Title" }).click();
+	await page.getByRole("button", { name: "Save Title and Dates" }).click();
 	await expect(page.locator("h1").filter({ hasText: `${STEM} renamed` })).toBeVisible();
 	await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 
@@ -262,18 +263,19 @@ test("a piece of writing is written on its page and reads as an article", async 
 
 	// Rated, on its own grid, on the Work's page — and still not releasable, because
 	// there is nothing in it yet (`text_missing`).
-	await page.getByRole("tab", { name: "Rating" }).click();
-	// The tab IS the table, always open (Parker, 2026-10-16); the None heading answers
-	// every row at once, which is what Mark the Rest used to do for the unanswered ones.
+	await page.getByRole("tab", { name: "Ratings" }).click();
+	await page.getByRole("button", { name: "Edit Ratings" }).click();
+	// The None heading answers every row at once, which is what Mark the Rest used to
+	// do for the unanswered ones.
 	await page
-		.getByRole("tabpanel", { name: "Rating" })
+		.getByRole("tabpanel", { name: "Ratings" })
 		.locator("table")
 		.getByRole("button", { name: "None", exact: true })
 		.click();
-	await page.getByRole("button", { name: "Save Rating" }).click();
+	await page.getByRole("button", { name: "Save Ratings" }).click();
 	// The release act is a release date already in the past, and
 	// the field's check waits while a readiness condition stands (Parker, 2026-10-23).
-	const saveRelease = page.getByRole("button", { name: "Save Release" });
+	const saveRelease = page.getByRole("button", { name: "Save Title and Dates" });
 
 	// And not releasable until a human is credited either (`credits_creator_required`):
 	// one credit row with its Created box ticked, naming the writer. The field lives in
@@ -288,16 +290,16 @@ test("a piece of writing is written on its page and reads as an article", async 
 	await contributor.press("Enter");
 	await page.getByRole("button", { name: "Save Credits" }).click();
 	await page.getByRole("tab", { name: "Details" }).click();
-	await page.getByRole("button", { name: "Edit Release" }).click();
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
 	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
 	await expect(saveRelease).toBeDisabled();
 
 	// The standfirst is the Description field, edited in the Details tab where a user
 	// reads it as a line of the record.
-	await page.getByRole("button", { name: "Cancel editing Release" }).click();
-	await page.getByRole("button", { name: "Edit Description" }).click();
+	await page.getByRole("button", { name: "Cancel editing Title and Dates" }).click();
+	await page.getByRole("button", { name: "Edit Details" }).click();
 	await page.getByPlaceholder("Describe this Work…").fill("A standfirst for the walk.");
-	await page.getByRole("button", { name: "Save Description" }).click();
+	await page.getByRole("button", { name: "Save Details" }).click();
 
 	// And a piece of writing is its body, written in the Manage tab in the typography
 	// the read prints.
@@ -309,7 +311,7 @@ test("a piece of writing is written on its page and reads as an article", async 
 
 	// The release walk returns to the Details tab, where the release field lives.
 	await page.getByRole("tab", { name: "Details" }).click();
-	await page.getByRole("button", { name: "Edit Release" }).click();
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
 	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
 	await expect(saveRelease).toBeEnabled();
 	await saveRelease.click();
@@ -338,7 +340,7 @@ test("a comic's media manager carries Thumbnail before Pages", async ({ page, co
 	// Manage is the tab the creator lands on, and the View As row is still its first fact;
 	// the thumbnail and the pages are the media manager's sections now (Parker, 2026-10-23).
 	await expect(page.getByRole("heading", { name: "View As" })).toBeVisible();
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	const sections = page.getByRole("tablist", { name: "Media management sections" });
 	// The order is the tab strip's: delivery first, then the thumbnail and previews, then
 	// Pages for the paged kinds, and the source with its version history last.
@@ -364,7 +366,7 @@ test("a game's media manager follows its delivery", async ({ page, context }) =>
 		title: `${STEM} delivery game`,
 	});
 	await page.goto(draft.url);
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	const sections = page.getByRole("tablist", { name: "Media management sections" });
 
 	// The game's default delivery is download, so the streaming door is absent entirely.
@@ -424,7 +426,7 @@ test("a Work's tags are added and removed from the Details tab", async ({ page, 
 	expect(fresh).not.toBe(existing);
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
-	await page.getByRole("button", { name: "Edit Tags" }).click();
+	await page.getByRole("button", { name: "Edit Details" }).click();
 	const input = page.getByPlaceholder("Search tags, or type a new one…");
 
 	// The existing tag is offered with the count behind it.
@@ -436,7 +438,7 @@ test("a Work's tags are added and removed from the Details tab", async ({ page, 
 	// A tag nobody uses yet says so, and can still be added.
 	await input.fill(fresh);
 	await page.getByRole("button", { name: new RegExp(`Use “${fresh}”`) }).click();
-	await page.getByRole("button", { name: "Save Tags" }).click();
+	await page.getByRole("button", { name: "Save Details" }).click();
 
 	// The read view is the chips, and the server holds the same list.
 	const details = page.getByRole("tabpanel", { name: "Details" });
@@ -448,10 +450,10 @@ test("a Work's tags are added and removed from the Details tab", async ({ page, 
 	expect(stored?.tags).toEqual([existing, fresh]);
 
 	// A Work's tags change at any time: remove both from the same field.
-	await page.getByRole("button", { name: "Edit Tags" }).click();
+	await page.getByRole("button", { name: "Edit Details" }).click();
 	await page.getByRole("button", { name: `Remove tag ${existing}` }).click();
 	await page.getByRole("button", { name: `Remove tag ${fresh}` }).click();
-	await page.getByRole("button", { name: "Save Tags" }).click();
+	await page.getByRole("button", { name: "Save Details" }).click();
 	await expect(details.getByText(existing, { exact: true })).toHaveCount(0);
 	const [cleared] = (await ownWorks()).filter((w) => w.title === title);
 	expect(cleared?.tags).toEqual([]);
