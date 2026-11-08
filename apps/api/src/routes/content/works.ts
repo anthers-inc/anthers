@@ -69,6 +69,7 @@ import {
 } from "../../services/credit-acceptance.js";
 import { parentalHiddenFrom, parentalVisibility } from "../../services/parental-controls.js";
 import { canBePaid } from "../../services/payouts.js";
+import { saveOwnWork } from "../../services/library.js";
 import { postContentExcerpt } from "../../services/post-markdown.js";
 import { rowsOf } from "../../services/rows.js";
 import { sanitizePostHtml } from "../../services/sanitize.js";
@@ -236,6 +237,11 @@ const worksRoutes = new Hono()
 				sourceUrl: data.sourceUrl ?? "",
 			})
 			.returning();
+
+		// The creator's own Work is in their Library from birth (Parker, 2026-11-08). This
+		// is membership, not a keep — see `saveOwnWork` — and it never puts the draft into
+		// the preservation program.
+		await saveOwnWork(user.id, work.id);
 
 		const job = await queueTranscodeForWork(work);
 		await queueScansForWork(work);
