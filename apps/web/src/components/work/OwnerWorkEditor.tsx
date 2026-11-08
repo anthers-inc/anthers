@@ -47,6 +47,7 @@ import {
 	isOwnThumbnail,
 	isPaged,
 	isPreRelease,
+	processingFor,
 	supportsPreviewMedia,
 } from "@anthers/shared/content";
 import {
@@ -122,6 +123,7 @@ import ImageEditMenu from "@anthers/web-shared/ui/ImageEditMenu";
 import ImageFrameModal from "@anthers/web-shared/ui/ImageFrameModal";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import Modal from "@anthers/web-shared/ui/Modal";
+import SetupChecklist, { type SetupChecklistItem } from "@anthers/web-shared/ui/SetupChecklist";
 import { uploadMediaFile } from "@anthers/web-shared/upload";
 import { useWebBuildUploads } from "@anthers/web-shared/web-build-uploads";
 import {
@@ -138,6 +140,7 @@ import {
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useMediaPlayer } from "../../lib/media-player";
 import { useExclusivePlayback } from "../../lib/playback";
 import CreditsSection from "../../studio/CreditsSection";
 import PanelEditor from "../../studio/PanelEditor";
@@ -151,7 +154,6 @@ import { InlineField } from "./Editing";
 import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
 import PreviewMediaSection from "./PreviewMediaSection";
-import ReleaseChecklist, { type ReleaseChecklistItem } from "./ReleaseChecklist";
 import ShareLinkButton from "./ShareLinkButton";
 import { WorkViewAsSection } from "./ViewAs";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
@@ -196,6 +198,9 @@ const GROWS = "resize-none [field-sizing:content]";
  */
 const RELEASE_WARNING = "This is mandatory for release. Fill it in before the scheduled date.";
 
+/** A checklist row, plus the sentence the Release field carries when it is the first blocker. */
+type ReleaseItem = SetupChecklistItem & { refusal?: string };
+
 /**
  * The Original Release Date explainer, on the (i) beside its label (Parker, 2026-10-23).
  * It was printed under the input until the field's own control needed the room.
@@ -213,6 +218,8 @@ export default function OwnerWorkEditor({
 	onRefetch: () => void;
 }) {
 	const { user } = useAuth();
+	/** Whether the persistent player bar owns the bottom edge, so the floating card clears it. */
+	const playerUp = useMediaPlayer().currentTrack !== null;
 	const [current, setCurrent] = useState<WorkDetail>(work);
 
 	/** Adopt a row the server answered: a save or a media re-read writes here. */
@@ -712,39 +719,64 @@ export default function OwnerWorkEditor({
 	};
 
 	/**
-	 * The Work's **release checklist**, in the server's own order (`refusalFor`): the
-	 * creator's standing, the file or the writing, processing, the rating, the credits.
-	 * `releaseNowRefusal` is this list's first unfinished refusal, so the floating card and
-	 * the Release field cannot disagree — the batch editor's one-definition rule, carried
-	 * from the warning icons into the fuller guide.
-	 *
-	 * ⚠️ **The two account-wide answers arrive a moment after the page.** Their rows join the
-	 * list once known rather than being drawn from an unasked question, so the card never
-	 * tells a creator they need something the platform has not checked yet.
+	 * **The creator's own setup** — the two things publishing takes that belong to the
+	 * account rather than to any one Work. They are one-time facts, so they are not rows on
+	 * every Work's checklist; a Work shows them only while one is still missing (Parker,
+	 * 2026-11-07). Each answer arrives a moment after the page, and a row exists only once
+	 * its answer does, so the card never claims a fact nobody has checked.
 	 */
-	const releaseChecklist: ReleaseChecklistItem[] = [];
-	if (permissionMissing !== null) {
-		releaseChecklist.push({
-			key: "permission",
-			label: "Give Anthers permission to publish",
-			state: permissionMissing ? "todo" : "done",
-			refusal: "Give Anthers permission to publish before releasing — the notice below says where.",
-			href: studioUrl("/settings"),
-		});
-	}
-	if (payoutsReady !== null) {
-		releaseChecklist.push({
-			key: "payouts",
-			label: "Set up payouts",
-			state: payoutsReady ? "done" : "todo",
-			refusal: "Set up payouts before releasing — the notice below says where.",
-			href: studioUrl("/payments"),
-		});
-	}
+	const permissionItem: ReleaseItem | null =
+		permissionMissing === null
+			? null
+			: {
+					key: "permission",
+					label: "Authorize creator permissions for ATProto",
+					state: permissionMissing ? "todo" : "done",
+					refusal:
+						"Give Anthers permission to publish before releasing — the notice below says where.",
+					href: studioUrl("/settings"),
+				};
+	const payoutsItem: ReleaseItem | null =
+		payoutsReady === null
+			? null
+			: {
+					key: "payouts",
+					label: "Complete your Stripe Payout Setup",
+					state: payoutsReady ? "done" : "todo",
+					refusal: "Set up payouts before releasing — the notice below says where.",
+					href: studioUrl("/payments"),
+				};
+	const creatorSetupItems = [permissionItem, payoutsItem].filter(
+		(item): item is ReleaseItem => item !== null,
+	);
+	const creatorSetupKnown = permissionItem !== null && payoutsItem !== null;
+	const creatorSetupMissing = permissionItem?.state === "todo" || payoutsItem?.state === "todo";
+
+	/**
+	 * **The Work's own setup**, in the order the card reads it: its medium, a human credit,
+	 * the rating. The card and the Release field share these predicates, so neither can call
+	 * a Work ready while the release gate refuses it.
+	 *
+	 * ⚠️ **Processing is folded into the media row rather than given a row of its own.** The
+	 * file is not set up until it can play, and a creator who has just uploaded one should see
+	 * the medium row waiting rather than a checked row beside a second one saying to wait.
+	 */
+	const transcodeStatus = current.transcoding?.status;
+	const mediaStalled = transcodeStatus === "failed" || transcodeStatus === "canceled";
+	const mediaWaiting =
+		fileUploading ||
+		running ||
+		(!!processingFor(current.type) && !current.transcoding && !!current.sourceKey);
+	const workItems: ReleaseItem[] = [];
+
 	if (writing) {
-		releaseChecklist.push({
+		workItems.push({
 			key: "writing",
-			label: "Write the piece",
+			label: (
+				<>
+					The <strong>writing</strong> for the Work
+				</>
+			),
 			state: writingEmpty ? "todo" : "done",
 			refusal: "This piece of writing is empty.",
 			onOpen: () => {
@@ -758,40 +790,53 @@ export default function OwnerWorkEditor({
 			},
 		});
 	} else if (isFileWorkType(current.type)) {
-		releaseChecklist.push({
+		workItems.push({
 			key: "media",
-			// An upload in flight resolves without the creator, so it is a wait rather than
-			// an act and says what it is doing. A file that never arrived is theirs to add.
-			label: fileUploading ? "Uploading the media" : "Add the Work's media",
-			state: fileUploading ? "waiting" : current.sourceKey ? "done" : "todo",
-			refusal: "This Work's file has to arrive before it can be released.",
-			onOpen: openMediaManager,
-		});
-	}
-	if (current.transcoding) {
-		const stalled =
-			current.transcoding.status === "failed" || current.transcoding.status === "canceled";
-		releaseChecklist.push({
-			key: "processing",
-			// A stopped encode is not something to wait for: nothing will finish it.
-			label: stalled
-				? "Replace the media or start processing again"
-				: "Finish processing the media",
-			state: running ? "waiting" : stalled ? "todo" : "done",
-			refusal: stalled
+			label: (
+				<>
+					The <strong>media</strong> for the Work
+				</>
+			),
+			state: mediaWaiting ? "waiting" : current.sourceKey && !mediaStalled ? "done" : "todo",
+			refusal: mediaStalled
 				? "Processing this Work's media was stopped, so it can't be released — replace the media or start the processing again."
-				: running
+				: mediaWaiting && current.sourceKey
 					? "Can't release yet — the media is still processing."
-					: undefined,
+					: "This Work's file has to arrive before it can be released.",
+			onOpen: openMediaManager,
+		});
+	} else if (isBuildType(current.type)) {
+		workItems.push({
+			key: "build",
+			label: (
+				<>
+					A <strong>build</strong> or embed for the Work
+				</>
+			),
+			state: deliverableIsEmpty(current) ? "todo" : "done",
+			// The release gate does not ask for a build, so this row carries no refusal: the
+			// card may name the page's empty medium without inventing a release condition.
 			onOpen: openMediaManager,
 		});
 	}
-	releaseChecklist.push({
+	workItems.push({
+		key: "credits",
+		label: (
+			<>
+				At least one human <strong>credit</strong>
+			</>
+		),
+		state: creditsMissing ? "todo" : "done",
+		refusal: "Credit at least one person as Created before releasing.",
+		onOpen: creditsMissing ? () => openInfoTab("credits") : undefined,
+	});
+	workItems.push({
 		key: "rating",
-		label:
-			fromRows && ratingRungRefusal === "closed"
-				? `${maturityLabel(fromRows)} work isn't open for release yet`
-				: "Answer every row of the Rating",
+		label: (
+			<>
+				A full set of <strong>ratings</strong>
+			</>
+		),
 		state: !fromRows ? "todo" : ratingRungRefusal === "closed" ? "waiting" : "done",
 		refusal: !fromRows
 			? "Answer every row of the Rating first — every row, no exceptions."
@@ -800,23 +845,42 @@ export default function OwnerWorkEditor({
 				: undefined,
 		onOpen: !fromRows ? () => openInfoTab("rating") : undefined,
 	});
-	releaseChecklist.push({
-		key: "credits",
-		label: "Credit who made it",
-		state: creditsMissing ? "todo" : "done",
-		refusal: "Credit at least one person as Created before releasing.",
-		onOpen: creditsMissing ? () => openInfoTab("credits") : undefined,
-	});
 
 	/**
-	 * The first thing that would refuse a release-now, said in the server's own order. The
-	 * notices below say each one in full, and this short form rides the checkmark's tooltip
-	 * while it waits. A schedule is still offered while these stand, as the batch editor's
-	 * rule had it.
+	 * The first thing that would refuse a release-now, said in the server's own order: the
+	 * creator's standing, the Work's medium, the rating, the credits. The notices below say
+	 * each one in full, and this short form rides the checkmark's tooltip while it waits. A
+	 * schedule is still offered while these stand, as the batch editor's rule had it.
 	 */
-	const releaseNowRefusal = releaseChecklist.find(
-		(item) => item.state !== "done" && item.refusal,
-	)?.refusal;
+	const releaseNowRefusal = [
+		permissionItem,
+		payoutsItem,
+		...workItems.filter(
+			(item) => item.key === "media" || item.key === "writing" || item.key === "build",
+		),
+		workItems.find((item) => item.key === "rating"),
+		workItems.find((item) => item.key === "credits"),
+	]
+		.filter((item): item is ReleaseItem => item != null)
+		.find((item) => item.state !== "done" && item.refusal)?.refusal;
+
+	/**
+	 * Which checklist the floating card shows. A creator who has not finished their own setup
+	 * sees that first, because it is what has to change before anything can be published; a
+	 * Work they have already set up sees the Work's own rows. Never both at once (Parker,
+	 * 2026-11-07), and nothing until the account answers are known.
+	 */
+	const checklist = creatorSetupMissing
+		? {
+				title: "Creator Setup Checklist",
+				intro: "Before you can publish Works or posts, you need to:",
+				items: creatorSetupItems,
+			}
+		: {
+				title: "Work Setup Checklist",
+				intro: "Before you can release a Work, you need to add:",
+				items: workItems,
+			};
 
 	// ── The Info tabs' contents ──
 	/**
@@ -2111,8 +2175,23 @@ export default function OwnerWorkEditor({
 			/>
 
 			{/* The setup checklist, in the corner while the Work is still being made. It
-			    leaves with the release, when there is nothing left to set up. */}
-			{unpublished && <ReleaseChecklist items={releaseChecklist} />}
+			    leaves with the release, when there is nothing left to set up. A creator
+			    whose own setup is unfinished sees that first; the Work's rows follow once
+			    the account can publish at all. */}
+			{unpublished && creatorSetupKnown && (
+				<div
+					className={`fixed right-4 z-40 sm:right-6 ${
+						playerUp ? "bottom-40 sm:bottom-24" : "bottom-28 sm:bottom-6"
+					}`}
+				>
+					<SetupChecklist
+						variant="floating"
+						title={checklist.title}
+						intro={checklist.intro}
+						items={checklist.items}
+					/>
+				</div>
+			)}
 		</WorkColumn>
 	);
 }

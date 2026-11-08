@@ -40,10 +40,13 @@ import {
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import Modal from "../components/ui/Modal";
+import SetupChecklist, { type SetupChecklistItem } from "../components/ui/SetupChecklist";
+import { usePayoutsReady } from "../lib/payouts";
+import { usePublishingPermissionMissing } from "../lib/publishing";
 import { Link, useSearchParams } from "../lib/router";
 import { client } from "../lib/rpc";
 import { useSidebar } from "../lib/sidebar";
-import { studioNewWorkUrl } from "../lib/studio";
+import { studioNewWorkUrl, studioUrl } from "../lib/studio";
 import type { Work } from "../lib/types";
 import { useWorkUploads } from "../lib/work-uploads";
 
@@ -57,6 +60,34 @@ interface UsingPost {
 export default function WorksPage() {
 	const [items, setItems] = useState<Work[]>([]);
 	const [loading, setLoading] = useState(true);
+
+	/**
+	 * The creator's own setup, for the onboarding card at the top of the page.
+	 *
+	 * ⭐ **This is the same pair the Work page's floating card shows, and the same pair the
+	 * server refuses a release for** (`publishRefusal`). It lives here because the Works page
+	 * is the Studio's front door: a creator who has just turned creator mode on lands on it,
+	 * and the two things publishing takes are what stands between them and their first
+	 * release. A creator with both done never sees the card.
+	 */
+	const payoutsReady = usePayoutsReady();
+	const permissionMissing = usePublishingPermissionMissing();
+	const creatorSetupKnown = payoutsReady !== null && permissionMissing !== null;
+	const creatorSetupMissing = payoutsReady === false || permissionMissing === true;
+	const creatorSetupItems: SetupChecklistItem[] = [
+		{
+			key: "permission",
+			label: "Authorize creator permissions for ATProto",
+			state: permissionMissing ? "todo" : "done",
+			href: studioUrl("/settings"),
+		},
+		{
+			key: "payouts",
+			label: "Complete your Stripe Payout Setup",
+			state: payoutsReady ? "done" : "todo",
+			href: studioUrl("/payments"),
+		},
+	];
 
 	const [deleteTarget, setDeleteTarget] = useState<Work | null>(null);
 	// Held across the dialog's exit, so the box keeps naming the Work while it fades.
@@ -327,6 +358,17 @@ export default function WorksPage() {
 					<PlusIcon className="w-4 h-4" /> New Work
 				</Link>
 			</div>
+
+			{creatorSetupKnown && creatorSetupMissing && (
+				<div className="mb-4">
+					<SetupChecklist
+						variant="inline"
+						title="Creator Setup Checklist"
+						intro="Before you can publish Works or posts, you need to:"
+						items={creatorSetupItems}
+					/>
+				</div>
+			)}
 
 			{releaseError && (
 				<div className="alert alert-error text-sm mb-4">

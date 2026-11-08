@@ -76,6 +76,7 @@
 		"./ui/InfoTip": "./src/components/ui/InfoTip.tsx",
 		"./ui/ImageEditMenu": "./src/components/ui/ImageEditMenu.tsx",
 		"./ui/ImageFrameModal": "./src/components/ui/ImageFrameModal.tsx",
+		"./ui/SetupChecklist": "./src/components/ui/SetupChecklist.tsx",
 		"./editor/RichTextEditor": "./src/components/editor/RichTextEditor.tsx",
 		"./post/AccessTables": "./src/components/post/AccessTables.tsx",
 		"./post/BadgeMaker": "./src/components/post/BadgeMaker.tsx",
