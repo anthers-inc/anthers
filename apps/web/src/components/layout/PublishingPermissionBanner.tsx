@@ -24,8 +24,11 @@ import { useLocation } from "react-router-dom";
  * Works, posts and projects, and anybody's comments, reviews, votes and follows. Giving it again
  * asks for everything the account needs in one round trip.
  *
- * ⚠️ **A creator's missing publishing permission is not repeated on Studio settings**, whose card
- * says it with more room. Two warnings on one page read as two problems.
+ * ⚠️ **A creator's missing publishing permission is not repeated where a setup checklist says it
+ * with more room** — Studio settings, whose ATProto card carries the grant, and the Works page,
+ * whose Creator Setup Checklist is the onboarding surface. Two warnings on one page read as two
+ * problems. The Works page's card covers publishing only, so a missing interaction tier still
+ * gets the banner there.
  */
 export default function PublishingPermissionBanner() {
 	const { user, grantPublishing } = useAuth();
@@ -37,8 +40,14 @@ export default function PublishingPermissionBanner() {
 	const creatorMode = user?.creatorMode === true;
 	const publishing = creatorMode && publishingPermissionMissing(state) === true;
 	const interactions = interactionPermissionMissing(state) === true;
-	if (!user || (!publishing && !interactions)) return null;
-	if (publishing && pathname.startsWith("/studio/settings")) return null;
+	if (!user) return null;
+	// Studio settings and the Works page's Creator Setup Checklist say the publishing half with
+	// more room, and two warnings on one page read as two problems. The Works page's card
+	// covers publishing only, so a missing interaction tier still gets the banner there.
+	if (pathname.startsWith("/studio/settings") && (publishing || interactions)) return null;
+	const showPublishing = publishing && pathname !== "/studio/works";
+	const showInteractions = interactions;
+	if (!showPublishing && !showInteractions) return null;
 
 	const handleGrant = async () => {
 		setBusy(true);
@@ -46,7 +55,7 @@ export default function PublishingPermissionBanner() {
 		try {
 			// A creator restoring publishing lands on Studio settings, which says what happened. A
 			// user comes back to the page they were on.
-			await grantPublishing(publishing ? undefined : `${pathname}${search}`);
+			await grantPublishing(showPublishing ? undefined : `${pathname}${search}`);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Couldn't ask for the permission.");
 			setBusy(false);
@@ -54,8 +63,8 @@ export default function PublishingPermissionBanner() {
 	};
 
 	const where = state?.handle ? `your repository at @${state.handle}` : "your repository";
-	const blocked = publishing
-		? interactions
+	const blocked = showPublishing
+		? showInteractions
 			? "release Works, publish posts and projects, or comment, review, vote and follow"
 			: "release Works or publish posts and projects"
 		: "comment, review, vote or follow";
