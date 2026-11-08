@@ -33,7 +33,7 @@ import {
 	type WorkVersionEntry,
 } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePreviewQuery } from "../components/creator/preview";
 import SaveButton from "../components/library/SaveButton";
 import { PublicAccessWall } from "../components/media/PublicAccessNotice";
@@ -48,7 +48,7 @@ import PreReleaseComposition from "../components/work/PreReleaseComposition";
 import PreviewCarousel from "../components/work/PreviewCarousel";
 import SharedWorkNotice from "../components/work/SharedWorkNotice";
 import ShareLinkButton from "../components/work/ShareLinkButton";
-import { WorkViewAsSection } from "../components/work/ViewAs";
+import { useTopBarViewAs } from "../components/work/ViewAs";
 import WorkInfoTabs from "../components/work/WorkInfoTabs";
 import {
 	formatVersionDate,
@@ -165,6 +165,14 @@ export default function WorkPage() {
 	const versionHistory = useWorkVersionHistory(work?.id, work?.versionAddedAt);
 	const [loading, setLoading] = useState(true);
 	usePageTitle(work?.title ?? null);
+	/**
+	 * The owner's View As control rides the top bar, where the search bar sits in user
+	 * mode (Parker, 2026-11-07). It is registered from here rather than from the editor,
+	 * because the page renders the editor and the previewed user view as two branches of
+	 * one page, and the control has to stay put across the switch.
+	 */
+	const isOwner = !!work && isAuthenticated && user?.id === work.creatorId;
+	useTopBarViewAs("Work", isOwner);
 
 	/**
 	 * What is already in state — the canonical path AND the preview it was fetched under.
@@ -314,7 +322,6 @@ export default function WorkPage() {
 	// user's — the owner's own shape carries the editable rows instead, which read as no
 	// verdict at all here (`null`), the same absence the comment below already describes.
 	const access = isAccessResult(work.access) ? work.access : null;
-	const isOwner = isAuthenticated && user?.id === work.creatorId;
 	/**
 	 * Whether this user may open the Work.
 	 *
@@ -345,11 +352,10 @@ export default function WorkPage() {
 	/**
 	 * Every kind's editing surface is the Work's own page now (the kinds pass,
 	 * 2026-10-14 — the video surface propagated): its owner edits right here, and the
-	 * View As row's modes are exactly that — when one is active the page is the user's
-	 * rendering, which is what the row itself says (the editing banner is gone,
-	 * 2026-10-16 — editing is inline, the pencil is the only edit affordance). The
-	 * row does not move when a mode takes: the owner's copy of the user's rendering
-	 * carries the same Manage tab the editor's does (Parker, 2026-10-17).
+	 * top bar's View As control's modes are exactly that — when one is active the page is
+	 * the user's rendering, which is what the control itself says (the editing banner is
+	 * gone, 2026-10-16 — editing is inline, the pencil is the only edit affordance). The
+	 * control does not move when a mode takes (Parker, 2026-11-07).
 	 */
 	const ownerEdits = isOwner && !preview.previewAs;
 
@@ -529,8 +535,8 @@ export default function WorkPage() {
 					// box names what will fill it — rather than showing nothing at all
 					// (Parker, 2026-10-17, after a previewed unreleased video's media area
 					// was gone entirely). Silent on purpose: the editor's own silhouette is
-					// the one that points at a Manage tab, and this surface cannot know
-					// whose reading it is.
+					// the one whose corner pencil opens the card, and this surface cannot
+					// know whose reading it is.
 					<WorkMediaFrame overlay={shareNotice}>
 						{isWriting(work.type) && <WorkDescription work={work} />}
 						<WorkPlaceholder type={work.type} note="" />
@@ -582,9 +588,7 @@ export default function WorkPage() {
 			{/* Every kind gets the SAME tab groups its editor renders — a user's read-only
 			    version of the very same information, in the same two columns (the kinds pass,
 			    2026-10-14); the per-kind linear pages and the goods two-up are gone. An owner
-			    previewing gets their Manage tab back in the side column (Parker, 2026-10-17):
-			    the row that switched the mode is where the mode is switched back, on the same
-			    tab it never left in the editor. */}
+			    previewing keeps the View As control in the top bar, where it never moved. */}
 			<VisitorRecord
 				work={work}
 				refetch={refetch}
@@ -592,7 +596,6 @@ export default function WorkPage() {
 				canAccess={canAccess}
 				downloadsInMedia={downloadsInMedia}
 				versions={versionHistory}
-				ownerManage={isOwner ? <WorkViewAsSection /> : undefined}
 			/>
 		</WorkColumn>
 	);
@@ -601,10 +604,10 @@ export default function WorkPage() {
 /**
  * A Work's information for a viewer — the same Info and side tab groups its owner
  * edits in (`WorkInfoTabs`/`WorkSideColumn`), read-only, for every kind (the kinds
- * pass, 2026-10-14). For the owner previewing their own Work it is the same Record
- * with the Manage tab handed back in, holding the View As row where the editor
- * holds it (Parker, 2026-10-17). Rough views on purpose: Parker reviews the layout in
- * screenshots and the reads get tuned against what they look like, not a spec.
+ * pass, 2026-10-14). The owner previewing their own Work sees the same Record; the
+ * View As control that put them here stays in the top bar (Parker, 2026-11-07). Rough
+ * views on purpose: Parker reviews the layout in screenshots and the reads get tuned
+ * against what they look like, not a spec.
  */
 function VisitorRecord({
 	work,
@@ -613,7 +616,6 @@ function VisitorRecord({
 	canAccess,
 	downloadsInMedia,
 	versions,
-	ownerManage,
 }: {
 	work: WorkDetail;
 	refetch: () => void;
@@ -625,11 +627,6 @@ function VisitorRecord({
 	downloadsInMedia: boolean;
 	/** Versions added after release, oldest first; the Details tab lists them all. */
 	versions: WorkVersionEntry[];
-	/**
-	 * The Manage tab's content for the owner previewing their own Work — the View As
-	 * row, on the tab it lives on in the editor — or nothing for every visitor's page.
-	 */
-	ownerManage?: ReactNode;
 }) {
 	const publicAccess = access ? access.isFree : (work.publicAccess ?? false);
 	const rating = work.maturity;
@@ -752,10 +749,6 @@ function VisitorRecord({
 				<div className="lg:pl-4">
 					<WorkSideColumn
 						tabs={[
-							// The owner's Manage tab, first and active as the editor's is
-							// (Parker, 2026-10-17): while previewing, the row that switched the
-							// mode stays where it was rather than jumping to the page's top.
-							...(ownerManage ? [{ key: "manage", label: "Manage", content: ownerManage }] : []),
 							{
 								key: "reviews",
 								label: "Reviews",

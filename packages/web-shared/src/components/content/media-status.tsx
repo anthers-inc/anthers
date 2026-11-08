@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The **variant chips** of a Work's media status — the per-variant state the Manage tab's
- * Media Status card and the Works table's Media Status column both show, extracted from
- * `apps/web`'s `MediaStatusCard` (2026-10-17) so the table can carry the same chips the
+ * The **variant chips** of a Work's media status — the per-variant state the media
+ * manager's Media Status card and the Works table's Media Status column both show, extracted
+ * from `apps/web`'s `MediaStatusCard` (2026-10-17) so the table can carry the same chips the
  * Work's own page does rather than a badge that says only "Ready".
  *
  * ⭐ **A video's ladder and an audio Work's products are the same idea, named for what
  * each pipeline makes** (Parker, 2026-10-19): the original file first, then each
  * rendition the processing run produces. The audio row is the MP3 a listener streams
- * and the waveform the player draws, so audio's Manage tab reads like video's rather
+ * and the waveform the player draws, so audio's media manager reads like video's rather
  * than as an older filename row.
  *
  * ⭐ **The variants are chips** (Parker's first redesign pass, 2026-10-13): greyed with an

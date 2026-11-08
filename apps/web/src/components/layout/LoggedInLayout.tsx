@@ -214,7 +214,8 @@ function PhoneTabs({ hidden }: { hidden: boolean }) {
 function LoggedInLayoutInner() {
 	const { user } = useAuth();
 	const { currentTrack } = useMediaPlayer();
-	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent, sharedContent } = useSidebar();
+	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent, sharedContent, topBarContent } =
+		useSidebar();
 	const { pathname, search } = useLocation();
 	const { count: cartCount } = useCart();
 	const creatorMode = Boolean(user?.creatorMode);
@@ -350,8 +351,12 @@ function LoggedInLayoutInner() {
 							)}
 						</div>
 
-						<div className="navbar-center flex-1 px-4 hidden sm:flex">
-							{!studio && <SearchBar />}
+						<div className="navbar-center flex-1 px-4 hidden sm:flex justify-center">
+							{/* The page's own header content — today the owner's View As control —
+							    takes the search bar's place, so the same control lands in the same
+							    spot on every subject page that registers one. Studio mode has no
+							    search to displace, so the slot simply fills the center there. */}
+							{topBarContent ?? (!studio ? <SearchBar /> : null)}
 						</div>
 
 						<div className="navbar-end gap-1">

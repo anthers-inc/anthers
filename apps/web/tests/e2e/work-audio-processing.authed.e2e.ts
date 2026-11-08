@@ -106,7 +106,7 @@ test("a music Work plays its original while processing runs", async ({ page, con
 	// The page is the Work's own page in editor mode, as every upload walk reads it.
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/, { timeout: 15_000 });
 	// The editing banner is gone (the View As task, 2026-10-16): the editor mode is
-	// what the page is, and the View As row on the Manage tab is its one marker.
+	// what the page is, and the View As control in the top bar is its one marker.
 	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
 
 	// The file lands, and landing is what starts processing — a job row exists with no
@@ -127,9 +127,9 @@ test("a music Work plays its original while processing runs", async ({ page, con
 		.toBe("arrived");
 
 	// The deliverable's place holds the player, not the status block. The old page put
-	// "Waiting to process…" there; the ruled page mounts the original and lets the
-	// Manage tab's Media Status card carry the progress (Parker, 2026-10-19 — audio
-	// joined video's card rather than keeping the older filename row).
+	// "Waiting to process…" there; the ruled page mounts the original and lets the media
+	// manager's Media Status card carry the progress (Parker, 2026-10-19 — audio joined
+	// video's card rather than keeping the older filename row).
 	//
 	// The <audio> element itself is 0x0 — the player's UI is its transport — so the
 	// visible half is asserted on the button and the playing half on the element.
@@ -154,8 +154,8 @@ test("a music Work plays its original while processing runs", async ({ page, con
 
 	// And nothing anywhere on the page claims the Work is waiting, while the job's row
 	// still says pending — the status block no longer stands in the player's place.
-	// Scoped to the player's own section: the Manage tab (open by default since the
-	// View As task, 2026-10-16) carries the machinery's own waiting words in its card.
+	// Scoped to the player's own section: the media manager's card carries the
+	// machinery's own waiting words when it is open.
 	await expect(
 		page.locator("section", { has: page.locator("audio") }).getByText(/Waiting to process…/),
 	).toHaveCount(0);

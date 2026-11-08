@@ -2,9 +2,9 @@
 /**
  * One physical good's listing row, and the two surfaces that edit it.
  *
- * ⭐ **The Manage tab keeps the parcel facts and the media area keeps the storefront's**
- * (Parker, 2026-10-29): shipping, handling and tax stay in Selling, while the variants and
- * the pictures live in Goods Management beside the panel they configure. Both surfaces read
+ * ⭐ **The parcel facts are the store panel's, and the variants and pictures live beside
+ * it** (Parker, 2026-10-29): shipping, handling and tax sit under the price box, while the
+ * variants and the pictures are edited in the panel they configure. Both surfaces read
  * the same row, so the save here re-reads it immediately before writing and applies only its
  * caller's slice. A component holding a copy from before the other surface saved would
  * otherwise undo that save, because the route replaces the whole listing.

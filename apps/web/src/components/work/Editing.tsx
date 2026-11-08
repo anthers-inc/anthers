@@ -240,6 +240,7 @@ export function InlineField<V>({
 	className = "",
 	pencilPlacement = "beside",
 	fill = false,
+	initiallyEditing = false,
 }: {
 	/** Names the field for the pencil and the screen reader. */
 	label: string;
@@ -279,8 +280,15 @@ export function InlineField<V>({
 	 * centered thing.
 	 */
 	pencilPlacement?: "beside" | "corner";
+	/**
+	 * Open the field in its edit state on mount. For a field whose only home is a card
+	 * that was opened to edit it — the media management card's Body and Details — the
+	 * pencil that opened the card promised an editor, and a second pencil inside asks
+	 * for the same click again.
+	 */
+	initiallyEditing?: boolean;
 }) {
-	const [mode, setMode] = useState<"read" | "edit" | "busy">("read");
+	const [mode, setMode] = useState<"read" | "edit" | "busy">(initiallyEditing ? "edit" : "read");
 	const [draft, setDraft] = useState<V>(saved);
 	const [error, setError] = useState<string | null>(null);
 	/** The field's own root, the anchor `keepScroll` measures the page's scroller from. */

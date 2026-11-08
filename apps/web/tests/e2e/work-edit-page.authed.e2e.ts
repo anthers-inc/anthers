@@ -99,7 +99,7 @@ test("a video's editing surface is its own page, and the two lead to each other"
 	await page.goto(`/studio/works/${video.publicId}/edit`);
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
 	// The editing banner is gone (the View As task, 2026-10-16): the editor mode is
-	// what the page is, and the View As row on the Manage tab is its one marker.
+	// what the page is, and the View As control in the top bar is its one marker.
 	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
 	// The Work itself, the player — the same page a user is drawn.
 	await expect(page.locator("video")).toHaveCount(1);
@@ -142,20 +142,18 @@ test("a video's editing surface is its own page, and the two lead to each other"
 	).json()) as { work?: { recordUrl?: string | null } };
 	expect(asStranger.work?.recordUrl).toBe(`https://atproto.at/uri/${owner?.atprotoUri}`);
 
-	// The user's view, and back again from it — by way of the View As row's modes, and
-	// its Creator button leaving the preview (the page does not round a Studio redirect).
+	// The user's view, and back again from it — by way of the View As control in the top
+	// bar, and its Creator button leaving the preview (the page does not round a Studio
+	// redirect).
 	await page.getByRole("button", { name: "Signed-Out" }).click();
 	await expect(page).toHaveURL(/\/works\/[^/?]+\?previewAs=out$/);
 	await expect(
 		page.getByRole("link", { name: "View the raw ATProto record on Taproot" }),
 	).toBeVisible();
-	// The row stays on the Manage tab in the preview too (Parker, 2026-10-17): the
-	// modes do not jump to the page's top when one takes — the owner's copy of the
-	// user's Record carries the same first tab the editor's does, so the buttons
-	// that switched the mode are where they were, and that is where the way back is.
-	await expect(
-		page.locator("#work-side-manage").getByRole("group", { name: "View this Work as" }),
-	).toBeVisible();
+	// The control stays in the top bar in the preview too (Parker, 2026-11-07): the
+	// modes do not move when one takes, so the buttons that switched the mode are where
+	// they were, and that is where the way back is.
+	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
 	await page.getByRole("button", { name: "Creator", exact: true }).click();
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
 	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
@@ -181,7 +179,7 @@ test("a field saves itself alone, and Cancel puts back what is saved", async ({
 	// The Studio route redirected; the page under test is the Work's own.
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
 	// The editing banner is gone (the View As task, 2026-10-16): the editor mode is
-	// what the page is, and the View As row on the Manage tab is its one marker.
+	// what the page is, and the View As control in the top bar is its one marker.
 	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
 
 	// The title alone is centered, and the Title section's pencil rides the byline's action
@@ -301,13 +299,13 @@ test("a piece of writing is written on its page and reads as an article", async 
 	await page.getByPlaceholder("Describe this Work…").fill("A standfirst for the walk.");
 	await page.getByRole("button", { name: "Save Details" }).click();
 
-	// And a piece of writing is its body, written in the Manage tab in the typography
-	// the read prints.
-	await page.getByRole("tab", { name: /Manage/ }).click();
+	// And a piece of writing is its body, written in the media management card in the
+	// typography the read prints.
 	await page.getByRole("button", { name: "Edit Body" }).click();
 	await page.locator(".tiptap").click();
 	await page.keyboard.type("The first hard frost came early this year.");
 	await page.getByRole("button", { name: "Save Body" }).click();
+	await page.getByRole("button", { name: "Done" }).click();
 
 	// The release walk returns to the Details tab, where the release field lives.
 	await page.getByRole("tab", { name: "Details" }).click();
@@ -337,9 +335,9 @@ test("a comic's media manager carries Thumbnail before Pages", async ({ page, co
 	if (!comic) return;
 
 	await page.goto(`/studio/works/${comic.publicId}/edit`);
-	// Manage is the tab the creator lands on, and the View As row is still its first fact;
-	// the thumbnail and the pages are the media manager's sections now (Parker, 2026-10-23).
-	await expect(page.getByRole("heading", { name: "View As" })).toBeVisible();
+	// The View As control is in the top bar now (Parker, 2026-11-07); the thumbnail and
+	// the pages are the media manager's sections (Parker, 2026-10-23).
+	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
 	await page.getByRole("button", { name: "Edit Media" }).click();
 	const sections = page.getByRole("tablist", { name: "Media management sections" });
 	// The order is the tab strip's: delivery first, then the thumbnail and previews, then

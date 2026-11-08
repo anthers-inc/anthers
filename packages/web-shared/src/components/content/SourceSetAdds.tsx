@@ -8,10 +8,11 @@
  * pick's one attach, the one that failed with its retry, and how many are waiting their turn.
  * It sits below the landed rows, because these files append to the end of the set.
  *
- * ⚠️ **The pick outlives the section that started it.** Leaving the Manage tab does not stop
- * anything: the store keeps the batch, the section reads it again when it mounts, and the tab's
- * unload guard already covers it. Only a cancel stops a file, and only "Stop adding the rest"
- * drops the ones that have not started — the files already uploaded attach all the same.
+ * ⚠️ **The pick outlives the section that started it.** Leaving the media manager does not
+ * stop anything: the store keeps the batch, the section reads it again when it mounts, and the
+ * page's unload guard already covers it. Only a cancel stops a file, and only "Stop adding
+ * the rest" drops the ones that have not started — the files already uploaded attach all the
+ * same.
  *
  * 🚨 **The pick attaches once, so a refused attach is the pick's failure rather than a file's.**
  * The batch's own message and retry sit above the rows, and the per-file buttons step aside
