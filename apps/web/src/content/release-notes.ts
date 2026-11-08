@@ -71,6 +71,22 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.10",
+		date: "2026-11-08",
+		lede: "A Work is edited a section at a time, the Studio says what a Work and an account still need before release, and a signed-out buyer is asked to sign in rather than shown an error.",
+		entries: [
+			"A Work is edited one section at a time now. The pencil in each Info tab opens Details, Credits, Ratings or Accessibility with a single save pair, and one control beside the title opens Title and Dates; each save sends only the fields whose values moved. The three release dates lay out in one row, and the Ratings tab reads as the visitor's matrix until its pencil opens it.",
+			"The media card is a Work's one management surface, so the fields still standing in the Manage tab joined it: a writing Work gets a Body tab opened from the pencil in its edit state, and a goods Work gets its fulfillment details there. View As moved into the top bar on a Work and on a Project alike, and the Manage tab is gone, leaving Reviews and Showings in the side column.",
+			"A Work that is not released yet carries a setup checklist in its corner, built from the same conditions as the release gate: its media, at least one human credit, and a full set of ratings, each row opening where the fix lives. The account-wide conditions, the ATProto publishing grant and Stripe payout setup, moved to a Creator Setup Checklist on the Studio's Works page.",
+			"A creator's own Works land in their Library when they are created. They can be hidden but not removed, carry a Yours badge, and a private one says it is not released yet; a Work made before the rule is added the next time the Library is read.",
+			"The purchase card on a signed-out Work asks for a sign-in rather than printing an authentication error. It names the price it can state without the quote, with the card fee inside the listed price and sales tax at checkout, offers Log in and Create a free account with the Work as the destination, and keeps Add to Cart for the scratch cart that merges at sign-in. Buy Now waits for an account.",
+			"A media element that fails to load no longer tells a free user their Public Access hours are spent. The month's notice comes only from the budget the server read, a failed load asks for a fresh budget, an unidentified caller meets no countdown, and the audio players no longer start an attention claim for a play that was refused.",
+			"A Work's Reviews tab gathers its summary, its verdict filter and its order into one card under the composer. The all-time and recent shares are a figure each, the recent column carries its own window label, and the version scope sits beside the controls as a quiet select.",
+			"The locked, pre-release and download cards center over the Work's thumbnail, the way a locked video's page already did, instead of sitting in a two-up beside it or pinned to the top of the stage. A locked piece of writing keeps its standfirst on its own panel, and a short stage lets the card scroll.",
+			"Below the phone breakpoint, the sidebar drawer is fully opaque, so the page behind it no longer reads through its labels, and its toggle is the 32-pixel button the header uses rather than a 24-pixel circle. The player's large play control and the card hovers are rounded rectangles.",
+		],
+	},
+	{
 		version: "2026.11.9",
 		date: "2026-11-07",
 		lede: "A Work's page can open before the Work is out, the cart is called the cart, and the Studio and Badge editor were rebuilt around a week of real use.",
