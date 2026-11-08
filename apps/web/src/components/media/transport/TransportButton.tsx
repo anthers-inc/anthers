@@ -61,6 +61,9 @@ export default function TransportButton({
 	className?: string;
 }) {
 	const toneClass = tone === "primary" ? "btn-primary" : "btn-ghost";
+	// The play/pause button is a rounded rectangle; the surrounding skip, volume and
+	// captions controls stay circular, so the primary act reads as the one different shape.
+	const shapeClass = tone === "primary" ? "rounded-xl" : "btn-circle";
 	return (
 		<button
 			type="button"
@@ -69,7 +72,7 @@ export default function TransportButton({
 			aria-label={label}
 			aria-pressed={active || undefined}
 			title={label}
-			className={`btn btn-circle relative ${SIZE_CLASS[size]} ${toneClass} ${
+			className={`btn ${shapeClass} relative ${SIZE_CLASS[size]} ${toneClass} ${
 				active && tone === "ghost" ? "text-primary" : ""
 			} transition-[transform,color,background-color,border-color,box-shadow] duration-fast ease-settle active:scale-95 ${className}`}
 		>

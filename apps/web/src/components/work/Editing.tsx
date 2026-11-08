@@ -39,7 +39,7 @@ const PENCIL =
 	// so the pencil sits in the open as the edit affordance it is. A bordered, filled
 	// button at the pair's size (Parker, 2026-11-07): the pencil is the anchor the save
 	// pair replaces, so it has to be the same object as the pair's save half.
-	"btn btn-sm btn-ghost border border-base-content/25 bg-base-200/80 text-base-content/60 shadow-sm hover:text-base-content";
+	"btn btn-sm border border-base-content/45 bg-base-content/10 text-base-content shadow-sm hover:bg-base-content/20";
 
 /**
  * The bordered, filled wrapper a field's cancel-and-save pair rides in — shared by the

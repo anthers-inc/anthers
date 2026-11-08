@@ -515,7 +515,7 @@ function ReleaseCard({
 						onClick={onPlay}
 						disabled={busy || opening}
 						aria-label={`Play ${release.title}`}
-						className="absolute bottom-2 right-2 flex size-10 translate-y-1 items-center justify-center rounded-full bg-primary text-primary-content opacity-0 shadow-lg transition-[opacity,transform] duration-200 hover:scale-105 focus-visible:translate-y-0 focus-visible:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 disabled:pointer-events-none"
+						className="absolute bottom-2 right-2 flex h-10 w-14 translate-y-1 items-center justify-center rounded-lg bg-primary text-primary-content opacity-0 shadow-lg transition-[opacity,transform] duration-200 hover:scale-105 focus-visible:translate-y-0 focus-visible:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 disabled:pointer-events-none"
 					>
 						{busy ? (
 							<span className="loading loading-spinner loading-sm" />

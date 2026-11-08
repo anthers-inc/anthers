@@ -42,7 +42,6 @@ import {
 	isListened,
 	isOwnThumbnail,
 	isPaged,
-	isPreRelease,
 	supportsPreviewMedia,
 } from "@anthers/shared/content";
 import {
@@ -146,7 +145,6 @@ import { WorkViewAsSection } from "./ViewAs";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
 import {
 	DescriptionBody,
-	formatOriginallyReleased,
 	isGoods,
 	isWriting,
 	WORK_DESCRIPTION_CLASS,
@@ -881,50 +879,9 @@ export default function OwnerWorkEditor({
 		/>
 	);
 
-	// The read view states the three dates in the same columns the editor uses, so the
-	// field does not change shape when it opens (Parker, 2026-11-07).
-	const datesRead = (() => {
-		const preReleaseShown = current.preReleaseAt
-			? new Date(current.preReleaseAt).toLocaleString("en-US", {
-					month: "long",
-					day: "numeric",
-					year: "numeric",
-					hour: "numeric",
-					minute: "2-digit",
-				})
-			: null;
-		const originalShown = formatOriginallyReleased(current.originallyReleased);
-		return (
-			<div className="mx-auto flex w-full max-w-3xl flex-col gap-2 text-left">
-				<div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
-					<div className="min-w-0">
-						<p className="text-xs text-base-content/45">Pre-Release Date</p>
-						<p className={`text-sm ${preReleaseShown ? "" : "text-base-content/40"}`}>
-							{preReleaseShown ?? "Not set"}
-						</p>
-					</div>
-					<div className="min-w-0">
-						<p className="text-xs text-base-content/45">Anthers Release Date</p>
-						<WorkDateLine
-							work={current}
-							scheduled={current.scheduledReleaseAt ?? null}
-							align="start"
-							showOriginally={false}
-						/>
-					</div>
-					<div className="min-w-0">
-						<p className="text-xs text-base-content/45">Original Release Date</p>
-						<p className={`text-sm ${originalShown ? "" : "text-base-content/40"}`}>
-							{originalShown ?? "Not set"}
-						</p>
-					</div>
-				</div>
-				{current.preReleaseAt && !isPreRelease(current) && current.visibility !== "released" && (
-					<p className="text-xs text-base-content/45">Pre-release page opens {preReleaseShown}</p>
-				)}
-			</div>
-		);
-	})();
+	// The read view is the one release line the page has always carried: the pre-release
+	// date belongs to the edit state only (Parker, 2026-11-07).
+	const datesRead = <WorkDateLine work={current} scheduled={current.scheduledReleaseAt ?? null} />;
 
 	const datesEdit = (() => {
 		const draft = titleSection.draft;

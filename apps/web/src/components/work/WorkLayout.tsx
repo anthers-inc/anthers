@@ -302,22 +302,10 @@ export function formatVersionDate(iso: string): string {
 export function WorkDateLine({
 	work,
 	scheduled,
-	align = "center",
-	showOriginally = true,
 }: {
 	work: WorkDetail;
 	/** The Work's queued release instant, when it has one. */
 	scheduled?: string | null;
-	/**
-	 * Which way the line reads. The byline centers it under the title; a field that
-	 * lays the three dates out in columns starts each value at its own column's edge.
-	 */
-	align?: "center" | "start";
-	/**
-	 * Whether an original release date rides this line. False where the caller gives
-	 * that date a column of its own, so it is not stated twice.
-	 */
-	showOriginally?: boolean;
 }) {
 	const released = work.releasedAt
 		? new Date(work.releasedAt).toLocaleDateString("en-US", {
@@ -326,7 +314,7 @@ export function WorkDateLine({
 				year: "numeric",
 			})
 		: null;
-	const originally = showOriginally ? formatOriginallyReleased(work.originallyReleased) : null;
+	const originally = formatOriginallyReleased(work.originallyReleased);
 	const scheduledAt = scheduled
 		? new Date(scheduled).toLocaleString("en-US", {
 				month: "long",
@@ -338,7 +326,7 @@ export function WorkDateLine({
 		: null;
 	if (isPreRelease(work)) {
 		return (
-			<div className={`flex flex-col gap-1 ${align === "center" ? "items-center" : "items-start"}`}>
+			<div className="flex flex-col items-center gap-1">
 				<span className="flex items-center gap-1">
 					Coming soon{scheduledAt ? ` on ${scheduledAt}` : ""}
 					<RecordLinkButton recordUrl={work.recordUrl} />
@@ -347,12 +335,8 @@ export function WorkDateLine({
 		);
 	}
 	return (
-		<div className={`flex flex-col gap-1 ${align === "center" ? "items-center" : "items-start"}`}>
-			<div
-				className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${
-					align === "center" ? "justify-center" : "justify-start"
-				}`}
-			>
+		<div className="flex flex-col items-center gap-1">
+			<div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
 				<span className="flex items-center gap-1">
 					{released ? `Released ${released}` : "Unreleased"}
 					<RecordLinkButton recordUrl={work.recordUrl} />
@@ -360,7 +344,7 @@ export function WorkDateLine({
 				{originally && (
 					<>
 						<span aria-hidden className="h-3 w-px bg-base-300" />
-						<span>Originally released {originally}</span>
+						<span>Originally Released {originally}</span>
 					</>
 				)}
 			</div>

@@ -737,7 +737,7 @@ export default function VideoPlayer({
 					    the picture underneath is the button. */}
 					{!isPlaying && (
 						<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-							<span className="flex size-16 items-center justify-center rounded-full bg-primary/90 text-primary-content shadow-lg transition-transform duration-200 group-hover/player:scale-105">
+							<span className="flex h-16 w-24 items-center justify-center rounded-2xl bg-primary/90 text-primary-content shadow-lg transition-transform duration-200 group-hover/player:scale-105">
 								<PlayIcon className="ml-1 size-8" />
 							</span>
 						</div>
