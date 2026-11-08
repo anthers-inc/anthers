@@ -41,6 +41,7 @@ import InlineUnlock from "../components/post/InlineUnlock";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectPricing from "../components/project/ProjectPricing";
 import WorkReviews from "../components/project/WorkReviews";
+import CoverCardStage, { CoverFallback } from "../components/work/CoverCardStage";
 import LockedWorkComposition from "../components/work/LockedWorkComposition";
 import OwnerWorkEditor, { CaptionsSummary } from "../components/work/OwnerWorkEditor";
 import PreReleaseComposition from "../components/work/PreReleaseComposition";
@@ -82,6 +83,12 @@ import { RatingMatrixReadOnly } from "../studio/RatingMatrix";
  * the same table, the same grant-then-download buttons, the same platform grouping. What
  * changes is where it lives — above the byline, inside the page's one media card — so a Work
  * that cannot play in the browser still has a media area rather than an empty stage.
+ *
+ * ⭐ **The card is centered over the Work's cover** (Parker, 2026-11-07), the same shape the
+ * video gate uses: the cover fills the stage and the files sit in the middle of it rather
+ * than at the top against the bare matte. The cover is clear rather than blurred — this
+ * Work is already the viewer's, so nothing is being withheld — and a scrim keeps the card
+ * legible over it.
  */
 function DownloadCard({
 	work,
@@ -93,16 +100,31 @@ function DownloadCard({
 	canAccess: boolean;
 }) {
 	return (
-		<div className="mx-auto w-full max-w-xl rounded-lg border border-base-300 bg-base-100 p-4 shadow-lg">
-			<p className="text-sm text-base-content/60">{creatorName}</p>
-			<h2 className="text-lg font-semibold">{work.title ?? "Untitled"}</h2>
-			<ProjectDownloads
-				assets={work.assets}
-				contentType={work.type}
-				workId={work.id}
-				canAccess={canAccess}
-			/>
-		</div>
+		<CoverCardStage
+			scrim
+			cover={
+				work.thumbnail ? (
+					<img
+						src={work.thumbnail}
+						alt=""
+						className="absolute inset-0 h-full w-full object-cover"
+					/>
+				) : (
+					<CoverFallback />
+				)
+			}
+		>
+			<div className="mx-auto w-full max-w-xl rounded-lg border border-base-300 bg-base-100 p-4 shadow-lg">
+				<p className="text-sm text-base-content/60">{creatorName}</p>
+				<h2 className="text-lg font-semibold">{work.title ?? "Untitled"}</h2>
+				<ProjectDownloads
+					assets={work.assets}
+					contentType={work.type}
+					workId={work.id}
+					canAccess={canAccess}
+				/>
+			</div>
+		</CoverCardStage>
 	);
 }
 
@@ -413,42 +435,39 @@ export default function WorkPage() {
 				) : access?.reason === "pre_release" ? (
 					// The page is public while the Work is not: the coming-soon composition takes the
 					// locked page's place, the preview media stays behind it, and no purchase,
-					// download or play door exists.
+					// download or play door exists. It fills the stage like every other stand-in.
 					supportsPreviewMedia(work.type) && (work.previewMedia?.length ?? 0) > 0 ? (
 						<PreviewCarousel
 							workTitle={work.title}
 							thumbnail={work.thumbnail}
 							previews={work.previewMedia ?? []}
-							slideZeroFill={work.type === "video"}
 							slideZeroLabel="Coming soon"
 							slideZero={
 								<PreReleaseComposition work={work} access={access} creatorName={creatorName} />
 							}
 						/>
 					) : (
-						<WorkMediaFrame fill={work.type === "video"} overlay={shareNotice}>
+						<WorkMediaFrame fill overlay={shareNotice}>
 							<PreReleaseComposition work={work} access={access} creatorName={creatorName} />
 						</WorkMediaFrame>
 					)
 				) : !canAccess ? (
-					// A locked Work keeps the one 16:9 stage like every other state. A
-					// video's gate fills it — the blur-and-overlay is the player's own
-					// rectangle — while the other kinds' two-up is a composition inside the
-					// stage: padded, centered where it fits, and scrolling where it does not.
-					// The carousel mounts only when the kind supports previews and the Work
-					// has any; with none, this is the same composition it has always been.
+					// A locked Work keeps the one 16:9 stage like every other state, and every
+					// kind wears the video gate's treatment: the cover fills the stage and the
+					// card is centered over it. `CoverCardStage` owns that shape. The carousel
+					// mounts only when the kind supports previews and the Work has any; with
+					// none, this is the same composition the carousel's first slide draws.
 					supportsPreviewMedia(work.type) && (work.previewMedia?.length ?? 0) > 0 ? (
 						<PreviewCarousel
 							workTitle={work.title}
 							thumbnail={work.thumbnail}
 							previews={work.previewMedia ?? []}
-							slideZeroFill={work.type === "video"}
 							slideZero={
 								<LockedWorkComposition work={work} access={access} creatorName={creatorName} />
 							}
 						/>
 					) : (
-						<WorkMediaFrame fill={work.type === "video"}>
+						<WorkMediaFrame fill>
 							<LockedWorkComposition work={work} access={access} creatorName={creatorName} />
 						</WorkMediaFrame>
 					)
@@ -487,20 +506,20 @@ export default function WorkPage() {
 				) : downloadsInMedia ? (
 					// A download-only Work has no browser deliverable, but it is not an empty
 					// Work: its media area carries the files, with the preview media behind
-					// them, exactly where a playable Work carries its player.
+					// them, exactly where a playable Work carries its player. The download
+					// card sits centered over the cover, the purchase card's own place.
 					supportsPreviewMedia(work.type) && (work.previewMedia?.length ?? 0) > 0 ? (
 						<PreviewCarousel
 							workTitle={work.title}
 							thumbnail={work.thumbnail}
 							previews={work.previewMedia ?? []}
-							slideZeroFill={false}
 							slideZeroLabel="Downloads"
 							slideZero={
 								<DownloadCard work={work} creatorName={creatorName} canAccess={canAccess} />
 							}
 						/>
 					) : (
-						<WorkMediaFrame overlay={shareNotice}>
+						<WorkMediaFrame fill overlay={shareNotice}>
 							<DownloadCard work={work} creatorName={creatorName} canAccess={canAccess} />
 						</WorkMediaFrame>
 					)

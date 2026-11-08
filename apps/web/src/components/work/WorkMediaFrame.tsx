@@ -22,8 +22,9 @@
  *   takes the stage's foot and the medium gives up that height.
  * - **Default** — a composition that lays itself out inside the stage and needs
  *   breathing room: the listened kinds' stage, a comic or ebook reader, a piece of
- *   writing, the goods store panel, a placeholder or a gate. It gets the stage's
- *   padding and scrolls when taller than the stage.
+ *   writing, or the goods store panel. It gets the stage's padding and scrolls when
+ *   taller than the stage. The locked, pre-release and download compositions fill the
+ *   stage instead: their cover is the ground the card sits on.
  *
  * ⭐ **Theater mode replaces the 16:9 profile with the content column's own box.** It is
  * the page-level state `useWorkTheater` carries, and the card reads it directly: the
