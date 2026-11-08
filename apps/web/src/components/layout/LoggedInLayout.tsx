@@ -420,9 +420,16 @@ function LoggedInLayoutInner() {
 					{/* Persistent sidebar. From `md` up it sits beside the page; below that it is
 				    lifted out of the flex row and laid over the page, so opening it on a phone
 				    never squeezes what it covers. The breakpoint is `SIDEBAR_BESIDE_QUERY`'s, which
-				    is also what decides that a phone starts with it closed. */}
+				    is also what decides that a phone starts with it closed.
+
+				    ⚠️ **The drawer is OPAQUE below `md` and translucent above it.** The 60% tint
+				    is a surface *beside* the page on a desktop — the meadow backdrop showing
+				    faintly through it — but a drawer laid *over* the page with that tint lets
+				    page content read straight through its labels and rows, which is the
+				    illegibility this rule exists to prevent. The rail and the desktop column
+				    keep the tint; the phone gets the solid `base-200` panel. */}
 					<aside
-						className={`${!chromeHidden && sidebarOpen ? "w-64 border-r" : chromeHidden ? "w-0" : "w-0 md:w-16 md:border-r"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-base overflow-hidden border-base-300/50 bg-base-200/60`}
+						className={`${!chromeHidden && sidebarOpen ? "w-64 border-r" : chromeHidden ? "w-0" : "w-0 md:w-16 md:border-r"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-base overflow-hidden border-base-300/50 bg-base-200 md:bg-base-200/60`}
 					>
 						<div className={`${rail ? "w-16" : "w-64"} h-full flex flex-col overflow-y-auto`}>
 							{/* Each mode's own nav, and never both: the Studio's places used to be tabs
