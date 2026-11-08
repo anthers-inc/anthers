@@ -89,10 +89,10 @@ test("a Work rated before the matrix is released only once every row is answered
 
 	await row.getByRole("link", { name: "Rate this" }).click();
 	// The Studio route redirects to the Work's page (every kind's editing surface now);
-	// the incomplete rating is the Rating tab's read, and the release field says why
+	// the incomplete rating is the Ratings tab's read, and the Title and Dates section says why
 	// its own control waits (the kinds pass, 2026-10-14).
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
-	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("tab", { name: "Ratings" }).click();
 	// The table is the tab, open without an edit state (Parker, 2026-10-16); this Work's
 	// kind of state is the summary's line above it, and the row of unanswered rows in it.
 	await expect(
@@ -103,23 +103,24 @@ test("a Work rated before the matrix is released only once every row is answered
 
 	// The release field waits for the same reason, said beside its control.
 	await page.getByRole("tab", { name: "Details" }).click();
-	await page.getByRole("button", { name: "Edit Release" }).click();
-	const saveRelease = page.getByRole("button", { name: "Save Release" });
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
+	const saveRelease = page.getByRole("button", { name: "Save Title and Dates" });
 	await expect(page.getByText(/answer every row of the rating first/i)).toBeVisible();
 	// The field offers a future time while unrated — that is a schedule — and refuses the
-	// release-now the Now button fills in.
-	await page.getByRole("button", { name: "Now", exact: true }).click();
+	// release-now a past date makes it.
+	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
 	await expect(saveRelease).toBeDisabled();
 	// (The schedule input itself stays offered while unrated, as the batch editor's rule had it.)
 
 	// Answering the rows is the whole fix: the None heading answers them all in one click,
 	// the tab's save carries the table alone, and then the release field's own save carries
 	// the release.
-	await page.getByRole("tab", { name: "Rating" }).click();
-	const matrix = page.getByRole("tabpanel", { name: "Rating" }).locator("table");
+	await page.getByRole("tab", { name: "Ratings" }).click();
+	await page.getByRole("button", { name: "Edit Ratings" }).click();
+	const matrix = page.getByRole("tabpanel", { name: "Ratings" }).locator("table");
 	await matrix.getByRole("button", { name: "None", exact: true }).click();
-	await page.getByRole("button", { name: "Save Rating" }).click();
-	// ⭐ The flip back finds the release edit still open (TabPanels keeps every panel
+	await page.getByRole("button", { name: "Save Ratings" }).click();
+	// ⭐ The flip back finds the Title and Dates section still open (it lives above the tabs
 	//    mounted), answering the saved rows: the draft the first opening could not save
 	//    is savable now, on the answer the rating save carried.
 	await page.getByRole("tab", { name: "Details" }).click();

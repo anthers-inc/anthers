@@ -11,18 +11,19 @@
  * field's edit state, and the Media Status card.
  *
  * Below the deliverable the page is two columns: the left is the **Info tab group**
- * (Details · Credits · Rating · Accessibility) shared with the user's rendering
+ * (Details · Credits · Ratings · Accessibility) shared with the user's rendering
  * of the same page (`WorkInfoTabs`), the right is **Reviews · Showings**
  * (`WorkSideColumn`). The creator's four ways to look at the page live in the **top bar's
- * View As control**, not in a tab (Parker, 2026-11-07). Each editable thing the
- * user can see is an `InlineField` — pencil opens it, X cancels, checkmark saves the
- * field alone; there is no page-wide Save.
+ * View As control**, not in a tab (Parker, 2026-11-07). Each section the
+ * creator can edit has one pencil — the pair opens and closes the section's fields as
+ * one act, and only the fields whose values moved are sent; there is no page-wide Save.
  *
- * ⭐ **The pencils are always visible, and the Rating tab is no pencil's** (Parker,
- * 2026-10-16). Hover-reveal was retired because an unfilled field left nothing to hover
- * for it; every field now renders its full structure at any value, so the pencil sits in
- * the open. The Rating tab is its own exception for a structural reason: the table is the
- * field, it saves as one act, and it is always open — see `studio/RatingMatrix.tsx`.
+ * ⭐ **The pencils are always visible, and each section owns one** (Parker, 2026-11-07).
+ * Hover-reveal was retired because an unfilled field left nothing to hover for it; every
+ * section now renders its full structure at any value, so its pencil sits in the open.
+ * The pencil's place is the pair's place: a tab's action column and the byline's action
+ * slot both keep one rectangle across the read/edit switch, and the save check lands on
+ * the pencil the creator just clicked.
  *
  * The deliverable is whatever the kind is: a rendered medium through `WorkDeliverable`,
  * or the store through `ProjectPricing` for the goods kinds, exactly where every user
@@ -32,12 +33,14 @@
  * versions, and — for the kinds with no media of their own — a writing Work's body and a
  * good's fulfillment details. The top bar's View As control carries the previewing.
  *
- * ⚠️ **Saves are narrow, one field per request, and adopt the response.** The server's
- * own rules (release gates, the rating re-declaration refusal, the media floors) are the
- * authority and answer in their own words; a field's error shows where the field lives —
- * which is what the batch bar's one shared error string could never do. The two deliberate
- * carries from the batch editor: a save NEVER sends `sourceKey`, and the thumbnail is
- * sent only from its settled value (the race into work 23's lost thumbnail).
+ * ⚠️ **Saves are narrow, and adopt the response.** A section's save diffs its draft
+ * against the row and sends only what changed — the title and each date independently,
+ * Description and Tags independently, credits and ratings only when their normalized
+ * rows differ. The server's own rules (release gates, the rating re-declaration refusal,
+ * the media floors) are the authority and answer in their own words; a section's error
+ * shows where the section lives. The two deliberate carries from the batch editor: a
+ * save NEVER sends `sourceKey`, and the thumbnail is sent only from its settled value
+ * (the race into work 23's lost thumbnail).
  */
 
 import {
@@ -47,7 +50,6 @@ import {
 	isListened,
 	isOwnThumbnail,
 	isPaged,
-	isPreRelease,
 	processingFor,
 	supportsPreviewMedia,
 } from "@anthers/shared/content";
@@ -85,11 +87,7 @@ import {
 	WORK_TYPE_DESCRIPTIONS,
 } from "@anthers/web-shared/content/works";
 import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
-import {
-	isoToLocalInput,
-	localInputToIso,
-	nowLocalInput,
-} from "@anthers/web-shared/local-datetime";
+import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import AccessTables, {
@@ -145,13 +143,12 @@ import { useMediaPlayer } from "../../lib/media-player";
 import { useExclusivePlayback } from "../../lib/playback";
 import CreditsSection from "../../studio/CreditsSection";
 import PanelEditor from "../../studio/PanelEditor";
-import RatingMatrix from "../../studio/RatingMatrix";
+import RatingMatrix, { RatingMatrixReadOnly } from "../../studio/RatingMatrix";
 import WorkCaptionsEditor from "../../studio/WorkCaptionsEditor";
-import SaveButton from "../library/SaveButton";
 import ProjectPricing from "../project/ProjectPricing";
 import WorkReviews from "../project/WorkReviews";
 import { contentTypeMeta } from "../ui/ContentTypeBadge";
-import { InlineField } from "./Editing";
+import { InlineField, SectionPencil, useSectionEdit } from "./Editing";
 import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
 import PreviewMediaSection from "./PreviewMediaSection";
@@ -292,38 +289,8 @@ export default function OwnerWorkEditor({
 		: normalizeContentNotes(current.maturityNotes ?? []);
 	const maturityLocked = current.maturityLocked ?? false;
 
-	// The Rating tab IS the matrix, always visible and always answering (Parker, 2026-10-16,
-	// replacing the hover-in pencil field, whose read view could not show a table that did
-	// not exist yet): the draft rides the saved rows the credits' way — a save adopts the
-	// response, and the sync clears the tab's own dirty bar underneath it.
-	const [ratingDraft, setRatingDraft] = useState<MaturityRows>(rows);
-	useEffect(() => setRatingDraft(rows), [rows]);
-	const ratingNext = normalizeMaturityRows(ratingDraft, grid);
-	const ratingDirty =
-		JSON.stringify(ratingNext) !== JSON.stringify(normalizeMaturityRows(rows, grid));
-	const [ratingSaving, setRatingSaving] = useState(false);
-	const [ratingError, setRatingError] = useState<string | null>(null);
-	const saveRating = async () => {
-		if (ratingSaving) return;
-		setRatingSaving(true);
-		setRatingError(null);
-		const changed =
-			JSON.stringify(ratingNext) !== JSON.stringify(normalizeMaturityRows(rows, grid));
-		if (!changed) {
-			// Sent unchanged, they re-declare the rating they add up to, which an operator's
-			// correction refuses — an unchanged save returns the tab to its read instead.
-			setRatingSaving(false);
-			return;
-		}
-		try {
-			await saveFields({ maturityRows: ratingNext });
-			setRows(ratingNext);
-		} catch (err) {
-			setRatingError(err instanceof Error ? err.message : "Couldn't save the rating just now.");
-		} finally {
-			setRatingSaving(false);
-		}
-	};
+	// The rating tab's draft lives in its section editor below; an unread `rows` is the
+	// saved matrix, and the read view is the table the visitor sees.
 
 	// Access. The creator's Badge ladder is fetched below because rungs live on the
 	// creator, not on the Work — `buildAccessRows` merges the Work's stored rows onto
@@ -1011,53 +978,302 @@ export default function OwnerWorkEditor({
 		</div>
 	);
 
-	const descriptionField = (
-		<InlineField<string>
-			label="Description"
-			saved={description}
-			renderRead={() => (
-				// The same rendering the user's Details tab carries — including the read-more
-				// truncation (Parker, 2026-10-16; `whitespace-pre-line` keeps the line breaks
-				// the edit textarea wrote) — and, below it, an empty field's note.
-				<DescriptionBody description={description} />
-			)}
-			renderEdit={(draft, setDraft) => (
-				<div>
-					<textarea
-						aria-label="Description"
-						className={`${WORK_DESCRIPTION_CLASS} ${description ? IN_PLACE : IN_PLACE_EMPTY} ${GROWS} w-full min-h-16`}
-						value={draft}
-						onChange={(e) => setDraft(e.target.value)}
-						rows={3}
-						placeholder="Describe this Work…"
-					/>
-					<p className="text-xs text-base-content/50">
-						Shown to everyone, including people who haven't unlocked this.
-					</p>
-				</div>
-			)}
-			save={(draft) => {
-				setDescription(draft.trim());
-				return saveFields({ description: draft.trim() });
+	/**
+	 * The byline's one edit (Parker, 2026-11-07): the title and the three release dates
+	 * open together, and the action that opens them stands where the library Save button
+	 * was. On save, only the fields whose values actually moved are sent — the title and
+	 * each date are diffed against the row before the one PATCH is built.
+	 */
+	const titleSection = useSectionEdit<{
+		title: string;
+		release: string;
+		original: string;
+		preRelease: string;
+	}>({
+		label: "Title and Dates",
+		saved: { title, release: releaseSaved, original: originalDate, preRelease: preReleaseSaved },
+		disabledSave: (draft) => {
+			const datesChanged =
+				draft.release !== releaseSaved ||
+				draft.preRelease !== preReleaseSaved ||
+				draft.original !== originalDate;
+			if (!datesChanged) return undefined;
+			const pre = localInputToIso(draft.preRelease);
+			const release = localInputToIso(draft.release);
+			if (pre && release && Date.parse(pre) >= Date.parse(release)) {
+				return "The pre-release date has to be before the release date.";
+			}
+			if (draft.release === releaseSaved) return undefined;
+			const iso = localInputToIso(draft.release);
+			return iso && Date.parse(iso) <= Date.now() ? releaseNowRefusal : undefined;
+		},
+		save: async (draft) => {
+			const updates: Partial<WorkInput> = {};
+			const nextTitle = draft.title.trim() || "Untitled";
+			if (nextTitle !== title) updates.title = nextTitle;
+			const originalIso = draft.original ? `${draft.original}T00:00:00.000Z` : null;
+			const originalChanged = originalIso !== (current.originallyReleased ?? null);
+			if (originalChanged) updates.originallyReleased = originalIso;
+			const preIso = localInputToIso(draft.preRelease);
+			if (preIso !== (current.preReleaseAt ?? null)) updates.preReleaseAt = preIso;
+			if (draft.release !== releaseSaved) {
+				const iso = localInputToIso(draft.release);
+				if (!iso) {
+					if (current.visibility === "released") updates.visibility = "private";
+					else if (current.scheduledReleaseAt) updates.scheduledReleaseAt = null;
+				} else if (Date.parse(iso) <= Date.now()) {
+					updates.visibility = "released";
+					updates.scheduledReleaseAt = null;
+				} else {
+					updates.visibility = "private";
+					updates.scheduledReleaseAt = iso;
+				}
+			}
+			if (Object.keys(updates).length === 0) return;
+			await saveFields(updates);
+			if (updates.title !== undefined) setTitle(nextTitle);
+			if (originalChanged) setOriginalDate(draft.original);
+		},
+	});
+
+	const titleRead = (
+		<h1
+			className={`${workTitleTypography(current.type).className} truncate`}
+			style={workTitleTypography(current.type).style}
+		>
+			{title || "Untitled"}
+		</h1>
+	);
+	const titleEdit = (
+		<textarea
+			aria-label="Title"
+			rows={1}
+			className={`${workTitleTypography(current.type).className} ${IN_PLACE} ${GROWS} mx-auto w-full max-w-3xl text-center`}
+			style={workTitleTypography(current.type).style}
+			value={titleSection.draft.title}
+			onChange={(e) =>
+				titleSection.setDraft({
+					...titleSection.draft,
+					title: e.target.value.replace(/\n/g, " "),
+				})
+			}
+			onKeyDown={(e) => {
+				if (e.key === "Enter") e.preventDefault();
 			}}
+			placeholder="Work title"
 		/>
 	);
 
-	// The Work's tags, below the description in the Details tab. The picker lives only in
-	// the edit state, so its directory request fires when the pencil is opened rather than
-	// on every page load.
-	const tagsField = (
-		<InlineField<string[]>
-			label="Tags"
-			saved={tags}
-			renderRead={() => <WorkTagChips tags={tags} />}
-			renderEdit={(draft, setDraft) => <WorkTagPicker selected={draft} onChange={setDraft} />}
-			save={(draft) => {
-				const next = normalizeWorkTags(draft);
-				setTags(next);
-				return saveFields({ tags: next });
-			}}
-		/>
+	// The read view is the one release line the page has always carried: the pre-release
+	// date belongs to the edit state only (Parker, 2026-11-07).
+	const datesRead = <WorkDateLine work={current} scheduled={current.scheduledReleaseAt ?? null} />;
+
+	const datesEdit = (() => {
+		const draft = titleSection.draft;
+		const setDraft = titleSection.setDraft;
+		const draftIso = localInputToIso(draft.release);
+		const releasingNow =
+			draft.release !== releaseSaved && draftIso !== null && Date.parse(draftIso) <= Date.now();
+		return (
+			<div className="mx-auto flex w-full max-w-3xl flex-col gap-3 text-left">
+				<div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
+					<div className="flex min-w-0 flex-col gap-1.5">
+						<div className="flex items-center gap-1.5">
+							<label className="text-sm" htmlFor="owner-anthers-pre-release">
+								Pre-Release Date
+							</label>
+							<InfoTip text="Opens this Work's page to everyone on this date, with its preview media and its coming-soon card. Buying, downloading, streaming and reviews stay closed until the Anthers Release Date." />
+						</div>
+						<input
+							id="owner-anthers-pre-release"
+							type="datetime-local"
+							aria-label="Pre-Release Date"
+							className="input input-bordered w-full"
+							value={draft.preRelease}
+							onChange={(e) => setDraft({ ...draft, preRelease: e.target.value })}
+						/>
+					</div>
+					<div className="flex min-w-0 flex-col gap-1.5">
+						<div className="flex items-center gap-1.5">
+							<label className="text-sm" htmlFor="owner-anthers-release">
+								Anthers Release Date
+							</label>
+							<InfoTip text={RELEASE_FIELD_HINT} />
+						</div>
+						<input
+							id="owner-anthers-release"
+							type="datetime-local"
+							aria-label="Anthers Release Date"
+							className="input input-bordered w-full"
+							value={draft.release}
+							onChange={(e) => setDraft({ ...draft, release: e.target.value })}
+						/>
+					</div>
+					<div className="flex min-w-0 flex-col gap-1.5">
+						<div className="flex items-center gap-1.5">
+							<label className="text-sm" htmlFor="owner-original-release">
+								Original Release Date
+							</label>
+							<InfoTip text={ORIGINAL_RELEASE_HINT} />
+						</div>
+						<input
+							id="owner-original-release"
+							type="date"
+							aria-label="Original release date"
+							className="input input-bordered w-full"
+							value={draft.original}
+							onChange={(e) => setDraft({ ...draft, original: e.target.value })}
+						/>
+					</div>
+				</div>
+				<div className="flex flex-col gap-2">
+					{current.visibility === "released" && !current.recordUrl && (
+						<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
+					)}
+					{releasingNow && !anyoneAllowed && (
+						<div className="alert alert-warning text-sm">
+							<span>
+								Nobody can open this. Released puts it in your Catalog; the Access tab is what lets
+								anyone in — allow <strong>Everyone</strong> at $0 to make it Public Access.
+							</span>
+						</div>
+					)}
+					{releasingNow && publicAccessNow && (
+						<p className="text-xs text-success">
+							Public Access — free to everyone, and earning from the Time Pool.
+						</p>
+					)}
+					{showsRatedPublicAccessNotice({
+						released: releasingNow,
+						publicAccess: publicAccessNow,
+						maturity,
+					}) && (
+						<div className="alert alert-info text-sm">
+							<span>
+								Heads up: Mature and Adult Works aren't shown to everyone. Users (or parents) can
+								choose to hide Mature Works, and Adult work is shown only to users who are 18+ and
+								have opted in.{" "}
+								<Link to={RATED_PUBLIC_ACCESS_HELP} className="link">
+									How Ratings Affect Who Sees a Work
+								</Link>
+							</span>
+						</div>
+					)}
+					{fileMissing && !releasingNow && (
+						<p className="text-xs text-warning">
+							{fileUploading
+								? "This can be released once its file has finished uploading and processing."
+								: "Add the Work's file first. There's nothing to release until it arrives."}
+						</p>
+					)}
+					{creditsMissing && !releasingNow && (
+						<p className="text-xs text-warning">
+							A Work isn't released until at least one credit has its Created box ticked.
+						</p>
+					)}
+					{!fromRows && !releasingNow && (
+						<p className="text-xs text-warning">
+							Answer every row of the Rating first — every row, no exceptions.
+						</p>
+					)}
+					{serverDown && !releasingNow && (
+						<div className="alert alert-info text-sm">
+							<span>
+								The server holding your identity isn't answering right now. You can still release
+								this: it goes out on Anthers straight away, and its listing reaches the network once
+								the server is back.
+							</span>
+						</div>
+					)}
+					{permissionMissing === true && !releasingNow && (
+						<div className="alert alert-warning text-sm">
+							<span>
+								<strong>Give Anthers permission to publish before releasing.</strong> A release
+								writes this Work's listing into your own repository.{" "}
+								<Link to={studioUrl("/settings")} className="link">
+									Give it in Studio settings
+								</Link>
+								.
+							</span>
+						</div>
+					)}
+					{payoutsReady === false && (
+						<div className="alert alert-warning text-sm">
+							<span>
+								<strong>Set up payouts before releasing.</strong> It is how you get paid, and it is
+								also what lets us say every creator here is an adult — Stripe checks identity so
+								Anthers never has to ask you for an ID. Anthers takes no cut, so all of it comes to
+								you.{" "}
+								<Link to={studioUrl("/payments")} className="link">
+									Set it up in the Studio's Payments tab
+								</Link>
+								.
+							</span>
+						</div>
+					)}
+				</div>
+			</div>
+		);
+	})();
+
+	/**
+	 * The Details tab's one edit (Parker, 2026-11-07): description and tags open together,
+	 * and the save sends only the field that changed. The tab's action column carries the
+	 * pencil/pair, so the read and edit views occupy the same box.
+	 */
+	const detailsEdit = useSectionEdit<{ description: string; tags: string[] }>({
+		label: "Details",
+		saved: { description, tags },
+		save: async (draft) => {
+			const updates: Partial<WorkInput> = {};
+			const nextDescription = draft.description.trim();
+			if (nextDescription !== description) updates.description = nextDescription;
+			const nextTags = normalizeWorkTags(draft.tags);
+			if (JSON.stringify(nextTags) !== JSON.stringify(tags)) updates.tags = nextTags;
+			if (Object.keys(updates).length === 0) return;
+			await saveFields(updates);
+			if (updates.description !== undefined) setDescription(nextDescription);
+			if (updates.tags !== undefined) setTags(nextTags);
+		},
+	});
+
+	const detailsSectionContent = (
+		<div className="flex flex-col gap-6">
+			<section className="flex flex-col gap-2">
+				<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
+				{detailsEdit.editing ? (
+					<div>
+						<textarea
+							aria-label="Description"
+							className={`${WORK_DESCRIPTION_CLASS} ${description ? IN_PLACE : IN_PLACE_EMPTY} ${GROWS} w-full min-h-16`}
+							value={detailsEdit.draft.description}
+							onChange={(e) =>
+								detailsEdit.setDraft({ ...detailsEdit.draft, description: e.target.value })
+							}
+							rows={3}
+							placeholder="Describe this Work…"
+						/>
+						<p className="text-xs text-base-content/50">
+							Shown to everyone, including people who haven't unlocked this.
+						</p>
+					</div>
+				) : (
+					<DescriptionBody description={description} />
+				)}
+			</section>
+			<section className="flex flex-col gap-2">
+				<h3 className={WORK_DETAILS_HEADING_CLASS}>Tags</h3>
+				{detailsEdit.editing ? (
+					<WorkTagPicker
+						selected={detailsEdit.draft.tags}
+						onChange={(next) => detailsEdit.setDraft({ ...detailsEdit.draft, tags: next })}
+					/>
+				) : (
+					<WorkTagChips tags={tags} />
+				)}
+			</section>
+			{detailsEdit.error && <p className="text-xs text-error">{detailsEdit.error}</p>}
+		</div>
 	);
 
 	// A song's words — edited where the user reads them: the deliverable's lyrics drawer
@@ -1214,267 +1430,37 @@ export default function OwnerWorkEditor({
 	);
 
 	/**
-	 * The release and original-release dates, edited together in the byline (Parker,
-	 * 2026-11-06). The release input still carries all three states — out, scheduled,
-	 * neither — so the save reads the draft to decide which act it is; the original date
-	 * rides the same commit.
+	 * The Credits tab's one edit (Parker, 2026-11-07): the row editor opens from the tab's
+	 * action column, and the save sends the credits only when they actually changed.
 	 */
-	const datesField = (
-		<InlineField<{ release: string; original: string; preRelease: string }>
-			label="Release"
-			saved={{ release: releaseSaved, original: originalDate, preRelease: preReleaseSaved }}
-			pencilPlacement="corner"
-			disabledSave={(draft) => {
-				const pre = localInputToIso(draft.preRelease);
-				const release = localInputToIso(draft.release);
-				if (pre && release && Date.parse(pre) >= Date.parse(release)) {
-					return "The pre-release date has to be before the release date.";
-				}
-				if (draft.release === releaseSaved) return undefined;
-				const iso = localInputToIso(draft.release);
-				return iso && Date.parse(iso) <= Date.now() ? releaseNowRefusal : undefined;
-			}}
-			renderRead={() => (
-				<div className="flex flex-col gap-1">
-					<WorkDateLine work={current} scheduled={current.scheduledReleaseAt ?? null} />
-					{current.preReleaseAt && !isPreRelease(current) && current.visibility !== "released" && (
-						<p className="text-xs text-base-content/45">
-							Pre-release page opens{" "}
-							{new Date(current.preReleaseAt).toLocaleString("en-US", {
-								month: "long",
-								day: "numeric",
-								year: "numeric",
-								hour: "numeric",
-								minute: "2-digit",
-							})}
-						</p>
-					)}
-				</div>
-			)}
-			renderEdit={(draft, setDraft) => {
-				const draftIso = localInputToIso(draft.release);
-				const releasingNow =
-					draft.release !== releaseSaved && draftIso !== null && Date.parse(draftIso) <= Date.now();
-				return (
-					<div className="flex flex-col gap-3 text-left">
-						<div className="flex flex-col gap-2">
-							<div className="flex items-center gap-1.5">
-								<label className="text-sm" htmlFor="owner-anthers-pre-release">
-									Pre-Release Date
-								</label>
-								<InfoTip text="Opens this Work's page to everyone on this date, with its preview media and its coming-soon card. Buying, downloading, streaming and reviews stay closed until the Anthers Release Date." />
-							</div>
-							<div className="flex flex-wrap items-center gap-2 py-1">
-								<input
-									id="owner-anthers-pre-release"
-									type="datetime-local"
-									aria-label="Pre-Release Date"
-									className="input input-bordered w-full max-w-56"
-									value={draft.preRelease}
-									onChange={(e) => setDraft({ ...draft, preRelease: e.target.value })}
-								/>
-								{draft.preRelease && (
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs"
-										onClick={() => setDraft({ ...draft, preRelease: "" })}
-									>
-										Clear
-									</button>
-								)}
-							</div>
-						</div>
-						<div className="flex flex-col gap-2">
-							<div className="flex items-center gap-1.5">
-								<label className="text-sm" htmlFor="owner-anthers-release">
-									Anthers Release Date
-								</label>
-								<InfoTip text={RELEASE_FIELD_HINT} />
-							</div>
-							<div className="flex flex-wrap items-center gap-2 py-1">
-								<input
-									id="owner-anthers-release"
-									type="datetime-local"
-									aria-label="Anthers Release Date"
-									className="input input-bordered w-full max-w-56"
-									value={draft.release}
-									onChange={(e) => setDraft({ ...draft, release: e.target.value })}
-								/>
-								<button
-									type="button"
-									className="btn btn-sm"
-									title="Set the release date to right now"
-									onClick={() => setDraft({ ...draft, release: nowLocalInput() })}
-								>
-									Now
-								</button>
-								{draft.release && (
-									<button
-										type="button"
-										className="btn btn-ghost btn-sm"
-										onClick={() => setDraft({ ...draft, release: "" })}
-									>
-										Clear
-									</button>
-								)}
-							</div>
-							{current.visibility === "released" && !current.recordUrl && (
-								<p className="text-xs text-base-content/50">
-									Its listing isn't on the network yet.
-								</p>
-							)}
-							{releasingNow && !anyoneAllowed && (
-								<div className="alert alert-warning text-sm">
-									<span>
-										Nobody can open this. Released puts it in your Catalog; the Access tab is what
-										lets anyone in — allow <strong>Everyone</strong> at $0 to make it Public Access.
-									</span>
-								</div>
-							)}
-							{releasingNow && publicAccessNow && (
-								<p className="text-xs text-success">
-									Public Access — free to everyone, and earning from the Time Pool.
-								</p>
-							)}
-							{showsRatedPublicAccessNotice({
-								released: releasingNow,
-								publicAccess: publicAccessNow,
-								maturity,
-							}) && (
-								<div className="alert alert-info text-sm">
-									<span>
-										Heads up: Mature and Adult Works aren't shown to everyone. Users (or parents)
-										can choose to hide Mature Works, and Adult work is shown only to users who are
-										18+ and have opted in.{" "}
-										<Link to={RATED_PUBLIC_ACCESS_HELP} className="link">
-											How Ratings Affect Who Sees a Work
-										</Link>
-									</span>
-								</div>
-							)}
-							{fileMissing && !releasingNow && (
-								<p className="text-xs text-warning">
-									{fileUploading
-										? "This can be released once its file has finished uploading and processing."
-										: "Add the Work's file first. There's nothing to release until it arrives."}
-								</p>
-							)}
-							{creditsMissing && !releasingNow && (
-								<p className="text-xs text-warning">
-									A Work isn't released until at least one credit has its Created box ticked.
-								</p>
-							)}
-							{!fromRows && !releasingNow && (
-								<p className="text-xs text-warning">
-									Answer every row of the Rating first — every row, no exceptions.
-								</p>
-							)}
-							{serverDown && !releasingNow && (
-								<div className="alert alert-info text-sm">
-									<span>
-										The server holding your identity isn't answering right now. You can still
-										release this: it goes out on Anthers straight away, and its listing reaches the
-										network once the server is back.
-									</span>
-								</div>
-							)}
-							{permissionMissing === true && !releasingNow && (
-								<div className="alert alert-warning text-sm">
-									<span>
-										<strong>Give Anthers permission to publish before releasing.</strong> A release
-										writes this Work's listing into your own repository.{" "}
-										<Link to={studioUrl("/settings")} className="link">
-											Give it in Studio settings
-										</Link>
-										.
-									</span>
-								</div>
-							)}
-							{payoutsReady === false && (
-								<div className="alert alert-warning text-sm">
-									<span>
-										<strong>Set up payouts before releasing.</strong> It is how you get paid, and it
-										is also what lets us say every creator here is an adult — Stripe checks identity
-										so Anthers never has to ask you for an ID. Anthers takes no cut, so all of it
-										comes to you.{" "}
-										<Link to={studioUrl("/payments")} className="link">
-											Set it up in the Studio's Payments tab
-										</Link>
-										.
-									</span>
-								</div>
-							)}
-						</div>
-						<div className="flex flex-col gap-2">
-							<div className="flex items-center gap-1.5">
-								<label className="text-sm" htmlFor="owner-original-release">
-									Original Release Date
-								</label>
-								<InfoTip text={ORIGINAL_RELEASE_HINT} />
-							</div>
-							<input
-								id="owner-original-release"
-								type="date"
-								aria-label="Original release date"
-								className="input input-bordered w-full max-w-56"
-								value={draft.original}
-								onChange={(e) => setDraft({ ...draft, original: e.target.value })}
-							/>
-						</div>
-					</div>
-				);
-			}}
-			save={async (draft) => {
-				const originalIso = draft.original ? `${draft.original}T00:00:00.000Z` : null;
-				const originalChanged = originalIso !== (current.originallyReleased ?? null);
-				const preIso = localInputToIso(draft.preRelease);
-				const preChanged = preIso !== (current.preReleaseAt ?? null);
-				const updates: Partial<WorkInput> = {};
-				if (preChanged) updates.preReleaseAt = preIso;
-				if (originalChanged) {
-					setOriginalDate(draft.original);
-					updates.originallyReleased = originalIso;
-				}
-				if (draft.release !== releaseSaved) {
-					const iso = localInputToIso(draft.release);
-					if (!iso) {
-						if (current.visibility === "released") updates.visibility = "private";
-						else if (current.scheduledReleaseAt) updates.scheduledReleaseAt = null;
-					} else if (Date.parse(iso) <= Date.now()) {
-						updates.visibility = "released";
-						updates.scheduledReleaseAt = null;
-					} else {
-						updates.visibility = "private";
-						updates.scheduledReleaseAt = iso;
-					}
-				}
-				if (Object.keys(updates).length > 0) await saveFields(updates);
-			}}
-		/>
-	);
+	const creditsEdit = useSectionEdit<WorkCredit[]>({
+		label: "Credits",
+		saved: creditRows,
+		save: async (draft) => {
+			if (draft.some((r) => r.types.includes("created") && r.contributor.trim() === "")) {
+				setShowCreditErrors(true);
+				throw new Error("Every Created credit names its contributor before this can save.");
+			}
+			const rows = draft
+				.map((r) => ({
+					role: r.role.trim(),
+					contributor: r.types.includes("created") ? r.contributor.trim() : "",
+					types: r.types,
+				}))
+				// A credit asserts SOMETHING — an untyped row is not a credit and cannot save.
+				.filter((r) => r.types.length > 0);
+			if (JSON.stringify(rows) === JSON.stringify(creditRows)) return;
+			await saveFields({ credits: rows });
+			setCreditRows(rows);
+		},
+	});
 
-	const creditsField = (
-		<InlineField<WorkCredit[]>
-			label="Credits"
-			saved={creditRows}
-			renderRead={(() => {
-				const shown: WorkDetail = { ...asRead, credits: creditRows };
-				if (creditRows.length === 0) {
-					// The full structure, at its empty value (Parker, 2026-10-16): credits are a
-					// list, so an empty one is said where its lines would sit, not as an absent
-					// field — a creator hunting for the release floor finds it at first glance.
-					return () => (
-						<p className="text-sm text-base-content/40">
-							A Work needs at least one Created credit naming a human before it can be released.
-						</p>
-					);
-				}
-				return () => <WorkCredits work={shown} />;
-			})()}
-			renderEdit={(draft, setDraft) => (
+	const creditsContent = (
+		<>
+			{creditsEdit.editing ? (
 				<CreditsSection
-					rows={draft}
-					onChange={setDraft}
+					rows={creditsEdit.draft}
+					onChange={creditsEdit.setDraft}
 					showErrors={showCreditErrors}
 					selfIdentity={
 						user
@@ -1487,23 +1473,18 @@ export default function OwnerWorkEditor({
 							: null
 					}
 				/>
+			) : creditRows.length === 0 ? (
+				// The full structure, at its empty value (Parker, 2026-10-16): credits are a
+				// list, so an empty one is said where its lines would sit, not as an absent
+				// field — a creator hunting for the release floor finds it at first glance.
+				<p className="text-sm text-base-content/40">
+					A Work needs at least one Created credit naming a human before it can be released.
+				</p>
+			) : (
+				<WorkCredits work={{ ...asRead, credits: creditRows }} />
 			)}
-			save={async (draft) => {
-				if (draft.some((r) => r.types.includes("created") && r.contributor.trim() === "")) {
-					setShowCreditErrors(true);
-					throw new Error("Every Created credit names its contributor before this can save.");
-				}
-				const rows = draft
-					.map((r) => ({
-						role: r.role.trim(),
-						contributor: r.types.includes("created") ? r.contributor.trim() : "",
-						types: r.types,
-					}))
-					// A credit asserts SOMETHING — an untyped row is not a credit and cannot save.
-					.filter((r) => r.types.length > 0);
-				await saveFields({ credits: rows });
-			}}
-		/>
+			{creditsEdit.error && <p className="text-xs text-error">{creditsEdit.error}</p>}
+		</>
 	);
 
 	// The changing-kind save — the row's kind is page-resolved in the batch editor; here
@@ -1558,16 +1539,37 @@ export default function OwnerWorkEditor({
 		/>
 	);
 
-	const ratingField = (
+	/**
+	 * The Ratings tab's one edit (Parker, 2026-11-07): the matrix reads as the visitor's
+	 * read-only table until the tab's pencil opens it, and an unchanged save writes
+	 * nothing. Renamed from "Rating" because the tab is the whole matrix, not the one
+	 * summary line.
+	 */
+	const ratingsEdit = useSectionEdit<MaturityRows>({
+		label: "Ratings",
+		saved: rows,
+		save: async (draft) => {
+			const next = normalizeMaturityRows(draft, grid);
+			if (JSON.stringify(next) === JSON.stringify(normalizeMaturityRows(rows, grid))) return;
+			await saveFields({ maturityRows: next });
+			setRows(next);
+		},
+	});
+
+	const ratingsContent = (
 		<div className="flex flex-col gap-3">
 			{/* The summary first — Unrated with its warning icon, or the rating the rows add
-			    up to — then the table, which is the tab's reason to exist and is always here. */}
+			    up to — then the table, read-only until the section's pencil opens it. */}
 			<RatingSummary
 				maturity={maturity}
 				notes={contentNotes}
 				incomplete={!!storedMaturity && !fromRows}
 			/>
-			<RatingMatrix grid={grid} rows={ratingDraft} onChange={setRatingDraft} />
+			{ratingsEdit.editing ? (
+				<RatingMatrix grid={grid} rows={ratingsEdit.draft} onChange={ratingsEdit.setDraft} />
+			) : (
+				<RatingMatrixReadOnly grid={grid} rows={rows} />
+			)}
 			{maturityLocked && (
 				<div className="alert alert-info text-sm">
 					<span>
@@ -1579,32 +1581,7 @@ export default function OwnerWorkEditor({
 			{maturityLocked && (
 				<RatingAppeal workId={current.id} corrected={current.maturity ?? "mature"} />
 			)}
-			{/* The table saves as one act, because one heading click answers every row; the
-			    bar is the tab's own, shown while the draft stands away from the saved rows. */}
-			{(ratingDirty || ratingError) && (
-				<div className="flex flex-wrap items-center gap-2">
-					<button
-						type="button"
-						className="btn btn-primary btn-sm"
-						disabled={ratingSaving}
-						onClick={() => void saveRating()}
-					>
-						{ratingSaving ? "Saving…" : "Save Rating"}
-					</button>
-					<button
-						type="button"
-						className="btn btn-ghost btn-sm"
-						disabled={ratingSaving}
-						onClick={() => {
-							setRatingDraft(rows);
-							setRatingError(null);
-						}}
-					>
-						Discard
-					</button>
-					{ratingError && <span className="text-xs text-error">{ratingError}</span>}
-				</div>
-			)}
+			{ratingsEdit.error && <p className="text-xs text-error">{ratingsEdit.error}</p>}
 		</div>
 	);
 
@@ -1612,52 +1589,52 @@ export default function OwnerWorkEditor({
 	// an image's alt text — the description its picture announces to a screen reader, which
 	// is this tab's fact for the kind; kinds with nothing to offer yet say so in one line,
 	// the same silence a tab's absence would have been, named rather than blank.
-	const accessibilityField =
+	const accessibilityEditable = current.type === "video" || current.type === "image";
+	const accessibilityEdit = useSectionEdit<string | null>({
+		label: "Accessibility",
+		saved: current.type === "image" ? imageAlt : null,
+		save: async (draft) => {
+			// The captions editor writes each track itself; the section's check is the way
+			// out of the editor, not a second save.
+			if (current.type !== "image") return;
+			const next = typeof draft === "string" ? draft : "";
+			if (next === imageAlt) return;
+			await saveFields({ imageAlt: next });
+			setImageAlt(next);
+		},
+	});
+
+	const accessibilityContent =
 		current.type === "video" ? (
-			<InlineField
-				label="Accessibility"
-				saved={current.captions ?? []}
-				renderRead={() => <CaptionsSummary captions={current.captions ?? []} />}
-				renderEdit={() => (
-					<WorkCaptionsEditor
-						workId={current.id}
-						captions={current.captions ?? []}
-						onChanged={() => void refreshMedia()}
-					/>
-				)}
-				save={async () => {
-					/* The caption editor manages its own acts; the check closes the field. */
-				}}
-			/>
+			accessibilityEdit.editing ? (
+				<WorkCaptionsEditor
+					workId={current.id}
+					captions={current.captions ?? []}
+					onChanged={() => void refreshMedia()}
+				/>
+			) : (
+				<CaptionsSummary captions={current.captions ?? []} />
+			)
 		) : current.type === "image" ? (
-			<InlineField<string>
-				label="Alt text"
-				saved={imageAlt}
-				renderRead={() => (
-					<p className="text-sm">
-						{imageAlt || <span className="text-sm text-base-content/40">No alt text yet.</span>}
+			accessibilityEdit.editing ? (
+				<div>
+					<textarea
+						aria-label="Alt text"
+						className={`textarea textarea-bordered w-full ${GROWS} min-h-16`}
+						value={accessibilityEdit.draft ?? ""}
+						onChange={(e) => accessibilityEdit.setDraft(e.target.value)}
+						rows={2}
+						placeholder="What does the picture show?"
+					/>
+					<p className="text-xs text-base-content/50">
+						Read to a screen reader instead of the picture. Empty falls back to the Work's title.
 					</p>
-				)}
-				renderEdit={(draft, setDraft) => (
-					<div>
-						<textarea
-							aria-label="Alt text"
-							className={`textarea textarea-bordered w-full ${GROWS} min-h-16`}
-							value={draft}
-							onChange={(e) => setDraft(e.target.value)}
-							rows={2}
-							placeholder="What does the picture show?"
-						/>
-						<p className="text-xs text-base-content/50">
-							Read to a screen reader instead of the picture. Empty falls back to the Work's title.
-						</p>
-					</div>
-				)}
-				save={(draft) => {
-					setImageAlt(draft);
-					return saveFields({ imageAlt: draft });
-				}}
-			/>
+				</div>
+			) : (
+				<p className="text-sm">
+					{imageAlt || <span className="text-sm text-base-content/40">No alt text yet.</span>}
+				</p>
+			)
 		) : (
 			<p className="text-sm text-base-content/40">
 				Nothing to set up here for a {typeLabel(current.type)} yet.
@@ -1679,43 +1656,33 @@ export default function OwnerWorkEditor({
 		</div>
 	) : null;
 
-	const detailsSection = (
-		// Named parts (Parker's third pass, 2026-10-13): the Details tab is the Work's
-		// composition — what it says, when it came out, who may open it — each under its
-		// own heading rather than a flat run of controls. The description leads the tab
-		// (Parker, 2026-10-19): what the Work is comes before when it came out. The kind
-		// is not here (Parker, 2026-10-29): its chip in the byline strip is the control,
-		// so no composition field names it.
-		<div className="flex flex-col gap-6">
-			<section className="flex flex-col gap-2">
-				<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
-				{descriptionField}
-			</section>
-			<section className="flex flex-col gap-2">
-				<h3 className={WORK_DETAILS_HEADING_CLASS}>Tags</h3>
-				{tagsField}
-			</section>
-			{/* The Access section is gone (Parker, 2026-10-13): the chip in the byline strip
-			    below the video names who may open this, and for the creator that chip is the
-			    way in — the table lives in the dialog it opens. */}
-		</div>
-	);
-
 	const infoTabs: InfoTab[] = [
-		{ key: "details", label: "Details", content: detailsSection },
+		{
+			key: "details",
+			label: "Details",
+			content: detailsSectionContent,
+			action: detailsEdit.actions,
+		},
 		{
 			key: "credits",
 			label: "Credits",
-			content: creditsField,
+			content: creditsContent,
+			action: creditsEdit.actions,
 			warning: creditsMissing ? RELEASE_WARNING : undefined,
 		},
 		{
 			key: "rating",
-			label: "Rating",
-			content: ratingField,
+			label: "Ratings",
+			content: ratingsContent,
+			action: ratingsEdit.actions,
 			warning: !fromRows ? RELEASE_WARNING : undefined,
 		},
-		{ key: "accessibility", label: "Accessibility", content: accessibilityField },
+		{
+			key: "accessibility",
+			label: "Accessibility",
+			content: accessibilityContent,
+			action: accessibilityEditable ? accessibilityEdit.actions : undefined,
+		},
 	];
 
 	// ── The media area's two modes ──
@@ -1954,30 +1921,21 @@ export default function OwnerWorkEditor({
 					</span>
 				)}
 				{!mediaManaging && (
-					<button
-						type="button"
-						className="btn btn-ghost btn-sm btn-circle absolute right-4 top-4 z-10 bg-base-100/80 text-base-content/70 backdrop-blur hover:text-base-content"
-						aria-label={
-							writing
-								? "Edit This Work's Body"
-								: isGoods(current.type)
-									? "Edit This Work's Details"
-									: "Manage This Work's Media"
-						}
-						aria-expanded={mediaManaging}
-						onClick={() => {
-							// The kinds with one concern open on it; the media kinds keep the
-							// last tab they were on, unless a kind change left that tab behind.
-							if (writing) setMediaTab("body");
-							else if (isGoods(current.type)) setMediaTab("details");
-							else if (!mediaManagerTabs.some((tab) => tab.key === mediaTab)) {
-								setMediaTab("delivery");
-							}
-							setMediaManaging((open) => !open);
-						}}
-					>
-						<PencilSquareIcon className="size-4" />
-					</button>
+					<div className="absolute right-4 top-4 z-10">
+						<SectionPencil
+							label={writing ? "Body" : isGoods(current.type) ? "Details" : "Media"}
+							onClick={() => {
+								// The kinds with one concern open on it; the media kinds keep the
+								// last tab they were on, unless a kind change left that tab behind.
+								if (writing) setMediaTab("body");
+								else if (isGoods(current.type)) setMediaTab("details");
+								else if (!mediaManagerTabs.some((tab) => tab.key === mediaTab)) {
+									setMediaTab("delivery");
+								}
+								setMediaManaging((open) => !open);
+							}}
+						/>
+					</div>
 				)}
 				{mediaManaging ? (
 					<WorkMediaManager
@@ -2067,58 +2025,34 @@ export default function OwnerWorkEditor({
 				</div>
 			)}
 
-			{/* ── The byline strip: the title (editable in place as everywhere) on the first
-			    line, the creator with the kind and access chips on the second. The rating
-			    line is not here — it is the Rating tab's fact, already above where the tabs
-			    name it (Parker's third pass, 2026-10-13). ── */}
+			{/* ── The byline strip: the title (editable as one section with the dates) on the
+			    first line, the creator with the kind and access chips on the second. The
+			    rating line is not here — it is the Ratings tab's fact, already above where
+			    the tabs name it (Parker's third pass, 2026-10-13). ── */}
 			<WorkByline
 				work={asRead}
-				dates={datesField}
-				// Share and Save ride the maker's line for the creator too (Parker, 2026-10-13):
-				// the centered strip fans out symmetrically, and a creator's line with an empty
-				// right half would sit lopsided. The verbs are a user's; they are what the strip
-				// offers.
+				dates={
+					<>
+						{titleSection.editing ? datesEdit : datesRead}
+						{titleSection.error && <p className="text-xs text-error">{titleSection.error}</p>}
+					</>
+				}
+				// Share rides the maker's line for the creator too (Parker, 2026-10-13), and
+				// the Title section's pencil takes the library Save button's place (Parker,
+				// 2026-11-07) — a creator's own Work is going to be saved to their Library
+				// automatically, so the Save verb is not the creator's to press.
 				actions={
 					<div className="flex shrink-0 items-center gap-1">
 						<ShareLinkButton workId={current.id} slug={asRead.slug ?? ""} />
-						<SaveButton workId={current.id} className="shrink-0" />
+						{/* The Save button's footprint, kept: the pencil sits at the slot's
+						    right edge, so the save check lands on the pencil's rectangle when
+						    the section opens (Parker, 2026-11-07). */}
+						<div className="flex w-[5.5rem] shrink-0 items-center justify-end">
+							{titleSection.actions}
+						</div>
 					</div>
 				}
-				title={
-					<InlineField<string>
-						label="Title"
-						saved={title}
-						className="w-full min-w-0"
-						pencilPlacement="corner"
-						renderRead={() => (
-							<h1
-								className={`${workTitleTypography(current.type).className} truncate`}
-								style={workTitleTypography(current.type).style}
-							>
-								{title || "Untitled"}
-							</h1>
-						)}
-						renderEdit={(draft, setDraft) => (
-							<textarea
-								aria-label="Title"
-								rows={1}
-								className={`${workTitleTypography(current.type).className} ${IN_PLACE} ${GROWS} w-full min-w-0 flex-1`}
-								style={workTitleTypography(current.type).style}
-								value={draft}
-								onChange={(e) => setDraft(e.target.value.replace(/\n/g, " "))}
-								onKeyDown={(e) => {
-									if (e.key === "Enter") e.preventDefault();
-								}}
-								placeholder="Work title"
-							/>
-						)}
-						save={(draft) => {
-							const next = draft.trim() || "Untitled";
-							setTitle(next);
-							return saveFields({ title: next });
-						}}
-					/>
-				}
+				title={titleSection.editing ? titleEdit : titleRead}
 				// The kind chip is the same chip a reader sees, with its own pencil: only a
 				// draft that could still be another kind gets the door (Parker, 2026-10-29).
 				kindChip={kindChangeable ? kindField : undefined}

@@ -79,7 +79,7 @@ test("an image Work's set grows, reorders, refuses a non-image, and displays", a
 	await box.locator('input[type="file"][multiple]').setInputFiles(stubImage("gallery cover.png"));
 	// Once the first picture lands the card shows the gallery, so the set editor is the
 	// media manager's Source section rather than the page body.
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Source" }).click();
 	const source = page.getByRole("tabpanel");
 	await expect(source.getByText(/gallery cover\.png$/)).toBeVisible({ timeout: 30_000 });

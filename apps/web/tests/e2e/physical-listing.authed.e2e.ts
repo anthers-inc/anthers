@@ -101,8 +101,9 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 	await expect(page.getByText("Work not found")).toHaveCount(0);
 
 	// The fulfillment note is the one field a buyer never sees, and it lives in the media
-	// management card now (Parker, 2026-11-07).
-	await page.getByRole("button", { name: "Edit This Work's Details" }).click();
+	// management card now (Parker, 2026-11-07). Scoped to the media area: the Details tab
+	// has its own pencil for the description and tags.
+	await page.locator("#work-media-area").getByRole("button", { name: "Edit Details" }).click();
 	await page.getByRole("textbox", { name: "Details" }).fill("Ships in a padded box.");
 	await page.getByRole("button", { name: "Save Details" }).click();
 	await page.getByRole("button", { name: "Done" }).click();
@@ -176,7 +177,7 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 	await expectDecoded(page, "Mug back");
 
 	// The fulfillment note survived the reload too.
-	await page.getByRole("button", { name: "Edit This Work's Details" }).click();
+	await page.locator("#work-media-area").getByRole("button", { name: "Edit Details" }).click();
 	await expect(page.getByRole("textbox", { name: "Details" })).toHaveValue(
 		"Ships in a padded box.",
 	);

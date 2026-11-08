@@ -307,15 +307,15 @@ test("a video Work takes its file on the page and edits while the file uploads",
 	await expect(climbing.locator("progress")).toBeVisible();
 	// A Work whose file has not arrived cannot be released (`media_missing`), and the
 	// control says so rather than earning the refusal.
-	await page.getByRole("button", { name: "Edit Release" }).click();
-	await page.getByRole("button", { name: "Now", exact: true }).click();
-	await expect(page.getByRole("button", { name: "Save Release" })).toBeDisabled();
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
+	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
+	await expect(page.getByRole("button", { name: "Save Title and Dates" })).toBeDisabled();
 
 	// The per-field model is what this walk is about: the description saves THROUGH the
 	// upload, not after it — one field, one save, whatever else is in flight.
-	await page.getByRole("button", { name: "Edit Description" }).click();
+	await page.getByRole("button", { name: "Edit Details" }).click();
 	await page.getByPlaceholder("Describe this Work…").fill("Written while it uploaded.");
-	await page.getByRole("button", { name: "Save Description" }).click();
+	await page.getByRole("button", { name: "Save Details" }).click();
 	await expect(page.getByText("Written while it uploaded.")).toBeVisible();
 
 	// ── The file lands while the page is open ───────────────────────────────
@@ -404,7 +404,7 @@ for (const source of [
 		// Arrival is the file's row in the set — the label from its filename, extension
 		// stripped by the rowLabel rule. The set editor is the manager's Source section
 		// once the set exists.
-		await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+		await page.getByRole("button", { name: "Edit Media" }).click();
 		await page.getByRole("tab", { name: "Source" }).click();
 		await expect(
 			page
@@ -460,7 +460,7 @@ test("a Work's page and the Works list follow its processing", async ({ page, co
 	// The editing surface is the Work's own page (2026-10-13); the processing reads in the
 	// media manager's Source section, where the file's machinery lives (2026-10-23).
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Source" }).click();
 	await expect(page.getByText("43%", { exact: true })).toBeVisible();
 	await expect(page.getByText("About 3 minutes left")).toBeVisible();
@@ -477,7 +477,7 @@ test("a Work's page and the Works list follow its processing", async ({ page, co
 	await page.goto(`/studio/works/${work.publicId}/edit`);
 	// The fresh page opens on the Work's own page; the processing lives in the media
 	// manager's Source section, which each visit opens on Delivery.
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Source" }).click();
 
 	// The page re-reads the job on its own. An audio or ebook job has no estimate, and the page
@@ -544,7 +544,7 @@ test("a downloadable build reports its progress and confirms the row that landed
 	await expect(
 		page.getByRole("status").filter({ hasText: `${fileName} is in the builds table.` }),
 	).toContainText(`${fileName} is in the builds table.`, { timeout: 15_000 });
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	// A game's build lives on Downloads; Source & Versions is the file kinds' tab.
 	await page.getByRole("tab", { name: "Downloads" }).click();
 	await expect(page.getByRole("table")).toContainText(fileName);

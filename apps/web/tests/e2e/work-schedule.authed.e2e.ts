@@ -84,8 +84,8 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
 	// The schedule lives in the Release field's edit state, on the Work's page (the
-	// kinds pass, 2026-10-14) — one date field and its Now shortcut, saved alone.
-	await page.getByRole("button", { name: "Edit Release" }).click();
+	// kinds pass, 2026-10-14) — three date fields, saved together.
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
 	const releaseAt = page.getByLabel("Anthers Release Date");
 	await expect(releaseAt).toBeEnabled();
 	await expect(releaseAt).toHaveValue("");
@@ -100,7 +100,7 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 	});
 	await releaseAt.fill(local);
 
-	await page.getByRole("button", { name: "Save Release" }).click();
+	await page.getByRole("button", { name: "Save Title and Dates" }).click();
 	// Saving keeps the creator on the Work's page, looking at the result.
 	await expect(page.getByText(/scheduled for/i)).toBeVisible({ timeout: 15_000 });
 	await page.goto("/studio/works");
@@ -116,13 +116,13 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 		expected,
 	);
 
-	// Now replaces the schedule with the release-now act, as the server would.
+	// A past date replaces the schedule with the release-now act, as the server would.
 	await page.goto(`/studio/works/${work.publicId}/edit`);
-	await page.getByRole("button", { name: "Edit Release" }).click();
+	await page.getByRole("button", { name: "Edit Title and Dates" }).click();
 	await expect(releaseAt).toHaveValue(local);
-	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await releaseAt.fill("2020-01-01T09:00");
 	await expect(releaseAt).not.toHaveValue(local);
-	await page.getByRole("button", { name: "Save Release" }).click();
+	await page.getByRole("button", { name: "Save Title and Dates" }).click();
 	await expect(page.getByText(/scheduled for/i)).toHaveCount(0, { timeout: 15_000 });
 	// A time the field holds that has already passed is the release act, not a schedule:
 	// the row is out, and its schedule is gone.
@@ -132,7 +132,7 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 				const [row] = (await ownWorks()).filter((w) => w.title === TITLE);
 				return row ? `${row.visibility}:${row.scheduledReleaseAt}` : "gone";
 			},
-			{ message: "the Now save never released the row" },
+			{ message: "the release-now save never released the row" },
 		)
 		.toBe("released:null");
 });

@@ -63,9 +63,11 @@ test("a piece of writing is rated on the light grid, where its language can make
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
 	// The Studio route is a redirect for every kind now (the kinds pass, 2026-10-14);
-	// the Rating tab IS the table — always open, no edit state to enter (Parker, 2026-10-16).
-	await page.getByRole("tab", { name: "Rating" }).click();
-	const matrix = page.getByRole("tabpanel", { name: "Rating" }).locator("table");
+	// the Ratings tab opens on the visitor's read-only table, and its pencil enters the
+	// edit state (Parker, 2026-11-07).
+	await page.getByRole("tab", { name: "Ratings" }).click();
+	await page.getByRole("button", { name: "Edit Ratings" }).click();
+	const matrix = page.getByRole("tabpanel", { name: "Ratings" }).locator("table");
 	await expect(matrix.getByRole("columnheader", { name: "General", exact: true })).toBeVisible();
 	await expect(matrix.getByRole("columnheader", { name: "Explicit", exact: true })).toBeVisible();
 	// Only sexual content reaches Adult on this grid.
@@ -88,7 +90,7 @@ test("a piece of writing is rated on the light grid, where its language can make
 	// row the rating turns on — the two ways the table is answered, in one walk.
 	await matrix.getByRole("button", { name: "None", exact: true }).click();
 	await page.getByRole("radio", { name: "Strong Language: Explicit" }).check();
-	await page.getByRole("button", { name: "Save Rating" }).click();
+	await page.getByRole("button", { name: "Save Ratings" }).click();
 
 	// POLLED: the DB read races nothing. The save's own response adopted the row, and the
 	// poll waits for what the server holds rather than asserting on the click's wake.
@@ -102,6 +104,7 @@ test("a piece of writing is rated on the light grid, where its language can make
 
 	// Parker's example for the closest-rung rule, left unsaved in the draft: the Adult
 	// heading cannot set Violence to a rung the light grid denies it, so it sets Explicit.
+	await page.getByRole("button", { name: "Edit Ratings" }).click();
 	await matrix.getByRole("button", { name: "Adult", exact: true }).click();
 	await expect(page.getByRole("radio", { name: "Violence: Explicit" })).toBeChecked();
 	await expect(page.getByRole("radio", { name: "Violence: Adult" })).toHaveCount(0);
@@ -115,9 +118,9 @@ test("a game is rated on the visual grid, where language never rates", async ({
 	const work = await create({ type: "game", title: `${STEM} game` });
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
-	// Same redirect, same tab, no edit state: the visual grid asserts itself in the open table.
-	await page.getByRole("tab", { name: "Rating" }).click();
-	const matrix = page.getByRole("tabpanel", { name: "Rating" }).locator("table");
+	// Same redirect, same tab: the visual grid asserts itself in the read-only table.
+	await page.getByRole("tab", { name: "Ratings" }).click();
+	const matrix = page.getByRole("tabpanel", { name: "Ratings" }).locator("table");
 	await expect(matrix.getByRole("columnheader", { name: "Mature", exact: true })).toBeVisible();
 	await expect(matrix.getByRole("columnheader", { name: "Explicit", exact: true })).toHaveCount(0);
 	await expect(page.getByRole("radio", { name: "Violence: Adult" })).toHaveCount(1);

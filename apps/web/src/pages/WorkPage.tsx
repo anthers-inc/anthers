@@ -725,7 +725,7 @@ function VisitorRecord({
 							},
 							{
 								key: "rating",
-								label: "Rating",
+								label: "Ratings",
 								// The full table, read-only, whatever the Work is rated (Parker,
 								// 2026-10-16): the tab exists for the table, and a General Work's
 								// all-General table says the rating in the same shape the other rungs
