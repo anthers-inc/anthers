@@ -271,7 +271,7 @@ test("a piece of writing is written on its page and reads as an article", async 
 		.getByRole("button", { name: "None", exact: true })
 		.click();
 	await page.getByRole("button", { name: "Save Rating" }).click();
-	// The release act is a release date already in the past — the Now button fills it — and
+	// The release act is a release date already in the past, and
 	// the field's check waits while a readiness condition stands (Parker, 2026-10-23).
 	const saveRelease = page.getByRole("button", { name: "Save Release" });
 
@@ -289,7 +289,7 @@ test("a piece of writing is written on its page and reads as an article", async 
 	await page.getByRole("button", { name: "Save Credits" }).click();
 	await page.getByRole("tab", { name: "Details" }).click();
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
 	await expect(saveRelease).toBeDisabled();
 
 	// The standfirst is the Description field, edited in the Details tab where a user
@@ -310,7 +310,7 @@ test("a piece of writing is written on its page and reads as an article", async 
 	// The release walk returns to the Details tab, where the release field lives.
 	await page.getByRole("tab", { name: "Details" }).click();
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
 	await expect(saveRelease).toBeEnabled();
 	await saveRelease.click();
 

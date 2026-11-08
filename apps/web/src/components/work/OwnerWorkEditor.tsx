@@ -82,11 +82,7 @@ import {
 	WORK_TYPE_DESCRIPTIONS,
 } from "@anthers/web-shared/content/works";
 import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
-import {
-	isoToLocalInput,
-	localInputToIso,
-	nowLocalInput,
-} from "@anthers/web-shared/local-datetime";
+import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import AccessTables, {
@@ -146,7 +142,7 @@ import SaveButton from "../library/SaveButton";
 import ProjectPricing from "../project/ProjectPricing";
 import WorkReviews from "../project/WorkReviews";
 import { contentTypeMeta } from "../ui/ContentTypeBadge";
-import { InlineField } from "./Editing";
+import { FieldActionJoin, InlineField } from "./Editing";
 import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
 import PreviewMediaSection from "./PreviewMediaSection";
@@ -155,6 +151,7 @@ import { WorkViewAsSection } from "./ViewAs";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
 import {
 	DescriptionBody,
+	formatOriginallyReleased,
 	isGoods,
 	isWriting,
 	WORK_DESCRIPTION_CLASS,
@@ -1042,7 +1039,7 @@ export default function OwnerWorkEditor({
 		<InlineField<{ release: string; original: string; preRelease: string }>
 			label="Release"
 			saved={{ release: releaseSaved, original: originalDate, preRelease: preReleaseSaved }}
-			pencilPlacement="corner"
+			className="w-full max-w-3xl"
 			disabledSave={(draft) => {
 				const pre = localInputToIso(draft.preRelease);
 				const release = localInputToIso(draft.release);
@@ -1053,90 +1050,109 @@ export default function OwnerWorkEditor({
 				const iso = localInputToIso(draft.release);
 				return iso && Date.parse(iso) <= Date.now() ? releaseNowRefusal : undefined;
 			}}
-			renderRead={() => (
-				<div className="flex flex-col gap-1">
-					<WorkDateLine work={current} scheduled={current.scheduledReleaseAt ?? null} />
-					{current.preReleaseAt && !isPreRelease(current) && current.visibility !== "released" && (
-						<p className="text-xs text-base-content/45">
-							Pre-release page opens{" "}
-							{new Date(current.preReleaseAt).toLocaleString("en-US", {
-								month: "long",
-								day: "numeric",
-								year: "numeric",
-								hour: "numeric",
-								minute: "2-digit",
-							})}
-						</p>
-					)}
-				</div>
-			)}
+			renderRead={() => {
+				const preReleaseShown = current.preReleaseAt
+					? new Date(current.preReleaseAt).toLocaleString("en-US", {
+							month: "long",
+							day: "numeric",
+							year: "numeric",
+							hour: "numeric",
+							minute: "2-digit",
+						})
+					: null;
+				const originalShown = formatOriginallyReleased(current.originallyReleased);
+				return (
+					<div className="flex w-full flex-col gap-2 text-left">
+						<div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
+							<div className="min-w-0">
+								<p className="text-xs text-base-content/45">Pre-Release Date</p>
+								<p className={`text-sm ${preReleaseShown ? "" : "text-base-content/40"}`}>
+									{preReleaseShown ?? "Not set"}
+								</p>
+							</div>
+							<div className="min-w-0">
+								<p className="text-xs text-base-content/45">Anthers Release Date</p>
+								<WorkDateLine
+									work={current}
+									scheduled={current.scheduledReleaseAt ?? null}
+									align="start"
+									showOriginally={false}
+								/>
+							</div>
+							<div className="min-w-0">
+								<p className="text-xs text-base-content/45">Original Release Date</p>
+								<p className={`text-sm ${originalShown ? "" : "text-base-content/40"}`}>
+									{originalShown ?? "Not set"}
+								</p>
+							</div>
+						</div>
+						{current.preReleaseAt &&
+							!isPreRelease(current) &&
+							current.visibility !== "released" && (
+								<p className="text-xs text-base-content/45">
+									Pre-release page opens {preReleaseShown}
+								</p>
+							)}
+					</div>
+				);
+			}}
 			renderEdit={(draft, setDraft) => {
 				const draftIso = localInputToIso(draft.release);
 				const releasingNow =
 					draft.release !== releaseSaved && draftIso !== null && Date.parse(draftIso) <= Date.now();
 				return (
-					<div className="flex flex-col gap-3 text-left">
-						<div className="flex flex-col gap-2">
-							<div className="flex items-center gap-1.5">
-								<label className="text-sm" htmlFor="owner-anthers-pre-release">
-									Pre-Release Date
-								</label>
-								<InfoTip text="Opens this Work's page to everyone on this date, with its preview media and its coming-soon card. Buying, downloading, streaming and reviews stay closed until the Anthers Release Date." />
-							</div>
-							<div className="flex flex-wrap items-center gap-2 py-1">
+					<div className="flex w-full flex-col gap-3 text-left">
+						<div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
+							<div className="flex min-w-0 flex-col gap-1.5">
+								<div className="flex items-center gap-1.5">
+									<label className="text-sm" htmlFor="owner-anthers-pre-release">
+										Pre-Release Date
+									</label>
+									<InfoTip text="Opens this Work's page to everyone on this date, with its preview media and its coming-soon card. Buying, downloading, streaming and reviews stay closed until the Anthers Release Date." />
+								</div>
 								<input
 									id="owner-anthers-pre-release"
 									type="datetime-local"
 									aria-label="Pre-Release Date"
-									className="input input-bordered w-full max-w-56"
+									className="input input-bordered w-full"
 									value={draft.preRelease}
 									onChange={(e) => setDraft({ ...draft, preRelease: e.target.value })}
 								/>
-								{draft.preRelease && (
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs"
-										onClick={() => setDraft({ ...draft, preRelease: "" })}
-									>
-										Clear
-									</button>
-								)}
 							</div>
-						</div>
-						<div className="flex flex-col gap-2">
-							<div className="flex items-center gap-1.5">
-								<label className="text-sm" htmlFor="owner-anthers-release">
-									Anthers Release Date
-								</label>
-								<InfoTip text={RELEASE_FIELD_HINT} />
-							</div>
-							<div className="flex flex-wrap items-center gap-2 py-1">
+							<div className="flex min-w-0 flex-col gap-1.5">
+								<div className="flex items-center gap-1.5">
+									<label className="text-sm" htmlFor="owner-anthers-release">
+										Anthers Release Date
+									</label>
+									<InfoTip text={RELEASE_FIELD_HINT} />
+								</div>
 								<input
 									id="owner-anthers-release"
 									type="datetime-local"
 									aria-label="Anthers Release Date"
-									className="input input-bordered w-full max-w-56"
+									className="input input-bordered w-full"
 									value={draft.release}
 									onChange={(e) => setDraft({ ...draft, release: e.target.value })}
 								/>
-								<button
-									type="button"
-									className="btn btn-sm"
-									title="Set the release date to right now"
-									onClick={() => setDraft({ ...draft, release: nowLocalInput() })}
-								>
-									Now
-								</button>
-								{draft.release && (
-									<button
-										type="button"
-										className="btn btn-ghost btn-sm"
-										onClick={() => setDraft({ ...draft, release: "" })}
-									>
-										Clear
-									</button>
-								)}
 							</div>
+							<div className="flex min-w-0 flex-col gap-1.5">
+								<div className="flex items-center gap-1.5">
+									<label className="text-sm" htmlFor="owner-original-release">
+										Original Release Date
+									</label>
+									<InfoTip text={ORIGINAL_RELEASE_HINT} />
+								</div>
+								<input
+									id="owner-original-release"
+									type="date"
+									aria-label="Original release date"
+									className="input input-bordered w-full"
+									value={draft.original}
+									onChange={(e) => setDraft({ ...draft, original: e.target.value })}
+								/>
+							</div>
+						</div>
+						<div className="flex flex-col gap-2">
 							{current.visibility === "released" && !current.recordUrl && (
 								<p className="text-xs text-base-content/50">
 									Its listing isn't on the network yet.
@@ -1223,22 +1239,6 @@ export default function OwnerWorkEditor({
 									</span>
 								</div>
 							)}
-						</div>
-						<div className="flex flex-col gap-2">
-							<div className="flex items-center gap-1.5">
-								<label className="text-sm" htmlFor="owner-original-release">
-									Original Release Date
-								</label>
-								<InfoTip text={ORIGINAL_RELEASE_HINT} />
-							</div>
-							<input
-								id="owner-original-release"
-								type="date"
-								aria-label="Original release date"
-								className="input input-bordered w-full max-w-56"
-								value={draft.original}
-								onChange={(e) => setDraft({ ...draft, original: e.target.value })}
-							/>
 						</div>
 					</div>
 				);
@@ -1402,25 +1402,27 @@ export default function OwnerWorkEditor({
 			    bar is the tab's own, shown while the draft stands away from the saved rows. */}
 			{(ratingDirty || ratingError) && (
 				<div className="flex flex-wrap items-center gap-2">
-					<button
-						type="button"
-						className="btn btn-primary btn-sm"
-						disabled={ratingSaving}
-						onClick={() => void saveRating()}
-					>
-						{ratingSaving ? "Saving…" : "Save Rating"}
-					</button>
-					<button
-						type="button"
-						className="btn btn-ghost btn-sm"
-						disabled={ratingSaving}
-						onClick={() => {
-							setRatingDraft(rows);
-							setRatingError(null);
-						}}
-					>
-						Discard
-					</button>
+					<FieldActionJoin>
+						<button
+							type="button"
+							className="btn btn-ghost btn-sm join-item text-base-content/70 hover:text-base-content"
+							disabled={ratingSaving}
+							onClick={() => {
+								setRatingDraft(rows);
+								setRatingError(null);
+							}}
+						>
+							Discard
+						</button>
+						<button
+							type="button"
+							className="btn btn-success btn-sm join-item"
+							disabled={ratingSaving}
+							onClick={() => void saveRating()}
+						>
+							{ratingSaving ? "Saving…" : "Save Rating"}
+						</button>
+					</FieldActionJoin>
 					{ratingError && <span className="text-xs text-error">{ratingError}</span>}
 				</div>
 			)}

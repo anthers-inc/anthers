@@ -80,8 +80,8 @@ test("a creator releasing rated work into Public Access is told who will see it"
 	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(note).toHaveCount(0);
 
-	// Now makes the draft a release-now — the act every note in the field qualifies.
-	await page.getByRole("button", { name: "Now", exact: true }).click();
+	// A past date makes the draft a release-now — the act every note in the field qualifies.
+	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
 	await expect(note).toBeVisible();
 
 	// The rating alone never decides it: General is met by every user. The walk saves

@@ -308,7 +308,7 @@ test("a video Work takes its file on the page and edits while the file uploads",
 	// A Work whose file has not arrived cannot be released (`media_missing`), and the
 	// control says so rather than earning the refusal.
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
 	await expect(page.getByRole("button", { name: "Save Release" })).toBeDisabled();
 
 	// The per-field model is what this walk is about: the description saves THROUGH the

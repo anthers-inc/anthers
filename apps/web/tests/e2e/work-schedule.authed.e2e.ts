@@ -84,7 +84,7 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
 	// The schedule lives in the Release field's edit state, on the Work's page (the
-	// kinds pass, 2026-10-14) — one date field and its Now shortcut, saved alone.
+	// kinds pass, 2026-10-14) — three date fields, saved together.
 	await page.getByRole("button", { name: "Edit Release" }).click();
 	const releaseAt = page.getByLabel("Anthers Release Date");
 	await expect(releaseAt).toBeEnabled();
@@ -116,11 +116,11 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 		expected,
 	);
 
-	// Now replaces the schedule with the release-now act, as the server would.
+	// A past date replaces the schedule with the release-now act, as the server would.
 	await page.goto(`/studio/works/${work.publicId}/edit`);
 	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(releaseAt).toHaveValue(local);
-	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await releaseAt.fill("2020-01-01T09:00");
 	await expect(releaseAt).not.toHaveValue(local);
 	await page.getByRole("button", { name: "Save Release" }).click();
 	await expect(page.getByText(/scheduled for/i)).toHaveCount(0, { timeout: 15_000 });
@@ -132,7 +132,7 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 				const [row] = (await ownWorks()).filter((w) => w.title === TITLE);
 				return row ? `${row.visibility}:${row.scheduledReleaseAt}` : "gone";
 			},
-			{ message: "the Now save never released the row" },
+			{ message: "the release-now save never released the row" },
 		)
 		.toBe("released:null");
 });

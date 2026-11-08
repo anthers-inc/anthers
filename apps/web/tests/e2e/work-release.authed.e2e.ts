@@ -179,9 +179,9 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// ── Unrated, and therefore unreleasable ─────────────────────────────────
 	// A Work is born `unrated` and the server refuses to release one (`maturity_undeclared`),
 	// so the control refuses the click rather than earning the error. The release act is a
-	// date in the past — Now fills it — and that is what the field's check waits on.
+	// date in the past, and that is what the field's check waits on.
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
 	await expect(page.getByRole("button", { name: "Save Release" })).toBeDisabled();
 	await page.getByRole("button", { name: "Cancel editing Release" }).click();
 

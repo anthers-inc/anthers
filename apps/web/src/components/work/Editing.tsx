@@ -33,6 +33,20 @@ const PENCIL =
 	"btn btn-ghost btn-xs text-base-content/40 hover:text-base-content/80";
 
 /**
+ * The bordered, filled wrapper a field's cancel-and-save pair rides in — shared by the
+ * inline fields and the Rating table's one-act save, so the two never look like they
+ * belong to different applications. A bare ghost X on the page's background is invisible
+ * beside a green checkmark; one edge and one fill make both acts read as buttons.
+ */
+export function FieldActionJoin({ children }: { children: ReactNode }) {
+	return (
+		<div className="-mt-1 join shrink-0 rounded-lg border border-base-content/25 bg-base-200/80 shadow-sm">
+			{children}
+		</div>
+	);
+}
+
+/**
  * One editable field: what a user reads, with a pencil that opens it, an X that cancels
  * and a checkmark that saves the field alone.
  *
@@ -40,23 +54,25 @@ const PENCIL =
  * when it passes `renderEdit` and `save` — the primitive only owns the opening, the
  * closing and the waiting.
  *
- * ⭐ **The pencil rides the content, not the field's edge**: the read view and the pencil
- * sit in one top-aligned flex row whose content hugs what it renders, so the pencil lands
- * beside the thing it edits — a description's beside its last full line — rather than at
- * the far edge of a full-width edit area. The `-mt-1` lifts the pencil toward the first
- * text line's ascent.
+ * ⭐ **The pencil is a static corner, and the save pair takes its place** (Parker,
+ * 2026-11-07). The pencil used to ride the read content, so a short read view put it a
+ * few words from the left while the edit control filled the field and the pair landed at
+ * the far right — the eye clicked one place and had to travel to another. Now every
+ * field's read row reserves a right-hand action column, the pencil sits at the top of
+ * it, and the edit row puts the cancel/save join in the very same column. The content
+ * changes shape; the place the eye went does not.
  *
- * ⭐ **A centered title is the exception: the text alone is centered, and the pencil
+ * ⭐ **The pair is a join with its own fill and edge**, because a bare ghost X on the
+ * page's background is invisible next to a green checkmark. The cancel X and the save
+ * check share one bordered, filled control, so both acts read as buttons at a glance.
+ *
+ * ⭐ **A centered title is the one exception: the text alone is centered, and the pencil
  * hangs off its top-right corner** (Parker, 2026-10-19). Centering the read view and the
  * pencil as one group pulls the title off the page's center, so `pencilPlacement="corner"`
  * makes the read view a content-sized block centered by its own margins, with an equal
  * gutter on both sides that keeps the text centered while the pencil hangs in the right
  * one. Capping the block at the column's width means a long title truncates rather than
  * pushing the pencil past the page's edge.
- *
- * ⭐ **The cancel and save pair sits to the right of the working control, not beneath it**
- * (Parker, 2026-10-23): the edit area keeps the width it needs and the eye finds the two
- * acts where the pencil was, instead of below a block of text that grew as it was typed.
  */
 export function InlineField<V>({
 	label,
@@ -104,7 +120,8 @@ export function InlineField<V>({
 	fill?: boolean;
 	/**
 	 * Whether the pencil hangs off the read view's top-right corner rather than sitting
-	 * beside it — for a centered title, where the text alone is the centered thing.
+	 * in the field's action column — for a centered title, where the text alone is the
+	 * centered thing.
 	 */
 	pencilPlacement?: "beside" | "corner";
 }) {
@@ -131,13 +148,22 @@ export function InlineField<V>({
 		}
 	};
 
+	const cancel = () =>
+		keepScroll(rootRef.current, () => {
+			setDraft(saved);
+			setError(null);
+			setMode("read");
+		});
+
 	const pencil = !disabledReason ? (
 		<button
 			type="button"
 			aria-label={`Edit ${label}`}
 			title={`Edit ${label}`}
 			className={`${PENCIL} shrink-0 ${
-				pencilPlacement === "corner" ? "absolute -top-1 right-0" : "-mt-1 self-start"
+				pencilPlacement === "corner"
+					? "absolute -top-1 right-0"
+					: "-mt-1 self-start justify-self-end"
 			}`}
 			onClick={() =>
 				// Opening for edit usually makes the page taller — and whatever it
@@ -152,10 +178,40 @@ export function InlineField<V>({
 			<PencilSquareIcon className="size-4" />
 		</button>
 	) : (
-		<span className="shrink-0 self-start text-xs text-base-content/40" title={disabledReason}>
+		<span
+			className="shrink-0 self-start justify-self-end text-xs text-base-content/40"
+			title={disabledReason}
+		>
 			{disabledReason}
 		</span>
 	);
+
+	const fieldActions =
+		mode === "busy" ? (
+			<span className="px-1 text-xs text-base-content/60">Saving…</span>
+		) : (
+			<FieldActionJoin>
+				<button
+					type="button"
+					aria-label={`Cancel editing ${label}`}
+					title="Discard"
+					className="btn btn-ghost btn-sm join-item text-base-content/70 hover:text-base-content"
+					onClick={cancel}
+				>
+					<XMarkIcon className="size-4" />
+				</button>
+				<button
+					type="button"
+					aria-label={`Save ${label}`}
+					title={saveRefusal ?? "Save"}
+					disabled={saveRefusal !== undefined}
+					className="btn btn-success btn-sm join-item"
+					onClick={() => void commit()}
+				>
+					<CheckIcon className="size-4" />
+				</button>
+			</FieldActionJoin>
+		);
 
 	return (
 		<div
@@ -175,57 +231,24 @@ export function InlineField<V>({
 						{pencil}
 					</div>
 				) : (
-					<div className={`flex gap-1 ${fill ? "h-full w-full items-stretch" : "items-start"}`}>
-						<div className={`min-w-0 ${fill ? "flex w-full min-h-0" : ""}`}>{renderRead()}</div>
+					<div
+						className={`grid grid-cols-[minmax(0,1fr)_auto] gap-2 ${
+							fill ? "h-full items-stretch" : "items-start"
+						}`}
+					>
+						<div className={`min-w-0 ${fill ? "flex min-h-0" : ""}`}>{renderRead()}</div>
 						{pencil}
 					</div>
 				)
 			) : (
-				<div className="flex items-start gap-2">
-					<div className="min-w-0 flex-1 space-y-2">
-						{renderEdit(draft, setDraft, () => {
-							// Cancel — the field shrinks back to its read view; the place stays.
-							keepScroll(rootRef.current, () => {
-								setDraft(saved);
-								setError(null);
-								setMode("read");
-							});
-						})}
+				<div
+					className={`grid grid-cols-[minmax(0,1fr)_auto] gap-2 ${fill ? "h-full" : "items-start"}`}
+				>
+					<div className={`min-w-0 space-y-2 ${fill ? "flex h-full flex-col" : ""}`}>
+						{renderEdit(draft, setDraft, cancel)}
 						{error && <p className="text-xs text-error">{error}</p>}
 					</div>
-					<div className="flex shrink-0 items-center gap-1">
-						{mode === "busy" ? (
-							<span className="text-xs text-base-content/60">Saving…</span>
-						) : (
-							<>
-								<button
-									type="button"
-									aria-label={`Cancel editing ${label}`}
-									title="Discard"
-									className="btn btn-ghost btn-xs"
-									onClick={() =>
-										keepScroll(rootRef.current, () => {
-											setDraft(saved);
-											setError(null);
-											setMode("read");
-										})
-									}
-								>
-									<XMarkIcon className="size-4" />
-								</button>
-								<button
-									type="button"
-									aria-label={`Save ${label}`}
-									title={saveRefusal ?? "Save"}
-									disabled={saveRefusal !== undefined}
-									className="btn btn-success btn-xs"
-									onClick={() => void commit()}
-								>
-									<CheckIcon className="size-4" />
-								</button>
-							</>
-						)}
-					</div>
+					{fieldActions}
 				</div>
 			)}
 		</div>

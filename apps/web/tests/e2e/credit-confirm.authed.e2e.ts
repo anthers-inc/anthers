@@ -223,7 +223,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	await page.getByRole("button", { name: "Save Credits" }).click();
 	await page.getByRole("tab", { name: "Details" }).click();
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	await page.getByRole("button", { name: "Now", exact: true }).click({ timeout: 15_000 });
+	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
 	await page.getByRole("button", { name: "Save Release" }).click();
 
 	// The release made the credit public, which is the moment the user is owed the ask.

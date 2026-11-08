@@ -107,8 +107,8 @@ test("a Work rated before the matrix is released only once every row is answered
 	const saveRelease = page.getByRole("button", { name: "Save Release" });
 	await expect(page.getByText(/answer every row of the rating first/i)).toBeVisible();
 	// The field offers a future time while unrated — that is a schedule — and refuses the
-	// release-now the Now button fills in.
-	await page.getByRole("button", { name: "Now", exact: true }).click();
+	// release-now a past date makes it.
+	await page.getByLabel("Anthers Release Date").fill("2020-01-01T09:00");
 	await expect(saveRelease).toBeDisabled();
 	// (The schedule input itself stays offered while unrated, as the batch editor's rule had it.)
 
