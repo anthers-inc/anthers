@@ -407,14 +407,14 @@ function LoggedInLayoutInner() {
 						aria-label="Toggle sidebar"
 						aria-hidden={chromeHidden || undefined}
 						tabIndex={chromeHidden ? -1 : undefined}
-						className={`btn btn-xs btn-circle border-base-300/60 bg-base-100 shadow-md absolute top-4 z-40 transition-all duration-base ease-in-out ${
+						className={`btn btn-sm btn-circle border-base-300/60 bg-base-100 shadow-md absolute top-4 z-40 transition-all duration-base ease-in-out ${
 							sidebarOpen
 								? "left-64 -translate-x-1/2"
 								: "left-0 md:left-16 translate-x-0 md:-translate-x-1/2"
 						} ${chromeHidden ? "invisible pointer-events-none" : ""}`}
 					>
 						<ChevronLeftIcon
-							className={`w-3.5 h-3.5 transition-transform duration-base ${sidebarOpen ? "" : "rotate-180"}`}
+							className={`w-4 h-4 transition-transform duration-base ${sidebarOpen ? "" : "rotate-180"}`}
 						/>
 					</button>
 					{/* Persistent sidebar. From `md` up it sits beside the page; below that it is
