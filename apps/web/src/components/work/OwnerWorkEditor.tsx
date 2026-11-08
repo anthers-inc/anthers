@@ -60,6 +60,7 @@ import {
 	normalizeMaturityRows,
 	notesFromRows,
 	ratingFromRows,
+	releaseRatingRefusal,
 } from "@anthers/shared/content-rating";
 import { normalizeWorkTags } from "@anthers/shared/tags";
 import { useAuth } from "@anthers/web-shared/auth";
@@ -150,6 +151,7 @@ import { InlineField } from "./Editing";
 import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
 import PreviewMediaSection from "./PreviewMediaSection";
+import ReleaseChecklist, { type ReleaseChecklistItem } from "./ReleaseChecklist";
 import ShareLinkButton from "./ShareLinkButton";
 import { WorkViewAsSection } from "./ViewAs";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
@@ -364,6 +366,8 @@ export default function OwnerWorkEditor({
 	const [thumbError, setThumbError] = useState<string | null>(null);
 	/** Which Info tab is open — lifted, because the header's *Change* rating link opens Rating. */
 	const [activeInfoTab, setActiveInfoTab] = useState("details");
+	/** The side column's tab, lifted so the release checklist can open Manage for a writing's body. */
+	const [activeSideTab, setActiveSideTab] = useState("manage");
 
 	/**
 	 * The Release field's draft, as the datetime input holds it: the Work's own release
@@ -682,25 +686,137 @@ export default function OwnerWorkEditor({
 	// server's own word for it — the creator's to fix rather than to wait for.
 	const writingEmpty = writing && isEmptyWriting(bodyHtml);
 	const creditsMissing = !creditRows.some((r) => r.types.includes("created"));
+	/** The rating's other refusal: a complete rating at a rung Anthers is not taking today. */
+	const ratingRungRefusal = fromRows ? releaseRatingRefusal(fromRows) : null;
+
+	/** Open an Info tab and bring it into view from the floating checklist. */
+	const openInfoTab = (key: string) => {
+		setActiveInfoTab(key);
+		requestAnimationFrame(() =>
+			document.getElementById("work-info-tabs")?.scrollIntoView({
+				behavior: "smooth",
+				block: "start",
+			}),
+		);
+	};
+	/** Open the media manager where this kind's file lives, and bring the media area into view. */
+	const openMediaManager = () => {
+		setMediaManaging(true);
+		setMediaTab(isPaged(current.type) ? "pages" : "source");
+		requestAnimationFrame(() =>
+			document.getElementById("work-media-area")?.scrollIntoView({
+				behavior: "smooth",
+				block: "start",
+			}),
+		);
+	};
+
 	/**
-	 * The first thing that would refuse a release-now, in the server's own order — the notices
-	 * below say each one in full, and this short form rides the checkmark's tooltip while it
-	 * waits. A schedule is still offered while these stand, as the batch editor's rule had it.
+	 * The Work's **release checklist**, in the server's own order (`refusalFor`): the
+	 * creator's standing, the file or the writing, processing, the rating, the credits.
+	 * `releaseNowRefusal` is this list's first unfinished refusal, so the floating card and
+	 * the Release field cannot disagree — the batch editor's one-definition rule, carried
+	 * from the warning icons into the fuller guide.
+	 *
+	 * ⚠️ **The two account-wide answers arrive a moment after the page.** Their rows join the
+	 * list once known rather than being drawn from an unasked question, so the card never
+	 * tells a creator they need something the platform has not checked yet.
 	 */
-	const releaseNowRefusal =
-		payoutsReady === false
-			? "Set up payouts before releasing — the notice below says where."
-			: permissionMissing === true
-				? "Give Anthers permission to publish before releasing — the notice below says where."
-				: fileMissing
-					? "This Work's file has to arrive before it can be released."
-					: writingEmpty
-						? "This piece of writing is empty."
-						: !fromRows
-							? "Answer every row of the Rating first — every row, no exceptions."
-							: creditsMissing
-								? "Credit at least one person as Created before releasing."
-								: undefined;
+	const releaseChecklist: ReleaseChecklistItem[] = [];
+	if (permissionMissing !== null) {
+		releaseChecklist.push({
+			key: "permission",
+			label: "Give Anthers permission to publish",
+			state: permissionMissing ? "todo" : "done",
+			refusal: "Give Anthers permission to publish before releasing — the notice below says where.",
+			href: studioUrl("/settings"),
+		});
+	}
+	if (payoutsReady !== null) {
+		releaseChecklist.push({
+			key: "payouts",
+			label: "Set up payouts",
+			state: payoutsReady ? "done" : "todo",
+			refusal: "Set up payouts before releasing — the notice below says where.",
+			href: studioUrl("/payments"),
+		});
+	}
+	if (writing) {
+		releaseChecklist.push({
+			key: "writing",
+			label: "Write the piece",
+			state: writingEmpty ? "todo" : "done",
+			refusal: "This piece of writing is empty.",
+			onOpen: () => {
+				setActiveSideTab("manage");
+				requestAnimationFrame(() =>
+					document.getElementById("work-body-field")?.scrollIntoView({
+						behavior: "smooth",
+						block: "center",
+					}),
+				);
+			},
+		});
+	} else if (isFileWorkType(current.type)) {
+		releaseChecklist.push({
+			key: "media",
+			// An upload in flight resolves without the creator, so it is a wait rather than
+			// an act and says what it is doing. A file that never arrived is theirs to add.
+			label: fileUploading ? "Uploading the media" : "Add the Work's media",
+			state: fileUploading ? "waiting" : current.sourceKey ? "done" : "todo",
+			refusal: "This Work's file has to arrive before it can be released.",
+			onOpen: openMediaManager,
+		});
+	}
+	if (current.transcoding) {
+		const stalled =
+			current.transcoding.status === "failed" || current.transcoding.status === "canceled";
+		releaseChecklist.push({
+			key: "processing",
+			// A stopped encode is not something to wait for: nothing will finish it.
+			label: stalled
+				? "Replace the media or start processing again"
+				: "Finish processing the media",
+			state: running ? "waiting" : stalled ? "todo" : "done",
+			refusal: stalled
+				? "Processing this Work's media was stopped, so it can't be released — replace the media or start the processing again."
+				: running
+					? "Can't release yet — the media is still processing."
+					: undefined,
+			onOpen: openMediaManager,
+		});
+	}
+	releaseChecklist.push({
+		key: "rating",
+		label:
+			fromRows && ratingRungRefusal === "closed"
+				? `${maturityLabel(fromRows)} work isn't open for release yet`
+				: "Answer every row of the Rating",
+		state: !fromRows ? "todo" : ratingRungRefusal === "closed" ? "waiting" : "done",
+		refusal: !fromRows
+			? "Answer every row of the Rating first — every row, no exceptions."
+			: ratingRungRefusal === "closed"
+				? `Anthers isn't accepting ${maturityLabel(fromRows)} work at the moment, so this Work can't be released. The rating is right and has been saved — you'll be able to release when ${maturityLabel(fromRows)} reopens.`
+				: undefined,
+		onOpen: !fromRows ? () => openInfoTab("rating") : undefined,
+	});
+	releaseChecklist.push({
+		key: "credits",
+		label: "Credit who made it",
+		state: creditsMissing ? "todo" : "done",
+		refusal: "Credit at least one person as Created before releasing.",
+		onOpen: creditsMissing ? () => openInfoTab("credits") : undefined,
+	});
+
+	/**
+	 * The first thing that would refuse a release-now, said in the server's own order. The
+	 * notices below say each one in full, and this short form rides the checkmark's tooltip
+	 * while it waits. A schedule is still offered while these stand, as the batch editor's
+	 * rule had it.
+	 */
+	const releaseNowRefusal = releaseChecklist.find(
+		(item) => item.state !== "done" && item.refusal,
+	)?.refusal;
 
 	// ── The Info tabs' contents ──
 	/**
@@ -1732,7 +1848,7 @@ export default function OwnerWorkEditor({
 						<section className="flex flex-col gap-2">{detailsNoteField}</section>
 					)}
 					{writing && (
-						<section className="flex flex-col gap-2">
+						<section id="work-body-field" className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Body</h3>
 							{bodyField}
 						</section>
@@ -1770,10 +1886,11 @@ export default function OwnerWorkEditor({
 			    its record. A piece of writing reads at its measure centered inside the
 			    card; a good's deliverable is the store panel, exactly where every user
 			    meets it. ── */}
-			<section className="relative">
+			<section id="work-media-area" className="relative">
 				{!writing && !isGoods(current.type) && !mediaManaging && fileMissing && (
 					// The same warning the refusal reads: no file, no release — and it sits
-					// beside the media it is about, not in a checklist elsewhere on the page.
+					// beside the media it is about, where the fix lands, as well as in the
+					// floating checklist that tracks the whole set.
 					<span
 						className="absolute right-14 top-4 z-10 flex size-8 items-center justify-center rounded-full bg-base-100/80 text-warning backdrop-blur"
 						title={RELEASE_WARNING}
@@ -1945,7 +2062,7 @@ export default function OwnerWorkEditor({
 			    the same hair laid flat (Parker, 2026-10-16), as the visitor's page draws. ── */}
 			<div aria-hidden className="h-0.5 bg-base-content/20" />
 			<div className="grid lg:grid-cols-[minmax(0,1fr)_2px_minmax(0,1fr)]">
-				<div className="lg:pr-4">
+				<div id="work-info-tabs" className="lg:pr-4">
 					<WorkInfoTabs
 						tabs={infoTabs}
 						activeKey={activeInfoTab}
@@ -1954,7 +2071,12 @@ export default function OwnerWorkEditor({
 				</div>
 				<div aria-hidden className="w-0.5 self-stretch bg-base-content/20 max-lg:hidden" />
 				<div className="lg:pl-4">
-					<WorkSideColumn tabs={sideTabs} work={current} />
+					<WorkSideColumn
+						tabs={sideTabs}
+						work={current}
+						activeKey={activeSideTab}
+						onActiveChange={setActiveSideTab}
+					/>
 				</div>
 			</div>
 
@@ -1987,6 +2109,10 @@ export default function OwnerWorkEditor({
 				onCancel={closeThumbFrame}
 				onSave={(crop) => void saveFramedThumbnail(crop)}
 			/>
+
+			{/* The setup checklist, in the corner while the Work is still being made. It
+			    leaves with the release, when there is nothing left to set up. */}
+			{unpublished && <ReleaseChecklist items={releaseChecklist} />}
 		</WorkColumn>
 	);
 }
