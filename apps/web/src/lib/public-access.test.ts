@@ -15,6 +15,7 @@ import {
 	describeRemaining,
 	LOW_BUDGET_SECONDS,
 	type PublicAccessBudget,
+	publicAccessSpent,
 	shouldWarn,
 } from "./public-access";
 
@@ -37,6 +38,15 @@ const UNLIMITED: PublicAccessBudget = {
 	limitSeconds: null,
 	remainingSeconds: null,
 	allowed: true,
+};
+
+/** What the server answers a caller it cannot identify — no allowance was read. */
+const NO_ALLOWANCE: PublicAccessBudget = {
+	unlimited: false,
+	usedSeconds: 0,
+	limitSeconds: 0,
+	remainingSeconds: 0,
+	allowed: false,
 };
 
 describe("when the meter speaks", () => {
@@ -81,6 +91,42 @@ describe("when the meter speaks", () => {
 		// Null is "not loaded yet" as well as "not applicable". Warning on either would
 		// flash a limit at someone who may not have one.
 		expect(shouldWarn(null)).toBe(false);
+	});
+
+	test("never speaks over the no-allowance answer", () => {
+		// Zero remaining with a zero limit is the shape an unauthenticated caller gets,
+		// not a meter that ran out. A shell's first request can meet it while its token
+		// is still coming out of the keystore, and "you've used your hours" is a false
+		// claim about an allowance nobody read.
+		expect(shouldWarn(NO_ALLOWANCE)).toBe(false);
+	});
+});
+
+describe("when the wall stands in for a player", () => {
+	test("stands only when the server's budget says the allowance is spent", () => {
+		expect(publicAccessSpent(true, limited(0))).toBe(true);
+		expect(publicAccessSpent(true, limited(1))).toBe(false);
+	});
+
+	test("a load failure with no budget is not a spent allowance", () => {
+		// The element cannot say 402, and every other failure looks the same. Until a
+		// refresh brings back a budget, a player has no business claiming the month is over.
+		expect(publicAccessSpent(true, null)).toBe(false);
+	});
+
+	test("work that does not draw the meter never shows its wall", () => {
+		expect(publicAccessSpent(false, limited(0))).toBe(false);
+	});
+
+	test("an unlimited budget is not a spent allowance", () => {
+		expect(publicAccessSpent(true, UNLIMITED)).toBe(false);
+	});
+
+	test("the no-allowance answer is not a ten-hour allowance", () => {
+		// `NO_PUBLIC_ACCESS_ALLOWANCE` is what an unauthenticated caller receives. Its
+		// zero limit must not be rendered as "your ten hours" — that would invent an
+		// allowance the account does not have.
+		expect(publicAccessSpent(true, NO_ALLOWANCE)).toBe(false);
 	});
 });
 

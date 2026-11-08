@@ -70,7 +70,7 @@ import WorkMediaFrame from "../components/work/WorkMediaFrame";
 import WorkSideColumn, { ShowingsStub } from "../components/work/WorkSideColumn";
 import { WorkTagChips } from "../components/work/WorkTags";
 import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
-import { useMeteredBudget } from "../lib/public-access";
+import { publicAccessSpent, useMeteredBudget } from "../lib/public-access";
 import { useShareToken, withShareToken } from "../lib/share-link";
 import { useWorkVersionHistory } from "../lib/version-history";
 import { RatingMatrixReadOnly } from "../studio/RatingMatrix";
@@ -266,7 +266,9 @@ export default function WorkPage() {
 	 * catalog — none of which is Public Access, and none of which the meter touches.
 	 */
 	const spentOnThis =
-		playerless && (work?.publicAccess ?? false) && meterBudget != null && !meterBudget.allowed;
+		playerless &&
+		meterBudget != null &&
+		publicAccessSpent(work?.publicAccess ?? false, meterBudget);
 	useEffect(() => {
 		if (!work || !encoding) return;
 		const tick = async () => {

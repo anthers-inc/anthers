@@ -38,7 +38,7 @@ import {
 } from "../components/work/WorkLayout";
 import WorkMediaFrame from "../components/work/WorkMediaFrame";
 import { useAttentionClaim } from "../lib/attention";
-import { useMeteredBudget } from "../lib/public-access";
+import { publicAccessSpent, useMeteredBudget } from "../lib/public-access";
 import { withShareToken } from "../lib/share-link";
 
 export default function EmbedWorkPage() {
@@ -110,7 +110,9 @@ export default function EmbedWorkPage() {
 	const meterBudget = useMeteredBudget();
 	const playerless = work != null && pageHoldsTheMeter(work.type);
 	const spentOnThis =
-		playerless && (work?.publicAccess ?? false) && meterBudget != null && !meterBudget.allowed;
+		playerless &&
+		meterBudget != null &&
+		publicAccessSpent(work?.publicAccess ?? false, meterBudget);
 
 	if (loading) {
 		return (
