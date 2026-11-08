@@ -27,6 +27,7 @@ import { interactionPermissionRefusal } from "../../services/atproto.js";
 import { adultVisibility } from "../../services/content-preferences.js";
 import { acceptCredit, rejectCredit } from "../../services/credit-acceptance.js";
 import {
+	ensureOwnWorksInLibrary,
 	LIBRARY_LIMIT,
 	permanentWorkIds,
 	removeItem,
@@ -62,6 +63,12 @@ const libraryRoutes = new Hono()
 	.get("/library", requireAuth, async (c) => {
 		const user = c.get("user");
 		const includeHidden = c.req.query("hidden") === "1";
+
+		// A creator's own Works are in their Library by membership, not by a Save
+		// (Parker, 2026-11-08). The creation route writes the row; this backfills any Work
+		// made before that rule existed, or by a path that forgot the call. Idempotent, and
+		// it leaves a hidden row exactly as hidden as its owner left it.
+		await ensureOwnWorksInLibrary(user.id);
 
 		const conditions: SQL[] = [eq(userLibraryItems.userId, user.id)];
 		if (!includeHidden) conditions.push(eq(userLibraryItems.hidden, false));
@@ -227,6 +234,9 @@ const libraryRoutes = new Hono()
 								// Derived from `purchases` on every read, never stamped on the row —
 								// so a refund releases the entry with nothing to keep in step.
 								purchased: permanent.has(w.id),
+								// The caller made this Work, so the entry is membership rather
+								// than a save: it can be hidden but not removed.
+								owned: w.creatorId === user.id,
 								work: {
 									...(await serializeWorkForUser(
 										w,
@@ -398,6 +408,15 @@ const libraryRoutes = new Hono()
 				{
 					error: "You bought this, so it stays in your Library. You can hide it instead.",
 					reason: "purchased",
+				},
+				409,
+			);
+		}
+		if (result.reason === "owned") {
+			return c.json(
+				{
+					error: "You made this, so it stays in your Library. You can hide it instead.",
+					reason: "owned",
 				},
 				409,
 			);

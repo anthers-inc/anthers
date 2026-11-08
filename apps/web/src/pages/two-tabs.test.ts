@@ -41,7 +41,7 @@ describe("the two user tabs share one header", () => {
 
 	it("carries the settled copy on each tab", () => {
 		expect(library).toContain(
-			"All of the Works, Projects, and Posts you've purchased or otherwise saved",
+			"Every Work you've made, and everything else you've purchased or saved",
 		);
 		// The merged tab's subtitle has to be true of both jobs it now does: the reader's
 		// own network and the whole site. The anti-algorithm claim is the part of the old

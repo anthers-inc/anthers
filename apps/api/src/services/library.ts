@@ -14,7 +14,7 @@
  */
 
 import { db, posts, purchases, userLibraryItems, works } from "@anthers/db";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { preserveCurrentVersion } from "./preservation.js";
 
 /** Why a save was refused, when it was. */
@@ -110,6 +110,53 @@ export async function saveWork(
 	return existing ? { ok: true, id: existing.id } : { ok: false, reason: "not_found" };
 }
 
+/**
+ * A creator's own Work is in their Library from birth (Parker, 2026-11-08).
+ *
+ * 🚨 **This is membership, not a keep.** `saveWork` describes somebody choosing to keep
+ * something, and calls `preserveCurrentVersion`, whose keeper predicate already refuses a
+ * creator's own save. The auto-membership is a different fact — the Library is the set of
+ * what a person has, and a creator has their own Work whether or not they pressed Save —
+ * so it inserts the row directly and never touches preservation.
+ *
+ * Idempotent, and never un-hides: a creator who hides their own Work has said so, and a
+ * later call (the create route's, or the read-side backfill below) leaves that choice
+ * alone. `saveWork`'s un-hide is the right shape for a Save button, not for membership.
+ */
+export async function saveOwnWork(userId: number, workId: number): Promise<void> {
+	await db
+		.insert(userLibraryItems)
+		.values({ userId, workId, sortOrder: await nextSortOrder(userId) })
+		.onConflictDoNothing();
+}
+
+/**
+ * Backfill a creator's own Works into their Library, once per missing Work.
+ *
+ * Works made before the membership rule existed have no row, and a Work created by a path
+ * that forgot the creation call has none either. The Library read calls this before it
+ * selects, so the collection is whole the first time its owner opens it; existing rows are
+ * left alone, hidden ones included.
+ */
+export async function ensureOwnWorksInLibrary(userId: number): Promise<void> {
+	const missing = await db
+		.select({ id: works.id })
+		.from(works)
+		.leftJoin(
+			userLibraryItems,
+			and(eq(userLibraryItems.workId, works.id), eq(userLibraryItems.userId, userId)),
+		)
+		.where(and(eq(works.creatorId, userId), isNull(userLibraryItems.id)))
+		.orderBy(works.createdAt);
+	if (missing.length === 0) return;
+
+	let order = await nextSortOrder(userId);
+	await db
+		.insert(userLibraryItems)
+		.values(missing.map((work) => ({ userId, workId: work.id, sortOrder: order++ })))
+		.onConflictDoNothing();
+}
+
 /** Save a Project — an album, a series — as one thing rather than as its members. */
 export async function saveProject(
 	userId: number,
@@ -196,13 +243,18 @@ export async function saveOnPurchase(purchase: {
  * how to get it back has effectively lost the thing they paid for. Hiding is the control
  * they actually want, it is reversible from a toggle in the same view, and it cannot lose
  * anything.
+ *
+ * Refuses the caller's **own Work** for the same shape of reason (Parker, 2026-11-08): it
+ * is in the Library by membership rather than by a save, so removing it would only make
+ * the collection incomplete until the next read backfilled it. Hide is the control; the
+ * Work itself is untouched either way.
  */
 export async function removeItem(
 	userId: number,
 	itemId: number,
 ): Promise<
 	| { ok: true; subject: { kind: "work" | "project" | "post"; id: number } }
-	| { ok: false; reason: "not_found" | "purchased" }
+	| { ok: false; reason: "not_found" | "purchased" | "owned" }
 > {
 	const [item] = await db
 		.select()
@@ -211,8 +263,16 @@ export async function removeItem(
 		.limit(1);
 	if (!item) return { ok: false, reason: "not_found" };
 
-	if (item.workId != null && (await isPermanent(userId, item.workId))) {
-		return { ok: false, reason: "purchased" };
+	if (item.workId != null) {
+		if (await isPermanent(userId, item.workId)) {
+			return { ok: false, reason: "purchased" };
+		}
+		const [work] = await db
+			.select({ creatorId: works.creatorId })
+			.from(works)
+			.where(eq(works.id, item.workId))
+			.limit(1);
+		if (work?.creatorId === userId) return { ok: false, reason: "owned" };
 	}
 
 	const subject =

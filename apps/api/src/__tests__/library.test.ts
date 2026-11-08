@@ -517,4 +517,69 @@ describe("the Library", () => {
 		const mineIds = new Set(mine.map((m) => m.id));
 		expect(items.every((i) => !mineIds.has(i.id))).toBe(true);
 	});
+
+	it("puts a creator's own Work in their Library from birth, hideable but never removable", async () => {
+		const own = await makeWork(`Own ${id}`, FREE, false);
+
+		// The create route writes membership itself, before any Library read could backfill it.
+		const [auto] = await db
+			.select({ id: userLibraryItems.id })
+			.from(userLibraryItems)
+			.where(and(eq(userLibraryItems.userId, creatorId), eq(userLibraryItems.workId, own)));
+		expect(auto, "creating the Work should have put it in its maker's Library").toBeTruthy();
+
+		// Membership is not a keep: the creator's own draft does not enter preservation.
+		const [preserved] = await db
+			.select({ preserved: works.preserved })
+			.from(works)
+			.where(eq(works.id, own));
+		expect(preserved.preserved).toBe(false);
+
+		const list = async (hidden = false) => {
+			const res = await req(`/api/content/library${hidden ? "?hidden=1" : ""}`, {
+				headers: creatorAuth,
+			});
+			expect(res.status).toBe(200);
+			return (await res.json()).items as {
+				id: number;
+				hidden: boolean;
+				purchased: boolean;
+				owned: boolean;
+				work?: { id: number };
+			}[];
+		};
+
+		const entry = (await list(true)).find((i) => i.work?.id === own);
+		expect(entry, "the creator's own Work should be in their Library").toBeTruthy();
+		expect(entry?.owned).toBe(true);
+		expect(entry?.purchased).toBe(false);
+
+		// Hide is the control; it is reversible and leaves the Work itself alone.
+		const hide = await req(`/api/content/library/${entry?.id}`, {
+			method: "PATCH",
+			headers: creatorAuth,
+			body: JSON.stringify({ hidden: true }),
+		});
+		expect(hide.status).toBe(200);
+		expect((await list()).find((i) => i.work?.id === own)).toBeUndefined();
+		expect((await list(true)).find((i) => i.work?.id === own)?.hidden).toBe(true);
+
+		// Removal is refused for the same reason a purchase is: it is membership, and the
+		// entry would be backfilled straight back. Hide is the alternative.
+		const remove = await req(`/api/content/library/${entry?.id}`, {
+			method: "DELETE",
+			headers: creatorAuth,
+		});
+		expect(remove.status).toBe(409);
+		expect(((await remove.json()) as { reason?: string }).reason).toBe("owned");
+
+		// A row lost to history (a Work made before this rule, or a path that forgot the
+		// creation call) comes back on the next Library read, still hidden if it was hidden.
+		await db
+			.delete(userLibraryItems)
+			.where(and(eq(userLibraryItems.userId, creatorId), eq(userLibraryItems.workId, own)));
+		const recreated = (await list(true)).find((i) => i.work?.id === own);
+		expect(recreated, "the Library read should backfill a missing own-Work entry").toBeTruthy();
+		expect(recreated?.owned).toBe(true);
+	});
 });

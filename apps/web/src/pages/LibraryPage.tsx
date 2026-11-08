@@ -105,6 +105,8 @@ interface LibraryItem {
 	savedAt: string;
 	/** Derived from a completed purchase on every read — never stored on the row. */
 	purchased: boolean;
+	/** The caller made this Work, so it is in the Library by membership and cannot be removed. */
+	owned: boolean;
 	work?: Work | null;
 	project?: LibraryProject | null;
 	post?: LibraryPost | null;
@@ -184,8 +186,10 @@ function LibraryTile({ item, onChanged }: { item: LibraryItem; onChanged: () => 
 			badges={
 				<>
 					{/* A word, not only a color: "Purchased" is what makes the permanence
-					    rule legible when the remove control refuses. */}
+					    rule legible when the remove control refuses. "Yours" does the same
+					    job for a Work the caller made — it is membership, not a save. */}
 					{item.purchased && <span className="badge badge-sm badge-soft">Purchased</span>}
+					{item.owned && <span className="badge badge-sm badge-soft">Yours</span>}
 					{item.hidden && <span className="badge badge-sm badge-ghost">Hidden</span>}
 				</>
 			}
@@ -199,6 +203,10 @@ function LibraryTile({ item, onChanged }: { item: LibraryItem; onChanged: () => 
 					<p className="text-xs text-warning">
 						Withdrawn by the creator — still yours to open and download.
 					</p>
+				) : work?.visibility === "private" ? (
+					// The creator's own draft, now in their Library by membership. The card
+					// would otherwise read like a published Work that happens to have no date.
+					<p className="text-xs text-base-content/50">Not released yet, so only you can see it.</p>
 				) : null
 			}
 			menu={
@@ -213,10 +221,11 @@ function LibraryTile({ item, onChanged }: { item: LibraryItem; onChanged: () => 
 							{item.hidden ? "Show" : "Hide"}
 						</button>
 					</li>
-					{/* Absent entirely on a purchase, rather than present-and-refusing. A control
-					    that exists to say no is worse than one that was never offered — and the
-					    server refuses regardless, so this is presentation, not enforcement. */}
-					{!item.purchased && (
+					{/* Absent entirely on a purchase or on the caller's own Work, rather than
+					    present-and-refusing. A control that exists to say no is worse than one
+					    that was never offered — and the server refuses regardless, so this is
+					    presentation, not enforcement. */}
+					{!item.purchased && !item.owned && (
 						<li>
 							<button type="button" disabled={busy} onClick={() => act(() => removeItem(item.id))}>
 								<TrashIcon className="size-4" />
@@ -489,12 +498,12 @@ export default function LibraryPage() {
 				<TabHeader
 					icon={RectangleStackIcon}
 					title="Library"
-					subtitle="All of the Works, Projects, and Posts you've purchased or otherwise saved, with everything you've purchased staying yours."
+					subtitle="Every Work you've made, and everything else you've purchased or saved, with what you've purchased staying yours."
 				/>
 				{cutTo != null && (
 					<p className="mb-6 text-sm text-base-content/60">
 						Your Library holds more than {cutTo.toLocaleString()} things, and this page shows the{" "}
-						{cutTo.toLocaleString()} you saved most recently. Everything older is still saved.
+						{cutTo.toLocaleString()} most recently added. Everything older is still here.
 					</p>
 				)}
 
