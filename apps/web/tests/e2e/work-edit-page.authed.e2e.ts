@@ -299,13 +299,13 @@ test("a piece of writing is written on its page and reads as an article", async 
 	await page.getByPlaceholder("Describe this Work…").fill("A standfirst for the walk.");
 	await page.getByRole("button", { name: "Save Description" }).click();
 
-	// And a piece of writing is its body, written in the Manage tab in the typography
-	// the read prints.
-	await page.getByRole("tab", { name: /Manage/ }).click();
-	await page.getByRole("button", { name: "Edit Body" }).click();
+	// And a piece of writing is its body, written in the media management card in the
+	// typography the read prints.
+	await page.getByRole("button", { name: "Edit This Work's Body" }).click();
 	await page.locator(".tiptap").click();
 	await page.keyboard.type("The first hard frost came early this year.");
 	await page.getByRole("button", { name: "Save Body" }).click();
+	await page.getByRole("button", { name: "Done" }).click();
 
 	// The release walk returns to the Details tab, where the release field lives.
 	await page.getByRole("tab", { name: "Details" }).click();

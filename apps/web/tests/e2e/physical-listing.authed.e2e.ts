@@ -101,6 +101,13 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 	await expect(page.getByTestId("physical-policies")).toBeVisible();
 	await expect(page.getByText("Work not found")).toHaveCount(0);
 
+	// The fulfillment note is the one field a buyer never sees, and it lives in the media
+	// management card now (Parker, 2026-11-07).
+	await page.getByRole("button", { name: "Edit This Work's Details" }).click();
+	await page.getByRole("textbox", { name: "Details" }).fill("Ships in a padded box.");
+	await page.getByRole("button", { name: "Save Details" }).click();
+	await page.getByRole("button", { name: "Done" }).click();
+
 	// Shipping: the pencil in the policy block opens it.
 	await page.getByRole("button", { name: "Edit Shipping cost" }).click();
 	await page.getByLabel("Shipping price").fill("6.5");
@@ -168,6 +175,13 @@ test("a physical good's fields are edited on its storefront", async ({ page, con
 	await expect(page.getByRole("button", { name: "Edit Size variant" })).toBeVisible();
 	await expect(page.getByRole("img", { name: "Mug back" })).toBeVisible();
 	await expectDecoded(page, "Mug back");
+
+	// The fulfillment note survived the reload too.
+	await page.getByRole("button", { name: "Edit This Work's Details" }).click();
+	await expect(page.getByRole("textbox", { name: "Details" })).toHaveValue(
+		"Ships in a padded box.",
+	);
+	await page.getByRole("button", { name: "Done" }).click();
 
 	// A removal is confirmed first, and the remaining picture carries the cover.
 	await page.getByRole("button", { name: "Edit photos" }).click();

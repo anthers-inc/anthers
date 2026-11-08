@@ -252,10 +252,9 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await contributor.press("Enter");
 	await page.getByRole("button", { name: "Save Credits" }).click();
 
-	// The body, in the Manage tab's editor. Release refuses a Work whose writing is empty
-	// (`text_missing`), and a writing Work's body is its deliverable.
-	await page.getByRole("tab", { name: /Manage/ }).click();
-	await page.getByRole("button", { name: "Edit Body" }).click();
+	// The body, in the media management card's editor. Release refuses a Work whose
+	// writing is empty (`text_missing`), and a writing Work's body is its deliverable.
+	await page.getByRole("button", { name: "Edit This Work's Body" }).click();
 	await page.locator(".tiptap").click();
 	await page.keyboard.type("A release walk's only sentence.");
 	await page.getByRole("button", { name: "Save Body" }).click();

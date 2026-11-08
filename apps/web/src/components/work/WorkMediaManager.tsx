@@ -3,9 +3,11 @@
  * The Work's media manager — the same media card, swapped from the medium to its
  * management surface (Parker, 2026-10-23).
  *
- * ⭐ **A physical good's variants open here too** (Parker, 2026-10-28): the card is the
- * store panel they configure, and the pencil in its corner is the same affordance a
- * digital Work's media carries. The caller names the card and owns the tabs.
+ * ⭐ **The card holds whatever the kind needs managing** (Parker, 2026-11-07): a digital
+ * Work's media, a writing Work's body and a goods Work's fulfillment details all open
+ * through the same pencil over the media area. A physical good's variants and photos stay
+ * in its store panel, where buyers meet them; the Details tab here is the fulfillment
+ * material a buyer never sees. The caller names the card and owns the tabs.
  *
  * ⭐ **The card keeps its dimensions.** The manager is a mode of the media area, not a
  * panel that grows the page: the byline and the tabs below stay exactly where they were,
