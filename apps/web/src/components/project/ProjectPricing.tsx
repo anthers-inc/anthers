@@ -10,12 +10,25 @@
  * POST fired on mount for every user who merely scrolled past a price, and a dead end
  * whenever the session refused. Parker's decision the same day: **every purchase goes
  * through the cart.** Checkout exists once now, embedded on `/cart`
- * (`CartCheckout`) — this component quotes the price, offers the two doors into that
- * flow, and renders nothing that touches a card.
+ * (`CartCheckout`) — this component quotes the price, offers the doors into that flow, and
+ * renders nothing that touches a card.
+ *
+ * ⭐ **A signed-out visitor meets the reason, not a server error** (Parker, 2026-11-07).
+ * The quote is an authenticated read, so asking it without a session answers 401
+ * "Authentication required" — which this card used to print verbatim in a warning box
+ * above live Buy Now and Add to Cart buttons. Now the card asks for the account instead:
+ * one panel that says what the purchase is tied to, the two doors that provide one, and
+ * the price story a signed-out visitor can honestly be told. Add to Cart stays, because a
+ * signed-out visitor's scratch cart is real and merges at sign-in (`lib/cart.ts`); Buy Now
+ * does not, because it has nowhere to go until there is an account.
  */
 
+import { withNextPath } from "@anthers/shared/next-path";
+import { useAuth } from "@anthers/web-shared/auth";
+import { Link, useLocation } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult } from "@anthers/web-shared/types";
+import { UserCircleIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import AddToCart from "../cart/AddToCart";
 import BuyNow from "../cart/BuyNow";
@@ -48,6 +61,49 @@ interface Quote {
 	buyerTotal: string | null;
 }
 
+/**
+ * The signed-out purchase card: why an account is required, and the two doors that
+ * provide one.
+ *
+ * It stands where the quote breakdown stands for a signed-in buyer and borrows
+ * `InlineUnlock`'s `UnlockCard` shape — an icon, a heading, a plain-spoken reason and the
+ * doors — so the two places the app asks for an account do not read as two different
+ * things. Both doors carry this Work as `next`, so the buyer comes back to the purchase
+ * rather than to the feed.
+ */
+function SignInToBuy({ back }: { back: string }) {
+	return (
+		<div className="w-full rounded-lg bg-base-100 p-4">
+			<div className="flex items-start gap-3">
+				<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-base-300">
+					<UserCircleIcon className="h-5 w-5 text-base-content/70" aria-hidden="true" />
+				</div>
+				<div className="min-w-0">
+					<h3 className="font-semibold">Sign in to buy</h3>
+					<p className="mt-1 text-sm leading-relaxed text-base-content/60">
+						Purchases are tied to your Anthers account: anything you buy stays in your Library, with
+						its receipt. Creating an account is free.
+					</p>
+				</div>
+			</div>
+			<div className="mt-4 grid gap-2">
+				<Link to={withNextPath("/login", back)} className="btn btn-primary w-full">
+					Log in
+				</Link>
+				<Link to={withNextPath("/signup", back)} className="btn btn-ghost btn-sm w-full">
+					Create a free account
+				</Link>
+			</div>
+			{/* The fee and the tax are the two things a buyer asks about next, and the
+			    quote that itemizes them is the authenticated read this card cannot make.
+			    What is true without it is still worth saying. */}
+			<p className="mt-3 text-xs leading-relaxed text-base-content/50">
+				The listed price includes the at-cost card processing fee. Sales tax is added at checkout.
+			</p>
+		</div>
+	);
+}
+
 export default function ProjectPricing({
 	workId,
 	slug,
@@ -59,27 +115,43 @@ export default function ProjectPricing({
 	workType,
 	owner = false,
 }: ProjectPricingProps) {
+	const { isAuthenticated, isLoading: authLoading } = useAuth();
+	const location = useLocation();
 	const [quote, setQuote] = useState<Quote | null>(null);
 	const [quoteError, setQuoteError] = useState<string | null>(null);
+	/** The quote answered 401 — a session the server does not accept. */
+	const [quoteNeedsAuth, setQuoteNeedsAuth] = useState(false);
 
-	// The quote is fetched unconditionally — hooks must run in the same order on every
-	// render, and the early returns below (free, owned, signed out) would skip one if
-	// this sat where it is used. The fetch is wasted on those branches; it was wasted
-	// the same way for the session POST this rewrite retired, and that POST is gone.
+	// The quote is fetched in an effect rather than where it is used because hooks must
+	// run in the same order on every render, and the branches below return early.
+	//
+	// 🚨 **It waits for a session.** The quote is an authenticated read, so asking it
+	// signed out (or while auth is still resolving) is a guaranteed 401 — the
+	// "Authentication required" box this card used to show. A signed-out buyer gets the
+	// account panel instead, and the request is never made.
 	//
 	// ⚠️ Except on a goods Work, where the fetch is noise: the resolver prices a
-	// physical Work `null`, checkout refuses it, and a signed-out visitor got a console
-	// 401 on every view. The guard lives INSIDE the effect so the hook order never
-	// depends on it.
+	// physical Work `null` and checkout refuses it, and a signed-out visitor got a
+	// console 401 on every view. The guard lives INSIDE the effect so the hook order
+	// never depends on it.
 	useEffect(() => {
 		if (workType === "physical") return;
-		let canceled = false;
 		setQuote(null);
 		setQuoteError(null);
+		setQuoteNeedsAuth(false);
+		if (authLoading || !isAuthenticated) return;
+		let canceled = false;
 		client.api.payments.quote[":slug"]
 			.$get({ param: { slug } })
 			.then(async (res) => {
 				if (canceled) return;
+				if (res.status === 401) {
+					// Signed in by the client's account of it, refused by the server: the
+					// session is gone, so the card asks for one rather than printing the
+					// middleware's own sentence at a buyer.
+					setQuoteNeedsAuth(true);
+					return;
+				}
 				const body = (await res.json().catch(() => null)) as (Quote & { error?: string }) | null;
 				if (!res.ok) {
 					// The server's own refusal — "already have access", "below what a card
@@ -95,7 +167,7 @@ export default function ProjectPricing({
 		return () => {
 			canceled = true;
 		};
-	}, [slug, workType]);
+	}, [slug, workType, isAuthenticated, authLoading]);
 
 	// A physical good renders its own panel — the pickers, the count and the shipping —
 	// rather than the unlock-price card below. The goods rule still holds: the page reads
@@ -127,12 +199,12 @@ export default function ProjectPricing({
 		creatorHandle,
 		thumbnail: thumbnail ?? null,
 	};
+	const back = `${location.pathname}${location.search}`;
 
 	return (
-		/* The purchase panel: one composed card, paired beside the locked preview on a wide
-		   display (`WorkPage`'s grid stretches it to the preview's height; on a phone it
-		   stacks). The price is the panel's headline — the row breakdown sits under it on
-		   its own quiet ground, and the two doors into the cart anchor the bottom. */
+		/* The purchase panel: one composed card, standing over the Work's cover. The price
+		   is the panel's headline — the row breakdown sits under it on its own quiet
+		   ground, and the doors into the cart anchor the bottom. */
 		<div className="card bg-base-200 border border-base-300 h-full">
 			<div className="card-body p-5 gap-4 flex flex-col items-start text-start">
 				<div>
@@ -152,6 +224,19 @@ export default function ProjectPricing({
 					<p className="text-sm text-base-content/60">
 						Payments not available yet—the creator hasn't connected Stripe.
 					</p>
+				) : authLoading ? (
+					// The account panel and the quote are the two shapes this space takes;
+					// neither is known until auth resolves, so the space holds its size.
+					<div className="skeleton h-24 w-full" aria-hidden="true" />
+				) : !isAuthenticated || quoteNeedsAuth ? (
+					<>
+						<SignInToBuy back={back} />
+						{/* The cart is intent, not a purchase: a signed-out scratch cart is
+						    real and merges into the account at sign-in, so its door stays. */}
+						<div className="w-full">
+							<AddToCart {...cartProps} />
+						</div>
+					</>
 				) : (
 					<>
 						{quote ? (
