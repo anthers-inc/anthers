@@ -32,9 +32,25 @@ export interface SideTab {
 	content: ReactNode;
 }
 
-export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: WorkDetail }) {
-	const [active, setActive] = useState(tabs[0]?.key ?? "");
+export default function WorkSideColumn({
+	tabs,
+	work,
+	activeKey: controlledActive,
+	onActiveChange,
+}: {
+	tabs: SideTab[];
+	work: WorkDetail;
+	/** Controlled mode, when a sibling needs to open a tab — the release checklist's body item. */
+	activeKey?: string;
+	onActiveChange?: (key: string) => void;
+}) {
+	const [localActive, setActive] = useState(tabs[0]?.key ?? "");
+	const active = controlledActive ?? localActive;
 	const current = tabs.find((t) => t.key === active) ?? tabs[0];
+	const select = (key: string) => {
+		setActive(key);
+		onActiveChange?.(key);
+	};
 
 	/**
 	 * 🚨 **A hash naming a tab opens it** — `#reviews` is a real address for this column,
@@ -54,7 +70,7 @@ export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `hash` is the trigger; the tab list is read, not watched
 	useEffect(() => {
 		const key = hash.startsWith("#") ? hash.slice(1) : "";
-		if (key && tabs.some((t) => t.key === key)) setActive(key);
+		if (key && tabs.some((t) => t.key === key)) select(key);
 	}, [hash]);
 
 	if (!current) return null;
@@ -80,7 +96,7 @@ export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: 
 						aria-controls={`work-side-${tab.key}`}
 						id={`work-side-button-${tab.key}`}
 						className={`btn btn-xs sm:btn-sm join-item flex-1 ${tab.key === current.key ? "btn-active" : ""}`}
-						onClick={() => setActive(tab.key)}
+						onClick={() => select(tab.key)}
 					>
 						{tab.label}
 					</button>

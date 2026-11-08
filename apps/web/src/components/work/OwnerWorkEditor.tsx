@@ -42,6 +42,7 @@ import {
 	isListened,
 	isOwnThumbnail,
 	isPaged,
+	processingFor,
 	supportsPreviewMedia,
 } from "@anthers/shared/content";
 import {
@@ -55,6 +56,7 @@ import {
 	normalizeMaturityRows,
 	notesFromRows,
 	ratingFromRows,
+	releaseRatingRefusal,
 } from "@anthers/shared/content-rating";
 import { normalizeWorkTags } from "@anthers/shared/tags";
 import { useAuth } from "@anthers/web-shared/auth";
@@ -112,6 +114,7 @@ import ImageEditMenu from "@anthers/web-shared/ui/ImageEditMenu";
 import ImageFrameModal from "@anthers/web-shared/ui/ImageFrameModal";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import Modal from "@anthers/web-shared/ui/Modal";
+import SetupChecklist, { type SetupChecklistItem } from "@anthers/web-shared/ui/SetupChecklist";
 import { uploadMediaFile } from "@anthers/web-shared/upload";
 import { useWebBuildUploads } from "@anthers/web-shared/web-build-uploads";
 import {
@@ -128,6 +131,7 @@ import {
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useMediaPlayer } from "../../lib/media-player";
 import { useExclusivePlayback } from "../../lib/playback";
 import CreditsSection from "../../studio/CreditsSection";
 import PanelEditor from "../../studio/PanelEditor";
@@ -184,6 +188,9 @@ const GROWS = "resize-none [field-sizing:content]";
  */
 const RELEASE_WARNING = "This is mandatory for release. Fill it in before the scheduled date.";
 
+/** A checklist row, plus the sentence the Release field carries when it is the first blocker. */
+type ReleaseItem = SetupChecklistItem & { refusal?: string };
+
 /**
  * The Original Release Date explainer, on the (i) beside its label (Parker, 2026-10-23).
  * It was printed under the input until the field's own control needed the room.
@@ -201,6 +208,8 @@ export default function OwnerWorkEditor({
 	onRefetch: () => void;
 }) {
 	const { user } = useAuth();
+	/** Whether the persistent player bar owns the bottom edge, so the floating card clears it. */
+	const playerUp = useMediaPlayer().currentTrack !== null;
 	const [current, setCurrent] = useState<WorkDetail>(work);
 
 	/** Adopt a row the server answered: a save or a media re-read writes here. */
@@ -324,6 +333,8 @@ export default function OwnerWorkEditor({
 	const [thumbError, setThumbError] = useState<string | null>(null);
 	/** Which Info tab is open — lifted, because the header's *Change* rating link opens Rating. */
 	const [activeInfoTab, setActiveInfoTab] = useState("details");
+	/** The side column's tab, lifted so the release checklist can open Manage for a writing's body. */
+	const [activeSideTab, setActiveSideTab] = useState("manage");
 
 	/**
 	 * The Release field's draft, as the datetime input holds it: the Work's own release
@@ -642,25 +653,194 @@ export default function OwnerWorkEditor({
 	// server's own word for it — the creator's to fix rather than to wait for.
 	const writingEmpty = writing && isEmptyWriting(bodyHtml);
 	const creditsMissing = !creditRows.some((r) => r.types.includes("created"));
+	/** The rating's other refusal: a complete rating at a rung Anthers is not taking today. */
+	const ratingRungRefusal = fromRows ? releaseRatingRefusal(fromRows) : null;
+
+	/** Open an Info tab and bring it into view from the floating checklist. */
+	const openInfoTab = (key: string) => {
+		setActiveInfoTab(key);
+		requestAnimationFrame(() =>
+			document.getElementById("work-info-tabs")?.scrollIntoView({
+				behavior: "smooth",
+				block: "start",
+			}),
+		);
+	};
+	/** Open the media manager where this kind's file lives, and bring the media area into view. */
+	const openMediaManager = () => {
+		setMediaManaging(true);
+		setMediaTab(isPaged(current.type) ? "pages" : "source");
+		requestAnimationFrame(() =>
+			document.getElementById("work-media-area")?.scrollIntoView({
+				behavior: "smooth",
+				block: "start",
+			}),
+		);
+	};
+
 	/**
-	 * The first thing that would refuse a release-now, in the server's own order — the notices
-	 * below say each one in full, and this short form rides the checkmark's tooltip while it
-	 * waits. A schedule is still offered while these stand, as the batch editor's rule had it.
+	 * **The creator's own setup** — the two things publishing takes that belong to the
+	 * account rather than to any one Work. They are one-time facts, so they are not rows on
+	 * every Work's checklist; a Work shows them only while one is still missing (Parker,
+	 * 2026-11-07). Each answer arrives a moment after the page, and a row exists only once
+	 * its answer does, so the card never claims a fact nobody has checked.
 	 */
-	const releaseNowRefusal =
-		payoutsReady === false
-			? "Set up payouts before releasing — the notice below says where."
-			: permissionMissing === true
-				? "Give Anthers permission to publish before releasing — the notice below says where."
-				: fileMissing
-					? "This Work's file has to arrive before it can be released."
-					: writingEmpty
-						? "This piece of writing is empty."
-						: !fromRows
-							? "Answer every row of the Rating first — every row, no exceptions."
-							: creditsMissing
-								? "Credit at least one person as Created before releasing."
-								: undefined;
+	const permissionItem: ReleaseItem | null =
+		permissionMissing === null
+			? null
+			: {
+					key: "permission",
+					label: "Allow ATProto creator permissions",
+					state: permissionMissing ? "todo" : "done",
+					refusal:
+						"Give Anthers permission to publish before releasing — the notice below says where.",
+					href: studioUrl("/settings"),
+				};
+	const payoutsItem: ReleaseItem | null =
+		payoutsReady === null
+			? null
+			: {
+					key: "payouts",
+					label: "Complete your Stripe Payout Setup",
+					state: payoutsReady ? "done" : "todo",
+					refusal: "Set up payouts before releasing — the notice below says where.",
+					href: studioUrl("/payments"),
+				};
+	const creatorSetupItems = [permissionItem, payoutsItem].filter(
+		(item): item is ReleaseItem => item !== null,
+	);
+	const creatorSetupKnown = permissionItem !== null && payoutsItem !== null;
+	const creatorSetupMissing = permissionItem?.state === "todo" || payoutsItem?.state === "todo";
+
+	/**
+	 * **The Work's own setup**, in the order the card reads it: its medium, a human credit,
+	 * the rating. The card and the Release field share these predicates, so neither can call
+	 * a Work ready while the release gate refuses it.
+	 *
+	 * ⚠️ **Processing is folded into the media row rather than given a row of its own.** The
+	 * file is not set up until it can play, and a creator who has just uploaded one should see
+	 * the medium row waiting rather than a checked row beside a second one saying to wait.
+	 */
+	const transcodeStatus = current.transcoding?.status;
+	const mediaStalled = transcodeStatus === "failed" || transcodeStatus === "canceled";
+	const mediaWaiting =
+		fileUploading ||
+		running ||
+		(!!processingFor(current.type) && !current.transcoding && !!current.sourceKey);
+	const workItems: ReleaseItem[] = [];
+
+	if (writing) {
+		workItems.push({
+			key: "writing",
+			label: (
+				<>
+					The <strong>writing</strong> for the Work
+				</>
+			),
+			state: writingEmpty ? "todo" : "done",
+			refusal: "This piece of writing is empty.",
+			onOpen: () => {
+				setActiveSideTab("manage");
+				requestAnimationFrame(() =>
+					document.getElementById("work-body-field")?.scrollIntoView({
+						behavior: "smooth",
+						block: "center",
+					}),
+				);
+			},
+		});
+	} else if (isFileWorkType(current.type)) {
+		workItems.push({
+			key: "media",
+			label: (
+				<>
+					The <strong>media</strong> for the Work
+				</>
+			),
+			state: mediaWaiting ? "waiting" : current.sourceKey && !mediaStalled ? "done" : "todo",
+			refusal: mediaStalled
+				? "Processing this Work's media was stopped, so it can't be released — replace the media or start the processing again."
+				: mediaWaiting && current.sourceKey
+					? "Can't release yet — the media is still processing."
+					: "This Work's file has to arrive before it can be released.",
+			onOpen: openMediaManager,
+		});
+	} else if (isBuildType(current.type)) {
+		workItems.push({
+			key: "build",
+			label: (
+				<>
+					A <strong>build</strong> or embed for the Work
+				</>
+			),
+			state: deliverableIsEmpty(current) ? "todo" : "done",
+			// The release gate does not ask for a build, so this row carries no refusal: the
+			// card may name the page's empty medium without inventing a release condition.
+			onOpen: openMediaManager,
+		});
+	}
+	workItems.push({
+		key: "credits",
+		label: (
+			<>
+				At least one human <strong>credit</strong>
+			</>
+		),
+		state: creditsMissing ? "todo" : "done",
+		refusal: "Credit at least one person as Created before releasing.",
+		onOpen: creditsMissing ? () => openInfoTab("credits") : undefined,
+	});
+	workItems.push({
+		key: "rating",
+		label: (
+			<>
+				A full set of <strong>ratings</strong>
+			</>
+		),
+		state: !fromRows ? "todo" : ratingRungRefusal === "closed" ? "waiting" : "done",
+		refusal: !fromRows
+			? "Answer every row of the Rating first — every row, no exceptions."
+			: ratingRungRefusal === "closed"
+				? `Anthers isn't accepting ${maturityLabel(fromRows)} work at the moment, so this Work can't be released. The rating is right and has been saved — you'll be able to release when ${maturityLabel(fromRows)} reopens.`
+				: undefined,
+		onOpen: !fromRows ? () => openInfoTab("rating") : undefined,
+	});
+
+	/**
+	 * The first thing that would refuse a release-now, said in the server's own order: the
+	 * creator's standing, the Work's medium, the rating, the credits. The notices below say
+	 * each one in full, and this short form rides the checkmark's tooltip while it waits. A
+	 * schedule is still offered while these stand, as the batch editor's rule had it.
+	 */
+	const releaseNowRefusal = [
+		permissionItem,
+		payoutsItem,
+		...workItems.filter(
+			(item) => item.key === "media" || item.key === "writing" || item.key === "build",
+		),
+		workItems.find((item) => item.key === "rating"),
+		workItems.find((item) => item.key === "credits"),
+	]
+		.filter((item): item is ReleaseItem => item != null)
+		.find((item) => item.state !== "done" && item.refusal)?.refusal;
+
+	/**
+	 * Which checklist the floating card shows. A creator who has not finished their own setup
+	 * sees that first, because it is what has to change before anything can be published; a
+	 * Work they have already set up sees the Work's own rows. Never both at once (Parker,
+	 * 2026-11-07), and nothing until the account answers are known.
+	 */
+	const checklist = creatorSetupMissing
+		? {
+				title: "Creator Setup Checklist",
+				intro: "Before you can publish Works or posts, you need to:",
+				items: creatorSetupItems,
+			}
+		: {
+				title: "Work Setup Checklist",
+				intro: "Before you can release a Work, you need to add:",
+				items: workItems,
+			};
 
 	// ── The Info tabs' contents ──
 	/**
@@ -1692,7 +1872,7 @@ export default function OwnerWorkEditor({
 						<section className="flex flex-col gap-2">{detailsNoteField}</section>
 					)}
 					{writing && (
-						<section className="flex flex-col gap-2">
+						<section id="work-body-field" className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Body</h3>
 							{bodyField}
 						</section>
@@ -1730,10 +1910,11 @@ export default function OwnerWorkEditor({
 			    its record. A piece of writing reads at its measure centered inside the
 			    card; a good's deliverable is the store panel, exactly where every user
 			    meets it. ── */}
-			<section className="relative">
+			<section id="work-media-area" className="relative">
 				{!writing && !isGoods(current.type) && !mediaManaging && fileMissing && (
 					// The same warning the refusal reads: no file, no release — and it sits
-					// beside the media it is about, not in a checklist elsewhere on the page.
+					// beside the media it is about, where the fix lands, as well as in the
+					// floating checklist that tracks the whole set.
 					<span
 						className="absolute right-14 top-4 z-10 flex size-8 items-center justify-center rounded-full bg-base-100/80 text-warning backdrop-blur"
 						title={RELEASE_WARNING}
@@ -1875,7 +2056,7 @@ export default function OwnerWorkEditor({
 			    the same hair laid flat (Parker, 2026-10-16), as the visitor's page draws. ── */}
 			<div aria-hidden className="h-0.5 bg-base-content/20" />
 			<div className="grid lg:grid-cols-[minmax(0,1fr)_2px_minmax(0,1fr)]">
-				<div className="lg:pr-4">
+				<div id="work-info-tabs" className="lg:pr-4">
 					<WorkInfoTabs
 						tabs={infoTabs}
 						activeKey={activeInfoTab}
@@ -1884,7 +2065,12 @@ export default function OwnerWorkEditor({
 				</div>
 				<div aria-hidden className="w-0.5 self-stretch bg-base-content/20 max-lg:hidden" />
 				<div className="lg:pl-4">
-					<WorkSideColumn tabs={sideTabs} work={current} />
+					<WorkSideColumn
+						tabs={sideTabs}
+						work={current}
+						activeKey={activeSideTab}
+						onActiveChange={setActiveSideTab}
+					/>
 				</div>
 			</div>
 
@@ -1917,6 +2103,25 @@ export default function OwnerWorkEditor({
 				onCancel={closeThumbFrame}
 				onSave={(crop) => void saveFramedThumbnail(crop)}
 			/>
+
+			{/* The setup checklist, in the corner while the Work is still being made. It
+			    leaves with the release, when there is nothing left to set up. A creator
+			    whose own setup is unfinished sees that first; the Work's rows follow once
+			    the account can publish at all. */}
+			{unpublished && creatorSetupKnown && (
+				<div
+					className={`fixed right-4 z-40 sm:right-6 ${
+						playerUp ? "bottom-40 sm:bottom-24" : "bottom-28 sm:bottom-6"
+					}`}
+				>
+					<SetupChecklist
+						variant="floating"
+						title={checklist.title}
+						intro={checklist.intro}
+						items={checklist.items}
+					/>
+				</div>
+			)}
 		</WorkColumn>
 	);
 }
