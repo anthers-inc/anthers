@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The locked Work's composition — the blurred cover and the price or unlock card — as one
+ * The locked Work's composition — the cover and the price or unlock card — as one
  * component, so the no-preview page and the carousel's first slide cannot drift (Parker,
  * 2026-10-19).
  *
- * A video is the feed's treatment at page scale: the thumbnail blurred beneath, the card
- * overlaid on it. Every other kind is the Vimeo On Demand two-up: cover left, card right,
- * stacking below `sm`. Both ride inside `WorkMediaFrame`'s one 16:9 stage, and the caller
- * owns which mount shape that frame takes.
+ * ⭐ **Every kind wears the video gate's treatment** (Parker, 2026-11-07): the cover fills
+ * the 16:9 stage and the card sits centered over it. The two-up that preceded it — blurred
+ * cover left, price card right, stacking below `sm` — made a game's locked page read unlike
+ * a video's for no reason a viewer could see. `CoverCardStage` owns the shape; this
+ * component owns what goes in it.
+ *
+ * 🚨 **The blur is a lock signal and only a lock uses it.** A Public Access Work is free to
+ * everyone and merely needs an account for the time to be attributed, so its cover stays
+ * clear under a scrim here — see `presentsAsLocked`. The same rule the old two-up's comment
+ * carried survives the reshape.
  *
  * The carousel adds nothing here: its thumbnail strip sits below the stage, not over it,
  * so the first slide is the composition exactly as the no-preview page draws it.
@@ -17,6 +23,7 @@ import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-share
 import type { AccessResult } from "@anthers/web-shared/types";
 import InlineUnlock from "../post/InlineUnlock";
 import ProjectPricing from "../project/ProjectPricing";
+import CoverCardStage, { CoverFallback } from "./CoverCardStage";
 import { isWriting, WorkDescription, type WorkDetail } from "./WorkLayout";
 
 export default function LockedWorkComposition({
@@ -28,112 +35,64 @@ export default function LockedWorkComposition({
 	access: AccessResult | null;
 	creatorName: string;
 }) {
-	if (work.type === "video") {
-		return (
-			<div className="relative w-full overflow-hidden rounded-lg">
-				{presentsAsLocked(access) ? (
-					<LockedCover thumbnail={work.thumbnail} className="aspect-video w-full" lockedBy={null} />
-				) : work.thumbnail ? (
-					<img
-						src={work.thumbnail}
-						alt=""
-						className="aspect-video w-full object-cover blur-xl scale-110"
-					/>
-				) : (
-					// ⚠️ The base layer is this box's ONLY height (the overlay rides
-					// `absolute inset-0`), so a thumbnail-free Work renders the gradient
-					// fill `LockedCover` itself falls back to — unblurred and
-					// un-padlocked, because this arm is exactly the not-a-lock state —
-					// or the frame collapses to zero height and `overflow-hidden`
-					// clips the account card invisible, rendering as absence.
-					<div className="aspect-video w-full bg-gradient-to-br from-base-300 to-base-200" />
-				)}
-				<div className="absolute inset-0 z-10 flex items-center justify-center p-6">
-					{/*
-					 * ⚠️ A user-shape Work always carries an access verdict, which is
-					 * the only shape that reaches this branch — an owner without one
-					 * reads canAccess true above and never gets here. So the card
-					 * here is whichever the verdict asks for.
-					 */}
-					{access && (
-						<div className="w-full max-w-md rounded-lg shadow-lg">
-							{access.requiresPurchase ? (
-								<ProjectPricing
-									workId={work.id}
-									slug={work.slug ?? ""}
-									access={access}
-									title={work.title ?? "Untitled"}
-									creatorHandle={work.creator?.handle ?? ""}
-									thumbnail={work.thumbnail}
-									creatorHasStripe={work.creatorHasStripe ?? false}
-									workType={work.type}
-								/>
-							) : (
-								<InlineUnlock post={work} access={access} />
-							)}
-						</div>
-					)}
-				</div>
-			</div>
-		);
-	}
-
+	const locked = presentsAsLocked(access);
 	return (
-		<div className="flex h-full flex-col justify-start gap-4 sm:justify-center">
-			{isWriting(work.type) && <WorkDescription work={work} />}
-			{/* ⚠️ A signed-out visitor is refused the bytes of free work too, and
-			    that is not a lock — the Work is free to everyone and stays free;
-			    what is missing is an account for the time to be attributed to. So
-			    the cover stays unblurred and un-padlocked here, and the card
-			    underneath asks for the account instead. See `presentsAsLocked`. */}
-			{/* The locked preview and the purchase decision are one composition: a
-			    two-up, equal-height pairing — the blurred cover left, the price card
-			    right, both cards' edges aligned. They stack below `sm` with the cover
-			    first. Everything else on the page stays full-width; only this
-			    pairing is two-up. */}
-			{/* ⚠️ `w-full` is load-bearing on both children: a grid item stretched to
-			    the row's height lets `aspect-video` derive its WIDTH from that
-			    height (254 × 16/9 ≈ 452px), overflowing its 424px track — the
-			    aspect ratio silently outranks the track. An explicit width breaks
-			    the derive-back and the cover sizes to its column. Found by
-			    measuring, invisible in the DOM string. */}
-			<div className="w-full sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
-				{presentsAsLocked(access) ? (
-					<LockedCover
-						thumbnail={work.thumbnail}
-						className="aspect-video w-full rounded-lg"
-						lockedBy={access ? lockedByBadge(access, creatorName) : null}
-					/>
+		<CoverCardStage
+			scrim={!locked}
+			cover={
+				locked ? (
+					<div className="absolute inset-0">
+						<LockedCover
+							thumbnail={work.thumbnail}
+							className="h-full w-full"
+							lockedBy={access ? lockedByBadge(access, creatorName) : null}
+						/>
+					</div>
 				) : work.thumbnail ? (
 					<img
 						src={work.thumbnail}
 						alt=""
-						className="aspect-video w-full rounded-lg object-cover"
+						className="absolute inset-0 h-full w-full object-cover"
 					/>
 				) : (
-					// Same fill as the video arm above: the two-up's cover is its own
-					// height and the composition's first column — dropping it for a
-					// thumbnail-free Work leaves the pairing one-sided.
-					<div className="aspect-video w-full rounded-lg bg-gradient-to-br from-base-300 to-base-200" />
+					<CoverFallback />
+				)
+			}
+		>
+			{/*
+			 * ⚠️ A user-shape Work always carries an access verdict, which is the only shape
+			 * that reaches this branch — an owner without one reads canAccess true above and
+			 * never gets here. So the card here is whichever the verdict asks for.
+			 */}
+			<div className="mx-auto flex w-full max-w-md flex-col gap-4">
+				{/* ⚠️ A piece of writing's standfirst stays readable on its locked page: it is
+				    the sample the Work offers, and it rode above the card before the cover
+				    became the ground — now on its own panel, because prose over a blurred
+				    cover loses its contrast. */}
+				{isWriting(work.type) && work.description && (
+					<div className="rounded-lg border border-base-300 bg-base-100 p-4 shadow-lg">
+						<WorkDescription work={work} />
+					</div>
 				)}
-				{access &&
-					(access.requiresPurchase ? (
-						/* Every purchase goes through the cart: the pricing card offers
-						   the two doors into it and nothing about a card lives on this page. */
-						<ProjectPricing
-							workId={work.id}
-							slug={work.slug ?? ""}
-							access={access}
-							title={work.title ?? "Untitled"}
-							creatorHandle={work.creator?.handle ?? ""}
-							thumbnail={work.thumbnail}
-							creatorHasStripe={work.creatorHasStripe ?? false}
-							workType={work.type}
-						/>
-					) : (
-						<InlineUnlock post={work} access={access} />
-					))}
+				{access && (
+					<div className="rounded-lg shadow-lg">
+						{access.requiresPurchase ? (
+							<ProjectPricing
+								workId={work.id}
+								slug={work.slug ?? ""}
+								access={access}
+								title={work.title ?? "Untitled"}
+								creatorHandle={work.creator?.handle ?? ""}
+								thumbnail={work.thumbnail}
+								creatorHasStripe={work.creatorHasStripe ?? false}
+								workType={work.type}
+							/>
+						) : (
+							<InlineUnlock post={work} access={access} />
+						)}
+					</div>
+				)}
 			</div>
-		</div>
+		</CoverCardStage>
 	);
 }
