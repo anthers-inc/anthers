@@ -3,9 +3,11 @@
  * A **logged-out** user at a Work — the surface where the app has to hand someone to an
  * auth flow and get them back afterwards.
  *
- * Two Works, because there are now two of these and they must not look alike: a **gated**
- * one, where the visitor's access genuinely is in question, and a **Public Access** one,
- * where it is not and only the account is missing. See the second `describe`.
+ * Three Works, because there are now three of these and they must not look alike: a
+ * **gated** one, where the visitor's access genuinely is in question; a **Public Access**
+ * one, where it is not and only the account is missing; and a **paid** one, whose signed-out
+ * purchase card asks for the account instead of printing the price quote's 401. See the
+ * three `describe`s.
  *
  * 🚨 **Why the filename says `.authed.` when the spec is deliberately signed OUT.** The
  * suffix selects the Playwright *project*, and what this needs from that project is its
@@ -21,7 +23,7 @@
  * their feed having lost the Work. The code comment above that branch claimed it would
  * "return to the post" and never had.
  */
-import { gauntletPost } from "@anthers/db/gauntlet";
+import { BADGE_RUNGS, gauntletPost } from "@anthers/db/gauntlet";
 import { expect, test } from "./fixtures";
 
 // No cookies, no origins: this spec's whole subject is the anonymous user. It overrides
@@ -130,5 +132,57 @@ test.describe("a Public Access Work, signed out", () => {
 		await page.goto(PUBLIC_ACCESS);
 		await expect(page.getByRole("link", { name: /create a free account/i })).toBeVisible();
 		await expect(page.locator("video")).toHaveCount(0);
+	});
+});
+
+/**
+ * The paid Work's card, signed out — the account requirement rather than the API's 401.
+ *
+ * The quote is an authenticated read, so the old card asked for it, printed the middleware's
+ * "Authentication required" in a warning box, and left Buy Now and Add to Cart standing as
+ * though the refusal were a temporary glitch. The card now says what the purchase is tied
+ * to, offers the two doors that provide an account, and never makes the request at all.
+ * The key is derived from the ladder like `GATED`'s is: the paid Work sits after the rungs.
+ */
+const PAID = `/works/${gauntletPost(`G${2 + BADGE_RUNGS.length}`).slug}`;
+
+test.describe("a paid Work, signed out", () => {
+	test("asks for the account instead of showing the quote's authentication error", async ({
+		page,
+	}) => {
+		const quoteRequests: string[] = [];
+		page.on("request", (request) => {
+			if (request.url().includes("/api/payments/quote/")) quoteRequests.push(request.url());
+		});
+
+		await page.goto(PAID);
+		await expect(page).toHaveURL(new RegExp(`${PAID}-\\d+$`));
+		const here = new URL(page.url()).pathname;
+
+		const card = page.locator(".card").filter({ hasText: "Sign in to buy" });
+		await expect(card).toBeVisible();
+		await expect(card.getByText(/purchases are tied to your anthers account/i)).toBeVisible();
+
+		// Both doors, and both return to this Work — the same contract the gate's card keeps.
+		await expect(card.getByRole("link", { name: "Log in" })).toHaveAttribute(
+			"href",
+			`/login?next=${encodeURIComponent(here)}`,
+		);
+		await expect(card.getByRole("link", { name: /create a free account/i })).toHaveAttribute(
+			"href",
+			`/signup?next=${encodeURIComponent(here)}`,
+		);
+
+		// The two failures the old card shipped: the server's sentence at a buyer, and a
+		// Buy Now that could only lead to a sign-in detour.
+		await expect(page.getByText("Authentication required")).toHaveCount(0);
+		await expect(page.getByRole("button", { name: /Buy Now/ })).toHaveCount(0);
+		// The cart stays: a signed-out scratch cart is real and merges at sign-in.
+		await expect(page.getByRole("button", { name: /Add to Cart/ })).toBeVisible();
+		// And the price story the card can tell without the authenticated quote.
+		await expect(card.getByText(/at-cost card processing fee/i)).toBeVisible();
+
+		// The quote was never asked for, so there is no 401 to render or log.
+		expect(quoteRequests, "the signed-out card asked for an authenticated quote").toEqual([]);
 	});
 });
