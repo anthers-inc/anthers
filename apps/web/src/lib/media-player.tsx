@@ -63,7 +63,7 @@ import {
 	upcoming as upcomingIn,
 } from "./music-queue";
 import { registerExclusivePlayback } from "./playback";
-import { refreshBudget, useMeteredBudget } from "./public-access";
+import { publicAccessSpent, refreshBudget, useMeteredBudget } from "./public-access";
 import { readSpokenRate, SPOKEN_RATE_EVENT } from "./spoken-rate";
 
 export type { QueueTrack, RepeatMode };
@@ -127,8 +127,6 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [progress, setProgress] = useState(0);
 	const [duration, setDuration] = useState(0);
-	/** Delivery refused — the backstop for an allowance emptied between attention flushes. */
-	const [refused, setRefused] = useState(false);
 	const budget = useMeteredBudget();
 	const { volume } = useVolume();
 
@@ -142,8 +140,7 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 	 * network. The budget rides back on every attention write, so the bar knows before the
 	 * request is made and never mislabels an outage as "you're out of hours".
 	 */
-	const allowanceSpent =
-		(current?.publicAccess ?? false) && (refused || (!!budget && !budget.allowed));
+	const allowanceSpent = publicAccessSpent(current?.publicAccess ?? false, budget);
 
 	// ── The element ───────────────────────────────────────────────────────────
 
@@ -206,7 +203,6 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 		// unchanged and this stays silent — the right outcome for a network blip.
 		const onError = () => {
 			if (!current?.publicAccess) return;
-			setRefused(true);
 			refreshBudget();
 		};
 
@@ -249,9 +245,6 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		const audio = audioRef.current;
 		if (!audio) return;
-		// A newly chosen track clears a previous refusal: it may be a different Work
-		// entirely, and one that is gated or bought draws no allowance at all.
-		setRefused(false);
 		setProgress(0);
 		setDuration(0);
 		// One consumption point for the moment `?t` named — cleared here so a later
@@ -293,7 +286,6 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 				});
 				hls.on(Hls.Events.ERROR, (_evt, data) => {
 					if (data?.response?.code === 402) {
-						setRefused(true);
 						refreshBudget();
 						audio.pause();
 					}
@@ -443,7 +435,6 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 		setIsPlaying(false);
 		setProgress(0);
 		setDuration(0);
-		setRefused(false);
 	}, []);
 
 	const value = useMemo<MediaPlayerContextValue>(

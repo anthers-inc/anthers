@@ -115,11 +115,12 @@ export function usePublicAccessBudget(): PublicAccessBudget | null {
 /**
  * The budget **only when it actually applies to this user** — signed in, and limited.
  *
- * Null covers three genuinely different situations that all mean *do not render a
- * meter*: not signed in (not metered at all), not yet known, and unlimited (gives Anthers
- * the Public Access price). Collapsing them is safe here because every caller does the same thing with all
- * three, and separating them would push a three-way branch into every consumer to no
- * end.
+ * Null covers four genuinely different situations that all mean *do not render a
+ * meter*: not signed in (not metered at all), not yet known, unlimited (gives Anthers
+ * the Public Access price), and the zero-limit no-allowance answer (the server could not
+ * identify a caller, so no allowance was read). Collapsing them is safe here because
+ * every caller does the same thing with all four, and separating them would push a
+ * four-way branch into every consumer to no end.
  *
  * ⚠️ **The `unlimited` clause here is redundant today, and that is recorded rather than
  * hidden.** Sabotage-testing found that removing it changes nothing: an unlimited user's
@@ -133,6 +134,14 @@ export function useMeteredBudget(): PublicAccessBudget | null {
 	const { user } = useAuth();
 	const budget = usePublicAccessBudget();
 	if (!user || !budget || budget.unlimited) return null;
+	/*
+	 * 🚨 A zero limit is the no-allowance answer, not a meter with nothing left.
+	 * `NO_PUBLIC_ACCESS_ALLOWANCE` is what the server hands an unauthenticated caller —
+	 * the shape a shell's first request can receive while its token is still coming out
+	 * of the keystore. Treating it as a metered budget renders "you have used your hours"
+	 * to somebody whose hours were never read. No meter is the honest answer.
+	 */
+	if (budget.limitSeconds === null || budget.limitSeconds <= 0) return null;
 	return budget;
 }
 
@@ -159,7 +168,34 @@ export const LOW_BUDGET_SECONDS = 3600;
 /** Whether the meter should say something — running low, or spent. */
 export function shouldWarn(budget: PublicAccessBudget | null): boolean {
 	if (!budget || budget.unlimited || budget.remainingSeconds === null) return false;
+	// The no-allowance answer carries zero remaining and a zero limit; warning on it
+	// would tell an unauthenticated caller they had spent an allowance nobody read.
+	if (budget.limitSeconds === null || budget.limitSeconds <= 0) return false;
 	return budget.remainingSeconds <= LOW_BUDGET_SECONDS;
+}
+
+/**
+ * Whether the wall should stand where a Public Access player would be.
+ *
+ * Only a budget the server has read can spend an allowance. A media element cannot report
+ * a 402 — the event carries no status, and a refused delivery, a corrupt file and a dead
+ * network all arrive as the same error — so deriving this from an `error` event turns any
+ * load failure into "you have run out of hours", the one claim this meter must never make
+ * falsely. The players call {@link refreshBudget} on an error instead, and this becomes
+ * true only when the refreshed budget says so.
+ *
+ * 🚨 **A zero limit is not a spent allowance.** `NO_PUBLIC_ACCESS_ALLOWANCE` is what the
+ * server answers an unauthenticated caller, and rendering the wall's "ten hours" over it
+ * would invent an allowance the account does not have — the same lie in the other
+ * direction. A budget with no limit is not a metered budget at all.
+ */
+export function publicAccessSpent(
+	publicAccess: boolean,
+	budget: PublicAccessBudget | null,
+): boolean {
+	if (!publicAccess || budget === null || budget.unlimited) return false;
+	if (budget.limitSeconds === null || budget.limitSeconds <= 0) return false;
+	return !budget.allowed;
 }
 
 // ── The anonymous user ─────────────────────────────────────────────────────

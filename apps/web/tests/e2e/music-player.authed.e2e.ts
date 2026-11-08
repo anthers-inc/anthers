@@ -261,3 +261,22 @@ test("the Work-page player's transport skips, and the times bracket the waveform
 	await page.keyboard.press("m");
 	await expect(mute).toBeVisible();
 });
+
+test("a failed audio load is not reported as a spent allowance", async ({ page }) => {
+	/*
+	 * 🚨 The bar used to turn any `error` event on Public Access work into "that's your
+	 * hours for the month". A media element cannot report a 402: a blocked request, a
+	 * dead network and a corrupt file all arrive as the same event, so the notice was
+	 * standing in for failures that had nothing to do with the allowance. Only a budget
+	 * the server actually read may spend the month.
+	 */
+	await page.route("**/api/content/works/*/audio*", (route) => route.abort());
+	await page.goto(`/works/${FREE_WITH_LYRICS.slug}-${FREE_WITH_LYRICS.publicId}`);
+	await page
+		.locator("[data-testid=audio-player]")
+		.getByRole("button", { name: "Play", exact: true })
+		.click();
+
+	await expect(page.locator(BAR)).toBeVisible();
+	await expect(page.getByText(/That's your .* hours of Public Access this month/i)).toHaveCount(0);
+});

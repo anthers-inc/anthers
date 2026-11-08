@@ -40,7 +40,7 @@ import {
 import { useMediaPlayer } from "../../lib/media-player";
 import type { QueueTrack } from "../../lib/music-queue";
 import { useExclusivePlayback } from "../../lib/playback";
-import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
+import { publicAccessSpent, refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { SPOKEN_RATE_EVENT, stepSpokenRate, useSpokenRate } from "../../lib/spoken-rate";
 import { useBindPlayerSeek } from "../../lib/work-player";
 import ChapterList from "./ChapterList";
@@ -115,8 +115,6 @@ export default function SpokenPlayer({
 	const [elPlaying, setElPlaying] = useState(false);
 	const [elProgress, setElProgress] = useState(0);
 	const [elDuration, setElDuration] = useState(0);
-	/** Delivery refused — the backstop for an allowance emptied between flushes. */
-	const [refused, setRefused] = useState(false);
 	const budget = useMeteredBudget();
 	const { volume, effective: effectiveVolume } = useVolume();
 	const [rate, setRate] = useSpokenRate();
@@ -148,7 +146,7 @@ export default function SpokenPlayer({
 	 * the player knows before the request is even made, and never mislabels an outage as
 	 * "you're out of hours".
 	 */
-	const spent = publicAccess && (refused || (!!budget && !budget.allowed));
+	const spent = publicAccessSpent(publicAccess, budget);
 
 	// Audio credits time only while it is actually playing — and keeps crediting
 	// in a hidden tab, because listening while working elsewhere is real listening.
@@ -190,7 +188,6 @@ export default function SpokenPlayer({
 		// network blip.
 		const onError = () => {
 			if (!publicAccess) return;
-			setRefused(true);
 			refreshBudget();
 		};
 		// The flush that survives nothing else: navigate, close, crash.
@@ -290,8 +287,10 @@ export default function SpokenPlayer({
 			audio.pause();
 			setElPlaying(false);
 		} else {
+			// The element's own `play` event is what flips the transport and starts the
+			// attention claim. Setting it here as well marked a refused `play()` as
+			// listening, so a load failure drew an allowance for time nobody heard.
 			audio.play().catch(() => {});
-			setElPlaying(true);
 		}
 	}, [startSeconds, elPlaying]);
 
