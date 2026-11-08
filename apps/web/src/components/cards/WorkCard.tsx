@@ -121,7 +121,7 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 						<WorkPoster type={post.type} className="h-full w-full" />
 					)}
 					<div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/20">
-						<div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
+						<div className="h-12 w-16 rounded-xl bg-white/90 flex items-center justify-center">
 							<PlayIcon className="w-6 h-6 text-black ml-0.5" />
 						</div>
 					</div>

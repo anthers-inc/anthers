@@ -57,12 +57,13 @@ test("an image Work's description is authored in the Studio and announced by the
 
 	// The alt text is the Accessibility tab's field (the kinds pass, 2026-10-14), edited
 	// where a screen reader meets the picture — before the picture exists as much as after.
+	// The tab's own pencil opens the section (Parker, 2026-11-07).
 	await page.getByRole("tab", { name: "Accessibility" }).click();
-	await page.getByRole("button", { name: "Edit Alt text" }).click();
+	await page.getByRole("button", { name: "Edit Accessibility" }).click();
 	const field = page.getByRole("textbox", { name: "Alt text" });
 	await expect(field).toBeVisible();
 	await field.fill(DESCRIPTION);
-	await page.getByRole("button", { name: "Save Alt text" }).click();
+	await page.getByRole("button", { name: "Save Accessibility" }).click();
 	// The save is the field's own; the read answers it.
 	await expect(page.getByText(DESCRIPTION)).toBeVisible({ timeout: 15_000 });
 

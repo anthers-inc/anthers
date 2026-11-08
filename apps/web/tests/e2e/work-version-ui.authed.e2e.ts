@@ -35,7 +35,7 @@ test("a released comic's set offers a new version and no in-place edits", async 
 	expect(work?.visibility).toBe("released");
 
 	await page.goto(`/works/${work?.slug}-${work?.publicId}`);
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Source" }).click();
 
 	// The set is the version its readers have: the rows stand, and their edit controls do not.
@@ -99,7 +99,7 @@ test("the Versions section lists a previous version with its original", async ({
 
 	try {
 		await page.goto(draft.url);
-		await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+		await page.getByRole("button", { name: "Edit Media" }).click();
 		await page.getByRole("tab", { name: "Versions" }).click();
 		// The current version carries the name its creator gave it, editable where it lives.
 		await expect(page.getByText("Current version", { exact: true })).toBeVisible();
@@ -151,7 +151,7 @@ test("a released Work offers a new version but not removal", async ({ page, cont
 	expect(work?.visibility).toBe("released");
 
 	await page.goto(`/works/${work?.slug}-${work?.publicId}`);
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Source" }).click();
 	await expect(page.getByRole("tab", { name: "Source" })).toHaveAttribute("aria-selected", "true");
 

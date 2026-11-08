@@ -249,7 +249,7 @@ test("the media manager adds, reorders and removes a preview image", async ({ pa
 	await page.goto(`/works/${work.publicId}`);
 	await expect(page.locator("h1")).toBeVisible({ timeout: 15_000 });
 	// Preview media lives with the thumbnail in the media manager now, not on the Manage tab.
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Thumbnail & Preview Media" }).click();
 	const section = page.getByTestId("preview-media-section");
 	await expect(section).toBeVisible();

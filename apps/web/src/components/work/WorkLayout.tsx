@@ -344,7 +344,7 @@ export function WorkDateLine({
 				{originally && (
 					<>
 						<span aria-hidden className="h-3 w-px bg-base-300" />
-						<span>Originally released {originally}</span>
+						<span>Originally Released {originally}</span>
 					</>
 				)}
 			</div>

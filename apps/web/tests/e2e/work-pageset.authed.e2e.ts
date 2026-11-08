@@ -65,7 +65,7 @@ test("a comic's set grows by a multi-pick, reorders and removes", async ({ page,
 	const box = page.getByRole("status").filter({ hasText: /pages open here/i });
 	await box.locator('input[type="file"][multiple]').setInputFiles(stubImage("lead page.png"));
 	// The set editor is the manager's Source section once the set exists.
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Source" }).click();
 	const source = page.getByRole("tabpanel");
 	await expect(source.getByText(/lead page,?$/)).toBeVisible({ timeout: 30_000 });

@@ -223,7 +223,7 @@ function CoverBand({
 			)}
 			{playable && !previewing && (
 				<div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-					<div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
+					<div className="h-10 w-14 rounded-lg bg-white/90 flex items-center justify-center">
 						<PlayIcon className="w-5 h-5 text-black ml-0.5" />
 					</div>
 				</div>

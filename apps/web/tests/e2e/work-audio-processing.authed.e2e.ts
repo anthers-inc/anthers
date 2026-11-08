@@ -145,7 +145,7 @@ test("a music Work plays its original while processing runs", async ({ page, con
 
 	// And the media manager's Source section is video's card adapted to what this pipeline
 	// makes: the original, the MP3 a listener streams and the waveform the player draws.
-	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Source" }).click();
 	const media = page.getByRole("region", { name: "Media status" });
 	await expect(media.getByText("Original", { exact: true })).toBeVisible();
@@ -167,5 +167,5 @@ test("a music Work plays its original while processing runs", async ({ page, con
 	await expect(page.locator("audio")).toBeAttached();
 	const userSrc = await page.locator("audio").getAttribute("src");
 	expect(userSrc ?? "").toMatch(new RegExp(`works/${landedWork.id}/original|creators/`));
-	await expect(page.getByRole("button", { name: "Edit Description" })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Edit Details" })).toHaveCount(0);
 });
