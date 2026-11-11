@@ -36,11 +36,10 @@
  * `services/content-preferences.ts`); doing it here would let one user's private
  * decision produce a listing removal, which is a moderation-shaped outcome — and
  * the two stay separate even though both filter a listing, because a block is a
- * boundary between two accounts and a hide is one reader's own view.
- * The decisive case is that a purchase outlives
- * everything: a buyer who later blocks a creator still owns what they bought, so a
- * content-filtering block would need a Library carve-out, and the carve-out is the
- * proof that content was never the axis.
+ * boundary between two accounts and a hide is one reader's own view. The decisive
+ * case is that a purchase outlives everything: a buyer who later blocks a creator
+ * still owns what they bought, so a content-filtering block would need a Library
+ * carve-out, and the carve-out is the proof that content was never the axis.
  */
 
 import { db } from "@anthers/db/client";
