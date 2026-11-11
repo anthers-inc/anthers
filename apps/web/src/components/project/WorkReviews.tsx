@@ -1,6 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Reviews on a Work — the aggregates, the written reviews, and the composer.
+ * Reviews on a Work — the aggregates, the written reviews, and the composer, split into
+ * a **Your Review** section and an **Other Reviews** section.
+ *
+ * ⭐ **Your Review is one card with three modes** (Parker, 2026-11-11): closed with the
+ * reason the reader cannot review yet, open for a new review, or holding the one they
+ * wrote and can manage. The composer is the tallest, and the other two hold its height, so
+ * a review landing replaces the composer in place rather than changing the tab's shape —
+ * which also means the review a reader wrote is never shown twice, because Other Reviews
+ * leaves their own words out.
+ *
+ * ⭐ **The section keeps itself current.** Eligibility is the server's answer on each read,
+ * and the browser's attention engine tells this component when the reader starts earning
+ * on this Work; that moment is flushed and the section re-read, so pressing play opens the
+ * composer without a reload. A slow poll covers a change this tab did not witness.
+ *
  * The composer stands open for a signed-in user, and the verdict is what makes it
  * postable: choosing one is a selection, not a reveal, and text is optional. A
  * verdict alone counts in both shares and stays out of the list below, where only
@@ -55,6 +69,7 @@ import {
 	HandThumbUpIcon,
 } from "@heroicons/react/24/outline";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { flushAttentionNow, subscribeAttentionStarted } from "../../lib/attention";
 import { useSeekPlayer } from "../../lib/work-player";
 import TimestampedText from "../media/TimestampedText";
 import StickerChooser, { givePendingSticker } from "../post/StickerChooser";
@@ -70,6 +85,25 @@ type VerdictFilter = "all" | "recommended" | "not-recommended";
 
 /** Which versions' reviews to read, when the Work has more than one. */
 type VersionFilter = "all" | "current";
+
+/**
+ * How often a closed Your Review section re-reads its eligibility.
+ *
+ * The quick path is the attention engine's own signal: a claim that starts earning is
+ * flushed and the section re-read at once, so pressing play opens the composer without a
+ * reload. This interval is the fallback for a change this tab never witnessed — a
+ * scheduled release arriving, a grant made from another tab — and it stops as soon as
+ * the section opens.
+ */
+const ELIGIBILITY_POLL_MS = 15_000;
+
+/**
+ * The Your Review card's floor, and the reason it is a constant: the composer is the
+ * tallest of the section's three modes, and the other two hold its height so the tab does
+ * not move when a review lands. A long review body may still grow the card — clamping a
+ * reader's own words to keep a layout fixed would hide them.
+ */
+const YOUR_REVIEW_HEIGHT = "min-h-[11rem]";
 
 /** How a window reads as a scope label. */
 const WINDOW_LABELS: Record<ReviewWindow, string> = {
@@ -235,6 +269,32 @@ export default function WorkReviews({
 		fetchReviews(window, versionFilter);
 	}, [fetchReviews, window, versionFilter]);
 
+	// The section is waiting on something the server decides, so it listens for the one
+	// change that arrives from this tab: attention starting on this Work. `startedWorkId`
+	// is null for a claim that is not a Work, and another Work's player is not this one.
+	const waitingForEligibility =
+		agg?.eligibility != null && !agg.eligibility.canReview && agg.eligibility.code !== "own_work";
+
+	useEffect(() => {
+		if (!waitingForEligibility) return;
+		return subscribeAttentionStarted((startedWorkId) => {
+			if (startedWorkId !== workId) return;
+			// The engine holds the seconds until its own cadence; the gate is answered
+			// from rows, so the range is flushed before the section is re-read.
+			void flushAttentionNow().then(() => fetchReviews(window, versionFilter));
+		});
+	}, [waitingForEligibility, workId, fetchReviews, window, versionFilter]);
+
+	// The fallback poll: a release date passing, a grant made elsewhere, or a flush this
+	// tab did not make. Visibility-gated because a background tab has nothing to show.
+	useEffect(() => {
+		if (!waitingForEligibility) return;
+		const id = setInterval(() => {
+			if (document.visibilityState === "visible") fetchReviews(window, versionFilter);
+		}, ELIGIBILITY_POLL_MS);
+		return () => clearInterval(id);
+	}, [waitingForEligibility, fetchReviews, window, versionFilter]);
+
 	// Choosing a verdict opens the form. An existing review opens on what they already
 	// said, so editing is a correction rather than a retype.
 	const startReview = (verdict: string) => {
@@ -329,16 +389,27 @@ export default function WorkReviews({
 	// The visible list: the filter narrows it, the sort orders it — both over the one
 	// payload so the two controls can never disagree about what was fetched. Newest first
 	// breaks a helpfulness tie, recency being the only other thing a user can check.
+	//
+	// A reader's own review is deliberately not in this list: it is theirs to manage in
+	// Your Review above, and repeating it under Other Reviews would show one voice twice.
 	const shown = useMemo(() => {
 		if (!agg) return [];
-		const filtered =
-			filter === "all" ? agg.reviews : agg.reviews.filter((r) => r.verdict === filter);
+		const others = agg.reviews.filter((r) => r.userId !== user?.id);
+		const filtered = filter === "all" ? others : others.filter((r) => r.verdict === filter);
 		const byDate = (a: Review, b: Review) =>
 			new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 		return [...filtered].sort(
 			sort === "newest" ? byDate : (a, b) => b.score - a.score || byDate(a, b),
 		);
-	}, [agg, filter, sort]);
+	}, [agg, filter, sort, user?.id]);
+
+	// Written reviews that belong to somebody else — the only rows Other Reviews can show.
+	// Kept separate from `shown` because an empty verdict filter and an empty list are
+	// different answers, and the empty state says which one it is.
+	const otherReviews = useMemo(
+		() => agg?.reviews.filter((r) => r.userId !== user?.id) ?? [],
+		[agg, user?.id],
+	);
 
 	if (!agg) return null;
 
@@ -355,24 +426,38 @@ export default function WorkReviews({
 
 	return (
 		<div>
-			<h3 className={`${WORK_DETAILS_HEADING_CLASS} mb-4`}>Reviews</h3>
-
 			{isAuthenticated && (
-				<div className="mb-6">
-					{hasReview && !editing ? (
-						<div className="rounded-box border border-base-300 p-3" data-testid="your-review">
-							<div className="flex flex-wrap items-center gap-2 text-sm">
-								<span className="font-medium">Your review</span>
-								<span
-									className={
-										agg.userVerdict === "recommended"
-											? "text-success text-xs font-medium"
-											: "text-base-content/60 text-xs font-medium"
-									}
-								>
-									{verdictLabel(agg.userVerdict ?? "")}
-								</span>
-								<div className="ml-auto flex items-center gap-2">
+				<section aria-labelledby="your-review-heading" className="mb-6 flex flex-col gap-2">
+					<h3 id="your-review-heading" className={WORK_DETAILS_HEADING_CLASS}>
+						Your Review
+					</h3>
+					{/* One card, one floor, three modes: closed with the reason, open for a new
+					    review, and holding the review already written. The composer is the
+					    tallest, so the other two borrow its height — a section that grew only
+					    when a review landed would move the tab under a reader's cursor. */}
+					<div
+						data-testid="your-review"
+						className={`flex ${YOUR_REVIEW_HEIGHT} flex-col rounded-box border border-base-300 p-3`}
+					>
+						{hasReview && !editing ? (
+							<>
+								{/* The section's own heading already says whose review this is, so the
+								    card opens on the verdict rather than repeating it. */}
+								<div className="flex flex-wrap items-center gap-2 text-sm">
+									<span
+										className={
+											agg.userVerdict === "recommended"
+												? "text-success text-xs font-medium"
+												: "text-base-content/60 text-xs font-medium"
+										}
+									>
+										{verdictLabel(agg.userVerdict ?? "")}
+									</span>
+								</div>
+								<div className="mt-2 flex-1">
+									{agg.userReview && <ReviewBody body={agg.userReview} />}
+								</div>
+								<div className="mt-2 flex items-center justify-end gap-2">
 									{canEdit && (
 										<button
 											type="button"
@@ -392,70 +477,68 @@ export default function WorkReviews({
 										{removing ? "Removing…" : "Remove"}
 									</button>
 								</div>
+								{error && <p className="mt-1 text-sm text-error">{error}</p>}
+							</>
+						) : locked ? (
+							/* The reason IS the card in this mode: no disabled controls to read
+							   past, and nothing to press that would only refuse. */
+							<div className="flex flex-1 items-center justify-center">
+								<p className="max-w-[22rem] text-center text-sm text-base-content/60">
+									{agg.eligibility?.reason}
+								</p>
 							</div>
-							{agg.userReview && (
-								<p className="mt-1 whitespace-pre-line text-sm">{agg.userReview}</p>
-							)}
-							{error && <p className="mt-1 text-sm text-error">{error}</p>}
-						</div>
-					) : (
-						<>
-							<div className="flex items-center gap-2 flex-wrap">
-								{/* Two buttons and no third: somebody who feels neither is meant to post
+						) : (
+							<>
+								<div className="flex items-center gap-2 flex-wrap">
+									{/* Two buttons and no third: somebody who feels neither is meant to post
 								    nothing, because posting a review is an action and having it mean
 								    something is the point. The split is even — each verdict takes half
 								    this row's width — and the non-recommendation wears its own answer's
 								    color, red, when it is the one chosen. */}
-								<div className="flex flex-1 min-w-64 basis-56 items-center gap-2">
-									<button
-										type="button"
-										className={`btn btn-sm ${chosen === "recommended" ? "btn-primary" : "btn-outline"} flex-1`}
-										onClick={() => startReview("recommended")}
-										aria-pressed={chosen === "recommended"}
-										disabled={locked}
-									>
-										<HandThumbUpIcon className="w-4 h-4" />
-										Recommend
-									</button>
-									<button
-										type="button"
-										className={`btn btn-sm ${chosen === "not-recommended" ? "btn-error" : "btn-outline"} flex-1`}
-										onClick={() => startReview("not-recommended")}
-										aria-pressed={chosen === "not-recommended"}
-										disabled={locked}
-									>
-										<HandThumbDownIcon className="w-4 h-4" />
-										Don't Recommend
-									</button>
+									<div className="flex flex-1 min-w-64 basis-56 items-center gap-2">
+										<button
+											type="button"
+											className={`btn btn-sm ${chosen === "recommended" ? "btn-primary" : "btn-outline"} flex-1`}
+											onClick={() => startReview("recommended")}
+											aria-pressed={chosen === "recommended"}
+										>
+											<HandThumbUpIcon className="w-4 h-4" />
+											Recommend
+										</button>
+										<button
+											type="button"
+											className={`btn btn-sm ${chosen === "not-recommended" ? "btn-error" : "btn-outline"} flex-1`}
+											onClick={() => startReview("not-recommended")}
+											aria-pressed={chosen === "not-recommended"}
+										>
+											<HandThumbDownIcon className="w-4 h-4" />
+											Don't Recommend
+										</button>
+									</div>
 								</div>
-							</div>
-							{/* The field is not gated behind a verdict: it reads with the buttons. Text is
+								{/* The field is not gated behind a verdict: it reads with the buttons. Text is
 							    optional, so the post button enables on the verdict alone — the words are
 							    what put the review in the list below. */}
-							<form onSubmit={submit} className="mt-3">
-								<textarea
-									className="textarea textarea-bordered w-full"
-									rows={3}
-									maxLength={REVIEW_MAX}
-									placeholder="Say more if you like. A verdict on its own still counts."
-									value={draftBody}
-									disabled={locked}
-									onChange={(e) => {
-										setDraftBody(e.target.value);
-										if (draftVerdict === null && agg?.userVerdict != null) {
-											setDraftVerdict(agg.userVerdict);
-										}
-									}}
-								/>
-								{error && <p className="mt-1 text-sm text-error">{error}</p>}
-								{permissionMissing && (
-									<p className="mt-1 text-xs text-warning">{INTERACTION_PERMISSION_HINT}</p>
-								)}
-								{locked ? (
-									/* The reason takes the button's place rather than arriving after a
-									   refused post. */
-									<p className="mt-2 text-sm text-base-content/60">{agg.eligibility?.reason}</p>
-								) : (
+								<form onSubmit={submit} className="mt-3 flex flex-1 flex-col">
+									{/* `min-h-16` beats the component's own five-rem floor: this field
+									    is sized by the card around it, not by a form's default. */}
+									<textarea
+										className="textarea textarea-bordered w-full flex-1 resize-none min-h-16"
+										rows={2}
+										maxLength={REVIEW_MAX}
+										placeholder="Say more if you like. A verdict on its own still counts."
+										value={draftBody}
+										onChange={(e) => {
+											setDraftBody(e.target.value);
+											if (draftVerdict === null && agg?.userVerdict != null) {
+												setDraftVerdict(agg.userVerdict);
+											}
+										}}
+									/>
+									{error && <p className="mt-1 text-sm text-error">{error}</p>}
+									{permissionMissing && (
+										<p className="mt-1 text-xs text-warning">{INTERACTION_PERMISSION_HINT}</p>
+									)}
 									<div className="mt-2 flex items-center gap-2">
 										<button
 											type="submit"
@@ -485,249 +568,265 @@ export default function WorkReviews({
 											recipientOf={{ subjectType: "work", subjectId: workId }}
 										/>
 									</div>
-								)}
-								{stickerProblem && (
-									<p className="mt-1 text-xs text-error" role="alert">
-										Your review is posted, but the Sticker could not be given: {stickerProblem}
-									</p>
-								)}
-							</form>
-						</>
-					)}
-				</div>
+									{stickerProblem && (
+										<p className="mt-1 text-xs text-error" role="alert">
+											Your review is posted, but the Sticker could not be given: {stickerProblem}
+										</p>
+									)}
+								</form>
+							</>
+						)}
+					</div>
+				</section>
 			)}
 
-			{/* The review bar (Parker, 2026-11-07): the two shares and the controls that read
-			    the words below them, one card under the composer. The shares used to share a
-			    line with the heading, where the recent share's percentage, counts and window
-			    select wrapped into a stack of fragments; a figure now stands in its own
-			    column, and the scope it measures is the column's own label — the window
-			    select on the recent one, so picking a window is a heading rather than a
-			    control floating in a sentence. */}
-			{agg.count > 0 && (
-				<section
-					aria-label="Review summary and controls"
-					className="mb-4 overflow-hidden rounded-box border border-base-300"
-				>
-					<div className="grid grid-cols-2 divide-x divide-base-300">
-						<ShareFigure
-							// Narrowed to the current version, the figures describe that set and not
-							// the Work's whole history, so the label cannot say All Time — the
-							// number beside it would then be a count of something else.
-							label={narrowed ? "Since This Version" : "All Time"}
-							percent={agg.recommendedPercent}
-							recommended={agg.recommended}
-							count={agg.count}
-						/>
-						<ShareFigure
-							label={
-								<ScopeSelect
-									value={window}
-									onChange={setWindow}
-									options={REVIEW_WINDOWS.map((w) => ({
-										value: w,
-										label: WINDOW_LABELS[w],
-									}))}
-									label="Recent review window"
-								/>
-							}
-							// The Recent share sits beside All Time rather than replacing it, so All
-							// Time is always the constant a user can compare against. A window
-							// holding nothing is stated as such — an absent column would read as a
-							// bug — and the window control stays in its label either way.
-							percent={agg.recent.recommendedPercent}
-							recommended={agg.recent.recommended}
-							count={agg.recent.count}
-							emptyNote="No reviews in this window"
-						/>
-					</div>
+			<section aria-labelledby="other-reviews-heading" className="flex flex-col gap-4">
+				<h3 id="other-reviews-heading" className={WORK_DETAILS_HEADING_CLASS}>
+					Other Reviews
+				</h3>
 
-					{/* The version scope, when there is one: only a Work whose current build
+				{/* The review bar (Parker, 2026-11-07): the two shares and the controls that read
+				    the words below them, one card under the composer. The shares used to share a
+				    line with the heading, where the recent share's percentage, counts and window
+				    select wrapped into a stack of fragments; a figure now stands in its own
+				    column, and the scope it measures is the column's own label — the window
+				    select on the recent one, so picking a window is a heading rather than a
+				    control floating in a sentence. */}
+				{agg.count > 0 && (
+					<section
+						aria-label="Review summary and controls"
+						className="overflow-hidden rounded-box border border-base-300"
+					>
+						<div className="grid grid-cols-2 divide-x divide-base-300">
+							<ShareFigure
+								// Narrowed to the current version, the figures describe that set and not
+								// the Work's whole history, so the label cannot say All Time — the
+								// number beside it would then be a count of something else.
+								label={narrowed ? "Since This Version" : "All Time"}
+								percent={agg.recommendedPercent}
+								recommended={agg.recommended}
+								count={agg.count}
+							/>
+							<ShareFigure
+								label={
+									<ScopeSelect
+										value={window}
+										onChange={setWindow}
+										options={REVIEW_WINDOWS.map((w) => ({
+											value: w,
+											label: WINDOW_LABELS[w],
+										}))}
+										label="Recent review window"
+									/>
+								}
+								// The Recent share sits beside All Time rather than replacing it, so All
+								// Time is always the constant a user can compare against. A window
+								// holding nothing is stated as such — an absent column would read as a
+								// bug — and the window control stays in its label either way.
+								percent={agg.recent.recommendedPercent}
+								recommended={agg.recent.recommended}
+								count={agg.recent.count}
+								emptyNote="No reviews in this window"
+							/>
+						</div>
+
+						{/* The version scope, when there is one: only a Work whose current build
 					    arrived after its release has anything to narrow — with one version,
 					    every review is already the current one's. It scopes the shares above
 					    as well as the list, which is why it stands with them rather than among
 					    the list's own controls. The option names the version by what it is
 					    rather than by a name the payload does not carry; the page's byline
 					    states the date. */}
-					{agg.versionSince && (
-						<div className="flex items-center gap-2 border-t border-base-300 px-3 py-2 text-xs text-base-content/55">
-							<span>Showing</span>
-							<ScopeSelect
-								value={versionFilter}
-								onChange={setVersionFilter}
-								options={[
-									{ value: "all", label: "Every Version" },
-									{ value: "current", label: "Since This Version" },
-								]}
-								label="Filter reviews by media version"
-							/>
-						</div>
-					)}
+						{agg.versionSince && (
+							<div className="flex items-center gap-2 border-t border-base-300 px-3 py-2 text-xs text-base-content/55">
+								<span>Showing</span>
+								<ScopeSelect
+									value={versionFilter}
+									onChange={setVersionFilter}
+									options={[
+										{ value: "all", label: "Every Version" },
+										{ value: "current", label: "Since This Version" },
+									]}
+									label="Filter reviews by media version"
+								/>
+							</div>
+						)}
 
-					{/* The list's own controls, one row: which verdicts, in what order. Both read
+						{/* The list's own controls, one row: which verdicts, in what order. Both read
 					    the payload this section already has, so neither re-fetches, and both
 					    wear the page's segmented language — the same `join` of buttons the tab
-					    bars use — rather than one row of bare text beside a dropdown. */}
-					{agg.reviews.length > 0 && (
-						<div className="flex flex-col gap-2 border-t border-base-300 p-3">
-							<fieldset className="join min-w-0 w-full" aria-label="Filter reviews by verdict">
-								{VERDICT_OPTIONS.map((option) => (
+					    bars use — rather than one row of bare text beside a dropdown. Offered
+					    only when the list has somebody else's words to arrange. */}
+						{otherReviews.length > 0 && (
+							<div className="flex flex-col gap-2 border-t border-base-300 p-3">
+								<fieldset className="join min-w-0 w-full" aria-label="Filter reviews by verdict">
+									{VERDICT_OPTIONS.map((option) => (
+										<button
+											key={option.value}
+											type="button"
+											className={`btn btn-xs join-item flex-1 whitespace-nowrap px-1 ${
+												filter === option.value ? "btn-active" : ""
+											}`}
+											onClick={() => setFilter(option.value)}
+											aria-pressed={filter === option.value}
+										>
+											{option.label}
+										</button>
+									))}
+								</fieldset>
+								<fieldset className="join min-w-0 w-full" aria-label="Order reviews">
 									<button
-										key={option.value}
 										type="button"
-										className={`btn btn-xs join-item flex-1 whitespace-nowrap px-1 ${
-											filter === option.value ? "btn-active" : ""
-										}`}
-										onClick={() => setFilter(option.value)}
-										aria-pressed={filter === option.value}
+										className={`btn btn-xs join-item flex-1 ${sort === "helpful" ? "btn-active" : ""}`}
+										onClick={() => setSort("helpful")}
+										aria-pressed={sort === "helpful"}
 									>
-										{option.label}
+										Helpful First
 									</button>
-								))}
-							</fieldset>
-							<fieldset className="join min-w-0 w-full" aria-label="Order reviews">
-								<button
-									type="button"
-									className={`btn btn-xs join-item flex-1 ${sort === "helpful" ? "btn-active" : ""}`}
-									onClick={() => setSort("helpful")}
-									aria-pressed={sort === "helpful"}
-								>
-									Helpful First
-								</button>
-								<button
-									type="button"
-									className={`btn btn-xs join-item flex-1 ${sort === "newest" ? "btn-active" : ""}`}
-									onClick={() => setSort("newest")}
-									aria-pressed={sort === "newest"}
-								>
-									Newest First
-								</button>
-							</fieldset>
-						</div>
-					)}
-				</section>
-			)}
+									<button
+										type="button"
+										className={`btn btn-xs join-item flex-1 ${sort === "newest" ? "btn-active" : ""}`}
+										onClick={() => setSort("newest")}
+										aria-pressed={sort === "newest"}
+									>
+										Newest First
+									</button>
+								</fieldset>
+							</div>
+						)}
+					</section>
+				)}
 
-			{agg.reviews.length === 0 ? (
-				<p className="text-sm text-base-content/50">
-					{/* A narrowed section with nothing in it normally carries the version control
+				{agg.reviews.length === 0 ? (
+					<p className="text-sm text-base-content/50">
+						{/* A narrowed section with nothing in it normally carries the version control
 					    in the bar above; only a Work with no reviews at all loses that control
 					    with the figures, so the way back rides the sentence there. */}
-					{narrowed ? (
-						<>
-							{agg.count > 0
-								? "No written reviews since this version."
-								: "No reviews since this version."}{" "}
-							{agg.count === 0 && (
-								<button type="button" className="link" onClick={() => setVersionFilter("all")}>
-									Show every version
-								</button>
-							)}
-						</>
-					) : agg.count > 0 ? (
-						<>No written reviews yet. {isAuthenticated ? "Add yours." : "Log in to add yours."}</>
-					) : (
-						<>
-							No reviews yet.{" "}
-							{isAuthenticated ? "Be the first to say something." : "Log in to write one."}
-						</>
-					)}
-				</p>
-			) : shown.length === 0 ? (
-				<p className="text-sm text-base-content/50">
-					None of the written reviews is a{" "}
-					{filter === "recommended" ? "recommendation" : "non-recommendation"}.
-				</p>
-			) : (
-				<div className="flex flex-col gap-4">
-					{shown.map((review) => (
-						<div key={review.id} className="flex gap-3">
-							{review.avatar ? (
-								<img
-									src={review.avatar}
-									alt={review.handle}
-									className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-								/>
-							) : (
-								<div className="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
-									{review.handle.charAt(0).toUpperCase()}
-								</div>
-							)}
-							<div className="flex-1">
-								<div className="flex items-center gap-2 text-sm flex-wrap">
-									<span className="font-medium">{review.handle}</span>
-									<span
-										className={
-											review.verdict === "recommended"
-												? "text-success text-xs font-medium"
-												: "text-base-content/60 text-xs font-medium"
-										}
-									>
-										{verdictLabel(review.verdict)}
-									</span>
-									<span className="text-base-content/40 text-xs">
-										{new Date(review.createdAt).toLocaleDateString()}
-									</span>
-									{/* The review's own record, open on the network beside the
+						{narrowed ? (
+							<>
+								{agg.count > 0
+									? "No written reviews since this version."
+									: "No reviews since this version."}{" "}
+								{agg.count === 0 && (
+									<button type="button" className="link" onClick={() => setVersionFilter("all")}>
+										Show every version
+									</button>
+								)}
+							</>
+						) : agg.count > 0 ? (
+							<>
+								No written reviews yet.{" "}
+								{hasReview
+									? "Add words to yours above."
+									: isAuthenticated
+										? "Add yours."
+										: "Log in to add yours."}
+							</>
+						) : (
+							<>
+								No reviews yet.{" "}
+								{isAuthenticated ? "Be the first to say something." : "Log in to write one."}
+							</>
+						)}
+					</p>
+				) : otherReviews.length === 0 ? (
+					<p className="text-sm text-base-content/50">No other written reviews yet.</p>
+				) : shown.length === 0 ? (
+					<p className="text-sm text-base-content/50">
+						None of the other written reviews is a{" "}
+						{filter === "recommended" ? "recommendation" : "non-recommendation"}.
+					</p>
+				) : (
+					<div className="flex flex-col gap-4">
+						{shown.map((review) => (
+							<div key={review.id} className="flex gap-3">
+								{review.avatar ? (
+									<img
+										src={review.avatar}
+										alt={review.handle}
+										className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+									/>
+								) : (
+									<div className="w-8 h-8 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
+										{review.handle.charAt(0).toUpperCase()}
+									</div>
+								)}
+								<div className="flex-1">
+									<div className="flex items-center gap-2 text-sm flex-wrap">
+										<span className="font-medium">{review.handle}</span>
+										<span
+											className={
+												review.verdict === "recommended"
+													? "text-success text-xs font-medium"
+													: "text-base-content/60 text-xs font-medium"
+											}
+										>
+											{verdictLabel(review.verdict)}
+										</span>
+										<span className="text-base-content/40 text-xs">
+											{new Date(review.createdAt).toLocaleDateString()}
+										</span>
+										{/* The review's own record, open on the network beside the
 											    Work's reviews (the widening task, 2026-10-10) — the record
 											    is public, and a review carries a link the way the Work it
 											    reviews does. */}
-									{review.recordUrl && (
-										<a
-											href={review.recordUrl}
-											target="_blank"
-											rel="noreferrer"
-											className="link link-hover text-xs text-base-content/40"
-										>
-											View the record
-										</a>
-									)}
-									{/* A review's score is its helpfulness: the same gesture as a
+										{review.recordUrl && (
+											<a
+												href={review.recordUrl}
+												target="_blank"
+												rel="noreferrer"
+												className="link link-hover text-xs text-base-content/40"
+											>
+												View the record
+											</a>
+										)}
+										{/* A review's score is its helpfulness: the same gesture as a
 											    comment's vote, asked of a user's words rather than a
 											    creator's thing. It orders the list and nothing else. */}
-									<VoteControl
-										subjectType="review"
-										subjectId={review.id}
-										score={review.score}
-										userVote={review.userVote}
-										label={`${review.handle}'s review`}
-										disabledReason={
-											isOwnWork ? "You can't vote on reviews of your own Work." : undefined
-										}
-										onChange={({ score, userVote }) =>
-											setAgg((current) =>
-												current
-													? {
-															...current,
-															reviews: current.reviews.map((r) =>
-																r.id === review.id ? { ...r, score, userVote } : r,
-															),
-														}
-													: current,
-											)
-										}
-									/>
-									{/* Reviews are reportable for the same reason comments are. */}
-									{isAuthenticated && review.userId !== user?.id && (
-										<button
-											type="button"
-											className="ml-auto text-base-content/30 hover:text-base-content/70"
-											onClick={() => setReportingReview(review.id)}
-											title="Report this review"
-											aria-label={`Report ${review.handle}'s review`}
-										>
-											<FlagIcon className="w-3.5 h-3.5" />
-										</button>
-									)}
-								</div>
-								{/* Every listed review carries words — the list excludes a verdict
+										<VoteControl
+											subjectType="review"
+											subjectId={review.id}
+											score={review.score}
+											userVote={review.userVote}
+											label={`${review.handle}'s review`}
+											disabledReason={
+												isOwnWork ? "You can't vote on reviews of your own Work." : undefined
+											}
+											onChange={({ score, userVote }) =>
+												setAgg((current) =>
+													current
+														? {
+																...current,
+																reviews: current.reviews.map((r) =>
+																	r.id === review.id ? { ...r, score, userVote } : r,
+																),
+															}
+														: current,
+												)
+											}
+										/>
+										{/* Reviews are reportable for the same reason comments are. */}
+										{isAuthenticated && review.userId !== user?.id && (
+											<button
+												type="button"
+												className="ml-auto text-base-content/30 hover:text-base-content/70"
+												onClick={() => setReportingReview(review.id)}
+												title="Report this review"
+												aria-label={`Report ${review.handle}'s review`}
+											>
+												<FlagIcon className="w-3.5 h-3.5" />
+											</button>
+										)}
+									</div>
+									{/* Every listed review carries words — the list excludes a verdict
 										    left on its own — so the guard is a type narrowing, not a shape. */}
-								{review.body && <ReviewBody body={review.body} />}
+									{review.body && <ReviewBody body={review.body} />}
+								</div>
 							</div>
-						</div>
-					))}
-				</div>
-			)}
+						))}
+					</div>
+				)}
+			</section>
 
 			<ReportDialog
 				subject={

@@ -47,11 +47,27 @@ const REASONS: Record<ReviewRefusalCode, string> = {
 	pre_release: "This Work isn't out yet — you can review it once it's released.",
 	unreleased: "This Work hasn't been released yet.",
 	locked: "Unlock this Work to review it.",
+	// The fallback for a Work that offers neither delivery — a listing rather than a
+	// medium. Digital Works get their own wording from `unconsumedReason`.
 	unconsumed: "Spend some time with this Work before reviewing it.",
 };
 
-function refusal(code: ReviewRefusalCode): ReviewEligibility {
-	return { canReview: false, code, reason: REASONS[code] };
+/**
+ * What would open the composer, said in the reader's own terms.
+ *
+ * ⭐ **The refusal names the evidence the reader can actually produce.** A streamable Work
+ * is experienced in place, so watching or listening is the thing to do; a downloadable-only
+ * Work is taken as a file, so its refusal speaks about downloading rather than about time
+ * on a page the reader may only ever have seen as a storefront.
+ */
+function unconsumedReason(work: WorkRow): string {
+	if (work.streamEnabled) return "You can review this Work once you've experienced some of it.";
+	if (work.downloadEnabled) return "You can review this Work once you've downloaded it.";
+	return REASONS.unconsumed;
+}
+
+function refusal(code: ReviewRefusalCode, reason = REASONS[code]): ReviewEligibility {
+	return { canReview: false, code, reason };
 }
 
 /**
@@ -95,6 +111,6 @@ export async function reviewEligibilityFor(
 	// still private. This is why a scheduled Work's reviews stay closed until its release.
 	if (work.releasedAt == null) return refusal("unreleased");
 	if (!access.canAccess) return refusal("locked");
-	if (!(await hasConsumed(userId, work.id))) return refusal("unconsumed");
+	if (!(await hasConsumed(userId, work.id))) return refusal("unconsumed", unconsumedReason(work));
 	return { canReview: true, code: null, reason: null };
 }
