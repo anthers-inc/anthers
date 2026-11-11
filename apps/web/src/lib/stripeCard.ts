@@ -29,3 +29,22 @@ export function cardElementStyle() {
 		},
 	};
 }
+
+/**
+ * Appearance for the Payment and Address Elements, with the same theme-resolved colors the
+ * card field uses. Stripe's Appearance API has the same restriction the `style` object has —
+ * `oklch()` and CSS variables are rejected — so the values are rasterised to `rgb()` here
+ * rather than passed through.
+ */
+export function stripeAppearance() {
+	return {
+		theme: "flat" as const,
+		variables: {
+			colorPrimary: toRgb("oklch(var(--p))"),
+			colorText: toRgb("oklch(var(--bc))"),
+			colorBackground: toRgb("oklch(var(--b1))"),
+			colorDanger: toRgb("oklch(var(--er))"),
+			borderRadius: "0.5rem",
+		},
+	};
+}

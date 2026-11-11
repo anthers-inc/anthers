@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Client paths the server hands to a third party, in the one place both sides can see them.
+ * Client paths handed to a third party, in the one place both sides can see them. Mostly the
+ * server hands these to Stripe; a SetupIntent confirmed in the browser is handed one by the
+ * client, and it is recorded here for the same reason.
  *
  * 🚨 **A redirect URL is the one kind of route reference nothing in this repository could
  * check.** The server never navigates to it — it composes a string, gives it to Stripe, and
@@ -59,6 +61,15 @@ export const STRIPE_RETURN_PATHS = {
 	 * what a returning buyer is there to see.
 	 */
 	checkoutReturn: "/library?stripe=return",
+	/**
+	 * Somebody returning from a card setup in Account settings.
+	 *
+	 * Cards confirm in place, so this is only navigated by a redirect-based payment method —
+	 * which the account's card-only configuration does not offer — but `confirmSetup`
+	 * requires the URL regardless. The Account tab is where the saved payment method lives,
+	 * and `?tab=account` is what selects it.
+	 */
+	paymentInfoReturn: "/settings?tab=account",
 } as const;
 
 export type StripeReturnPath = keyof typeof STRIPE_RETURN_PATHS;
