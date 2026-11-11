@@ -42,7 +42,6 @@ import {
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { AnthersBadgeMark } from "@anthers/web-shared/economics";
 import { CreatorBadgeMark } from "@anthers/web-shared/economics/CreatorBadgeMark";
-import { EarningsBasis } from "@anthers/web-shared/economics/EarningsBasis";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
@@ -55,12 +54,12 @@ import type {
 	BadgeView,
 	CreatorBadge,
 	CreatorBadgeListResponse,
-	CreatorEarnings,
 	PoolDistribution,
 } from "@anthers/web-shared/types";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAnthersLadder } from "../../lib/anthers-ladder";
+import { cycleTableTotals } from "../../lib/badge-cycle-table";
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                 */
@@ -160,8 +159,13 @@ interface CreatorRow {
 	committedBadge: number;
 	/** The rung held or picked, including local pending edits. */
 	pendingBadge: CreatorBadge | null;
-	/** The creator's ladder, for the rung chips and the held emblem's fallback. */
+	/** The creator's ladder, for the held emblem's shape position. */
 	rungs: CreatorBadge[];
+	/**
+	 * What this Badge will charge on the next renewal, when the server projected a future
+	 * cycle. Null on a cycle whose rows come from the accounting record.
+	 */
+	projectedCharge: number | null;
 }
 
 function initials(row: CreatorRow): string {
@@ -171,6 +175,19 @@ function initials(row: CreatorRow): string {
 		.join("")
 		.slice(0, 2)
 		.toUpperCase();
+}
+
+/**
+ * The Badge dollars a row shows.
+ *
+ * A closed or running cycle reads the accounting record: the settled amount, or the held
+ * rung where the record has none yet. A future cycle has no record, so it reads the
+ * server's projection — the charge the next renewal will carry, which for a Badge started
+ * mid-month is the threshold less the days before it began.
+ */
+function badgeAmountFor(row: CreatorRow, mode: ViewMode): number {
+	if (mode === "next" && row.projectedCharge != null) return row.projectedCharge;
+	return row.settledBadge || row.committedBadge;
 }
 
 /* ------------------------------------------------------------------ */
@@ -185,11 +202,10 @@ export default function BadgesSection() {
 	// a Badge to Anthers funds. The constants stand in until the fetch lands.
 	const { rungs: anthersRungs, publicAccessPrice } = useAnthersLadder();
 
-	// Account + Badge + earnings
+	// Account + Badge
 	const [account, setAccount] = useState<Account | null>(null);
 	const [badge, setBadge] = useState<Badge>("free");
 	const [badgeView, setBadgeView] = useState<BadgeView | null>(null);
-	const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
 
 	// Per-cycle data
 	const [attention, setAttention] = useState<AttentionSummary | null>(null);
@@ -221,13 +237,6 @@ export default function BadgesSection() {
 		} finally {
 			setLoading(false);
 		}
-
-		// Earnings (non-blocking — only meaningful for creators)
-		client.api.subscriptions.earnings
-			.$get()
-			.then((res) => res.json())
-			.then((data) => setEarnings(data as CreatorEarnings))
-			.catch(() => {});
 	}, []);
 
 	const fetchCycleData = useCallback(async (cycle: string) => {
@@ -298,6 +307,7 @@ export default function BadgesSection() {
 				committedBadge: 0,
 				pendingBadge: null,
 				rungs: [],
+				projectedCharge: null,
 			});
 		}
 		// A holding's dollars are its Badge's threshold by construction, so the holding
@@ -306,7 +316,7 @@ export default function BadgesSection() {
 		// holding may arrive without the other, and both name the same creator.
 		for (const h of holdings?.badges ?? []) {
 			const existing = [...map.values()].find((row) => row.handle === h.creator.handle);
-			const committed = Math.round(Number(h.threshold));
+			const committed = Number(h.threshold);
 			const heldRung: CreatorBadge = {
 				id: h.id,
 				creatorId: existing?.creatorId ?? 0,
@@ -325,6 +335,7 @@ export default function BadgesSection() {
 			if (existing) {
 				existing.committedBadge = committed;
 				existing.pendingBadge = heldRung;
+				existing.projectedCharge = h.projectedCharge != null ? Number(h.projectedCharge) : null;
 			} else {
 				map.set(-h.id, {
 					mapKey: -h.id,
@@ -338,6 +349,7 @@ export default function BadgesSection() {
 					committedBadge: committed,
 					pendingBadge: heldRung,
 					rungs: [],
+					projectedCharge: h.projectedCharge != null ? Number(h.projectedCharge) : null,
 				});
 			}
 		}
@@ -346,12 +358,23 @@ export default function BadgesSection() {
 			row.rungs = rungs;
 		}
 		return Array.from(map.values()).sort(
-			(a, b) => b.poolAmount + b.committedBadge - (a.poolAmount + a.committedBadge),
+			(a, b) =>
+				b.poolAmount + badgeAmountFor(b, viewMode) - (a.poolAmount + badgeAmountFor(a, viewMode)),
 		);
-	}, [distributions, holdings, laddersMap]);
+	}, [distributions, holdings, laddersMap, viewMode]);
 
-	const totalPool = rows.reduce((s, r) => s + r.poolAmount, 0);
-	const totalTime = rows.reduce((s, r) => s + r.timeSeconds, 0);
+	const {
+		timeSeconds: totalTime,
+		poolAmount: totalPool,
+		badgeAmount: totalBadge,
+		grandTotal,
+	} = cycleTableTotals(
+		rows.map((row) => ({
+			timeSeconds: row.timeSeconds,
+			poolAmount: row.poolAmount,
+			badgeAmount: badgeAmountFor(row, viewMode),
+		})),
+	);
 
 	const isPaid = badge !== "free";
 	const isCanceling = account ? !!account.canceledAt : false;
@@ -619,11 +642,11 @@ export default function BadgesSection() {
 					</div>
 				</div>
 				{/* Fixed-height so switching months changes the text without shifting the layout. */}
-				<p className="text-xs text-base-content/50 min-h-[1rem]">
+				<p className="text-xs text-base-content/50 min-h-[1rem] mb-1">
 					{viewMode === "past"
 						? "Read-only view of a closed cycle."
 						: viewMode === "next"
-							? "Preview — you can direct next month's support now."
+							? "Preview — next month's Badge charges, including any reduction for days before a Badge started."
 							: ""}
 				</p>
 				{attention && (
@@ -636,13 +659,17 @@ export default function BadgesSection() {
 					<div>
 						<div className="flex items-center gap-3 text-[10px] text-base-content/40 uppercase tracking-wider px-1 pb-1 border-b border-base-content/10">
 							<div className="w-7" />
-							<span className="flex-1">Creator</span>
-							<span className="text-right hidden sm:block">Time</span>
+							<span className="flex-1 min-w-0">Creator</span>
+							<span className="text-right hidden sm:block w-20">Time</span>
 							<span className="w-16 text-right">Time Pool</span>
 							<span className="w-16 text-right">Badge</span>
+							<span className="w-16 text-right">Total</span>
 						</div>
 						{rows.map((row) => {
 							const pct = totalTime > 0 ? Math.round((row.timeSeconds / totalTime) * 100) : 0;
+							const badgeAmount = badgeAmountFor(row, viewMode);
+							const showsProjection = viewMode === "next" && row.projectedCharge != null;
+							const reduction = showsProjection ? Math.max(0, row.committedBadge - badgeAmount) : 0;
 							return (
 								<div key={row.mapKey} className="flex items-center gap-3 text-sm px-1 py-1.5">
 									<div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 bg-base-300 overflow-hidden">
@@ -661,7 +688,7 @@ export default function BadgesSection() {
 									{/* Two ways money reaches a creator: the Time Pool, by your time —
 									    video, audio, reading, and gameplay all count equally — and the
 									    Badge you hold from them. */}
-									<span className="text-base-content/40 text-xs tabular-nums text-right hidden sm:block">
+									<span className="text-base-content/40 text-xs tabular-nums text-right hidden sm:block w-20">
 										{row.timeSeconds > 0 ? (
 											<>
 												{formatHours(row.timeSeconds)}
@@ -675,82 +702,58 @@ export default function BadgesSection() {
 										{fmt(row.poolAmount)}
 									</span>
 									<span
-										className={`tabular-nums w-16 text-right ${row.settledBadge || row.committedBadge ? "" : "text-base-content/25"}`}
+										className={`tabular-nums w-16 text-right ${badgeAmount ? "" : "text-base-content/25"}`}
+										title={
+											reduction > 0 && badgeAmount > 0
+												? `${fmt(row.committedBadge)} Badge, less ${fmt(reduction)} for days before it started`
+												: undefined
+										}
 									>
-										{row.settledBadge || row.committedBadge
-											? fmt(row.settledBadge || row.committedBadge)
-											: "—"}
+										{badgeAmount ? fmt(badgeAmount) : "—"}
+									</span>
+									<span
+										className={`tabular-nums w-16 text-right font-medium ${row.poolAmount + badgeAmount > 0 ? "" : "text-base-content/25"}`}
+									>
+										{row.poolAmount + badgeAmount > 0 ? fmt(row.poolAmount + badgeAmount) : "—"}
 									</span>
 								</div>
 							);
 						})}
-						<div className="flex items-center justify-between text-sm border-t border-base-content/10 mt-2 pt-2">
-							<span className="text-base-content/60">Time Pool total</span>
-							<strong className="text-success tabular-nums">{fmt(totalPool)}</strong>
+						<div className="flex items-center gap-3 text-sm border-t border-base-content/10 mt-2 pt-2 px-1">
+							<div className="w-7" />
+							<span className="flex-1 text-base-content/60 font-medium">Totals</span>
+							<span className="w-20 text-right hidden sm:block text-xs text-base-content/40 tabular-nums">
+								{totalTime > 0 ? formatHours(totalTime) : "—"}
+							</span>
+							<strong className="w-16 text-right text-success tabular-nums">
+								{fmt(totalPool)}
+							</strong>
+							<strong className="w-16 text-right tabular-nums">{fmt(totalBadge)}</strong>
+							<strong className="w-16 text-right tabular-nums">{fmt(grandTotal)}</strong>
 						</div>
 					</div>
 				) : (
 					<div className="py-4 text-center text-sm text-base-content/40">
-						<p>No time with creators yet this cycle.</p>
-						<p className="mt-1">
-							Your Time Pool is distributed by time — video, audio, text, and gameplay all count
-							equally.
-						</p>
+						{viewMode === "next" ? (
+							<>
+								<p>Nothing is directed at creators next month.</p>
+								<p className="mt-1">
+									A Badge you hold continues on the 1st unless you cancel it, and a new one is
+									picked on the creator's own page.
+								</p>
+							</>
+						) : (
+							<>
+								<p>No time with creators yet this cycle.</p>
+								<p className="mt-1">
+									Your Time Pool is distributed by time — video, audio, text, and gameplay all count
+									equally.
+								</p>
+							</>
+						)}
 					</div>
 				)}
 			</div>
-
-			{/* ── Creator earnings ── */}
-			{earnings && parseFloat(earnings.total) > 0 && (
-				<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
-					<div className="divider text-sm text-base-content/50 mt-0 mb-3">
-						Your Creator Earnings
-					</div>
-					<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-						<div>
-							<div className="text-xs text-base-content/50 uppercase">Pool income</div>
-							<div className="text-xl font-bold text-success">{fmt(earnings.poolTotal)}</div>
-						</div>
-						<div>
-							<div className="text-xs text-base-content/50 uppercase">Badge income</div>
-							<div className="text-xl font-bold text-success">{fmt(earnings.badgeTotal)}</div>
-						</div>
-						<div>
-							<div className="text-xs text-base-content/50 uppercase">Total</div>
-							<div className="text-xl font-bold">{fmt(earnings.total)}</div>
-						</div>
-						<div>
-							<div className="text-xs text-base-content/50 uppercase">Supporters</div>
-							<div className="text-xl font-bold">{earnings.subscriberCount}</div>
-						</div>
-					</div>
-					{/* The transfer split — settled money still waiting out its hold, beside
-							what has already moved into the connected account. */}
-					<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-						<div>
-							<div className="text-xs text-base-content/50 uppercase">Held</div>
-							<div className="text-xl font-bold">{fmt(earnings.heldTotal)}</div>
-						</div>
-						<div>
-							<div className="text-xs text-base-content/50 uppercase">Transferred</div>
-							<div className="text-xl font-bold">{fmt(earnings.transferredTotal)}</div>
-						</div>
-						<div>
-							<div className="text-xs text-base-content/50 uppercase">Recovered</div>
-							<div className="text-xl font-bold">{fmt(earnings.nettedTotal)}</div>
-						</div>
-						<div>
-							<div className="text-xs text-base-content/50 uppercase">Still Recovering</div>
-							<div className="text-xl font-bold">{fmt(earnings.nettingOpenTotal)}</div>
-						</div>
-					</div>
-					{earnings.cycle && (
-						<p className="text-xs text-base-content/50 mt-2">
-							<EarningsBasis earnings={earnings} />
-						</p>
-					)}
-				</div>
-			)}
 		</section>
 	);
 }
@@ -761,9 +764,11 @@ export default function BadgesSection() {
 
 /**
  * A creator the person backs, as a Badge they hold: their patch — the emblem IS the
- * Badge they hold — beside the rung's label and price, the rest of the ladder beneath as
- * the rungs a raised amount would hold. Buying and changing a Badge happens on the
- * creator's own page; this card links there and picks nothing.
+ * Badge they hold — beside the rung's label and price. **The card shows the Badge held
+ * and nothing else**; the creator's whole ladder used to repeat beneath it as chips for
+ * every rung, which turned one held Badge into a menu of alternatives the card cannot
+ * act on. Buying and changing a Badge happens on the creator's own page, and this card
+ * links there and picks nothing.
  */
 function CreatorBadgeCard({ row }: { row: CreatorRow }) {
 	const held = row.pendingBadge;
@@ -815,22 +820,6 @@ function CreatorBadgeCard({ row }: { row: CreatorRow }) {
 					)}
 				</div>
 			</div>
-			{row.rungs.length > 0 && (
-				<div className="flex flex-wrap gap-1">
-					{row.rungs.map((rung) => {
-						const isHeld = held?.id === rung.id;
-						return (
-							<span
-								key={rung.id}
-								className={`badge badge-xs ${isHeld ? "badge-success" : "badge-ghost"}`}
-								title={rung.description ?? undefined}
-							>
-								{isHeld ? "✓" : "○"} {rung.label} (${rung.threshold})
-							</span>
-						);
-					})}
-				</div>
-			)}
 		</div>
 	);
 }

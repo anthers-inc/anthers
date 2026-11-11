@@ -1437,6 +1437,12 @@ export interface BadgeHolding {
 	updatedAt: string;
 	billingCycle: string;
 	createdAt: string;
+	/**
+	 * Present only on a future cycle's projection: the dollars this Badge will add to the
+	 * next renewal, after the day-exact reduction for a line that began mid-month. The
+	 * holding's own `threshold` stays the rung's price.
+	 */
+	projectedCharge?: string;
 	creator: {
 		handle: string;
 		displayName: string | null;

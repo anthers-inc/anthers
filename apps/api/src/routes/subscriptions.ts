@@ -108,6 +108,7 @@ import {
 import { anthersUserId, loadAnthersLadder } from "../services/anthers-badges.js";
 import { creditedSeconds, creditedSecondsByDayAndCreator } from "../services/attention-ranges.js";
 import { composeBadgeArt, recomposeBadgeArt } from "../services/badge-art-compose.js";
+import { projectedBadgeHoldings } from "../services/badge-projection.js";
 import {
 	ensureAnthersProduct,
 	ensureCreatorProduct,
@@ -1771,6 +1772,15 @@ const subscriptionRoutes = new Hono()
 	.get("/my-badges", requireAuth, async (c) => {
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? currentCycleKey();
+
+		// A future cycle has no holdings yet — they are written when the month turns. What
+		// it does have is the standing commitment, which is the subscription's own items
+		// less whatever this cycle's renewal has been discounted; `projectedBadgeHoldings`
+		// carries that read and its reasoning. A cycle further out than next month answers
+		// empty rather than pretending a commitment survives changes that have not happened.
+		if (cycle > currentCycleKey()) {
+			return c.json({ badges: await projectedBadgeHoldings(user.id, cycle) });
+		}
 
 		const result = await db
 			.select({

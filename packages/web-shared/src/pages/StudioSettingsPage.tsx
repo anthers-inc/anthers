@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Studio Settings — the creator-operational settings that live on the Studio side of
- * the boundary: the Communications table for creator emails and the account's AT
- * Protocol connection. Account settings (profile, password, email, identity, the
- * become-a-creator toggle) stay on anthers.org/settings, and the Badge Maker is on the
- * creator's own profile, in the Badges tab beside the ladder it edits.
+ * the boundary: what the creator has earned, the Communications table for creator
+ * emails, and the account's AT Protocol connection. Account settings (profile, password,
+ * email, identity, the become-a-creator toggle) stay on anthers.org/settings, and the
+ * Badge Maker is on the creator's own profile, in the Badges tab beside the ladder it
+ * edits.
  *
  * ⭐ **The signed-in account card at the top is the one account control this page does
  * carry**, because ending the session belongs wherever a person is working: it is the
@@ -26,9 +27,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import DiscordCard from "../components/account/DiscordCard";
 import SignedInAccountCard from "../components/account/SignedInAccountCard";
+import { EarningsBasis } from "../components/economics/EarningsBasis";
 import { useAuth } from "../lib/auth";
 import type { PublishingState } from "../lib/publishing";
-import { apiFetch } from "../lib/rpc";
+import { apiFetch, client } from "../lib/rpc";
+import type { CreatorEarnings } from "../lib/types";
 
 /** The order and copy of the Studio's Communications table. */
 const CREATOR_EMAIL_COPY: Record<CreatorEmailKind, { label: string; hint: string }> = {
@@ -382,18 +385,103 @@ function AtmospherePublishingSection() {
 	);
 }
 
+function money(amount: string | number): string {
+	return `$${Number(amount).toFixed(2)}`;
+}
+
+/**
+ * What the creator earned this cycle, and where the money stands.
+ *
+ * ⚠️ **This card used to sit on the supporter's Badges tab**, where it answered a
+ * question that page's reader was not asking: the account holder's takings as a creator,
+ * beside the money they give. Creator Settings is the surface for a person acting as a
+ * creator, so it lives here now.
+ */
+function EarningsSection() {
+	const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
+
+	useEffect(() => {
+		let live = true;
+		client.api.subscriptions.earnings
+			.$get()
+			.then(async (res) => (res.ok ? ((await res.json()) as CreatorEarnings) : null))
+			.then((data) => {
+				if (live) setEarnings(data);
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, []);
+
+	if (!earnings || Number(earnings.total) <= 0) return null;
+
+	return (
+		<div className="card bg-base-200">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Your Creator Earnings</h3>
+				<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Pool income</div>
+						<div className="text-xl font-bold text-success">{money(earnings.poolTotal)}</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Badge income</div>
+						<div className="text-xl font-bold text-success">{money(earnings.badgeTotal)}</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Total</div>
+						<div className="text-xl font-bold">{money(earnings.total)}</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Supporters</div>
+						<div className="text-xl font-bold">{earnings.subscriberCount}</div>
+					</div>
+				</div>
+				{/* The transfer split — settled money still waiting out its hold, beside
+						what has already moved into the connected account. */}
+				<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Held</div>
+						<div className="text-xl font-bold">{money(earnings.heldTotal)}</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Transferred</div>
+						<div className="text-xl font-bold">{money(earnings.transferredTotal)}</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Recovered</div>
+						<div className="text-xl font-bold">{money(earnings.nettedTotal)}</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50 uppercase">Still Recovering</div>
+						<div className="text-xl font-bold">{money(earnings.nettingOpenTotal)}</div>
+					</div>
+				</div>
+				{earnings.cycle && (
+					<p className="text-xs text-base-content/50 mt-2">
+						<EarningsBasis earnings={earnings} />
+					</p>
+				)}
+			</div>
+		</div>
+	);
+}
+
 export default function StudioSettingsPage() {
 	return (
 		<div className="max-w-2xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">Creator Settings</h1>
 			<p className="text-sm text-base-content/50 mb-6">
-				Communications and your ATProto connection. Account settings (profile, email, identity) live
-				on your Anthers account, and your Badges live on your profile.
+				What you earn as a creator, what Anthers emails you about, and your ATProto connection.
+				Account settings (profile, email, identity) live on your Anthers account, and the Badge
+				ladder is on your profile.
 			</p>
 
 			<div className="flex flex-col gap-6">
 				<SignedInAccountCard />
 				<DiscordCard surface="creator" />
+				<EarningsSection />
 				<CommunicationsSection />
 				<AtmospherePublishingSection />
 			</div>
