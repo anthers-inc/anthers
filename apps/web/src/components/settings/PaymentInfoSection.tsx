@@ -9,23 +9,37 @@
  * with a chip and the card can be replaced, but not removed: the renewal must always have
  * a card, and the account does not keep a second one beside it.
  *
- * 🚨 **The card is saved with a SetupIntent, so nothing is charged.** The same check the
- * Adult rung reads is the card's funding type; the address is stored on the Customer for
- * checkout prefill and tax. Replacing the card moves the subscription to the new one before
- * the old card is detached.
+ * ⭐ **Both halves are Stripe's own Elements** (Parker, 2026-11-11). The card and the
+ * address are collected by one Elements group — an `AddressElement` in billing mode,
+ * restricted to the US, beside a `PaymentElement` that asks for no billing details of its
+ * own — so the ZIP is typed once. The address attaches to the SetupIntent at confirmation
+ * and `finalizePaymentInfo` reads it off the confirmed payment method, which is what makes
+ * the saved object one thing rather than an address that can disagree with the card.
+ *
+ * 🚨 **The address is Stripe's, and so is the record.** The saved address is the Customer's
+ * `address`/`name`; checkout prefills from it and writes the address it collected back to
+ * it (`customer_update.address: "auto"` in `routes/payments.ts`). Nothing here stores an
+ * address in Anthers' database.
+ *
+ * 🚨 **Cards only, and nothing is charged.** The SetupIntent saves the card so the Adult
+ * rung can read its funding type; replacing the card moves the subscription to the new one
+ * before the old card is detached.
  */
+import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import type { SavedBillingAddress } from "@anthers/web-shared/types";
-import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
-import { useCallback, useEffect, useState } from "react";
+import {
+	AddressElement,
+	Elements,
+	PaymentElement,
+	useElements,
+	useStripe,
+} from "@stripe/react-stripe-js";
+import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getStripe } from "../../lib/stripe";
-import { cardElementStyle } from "../../lib/stripeCard";
-import UsBillingAddressForm, {
-	EMPTY_ADDRESS,
-	formatAddress,
-	isAddressComplete,
-	type UsAddressInput,
-} from "../payments/UsBillingAddressForm";
+import { stripeAppearance } from "../../lib/stripeCard";
+import { formatAddress } from "../payments/UsBillingAddressForm";
 
 interface SavedCard {
 	id: string;
@@ -40,17 +54,52 @@ interface PaymentInfo {
 	subscriptionAttached: boolean;
 }
 
-function addressDraft(address: SavedBillingAddress | null): UsAddressInput {
-	return address
-		? {
-				name: address.name,
-				line1: address.line1,
-				line2: address.line2 ?? "",
-				city: address.city,
-				state: address.state,
-				postalCode: address.postalCode,
-			}
-		: EMPTY_ADDRESS;
+/** The Address Element's `value`, as its own change event carries it. */
+type AddressValue = StripeAddressElementChangeEvent["value"];
+
+/**
+ * The saved address as the Address Element's mount-time defaults.
+ *
+ * The element has no imperative prefill — `defaultValues` is applied when it mounts — so the
+ * card and address forms are remounted from the saved address each time they open.
+ */
+function addressDefaults(address: SavedBillingAddress | null) {
+	if (!address) return undefined;
+	return {
+		name: address.name,
+		address: {
+			line1: address.line1,
+			line2: address.line2 ?? "",
+			city: address.city,
+			state: address.state,
+			postal_code: address.postalCode,
+			country: "US",
+		},
+	};
+}
+
+/** The element's value in the shape the billing-address route accepts. */
+function savedFromValue(value: AddressValue): SavedBillingAddress {
+	return {
+		name: value.name.trim(),
+		line1: value.address.line1.trim(),
+		line2: value.address.line2?.trim() ? value.address.line2.trim() : null,
+		city: value.address.city.trim(),
+		state: value.address.state.trim(),
+		postalCode: value.address.postal_code.trim(),
+	};
+}
+
+/** The saved address, as one line for the idle card. */
+function displayAddress(address: SavedBillingAddress): string {
+	return formatAddress({
+		name: address.name,
+		line1: address.line1,
+		line2: address.line2 ?? "",
+		city: address.city,
+		state: address.state,
+		postalCode: address.postalCode,
+	});
 }
 
 /** Tell the Adult control on the Content tab that the proof it reads has changed. */
@@ -59,22 +108,39 @@ function announcePaymentInfoChanged() {
 }
 
 /**
+ * The billing address, shared by both forms.
+ *
+ * This is the advanced Address Element, whose billing mode supports `allowedCountries` —
+ * the Checkout-flavored `BillingAddressElement` does not, which is why checkout keeps
+ * Anthers' own US-only form (`UsBillingAddressForm`). The phone field is hidden because
+ * nothing here reads one.
+ */
+function BillingAddress({ saved }: { saved: SavedBillingAddress | null }) {
+	return (
+		<AddressElement
+			options={{
+				mode: "billing",
+				allowedCountries: ["US"],
+				fields: { phone: "never" },
+				defaultValues: addressDefaults(saved),
+			}}
+		/>
+	);
+}
+
+/**
  * The card + address form, inside the SetupIntent's `Elements`.
  *
- * The address is saved on the Customer first; the card confirmation carries the same
- * billing details, and the finalize call makes the card the default, moves a subscription
- * onto it, and drops the old cards.
+ * The address is not posted separately: it rides the SetupIntent at confirmation, and the
+ * finalize call reads it off the payment method, makes the card the default, moves a
+ * subscription onto it, and drops the old cards.
  */
 function CardSetupForm({
-	clientSecret,
-	draft,
-	onDraft,
+	savedAddress,
 	onSaved,
 	onCancel,
 }: {
-	clientSecret: string;
-	draft: UsAddressInput;
-	onDraft: (next: UsAddressInput) => void;
+	savedAddress: SavedBillingAddress | null;
 	onSaved: (info: PaymentInfo) => void;
 	onCancel: () => void;
 }) {
@@ -84,47 +150,30 @@ function CardSetupForm({
 	const [error, setError] = useState<string | null>(null);
 
 	const save = async () => {
-		if (!stripe || !elements || !isAddressComplete(draft) || busy) return;
-		const card = elements.getElement(CardElement);
-		if (!card) {
-			setError("The card field isn't ready. Please try again.");
-			return;
-		}
+		if (!stripe || !elements || busy) return;
 		setBusy(true);
 		setError(null);
 		try {
-			const addressRes = await apiFetch("/api/accounts/me/billing-address", {
-				method: "PUT",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					name: draft.name.trim(),
-					line1: draft.line1.trim(),
-					line2: draft.line2.trim() ? draft.line2.trim() : null,
-					city: draft.city.trim(),
-					state: draft.state,
-					postalCode: draft.postalCode.trim(),
-				}),
-			});
-			if (!addressRes.ok) {
-				const body = (await addressRes.json().catch(() => null)) as { error?: string } | null;
-				throw new Error(body?.error ?? "That address didn't work. Please check it and retry.");
+			const address = await elements.getElement(AddressElement)?.getValue();
+			if (!address?.complete) {
+				setError("Enter your billing address — it is what the saved card is filed under.");
+				return;
 			}
-
-			const { error: stripeError, setupIntent } = await stripe.confirmCardSetup(clientSecret, {
-				payment_method: {
-					card,
-					billing_details: {
-						name: draft.name.trim(),
-						address: {
-							line1: draft.line1.trim(),
-							...(draft.line2.trim() ? { line2: draft.line2.trim() } : {}),
-							city: draft.city.trim(),
-							state: draft.state,
-							postal_code: draft.postalCode.trim(),
-							country: "US",
-						},
-					},
+			// Stripe's own validation for the card half; the address was checked above.
+			const submitted = await elements.submit();
+			if (submitted.error) {
+				setError(submitted.error.message ?? "Check the card details and try again.");
+				return;
+			}
+			const { error: stripeError, setupIntent } = await stripe.confirmSetup({
+				elements,
+				confirmParams: {
+					return_url: `${window.location.origin}${STRIPE_RETURN_PATHS.paymentInfoReturn}`,
 				},
+				// Cards confirm in place; the return URL is only ever navigated by a
+				// redirect-based method, which this account's card-only configuration
+				// does not offer.
+				redirect: "if_required",
 			});
 			// Stripe's own message says which thing about the card was wrong.
 			if (stripeError) {
@@ -155,9 +204,9 @@ function CardSetupForm({
 
 	return (
 		<div className="flex flex-col gap-3">
-			<UsBillingAddressForm value={draft} onChange={onDraft} />
-			<div className="rounded-box border border-base-300 bg-base-100 px-3 py-2">
-				<CardElement options={{ style: cardElementStyle() }} />
+			<BillingAddress saved={savedAddress} />
+			<div className="rounded-box border border-base-300 bg-base-100 px-3 py-3">
+				<PaymentElement options={{ fields: { billingDetails: "never" } }} />
 			</div>
 			<p className="text-xs text-base-content/50">
 				Nothing is charged. The card is stored at Stripe with the address, and replacing it later
@@ -168,7 +217,7 @@ function CardSetupForm({
 				<button
 					type="button"
 					className="btn btn-primary btn-sm"
-					disabled={busy || !stripe || !isAddressComplete(draft)}
+					disabled={busy || !stripe || !elements}
 					onClick={() => void save()}
 				>
 					{busy ? "Saving…" : "Save payment info"}
@@ -183,35 +232,32 @@ function CardSetupForm({
 
 /** The address alone, for editing the prefill without touching the card. */
 function AddressForm({
-	draft,
-	onDraft,
+	savedAddress,
 	onSaved,
 	onCancel,
 }: {
-	draft: UsAddressInput;
-	onDraft: (next: UsAddressInput) => void;
+	savedAddress: SavedBillingAddress | null;
 	onSaved: (address: SavedBillingAddress) => void;
 	onCancel: () => void;
 }) {
+	const elements = useElements();
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	const save = async () => {
-		if (!isAddressComplete(draft) || busy) return;
+		if (!elements || busy) return;
 		setBusy(true);
 		setError(null);
 		try {
+			const address = await elements.getElement(AddressElement)?.getValue();
+			if (!address?.complete) {
+				setError("Enter the full address before saving.");
+				return;
+			}
 			const res = await apiFetch("/api/accounts/me/billing-address", {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					name: draft.name.trim(),
-					line1: draft.line1.trim(),
-					line2: draft.line2.trim() ? draft.line2.trim() : null,
-					city: draft.city.trim(),
-					state: draft.state,
-					postalCode: draft.postalCode.trim(),
-				}),
+				body: JSON.stringify(savedFromValue(address.value)),
 			});
 			if (!res.ok) {
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -227,13 +273,13 @@ function AddressForm({
 
 	return (
 		<div className="flex flex-col gap-3">
-			<UsBillingAddressForm value={draft} onChange={onDraft} />
+			<BillingAddress saved={savedAddress} />
 			{error && <p className="text-sm text-error">{error}</p>}
 			<div className="flex gap-2">
 				<button
 					type="button"
 					className="btn btn-primary btn-sm"
-					disabled={busy || !isAddressComplete(draft)}
+					disabled={busy || !elements}
 					onClick={() => void save()}
 				>
 					{busy ? "Saving…" : "Save address"}
@@ -250,11 +296,11 @@ export default function PaymentInfoSection() {
 	const [info, setInfo] = useState<PaymentInfo | null>(null);
 	const [loaded, setLoaded] = useState(false);
 	const [mode, setMode] = useState<"idle" | "card" | "address">("idle");
-	const [draft, setDraft] = useState<UsAddressInput>(EMPTY_ADDRESS);
 	const [setupSecret, setSetupSecret] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [savedJustNow, setSavedJustNow] = useState(false);
+	const appearance = useMemo(stripeAppearance, []);
 
 	const load = useCallback(async () => {
 		try {
@@ -270,7 +316,6 @@ export default function PaymentInfoSection() {
 	}, [load]);
 
 	const startCard = async () => {
-		setDraft(addressDraft(info?.address ?? null));
 		setError(null);
 		setSavedJustNow(false);
 		setBusy(true);
@@ -288,7 +333,6 @@ export default function PaymentInfoSection() {
 	};
 
 	const startAddress = () => {
-		setDraft(addressDraft(info?.address ?? null));
 		setError(null);
 		setSavedJustNow(false);
 		setMode("address");
@@ -344,7 +388,8 @@ export default function PaymentInfoSection() {
 				<h3 className="card-title text-lg">Save payment info</h3>
 				<p className="text-sm text-base-content/60">
 					Save a card and billing address for faster checkout. Both are stored at Stripe, with your
-					payment records rather than on Anthers' servers, and checkout only ever reads them.
+					payment records rather than on Anthers' servers; checkout prefills from them, and the
+					address you enter there updates the saved one.
 				</p>
 				{savedJustNow && (
 					<p className="text-success text-sm" data-testid="payment-info-saved">
@@ -354,11 +399,9 @@ export default function PaymentInfoSection() {
 				{error && <p className="text-error text-sm">{error}</p>}
 
 				{mode === "card" && setupSecret ? (
-					<Elements stripe={getStripe()} options={{ clientSecret: setupSecret }}>
+					<Elements stripe={getStripe()} options={{ clientSecret: setupSecret, appearance }}>
 						<CardSetupForm
-							clientSecret={setupSecret}
-							draft={draft}
-							onDraft={setDraft}
+							savedAddress={info?.address ?? null}
 							onSaved={onCardSaved}
 							onCancel={() => {
 								setMode("idle");
@@ -368,15 +411,16 @@ export default function PaymentInfoSection() {
 						/>
 					</Elements>
 				) : mode === "address" ? (
-					<AddressForm
-						draft={draft}
-						onDraft={setDraft}
-						onSaved={onAddressSaved}
-						onCancel={() => {
-							setMode("idle");
-							setError(null);
-						}}
-					/>
+					<Elements stripe={getStripe()} options={{ appearance }}>
+						<AddressForm
+							savedAddress={info?.address ?? null}
+							onSaved={onAddressSaved}
+							onCancel={() => {
+								setMode("idle");
+								setError(null);
+							}}
+						/>
+					</Elements>
 				) : hasCard || hasAddress ? (
 					<div className="flex flex-col gap-3">
 						{hasCard && info?.card && (
@@ -395,8 +439,8 @@ export default function PaymentInfoSection() {
 							</div>
 						)}
 						{info?.address && (
-							<p className="whitespace-pre-line text-sm" data-testid="payment-info-address">
-								{formatAddress(addressDraft(info.address))}
+							<p className="text-sm" data-testid="payment-info-address">
+								{displayAddress(info.address)}
 							</p>
 						)}
 						<div className="flex flex-wrap gap-2">

@@ -54,6 +54,23 @@ function fakeStripe() {
 			status: "succeeded",
 			payment_method: "pm_new",
 		} as Record<string, unknown>,
+		// What the Address Element attached to the SetupIntent at confirmation — the saved
+		// address is read off the method now, not posted by the browser beforehand.
+		paymentMethod: {
+			id: "pm_new",
+			card: { brand: "visa", last4: "4242", funding: "credit" },
+			billing_details: {
+				name: ADDRESS.name,
+				address: {
+					line1: ADDRESS.line1,
+					line2: null,
+					city: ADDRESS.city,
+					state: ADDRESS.state,
+					postal_code: ADDRESS.postalCode,
+					country: "US",
+				},
+			},
+		} as Record<string, unknown>,
 	};
 	const client = {
 		customers: {
@@ -82,6 +99,10 @@ function fakeStripe() {
 			},
 		},
 		paymentMethods: {
+			retrieve: (id: string) => {
+				calls.push({ method: "paymentMethods.retrieve", args: [id] });
+				return Promise.resolve(state.paymentMethod);
+			},
 			list: (params: Record<string, unknown>) => {
 				calls.push({ method: "paymentMethods.list", args: [params] });
 				return Promise.resolve({ data: state.cards });
@@ -154,13 +175,6 @@ it(
 );
 
 it("saves a card with the address and makes it the default", async () => {
-	const address = await me("/api/accounts/me/billing-address", {
-		method: "PUT",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(ADDRESS),
-	});
-	expect(address.status).toBe(200);
-
 	const setup = await me("/api/accounts/me/payment-info/setup", { method: "POST" });
 	expect(setup.status).toBe(200);
 	expect((await setup.json()) as { clientSecret: string }).toEqual({
@@ -171,6 +185,9 @@ it("saves a card with the address and makes it the default", async () => {
 	const [params] = created[0].args as [Record<string, unknown>];
 	expect(params.customer).toBe("cus_1");
 	expect((params.metadata as Record<string, string>).purpose).toBe("save_payment_method");
+	// The Payment Element reads the offer from the intent, and this API version derives it
+	// from the account's card-only configuration rather than from `payment_method_types`.
+	expect(params.automatic_payment_methods).toEqual({ enabled: true, allow_redirects: "never" });
 
 	fake.state.cards = [
 		{ id: "pm_old", card: { brand: "visa", last4: "1111", funding: "credit" } },
@@ -201,10 +218,58 @@ it("saves a card with the address and makes it the default", async () => {
 	expect((customerParams.invoice_settings as Record<string, string>).default_payment_method).toBe(
 		"pm_new",
 	);
+	// The address rode the SetupIntent and is written from the confirmed payment method.
+	expect(customerParams.name).toBe(ADDRESS.name);
+	expect(customerParams.address).toEqual({
+		line1: ADDRESS.line1,
+		city: ADDRESS.city,
+		state: ADDRESS.state,
+		postal_code: ADDRESS.postalCode,
+		country: "US",
+	});
+	// ...and reads back off the Customer, which is the only place it is stored.
+	const saved = await me();
+	const savedBody = (await saved.json()) as {
+		address: { line1: string; postalCode: string };
+	};
+	expect(savedBody.address).toMatchObject({
+		line1: ADDRESS.line1,
+		postalCode: ADDRESS.postalCode,
+	});
 	const subscriptionUpdate = fake.callsTo("subscriptions.update").at(-1);
 	const [, subscriptionParams] = subscriptionUpdate?.args as [string, Record<string, unknown>];
 	expect(subscriptionParams.default_payment_method).toBe("pm_new");
 	expect(fake.callsTo("paymentMethods.detach").map((c) => c.args[0])).toEqual(["pm_old"]);
+});
+
+it("refuses a card whose billing address did not arrive, and drops the card", async () => {
+	fake.state.paymentMethod = {
+		id: "pm_orphan",
+		card: { brand: "visa", last4: "9999", funding: "credit" },
+		billing_details: { name: ADDRESS.name, address: null },
+	};
+	fake.state.setupIntent = {
+		id: "seti_2",
+		customer: "cus_1",
+		status: "succeeded",
+		payment_method: "pm_orphan",
+	};
+
+	const res = await me("/api/accounts/me/payment-info/finalize", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ setupIntentId: "seti_2" }),
+	});
+	expect(res.status).toBe(409);
+	expect((await res.json()) as { error: string }).toMatchObject({
+		error: expect.stringContaining("billing address"),
+	});
+	// Half an object is not saved: the card goes, and the address already on the Customer stays.
+	expect(fake.callsTo("paymentMethods.detach").map((c) => c.args[0])).toContain("pm_orphan");
+	const after = await me();
+	expect(((await after.json()) as { address: { line1: string } }).address.line1).toBe(
+		ADDRESS.line1,
+	);
 });
 
 it("refuses to remove the card a live subscription renews on", async () => {

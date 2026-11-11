@@ -54,6 +54,7 @@ import {
 	listCardPaymentMethods,
 	paymentsConfigured,
 	retrieveCustomer,
+	retrievePaymentMethod,
 	retrieveSetupIntent,
 	retrieveSubscription,
 	updateCustomer,
@@ -726,7 +727,16 @@ export async function paymentInfoFor(userId: number): Promise<PaymentInfo> {
 	return { address, card, subscriptionAttached };
 }
 
-/** Start the SetupIntent that attaches the reader's card, with the address collected beside it. */
+/**
+ * Start the SetupIntent that attaches the reader's card, with the address collected beside it.
+ *
+ * ⭐ **The offer comes from the account's configuration, not from this call.** This API
+ * version rejects `payment_method_types`, and the Payment Element reads the intent's
+ * payment-method offer from the account-wide card-only configuration (the Dashboard's
+ * Default; `STRIPE_PAYMENT_METHOD_CONFIGURATION` names a per-deployment override when one
+ * is set). `allow_redirects: "never"` keeps a redirect-based method from appearing on a
+ * form whose whole job is to confirm in place.
+ */
 export async function beginPaymentInfoSetup(
 	userId: number,
 	email: string,
@@ -736,6 +746,10 @@ export async function beginPaymentInfoSetup(
 	const intent = await createSetupIntent({
 		customer: customerId,
 		usage: "off_session",
+		automatic_payment_methods: { enabled: true, allow_redirects: "never" },
+		...(process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim()
+			? { payment_method_configuration: process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION.trim() }
+			: {}),
 		metadata: { purpose: "save_payment_method", userId: String(userId) },
 	});
 	if (!intent?.client_secret) throw new Error("Stripe not configured");
@@ -745,6 +759,12 @@ export async function beginPaymentInfoSetup(
 /**
  * Finish a saved-card setup: make the new card the customer's default, move a live
  * subscription onto it, and drop every other card so the account keeps one saved method.
+ *
+ * ⭐ **The address comes off the confirmed payment method.** The settings form's Address
+ * Element attaches it to the SetupIntent at confirmation, so this reads `billing_details`
+ * from the method rather than accepting a second save from the browser. That is what makes
+ * the card and the address one object: a finalize with no address is a refused finalize,
+ * and the card is detached again rather than left half-saved.
  *
  * 🚨 **A subscription is never left on a detached card.** Replacing the card updates the
  * subscription's own `default_payment_method` first; only then are the other cards removed.
@@ -780,7 +800,34 @@ export async function finalizePaymentInfo(
 		throw new Error("That card setup did not complete.");
 	}
 
+	const method = await retrievePaymentMethod(paymentMethod);
+	const billing = method?.billing_details;
+	const address = billing?.address;
+	if (
+		!billing?.name ||
+		!address?.line1 ||
+		!address.city ||
+		!address.state ||
+		!address.postal_code ||
+		address.country !== "US"
+	) {
+		// The card was created, but the address it should have carried did not arrive. The
+		// saved object is one thing, so drop the card rather than keep a method with no
+		// billing address and let the next attempt start clean.
+		await detachPaymentMethod(paymentMethod).catch(() => null);
+		throw new Error("That card's billing address didn't come through. Please enter it again.");
+	}
+
 	await updateCustomer(acct.customerId, {
+		name: billing.name,
+		address: {
+			line1: address.line1,
+			...(address.line2 ? { line2: address.line2 } : {}),
+			city: address.city,
+			state: address.state,
+			postal_code: address.postal_code,
+			country: "US",
+		},
 		invoice_settings: { default_payment_method: paymentMethod },
 	});
 	if (acct.subscriptionId) {

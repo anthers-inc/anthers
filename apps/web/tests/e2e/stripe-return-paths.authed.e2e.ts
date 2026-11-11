@@ -72,6 +72,17 @@ const EXPECTATIONS: Record<keyof typeof STRIPE_RETURN_PATHS, (page: Page) => Pro
 	},
 
 	/**
+	 * The Account tab in Settings, where the one saved payment method lives.
+	 */
+	paymentInfoReturn: async (page) => {
+		await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+		await expect(page.getByRole("tab", { name: "Account", exact: true })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+	},
+
+	/**
 	 * The Library page — where a buyer returning from a redirect-based payment method
 	 * lands. The heading proves the route matched; the `?stripe=return` parameter is
 	 * deliberately not asserted to render anything, because cards confirm in place and a
