@@ -17,6 +17,13 @@
  * These are `WHERE` conditions, before the limit, for the reason every other listing gives:
  * filtering a page afterwards silently returns short pages.
  *
+ * ⚠️ **The reader's own hide lists are deliberately absent here** (`hidden_works`,
+ * `hidden_creators`, in `services/content-preferences.ts`). Those filter the stream, and a
+ * Work or creator somebody hid is still meant to be findable — *Don't Show this Work* is not
+ * a block, and a search that could not reach what a reader hid would turn a feed preference
+ * into an erasure. A suite pins that (`hidden-from-discovery.test.ts`), because a search
+ * listing that grew the condition would look like an ordinary consistency fix.
+ *
  * ⭐ **Connected rows rank first.** The viewer's own rows, then what is in their Library,
  * then what a creator they follow made, then everything else; within a tier, an exact title
  * beats a prefix, a prefix beats a later match, and recency breaks the rest. Rank here

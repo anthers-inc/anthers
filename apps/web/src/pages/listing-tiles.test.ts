@@ -100,13 +100,17 @@ describe("the three-dot menu belongs to the surface", () => {
 		expect(library).toContain("removeItem(item.id)");
 	});
 
-	it("offers Discovery's two feed controls, waiting on the lists that store them", () => {
+	it("wires Discovery's two feed controls to the hide lists", () => {
 		expect(discovery).toContain("<DiscoveryMenu");
 		expect(discovery).toContain("Don't Show this Work");
 		expect(discovery).toContain("Don't Show this Creator");
-		// A wiring point, not a claim: each row stays disabled until the lists task
-		// gives it somewhere to write.
-		expect(discovery).toMatch(/disabled[\s\S]{0,160}Don't Show this Work/);
+		// The rows write now. A row back on `disabled` would be the placeholder state the
+		// lists task replaced, and nothing else on the page would notice.
+		expect(discovery, "a Discovery hide row went back to being a placeholder").not.toMatch(
+			/disabled[\s\S]{0,160}Don't Show/,
+		);
+		expect(discovery).toContain("onHidden({ workId: entry.id })");
+		expect(discovery).toContain("onHidden({ creatorId })");
 	});
 });
 

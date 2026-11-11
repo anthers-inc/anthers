@@ -111,6 +111,8 @@ type FeedEntry = {
 	at: string;
 	title?: string | null;
 	creator?: { handle?: string; displayName?: string | null } | null;
+	/** Who made it — what *Don't Show this Creator* names, and what a hide filters on. */
+	creatorId?: number | null;
 	/** Why the entry is here, as the API states it. */
 	reason?: DiscoveryReason;
 } & Record<string, unknown>;
@@ -361,31 +363,45 @@ function RecipeBar({
 }
 
 /**
- * Discovery's three-dot menu on a released Work.
+ * Discovery's three-dot menu on a stream entry.
  *
- * ⭐ **Both rows wait on the lists that store them** (Parker, 2026-11-06): *Don't
- * Show this Work* and *Don't Show this Creator* become real once the task *Let
- * readers hide a Work or a Creator from Discovery, with both lists in Content and
- * Safety settings* lands, and that task wires its actions here rather than
- * inventing a second menu. Until then the rows are present and disabled — this is
- * the slot the wiring goes in, and a disabled row is the honest state of a control
- * whose list does not exist yet.
+ * ⭐ **A release offers both rows and a post offers one** (Parker, 2026-11-06; the actions
+ * landed 2026-11-10). *Don't Show this Work* names the Work, which a post is not — so a post
+ * carries only the creator row. *Don't Show this Creator* answers for both kinds, because a
+ * post's creator and a release's creator are the same row in `hidden_creators`.
+ *
+ * ⚠️ **Both rows are a content preference, never a block**, and the settings card that holds
+ * the lists is where the difference is written down. Nothing here unfollows, un-buys or makes
+ * anything unreachable; it removes this entry, and the reader's own stream is the whole scope.
  */
-function DiscoveryMenu({ title }: { title: string }) {
+function DiscoveryMenu({
+	entry,
+	onHidden,
+}: {
+	entry: FeedEntry;
+	onHidden: (hidden: { workId?: number; creatorId?: number }) => void;
+}) {
+	const creatorId = typeof entry.creatorId === "number" ? entry.creatorId : null;
+	const title = entry.title ?? "";
+
 	return (
 		<TileMenu label={`More options for ${title || "this work"}`}>
-			<li>
-				<button type="button" disabled>
-					<EyeSlashIcon className="size-4" />
-					Don't Show this Work
-				</button>
-			</li>
-			<li>
-				<button type="button" disabled>
-					<UserMinusIcon className="size-4" />
-					Don't Show this Creator
-				</button>
-			</li>
+			{entry.kind === "release" && (
+				<li>
+					<button type="button" onClick={() => onHidden({ workId: entry.id })}>
+						<EyeSlashIcon className="size-4" />
+						Don't Show this Work
+					</button>
+				</li>
+			)}
+			{creatorId !== null && (
+				<li>
+					<button type="button" onClick={() => onHidden({ creatorId })}>
+						<UserMinusIcon className="size-4" />
+						Don't Show this Creator
+					</button>
+				</li>
+			)}
 		</TileMenu>
 	);
 }
@@ -456,6 +472,8 @@ export default function DiscoverPage() {
 	const [draftIndex, setDraftIndex] = useState(0);
 	const [savingRecipe, setSavingRecipe] = useState(false);
 	const [recipeError, setRecipeError] = useState<string | null>(null);
+	/** A *Don't Show* row that did not land. The tile stays, so the failure has to be said. */
+	const [hideError, setHideError] = useState<string | null>(null);
 	const [confirmDelete, setConfirmDelete] = useState(false);
 	const dialogRef = useRef<HTMLDialogElement>(null);
 
@@ -788,6 +806,38 @@ export default function DiscoverPage() {
 	 */
 	const drawsEveryone = recipe.candidates === "everyone";
 
+	/**
+	 * Hide a Work or a creator from the stream, from the tile's menu.
+	 *
+	 * ⚠️ **The entry leaves the grid on the spot rather than on the next fetch.** A hide
+	 * that waits for the server round-trip shows the reader the thing they just asked not
+	 * to see — and a refetch would also throw away the scroll position and the lens. A
+	 * failed request says so above the grid and leaves the tile where it was, because a
+	 * silent no-op would read as a hide that worked.
+	 */
+	const hideFromDiscovery = useCallback(
+		async (subject: { workId?: number; creatorId?: number }) => {
+			const isWork = subject.workId !== undefined;
+			const path = isWork ? "works" : "creators";
+			const id = isWork ? subject.workId : subject.creatorId;
+			try {
+				const res = await apiFetch(`/api/accounts/me/hidden/${path}/${id}`, { method: "POST" });
+				if (!res.ok) throw new Error("Failed to hide.");
+				setHideError(null);
+				setEntries((prev) =>
+					prev.filter((entry) =>
+						isWork
+							? !(entry.kind === "release" && entry.id === subject.workId)
+							: entry.creatorId !== subject.creatorId,
+					),
+				);
+			} catch {
+				setHideError("That couldn't be hidden just now. Try again in a moment.");
+			}
+		},
+		[],
+	);
+
 	// Sidebar: the lens is the page's own section, and the shared filters sit below the
 	// divider the layout draws. The URL carries the lens, so a link to "the stream under
 	// the Music Player" survives. Every row is live: a lens is a view over this stream.
@@ -850,6 +900,12 @@ export default function DiscoverPage() {
 					onRefresh={() => setRefreshKey((key) => key + 1)}
 				/>
 
+				{hideError && (
+					<p role="alert" className="mb-3 text-sm text-error">
+						{hideError}
+					</p>
+				)}
+
 				{loading ? (
 					<div className="flex justify-center py-16">
 						<LoadingSpinner size="lg" />
@@ -907,11 +963,7 @@ export default function DiscoverPage() {
 							<FeedTile
 								key={`${entry.kind}-${entry.id}`}
 								entry={entry}
-								menu={
-									entry.kind === "release" ? (
-										<DiscoveryMenu title={entry.title ?? "this work"} />
-									) : undefined
-								}
+								menu={<DiscoveryMenu entry={entry} onHidden={hideFromDiscovery} />}
 							/>
 						))}
 					</div>
