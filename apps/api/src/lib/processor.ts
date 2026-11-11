@@ -209,6 +209,17 @@ export async function detachPaymentMethod(id: string): Promise<Stripe.PaymentMet
 	return (await getStripe()?.paymentMethods.detach(id)) ?? null;
 }
 
+/**
+ * Mirrors `stripe.paymentMethods.retrieve` — one payment method by id.
+ *
+ * The saved-card setup reads this for the billing details the Address Element attached at
+ * confirmation, which is where the saved address comes from now that the client no longer
+ * posts it before the card.
+ */
+export async function retrievePaymentMethod(id: string): Promise<Stripe.PaymentMethod | null> {
+	return (await getStripe()?.paymentMethods.retrieve(id)) ?? null;
+}
+
 /** Mirrors `stripe.paymentMethods.list` — the cards on file for a customer. */
 export async function listCardPaymentMethods(
 	params: Stripe.PaymentMethodListParams,
