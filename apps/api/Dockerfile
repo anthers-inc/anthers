@@ -10,12 +10,25 @@ FROM oven/bun:1.4.3
 
 WORKDIR /app
 
-# Install FFmpeg for media transcoding (worker) and curl for healthchecks
-# ffmpeg transcodes video and audio; poppler-utils (pdftoppm/pdfinfo) renders an
-# uploaded ebook PDF to per-page images. Both are the WORKER's dependencies — the
-# API and worker share this image, so a missing one fails a job rather than a boot,
-# which is the quieter failure and the reason they are pinned here explicitly.
-RUN apt-get update && apt-get install -y ffmpeg poppler-utils curl && rm -rf /var/lib/apt/lists/*
+# The worker's two media dependencies, installed two different ways on purpose.
+#
+# poppler-utils (pdftoppm/pdfinfo) renders an uploaded ebook PDF to per-page images and
+# comes from the distribution. **FFmpeg does not**: the encoder is part of the bytes a
+# transcode produces, the ladder is tuned against a particular x264, and an apt package can
+# move it on a rebuild with no commit to blame. `scripts/install-ffmpeg.sh` installs the one
+# static build this image and CI's browser image both carry, verifying its sha256 and
+# asserting the version it reports — read that file's header for the whole argument.
+#
+# Both are the WORKER's dependencies; the API and worker share this image, so a missing one
+# fails a job rather than a boot, which is the quieter failure and the reason they are
+# pinned here explicitly. curl and xz-utils are what the installer downloads and unpacks
+# through, and curl also serves the healthcheck.
+RUN apt-get update \
+	&& apt-get install -y poppler-utils curl xz-utils \
+	&& rm -rf /var/lib/apt/lists/*
+
+COPY scripts/install-ffmpeg.sh /tmp/install-ffmpeg.sh
+RUN sh /tmp/install-ffmpeg.sh && rm /tmp/install-ffmpeg.sh
 
 # Install dependencies — copy package manifests first for layer caching
 COPY package.json bun.lock ./

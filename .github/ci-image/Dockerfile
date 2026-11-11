@@ -47,6 +47,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	libfontconfig1 libfreetype6 fonts-liberation fonts-noto-color-emoji \
 	&& rm -rf /var/lib/apt/lists/*
 
+# What the runner itself needs to work inside a container: `actions/checkout` shells out to
+# git, `actions/cache` untars, and `setup-bun` curls and unzips a release. A container job
+# fails on any of these in a way that reads as an action bug rather than a missing package.
+# It runs before the media block because curl and xz are what the pinned FFmpeg arrives
+# through.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	ca-certificates curl git tar unzip xz-utils zstd \
+	&& rm -rf /var/lib/apt/lists/*
+
 # The two media tools, which are the reason this image exists at all.
 #
 # ffmpeg makes the gauntlet fixture's bytes actually play, so the walk can assert delivered
@@ -54,16 +63,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # the per-page images an ebook is delivered as. Without either, the fixture no-ops and the
 # assertions **skip silently** — a quiet coverage loss rather than a red run, which is why
 # they are installed rather than detected.
+#
+# **poppler comes from the distribution and FFmpeg does not.** The gauntlet drives the real
+# transcode job, so the binary this image runs has to be the one production runs, and
+# Ubuntu 24.04's archive is a major version away from the worker image's Debian 13 one. The
+# shared installer is `scripts/install-ffmpeg.sh` — its header carries the whole argument,
+# and `apps/api/Dockerfile` runs the same file against the same pinned build.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-	ffmpeg poppler-utils \
+	poppler-utils \
 	&& rm -rf /var/lib/apt/lists/*
 
-# What the runner itself needs to work inside a container: `actions/checkout` shells out to
-# git, `actions/cache` untars, and `setup-bun` curls and unzips a release. A container job
-# fails on any of these in a way that reads as an action bug rather than a missing package.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-	ca-certificates curl git tar unzip xz-utils zstd \
-	&& rm -rf /var/lib/apt/lists/*
+COPY scripts/install-ffmpeg.sh /tmp/install-ffmpeg.sh
+RUN sh /tmp/install-ffmpeg.sh && rm /tmp/install-ffmpeg.sh
 
-# Proof the image is what it claims, at build time rather than on a runner at 2am.
-RUN ffmpeg -version > /dev/null && pdftoppm -v 2>&1 | head -1 && git --version
+# Proof the image is what it claims, at build time rather than on a runner at 2am. The
+# FFmpeg line is compared rather than printed, because a print says nothing about whether
+# the binary is the build the image was supposed to get. Plain `sh`, deliberately: this
+# image's default shell is dash and process substitution is a bash feature.
+RUN set -eu; \
+	installed="$(ffmpeg -version | head -1)"; \
+	recorded="$(cat /usr/local/share/anthers/ffmpeg-version)"; \
+	if [ "$installed" != "$recorded" ]; then \
+		echo "ffmpeg is not the build this image recorded" >&2; \
+		echo "  installed: $installed" >&2; \
+		echo "  recorded:  $recorded" >&2; \
+		exit 1; \
+	fi; \
+	echo "$installed"; \
+	pdftoppm -v 2>&1 | head -1; \
+	git --version
