@@ -102,8 +102,10 @@ describe("the CI jobs compare the build rather than printing it", () => {
 		const ci = read(".github/workflows/ci.yml");
 		const record = pin("FFMPEG_RECORD");
 		const reads = ci.match(/ffmpeg -version \| head -1/g) ?? [];
+		const guards = ci.match(/if \[ -f "\$record" \]/g) ?? [];
 		const comparisons = ci.match(/if \[ "\$installed" != "\$recorded" \]/g) ?? [];
 		expect(reads.length, "one media-tools step per job").toBe(2);
+		expect(guards.length, "each step tolerates an image published before the record file").toBe(2);
 		expect(comparisons.length, `each step reads ${record} and compares`).toBe(2);
 		expect(ci.split(record).length - 1, `both steps read ${record}`).toBe(2);
 	});
