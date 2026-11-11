@@ -71,6 +71,17 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.11",
+		date: "2026-11-11",
+		lede: "Discovery's stream leaves out a Work or a Creator a user asked it not to show, a Work's Reviews tab sets a user's own verdict apart from everyone else's, and the settings that read a supporter's month total every column and show the next cycle's charge.",
+		entries: [
+			"The two Don't Show rows on a Discovery tile write to lists of the user's own, one for Works and one for Creators, and Settings → Content & Safety shows both with a control to put anything back. The scope is the stream: Discovery and My Network stop listing what a user hid, while search, the Catalog, a creator's page, a Work itself, and the Library leave it alone, because a hide is not a block.",
+			"A Work's Reviews tab is two sections now. Your Review is one card that states why a review cannot be written yet, opens for a new one, or holds the one a user wrote and can manage; Other Reviews carries the summary, the controls and everyone else's. The card keeps the composer's height in every mode, so a review landing replaces it in place, and pressing play opens the composer without a reload.",
+			"The saved payment method in Account settings is collected in one Stripe form now, its card and billing address together, so the ZIP is typed once and the address attaches as the card is confirmed. A save with no address is refused and the card detached rather than half an object kept.",
+			"The Badges settings tab shows the one rung a supporter holds rather than the whole ladder, totals every column of the Where Your Month Went table, and previews the next cycle's charges after the second-month reduction; creator earnings stay in Creator Settings. The cards for Badges held from creators are titled Your Badges from Creators, matching Your Badge from Anthers above them.",
+		],
+	},
+	{
 		version: "2026.11.10",
 		date: "2026-11-08",
 		lede: "A Work is edited a section at a time, the Studio says what a Work and an account still need before release, and a signed-out buyer is asked to sign in rather than shown an error.",
