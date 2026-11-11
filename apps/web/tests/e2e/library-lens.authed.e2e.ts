@@ -575,104 +575,128 @@ test("the continue-reading rail stands the unfinished readings up, newest first"
 test("the Channel Guide lens puts a channel per creator and its timeline under them", async ({
 	page,
 }) => {
-	await saveFixtureWork(page, "video");
+	// 🚨 **The guide's counts are the account's, so each guide walk gets its own.**
+	// Every media spec saves its fixture Works into the same walker account, and the
+	// sibling specs run in other workers while this file walks: a count of "one
+	// channel, one program" taken on that account is a statement about whatever the
+	// shard happened to have saved, not about the lens. A throwaway account holds
+	// exactly the one video this walk saves, and is purged before the test ends.
+	const account = makeRailAccount(`guide_${Date.now().toString(36)}`);
+	try {
+		await signInThroughCallback(page, account.id);
+		await saveFixtureWork(page, "video");
 
-	await page.goto("/library?lens=channel-guide");
-	await expect(page.getByRole("heading", { name: "Channel Guide" })).toBeVisible();
+		await page.goto("/library?lens=channel-guide");
+		await expect(page.getByRole("heading", { name: "Channel Guide" })).toBeVisible();
 
-	// One channel: the video's creator, holding exactly their timeline. The fixture
-	// walker saved one video, so one channel stands.
-	const channels = page.getByTestId("guide-channel");
-	await expect(channels).toHaveCount(1);
-	await expect(page.getByText(mediaFixtureWork("video").title).first()).toBeVisible();
+		// One channel: the video's creator, holding exactly their timeline. This
+		// account saved one video, so one channel stands.
+		const channels = page.getByTestId("guide-channel");
+		await expect(channels).toHaveCount(1);
+		await expect(page.getByText(mediaFixtureWork("video").title).first()).toBeVisible();
 
-	// Select it: the playlist-player arrangement — the player pane and this video's
-	// channel in the rail, the selection highlighted.
-	await page.getByTestId("guide-block").click();
-	await expect(page.getByTestId("guide-playing")).toBeVisible();
-	await expect(page.getByTestId("guide-rail-block")).toHaveCount(1);
+		// Select it: the playlist-player arrangement — the player pane and this video's
+		// channel in the rail, the selection highlighted.
+		await page.getByTestId("guide-block").click();
+		await expect(page.getByTestId("guide-playing")).toBeVisible();
+		await expect(page.getByTestId("guide-rail-block")).toHaveCount(1);
 
-	// Up next is UP — this channel's only program is its newest, so there is nothing
-	// above it and the control says so by refusing; the guide ends rather than looping.
-	await expect(page.getByTestId("guide-next")).toBeDisabled();
+		// Up next is UP — this channel's only program is its newest, so there is nothing
+		// above it and the control says so by refusing; the guide ends rather than looping.
+		await expect(page.getByTestId("guide-next")).toBeDisabled();
 
-	// The X closes the player and the guide returns, whole.
-	await page.getByRole("button", { name: "Back to the guide" }).click();
-	await expect(page.getByTestId("guide-playing")).toHaveCount(0);
-	await expect(channels).toHaveCount(1);
+		// The X closes the player and the guide returns, whole.
+		await page.getByRole("button", { name: "Back to the guide" }).click();
+		await expect(page.getByTestId("guide-playing")).toHaveCount(0);
+		await expect(channels).toHaveCount(1);
+	} finally {
+		await purgeRailAccount(account.id);
+	}
 });
 
 test("the Channel Guide flips to rows, creators down the left and programs running right", async ({
 	page,
 }) => {
-	await saveFixtureWork(page, "video");
+	const account = makeRailAccount(`guide_rows_${Date.now().toString(36)}`);
+	try {
+		await signInThroughCallback(page, account.id);
+		await saveFixtureWork(page, "video");
 
-	await page.goto("/library?lens=channel-guide");
-	await expect(page.getByRole("heading", { name: "Channel Guide" })).toBeVisible();
+		await page.goto("/library?lens=channel-guide");
+		await expect(page.getByRole("heading", { name: "Channel Guide" })).toBeVisible();
 
-	// Columns is the default reading, and the toggle says so.
-	const columns = page.getByRole("button", { name: "Columns", exact: true });
-	const rowsButton = page.getByRole("button", { name: "Rows", exact: true });
-	await expect(columns).toHaveAttribute("aria-pressed", "true");
+		// Columns is the default reading, and the toggle says so.
+		const columns = page.getByRole("button", { name: "Columns", exact: true });
+		const rowsButton = page.getByRole("button", { name: "Rows", exact: true });
+		await expect(columns).toHaveAttribute("aria-pressed", "true");
 
-	await rowsButton.click();
-	await expect(rowsButton).toHaveAttribute("aria-pressed", "true");
-	await expect(page.getByText("newest at the right")).toBeVisible();
-	await expect(page.getByText("Newer", { exact: true })).toBeVisible();
-	await expect(page.getByText("Latest", { exact: true })).toBeVisible();
+		await rowsButton.click();
+		await expect(rowsButton).toHaveAttribute("aria-pressed", "true");
+		await expect(page.getByText("newest at the right")).toBeVisible();
+		await expect(page.getByText("Newer", { exact: true })).toBeVisible();
+		await expect(page.getByText("Latest", { exact: true })).toBeVisible();
 
-	// One channel still, now a row rather than a column.
-	await expect(page.getByTestId("guide-channel")).toHaveCount(1);
+		// One channel still, now a row rather than a column.
+		await expect(page.getByTestId("guide-channel")).toHaveCount(1);
 
-	// The reading is a device preference, so a reload keeps the rows.
-	await page.reload();
-	await expect(page.getByRole("button", { name: "Rows", exact: true })).toHaveAttribute(
-		"aria-pressed",
-		"true",
-	);
+		// The reading is a device preference, so a reload keeps the rows.
+		await page.reload();
+		await expect(page.getByRole("button", { name: "Rows", exact: true })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
 
-	// Tuning a program carries the axis into the rail: next points right, and a
-	// one-program channel has nothing further right to reach.
-	await page.getByTestId("guide-block").click();
-	await expect(page.getByTestId("guide-playing")).toBeVisible();
-	await expect(page.getByTestId("guide-rail-block")).toHaveCount(1);
-	await expect(page.getByTestId("guide-next")).toContainText("Next");
-	await expect(page.getByTestId("guide-next")).toBeDisabled();
+		// Tuning a program carries the axis into the rail: next points right, and a
+		// one-program channel has nothing further right to reach.
+		await page.getByTestId("guide-block").click();
+		await expect(page.getByTestId("guide-playing")).toBeVisible();
+		await expect(page.getByTestId("guide-rail-block")).toHaveCount(1);
+		await expect(page.getByTestId("guide-next")).toContainText("Next");
+		await expect(page.getByTestId("guide-next")).toBeDisabled();
 
-	// Leave the device in the default reading for the walks that follow.
-	await page.evaluate(() => localStorage.removeItem("anthers_guide_orientation"));
+		// Leave the device in the default reading for the walks that follow.
+		await page.evaluate(() => localStorage.removeItem("anthers_guide_orientation"));
+	} finally {
+		await purgeRailAccount(account.id);
+	}
 });
 
 test("the guide's arrows flip autoplay's direction without re-sorting the guide", async ({
 	page,
 }) => {
-	await saveFixtureWork(page, "video");
-	await page.goto("/library?lens=channel-guide");
-	await expect(page.getByRole("heading", { name: "Channel Guide" })).toBeVisible();
+	const account = makeRailAccount(`guide_flip_${Date.now().toString(36)}`);
+	try {
+		await signInThroughCallback(page, account.id);
+		await saveFixtureWork(page, "video");
+		await page.goto("/library?lens=channel-guide");
+		await expect(page.getByRole("heading", { name: "Channel Guide" })).toBeVisible();
 
-	// The ruler's arrow is a real control. It starts pointing at the newer end, and a
-	// click turns it around without touching the guide's own order.
-	const flip = page.getByRole("button", { name: "Flip autoplay direction" }).first();
-	await expect(flip).toHaveAttribute("title", /toward the newer end/);
-	await flip.click();
-	await expect(flip).toHaveAttribute("title", /toward the older end/);
-	// The sorting labels still describe the sort: Latest is still the newest end.
-	await expect(page.getByText("Latest", { exact: true })).toBeVisible();
+		// The ruler's arrow is a real control. It starts pointing at the newer end, and a
+		// click turns it around without touching the guide's own order.
+		const flip = page.getByRole("button", { name: "Flip autoplay direction" }).first();
+		await expect(flip).toHaveAttribute("title", /toward the newer end/);
+		await flip.click();
+		await expect(flip).toHaveAttribute("title", /toward the older end/);
+		// The sorting labels still describe the sort: Latest is still the newest end.
+		await expect(page.getByText("Latest", { exact: true })).toBeVisible();
 
-	// Tune the channel's only program. Next now looks toward the older end, and there is
-	// nothing below it — the opposite sentence from the default reading.
-	await page.getByTestId("guide-block").click();
-	await expect(page.getByTestId("guide-playing")).toBeVisible();
-	await expect(page.getByTestId("guide-next")).toBeDisabled();
-	await expect(page.getByTestId("guide-next")).toContainText(/nothing below/i);
+		// Tune the channel's only program. Next now looks toward the older end, and there is
+		// nothing below it — the opposite sentence from the default reading.
+		await page.getByTestId("guide-block").click();
+		await expect(page.getByTestId("guide-playing")).toBeVisible();
+		await expect(page.getByTestId("guide-next")).toBeDisabled();
+		await expect(page.getByTestId("guide-next")).toContainText(/nothing below/i);
 
-	// The choice resets rather than sticking: returning to the guide and flipping back
-	// leaves the default direction for the walks that follow.
-	await page.getByRole("button", { name: "Back to the guide" }).click();
-	await page.getByRole("button", { name: "Flip autoplay direction" }).first().click();
-	await expect(
-		page.getByRole("button", { name: "Flip autoplay direction" }).first(),
-	).toHaveAttribute("title", /toward the newer end/);
+		// The choice resets rather than sticking: returning to the guide and flipping back
+		// leaves the default direction for the walks that follow.
+		await page.getByRole("button", { name: "Back to the guide" }).click();
+		await page.getByRole("button", { name: "Flip autoplay direction" }).first().click();
+		await expect(
+			page.getByRole("button", { name: "Flip autoplay direction" }).first(),
+		).toHaveAttribute("title", /toward the newer end/);
+	} finally {
+		await purgeRailAccount(account.id);
+	}
 });
 
 test("the new lenses are views, not containers — switching through them leaves the Library exact", async ({

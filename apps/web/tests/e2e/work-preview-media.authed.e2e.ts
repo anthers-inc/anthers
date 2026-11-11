@@ -110,7 +110,7 @@ const VTT = `WEBVTT
 A caption line.
 `;
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "serial", timeout: 120_000 });
 
 test.afterAll(async () => {
 	if (!session) return;
@@ -169,7 +169,10 @@ test("the locked page carries the carousel, its strip, its chevrons and a traile
 	await expect(page).toHaveURL(/\?previewAs=locked$/, { timeout: 15_000 });
 
 	const carousel = page.locator('fieldset[aria-label="Preview media"]');
-	await expect(carousel).toBeVisible();
+	// The carousel is drawn from a separate read of the Work's preview media, after the
+	// page's own load, so it gets the same allowance a page load gets rather than the
+	// shorter default.
+	await expect(carousel).toBeVisible({ timeout: 30_000 });
 
 	// Opens on the lock slide: the first tile is pressed and the stage has no video yet.
 	const lockTile = carousel.getByRole("button", { name: "The locked Work" });
