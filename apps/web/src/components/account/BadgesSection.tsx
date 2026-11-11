@@ -604,7 +604,7 @@ export default function BadgesSection() {
 			{/* ── The Badges held from creators ── */}
 			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
 				<div className="divider text-sm text-base-content/50 mt-0 mb-1">
-					Badges You Hold
+					Your Badges from Creators
 					<InfoTip text="A Badge from a creator is the monthly amount you give them — held while you're giving, clearing the rung on their ladder, with no platform cut; only the at-cost card processing comes out. Pick one on the creator's own page, and it renews monthly alongside your support for Anthers." />
 				</div>
 
