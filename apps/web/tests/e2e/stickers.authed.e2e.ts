@@ -469,10 +469,11 @@ test("⭐ the review composer carries the Work's chooser, with the same rows", a
 	// There is no give on the Work page itself any more.
 	await expect(page.getByLabel(/Add a Sticker to this Work/)).toHaveCount(0);
 	// A review left by an earlier run opens as the walker's own; the chooser lives in the
-	// composer, so an existing one is reopened for the edit first.
-	const yourReview = page.getByTestId("your-review");
-	if ((await yourReview.count()) > 0) {
-		await yourReview.getByRole("button", { name: "Edit" }).click();
+	// composer, so an existing one is reopened for the edit first. The section is always
+	// there, so Edit is what says there is one to reopen.
+	const edit = page.getByTestId("your-review").getByRole("button", { name: "Edit" });
+	if ((await edit.count()) > 0) {
+		await edit.click();
 	}
 	await page.getByLabel("Add a Sticker to your review").click();
 	await assertCountedRows(page);

@@ -241,6 +241,8 @@ function tick() {
 				elementVisible: claim.elementVisible,
 				playing: claim.playing,
 			});
+			// The pair just started earning, which is the fact a consumption gate waits on.
+			announceStarted(claim.workId);
 		} else {
 			const r = openRanges.get(key)!;
 			// Keep the evidence current over the range's life.
@@ -411,6 +413,76 @@ function stopEngineIfIdle() {
 		clearInterval(flusher);
 		flusher = null;
 	}
+}
+
+// ── Consumption signals ──────────────────────────────────────────────────────
+
+type AttentionStartedListener = (workId: number | null) => void;
+
+const startedListeners = new Set<AttentionStartedListener>();
+
+function announceStarted(workId: number | null) {
+	for (const listener of startedListeners) {
+		try {
+			listener(workId);
+		} catch {
+			// A listener's failure is its own; the engine keeps crediting the second.
+		}
+	}
+}
+
+/**
+ * Be told when a claim on a Work **starts earning** — the first tick of a new range, not
+ * every second of one.
+ *
+ * ⭐ **This is how a surface learns that a reader has now consumed what it is gating on.**
+ * A review composer that stood closed because nobody had watched anything is the case:
+ * pressing play is the moment its answer changes, and the alternative is polling on a
+ * guess. The listener is told the Work's id (null for a claim that is not about a Work)
+ * and decides whether it cares.
+ *
+ * ⚠️ **The event is local evidence, not server state.** The seconds are still in this
+ * tab's queue when the listener runs; a reader of this must flush before asking the
+ * server whether the work counts. `flushAttentionNow` is that flush.
+ *
+ * Subscribing also reports any range already open, so a surface that mounts mid-play does
+ * not wait for the next range to begin.
+ */
+export function subscribeAttentionStarted(listener: AttentionStartedListener): () => void {
+	startedListeners.add(listener);
+	for (const range of openRanges.values()) {
+		try {
+			listener(range.claim.workId);
+		} catch {
+			// Same rule as `announceStarted`.
+		}
+	}
+	return () => {
+		startedListeners.delete(listener);
+	};
+}
+
+/**
+ * Close the open ranges and send now, rather than waiting for the thirty-second flush.
+ *
+ * The cadence is a durability choice, not a rule about when attention becomes true; a
+ * surface that needs the server's answer (a review gate, most concretely) asks at the
+ * moment its own evidence exists. Closing first is what turns the open range into a
+ * record, exactly as the interval does.
+ */
+export async function flushAttentionNow(): Promise<void> {
+	// ⚠️ A listener runs inside the tick that opened its range, so at this instant the
+	// range is milliseconds wide. The server refuses a range whose window has no length
+	// (`startedAt < endedAt`), and a sliver would credit nothing anyway — so wait out the
+	// tick that makes it a real interval, then close and send exactly as the cadence does.
+	const now = Date.now();
+	const youngest = Math.min(...[...openRanges.values()].map((range) => range.startedAt));
+	if (Number.isFinite(youngest)) {
+		const wait = youngest + TICK_MS - now;
+		if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait + 25));
+	}
+	closeAllRanges();
+	await flushEvents();
 }
 
 // ── Hooks ────────────────────────────────────────────────────────────────────

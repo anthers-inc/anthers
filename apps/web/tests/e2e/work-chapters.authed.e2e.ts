@@ -217,16 +217,18 @@ test("a review's timestamp is a link that starts the bar at the moment it names"
 	await seedConsumption(page, EPISODE);
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
 	await expect(page.getByTestId("chapter-list")).toBeVisible();
-	// The Reviews heading renders once the aggregate has arrived, which is when the card
-	// and the composer below are decided.
-	await expect(page.getByRole("heading", { name: "Reviews" })).toBeVisible();
+	// The section headings render once the aggregate has arrived, which is when the
+	// card and the composer are decided.
+	await expect(page.getByRole("heading", { name: "Your Review" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Other Reviews" })).toBeVisible();
 
 	// The walker's own review, re-posted over its previous self on every run. An earlier
 	// run leaves a review, which now opens as the walker's own rather than as an open
-	// composer, so the second and later runs take the Edit door.
-	const yourReview = page.getByTestId("your-review");
-	if ((await yourReview.count()) > 0) {
-		await yourReview.getByRole("button", { name: "Edit" }).click();
+	// composer, so the second and later runs take the Edit door. The section itself is
+	// always present now, so Edit is what tells the two states apart.
+	const edit = page.getByTestId("your-review").getByRole("button", { name: "Edit" });
+	if ((await edit.count()) > 0) {
+		await edit.click();
 	} else {
 		await page.getByRole("button", { name: "Recommend", exact: true }).click();
 	}
@@ -255,11 +257,11 @@ test("the creator's own Work states the review and vote refusals in place", asyn
 	await signInAsMediaFixture(context);
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}#reviews`);
 
-	await expect(page.getByRole("heading", { name: "Reviews" })).toBeVisible();
-	// The composer is closed with the reason in place of its button, not left open to
-	// fail on submit.
-	await expect(page.getByText("You can't review your own Work.")).toBeVisible();
-	await expect(page.getByRole("button", { name: "Recommend", exact: true })).toBeDisabled();
+	await expect(page.getByRole("heading", { name: "Your Review" })).toBeVisible();
+	// The section is a card carrying the reason, not a composer whose every control is
+	// disabled: there is nothing here that would only refuse when pressed.
+	await expect(page.getByTestId("your-review")).toContainText("You can't review your own Work.");
+	await expect(page.getByRole("button", { name: "Recommend", exact: true })).toHaveCount(0);
 	// ⚠️ The helpfulness controls are disabled with the same reason, but this fixture has
 	// no review a public list would show: the only reviewer here is the walker, whose
 	// account is a test account and is filtered out of the public list. The vote refusal

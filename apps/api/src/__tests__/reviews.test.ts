@@ -685,7 +685,7 @@ describe("Who may write a review", () => {
 		expect(list.eligibility).toEqual({
 			canReview: false,
 			code: "unconsumed",
-			reason: "Spend some time with this Work before reviewing it.",
+			reason: "You can review this Work once you've experienced some of it.",
 		});
 
 		const res = await write(fresh.cookie);
@@ -693,6 +693,31 @@ describe("Who may write a review", () => {
 		const body = (await res.json()) as { code?: string; eligibility?: { code?: string } };
 		expect(body.code).toBe("unconsumed");
 		expect(body.eligibility?.code).toBe("unconsumed");
+	});
+
+	it("asks a downloadable-only Work's reader for the download rather than for time on the page", async () => {
+		const [original] = await db
+			.select({
+				streamEnabled: works.streamEnabled,
+				downloadEnabled: works.downloadEnabled,
+			})
+			.from(works)
+			.where(eq(works.id, workId));
+		await db
+			.update(works)
+			.set({ streamEnabled: false, downloadEnabled: true })
+			.where(eq(works.id, workId));
+		try {
+			const fresh = await createAccount(`rv_unseen_dl_${id}`);
+			const list = await readReviews(fresh.cookie);
+			expect(list.eligibility).toEqual({
+				canReview: false,
+				code: "unconsumed",
+				reason: "You can review this Work once you've downloaded it.",
+			});
+		} finally {
+			await db.update(works).set(original).where(eq(works.id, workId));
+		}
 	});
 
 	it("opens the composer once the reader has spent time with it", async () => {
