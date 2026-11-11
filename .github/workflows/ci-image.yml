@@ -11,6 +11,11 @@ name: ci-image
 # keyed on content would be the instinct, and it cannot work: `jobs.<id>.container.image` is
 # resolved before any step runs, so `hashFiles()` there has no checkout to hash.
 #
+# ⭐ **FFmpeg is the exception, and it is not a second declaration.** `scripts/install-ffmpeg.sh`
+# is the only place that build is written down, and `apps/api/Dockerfile` runs the same file,
+# so the suite's encoder and production's are the same bytes. Moving that pin must therefore
+# rebuild this image, which is why the script is a `paths` trigger below.
+#
 # Sequencing to know before editing the image: a PR **builds** it and does not push, so the
 # job in `ci.yml` keeps running the previous `:latest` until the change is on `main`. That
 # is the wrong way round for testing an image change, and it is the deliberate trade —
@@ -22,10 +27,16 @@ on:
     branches: [main]
     paths:
       - ".github/ci-image/**"
+      - "scripts/install-ffmpeg.sh"
       - ".github/workflows/ci-image.yml"
   pull_request:
     paths:
       - ".github/ci-image/**"
+      # The pinned FFmpeg build lives in `scripts/`, and it has to be a trigger here: a
+      # change to it that did not republish this image would leave every job on the old
+      # binary while the API image built from the same commit moved, which is the drift the
+      # pin exists to close.
+      - "scripts/install-ffmpeg.sh"
       - ".github/workflows/ci-image.yml"
   # Monthly, so the base image's security updates land without anyone remembering to ask.
   # The image pins no versions of its own, so an unattended rebuild cannot surprise a job

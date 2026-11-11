@@ -231,10 +231,29 @@ jobs:
       - name: Drizzle snapshots are in step with the journal
         run: bun run db:snapshots
 
+      # FFmpeg is a dependency of the API suite (safety-scan decodes frames), and the binary
+      # is compared with the build the image recorded. Not with the repository's pin: a pull
+      # request that moves the pin still runs the previously published image, so the pin
+      # would fail the change that fixes the drift. An image old enough to predate the record
+      # file has nothing to compare against and says so — the image that carries one is built
+      # from the pin, and the comparison bites from the next run.
       - name: Media tools are present
         run: |
           set -euo pipefail
-          ffmpeg -version | head -1
+          installed="$(ffmpeg -version | head -1)"
+          record=/usr/local/share/anthers/ffmpeg-version
+          if [ -f "$record" ]; then
+            recorded="$(cat "$record")"
+            if [ "$installed" != "$recorded" ]; then
+              echo "ffmpeg is not the build this image recorded" >&2
+              echo "  installed: $installed" >&2
+              echo "  recorded:  $recorded" >&2
+              exit 1
+            fi
+          else
+            echo "::warning::this CI image predates the FFmpeg record file, so its binary is unchecked; it is rebuilt on merge"
+          fi
+          echo "$installed"
 
       - name: Apply database migrations
         run: bun run db:migrate
@@ -600,10 +619,30 @@ jobs:
       # the byte assertions skip **silently** — a quiet coverage loss rather than a red run,
       # which is exactly what the gauntlet exists to prevent. So assert them rather than
       # trusting the image to be what it was yesterday.
+      #
+      # FFmpeg is compared with the build the image recorded when it was made, not with the
+      # pin in the repository: a pull request that moves the pin still runs the previously
+      # published image, so holding it to the repository's pin would fail the change that
+      # fixes the drift rather than the drift itself. An image older than the record file has
+      # nothing to compare against and says so, because the image is published from `main`
+      # rather than from the branch that changes it.
       - name: Media tools are present
         run: |
           set -euo pipefail
-          ffmpeg -version | head -1
+          installed="$(ffmpeg -version | head -1)"
+          record=/usr/local/share/anthers/ffmpeg-version
+          if [ -f "$record" ]; then
+            recorded="$(cat "$record")"
+            if [ "$installed" != "$recorded" ]; then
+              echo "ffmpeg is not the build this image recorded" >&2
+              echo "  installed: $installed" >&2
+              echo "  recorded:  $recorded" >&2
+              exit 1
+            fi
+          else
+            echo "::warning::this CI image predates the FFmpeg record file, so its binary is unchecked; it is rebuilt on merge"
+          fi
+          echo "$installed"
           pdftoppm -v 2>&1 | head -1
 
       - name: Apply database migrations
