@@ -353,6 +353,75 @@ export const userPreferences = pgTable("user_preferences", {
 });
 
 /**
+ * The reader's own hide lists: a Work, or a Creator, they have asked Discovery not to show.
+ *
+ * ⭐ **A list, and its own table, because it grows without a bound and has to point at
+ * the thing hidden.** The settings beside it are one row per account; these are many per
+ * account, each a reference to a Work or a Creator that must cascade when that thing is
+ * gone. A JSON column on `user_preferences` could hold the ids, but nothing would delete
+ * them with the Work and nothing would stop a dangling one from quietly matching the next
+ * row to take that id.
+ *
+ * 🚨 **This is a content preference, not a block and not a moderation hide.** A block is a
+ * boundary between two accounts and lives in `auth.ts` beside `follows`
+ * (`services/blocks.ts`); a moderation hide is an operator's judgment about what may be
+ * listed (`services/moderation.ts`). This one is a reader filtering their own stream: it
+ * reaches nobody else, it removes nothing from the site, and the hidden Work and the
+ * hidden creator's profile both stay reachable by search and by direct link. That is also
+ * why it is `org` — what appears in the org-served stream is the org's to filter, and the
+ * preference means nothing on another PDS.
+ *
+ * Both writers live in `services/content-preferences.ts`, beside the rung and flag
+ * settings that are the same kind of decision.
+ */
+// org — a reader's opinion about the org-served Discovery stream, exactly as the display
+// and flag settings on `user_preferences` beside it are. It travels nowhere and means
+// nothing on another PDS.
+export const hiddenWorks = pgTable(
+	"hidden_works",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// Hiding twice is idempotent, not a second row — and `user_id` leading the pair is
+		// the index the settings list reads by.
+		uniqueIndex("uq_hidden_works_pair").on(table.userId, table.workId),
+	],
+);
+
+/**
+ * The creators a reader has asked Discovery not to show — the same list as `hidden_works`
+ * with a creator in place of a Work, and the same reasoning.
+ *
+ * ⚠️ **Hiding a creator does not unfollow, un-support or un-buy anything**, and it is
+ * deliberately a separate row from `follows`: a reader who has had enough of a creator's
+ * stream keeps whatever relationship they paid for, and clearing the hidden row is not a
+ * re-subscription.
+ */
+// org — the same org-served-stream preference as `hidden_works` above.
+export const hiddenCreators = pgTable(
+	"hidden_creators",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [uniqueIndex("uq_hidden_creators_pair").on(table.userId, table.creatorId)],
+);
+
+/**
  * Per-cycle economic snapshot — one row per (user, cycle) — kept for spend and
  * consumption history/analytics. Records the amount given to Anthers and what flowed:
  * Time Pool (to creators), the remainder, and the account's storage meter for the same

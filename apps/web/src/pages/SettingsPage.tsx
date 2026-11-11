@@ -814,6 +814,198 @@ function useContentDisplayWriter() {
 }
 
 /**
+ * The two lists behind Discovery's *Don't Show* menu rows.
+ *
+ * ⭐ **Both lists sit in one card because they answer one question** — what have I asked the
+ * stream not to show me — and because the difference between a hide and a block is the
+ * copy's job. A reader who expects a block and gets a feed filter is owed that difference in
+ * words, so the card says what a hide does *not* do: the Work and the profile still open
+ * from a link, still turn up in search, and hiding a creator moves no follow, no Badge and
+ * no purchase.
+ *
+ * ⚠️ **"Show again" is the only control here, and it has to exist.** The tile that hid an
+ * entry is gone from Discovery, so this page is the one route back — which is also why the
+ * lists are read from the server rather than from anything the stream holds.
+ */
+function HiddenFromDiscoverySection() {
+	const [lists, setLists] = useState<HiddenLists | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const [clearing, setClearing] = useState<string | null>(null);
+
+	useEffect(() => {
+		apiFetch("/api/accounts/me/hidden")
+			.then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to load."))))
+			.then((data) => setLists(data as HiddenLists))
+			.catch(() => setError("Could not load what you've hidden."));
+	}, []);
+
+	const showAgain = async (kind: "works" | "creators", id: number) => {
+		setClearing(`${kind}-${id}`);
+		setError(null);
+		try {
+			const res = await apiFetch(`/api/accounts/me/hidden/${kind}/${id}`, { method: "DELETE" });
+			if (!res.ok) throw new Error("Failed to show that again.");
+			if (kind === "works") {
+				setLists((prev) => prev && { ...prev, works: prev.works.filter((row) => row.id !== id) });
+			} else {
+				setLists(
+					(prev) => prev && { ...prev, creators: prev.creators.filter((row) => row.id !== id) },
+				);
+			}
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to show that again.");
+		} finally {
+			setClearing(null);
+		}
+	};
+
+	const rowClass = "flex items-center gap-3 py-3";
+
+	return (
+		<div className="card bg-base-200 mt-6">
+			<div className="card-body gap-4">
+				<div>
+					<h3 className="card-title text-lg">Hidden from Discovery</h3>
+					<p className="text-sm text-base-content/60">
+						Hiding a Work or a creator keeps them out of Discovery. It isn't a block: both still
+						open from a link and still turn up in search, and hiding a creator leaves your follows,
+						Badges and purchases exactly as they were.
+					</p>
+				</div>
+
+				{error && (
+					<div className="alert alert-error text-sm">
+						<span>{error}</span>
+					</div>
+				)}
+
+				{lists === null && !error && <p className="text-sm text-base-content/50">Loading…</p>}
+
+				{lists !== null && (
+					<>
+						<div>
+							<h4 className="font-medium">Hidden Works</h4>
+							{lists.works.length === 0 ? (
+								<p className="text-sm text-base-content/50 mt-2">You haven't hidden any Works.</p>
+							) : (
+								<ul className="mt-2 divide-y divide-base-300" aria-label="Hidden Works">
+									{lists.works.map((work) => (
+										<li key={work.id} className={rowClass}>
+											{work.thumbnail ? (
+												<img
+													src={work.thumbnail}
+													alt=""
+													className="h-10 w-10 shrink-0 rounded object-cover"
+												/>
+											) : (
+												<div
+													className="h-10 w-10 shrink-0 rounded bg-base-300"
+													aria-hidden="true"
+												/>
+											)}
+											<div className="min-w-0 flex-1">
+												<Link
+													to={`/works/${work.slug}`}
+													className="font-medium link-hover truncate block"
+												>
+													{work.title || "Untitled Work"}
+												</Link>
+												<div className="text-xs text-base-content/50 truncate">
+													@{work.creatorHandle} · hidden {formatWhen(work.createdAt)}
+												</div>
+											</div>
+											<button
+												type="button"
+												className="btn btn-ghost btn-xs"
+												onClick={() => showAgain("works", work.id)}
+												disabled={clearing === `works-${work.id}`}
+											>
+												{clearing === `works-${work.id}` ? "Showing…" : "Show again"}
+											</button>
+										</li>
+									))}
+								</ul>
+							)}
+						</div>
+
+						<div>
+							<h4 className="font-medium">Hidden Creators</h4>
+							{lists.creators.length === 0 ? (
+								<p className="text-sm text-base-content/50 mt-2">
+									You haven't hidden any creators.
+								</p>
+							) : (
+								<ul className="mt-2 divide-y divide-base-300" aria-label="Hidden Creators">
+									{lists.creators.map((creator) => (
+										<li key={creator.id} className={rowClass}>
+											{creator.avatar ? (
+												<img
+													src={creator.avatar}
+													alt=""
+													className="h-10 w-10 shrink-0 rounded-full object-cover"
+												/>
+											) : (
+												<div
+													className="h-10 w-10 shrink-0 rounded-full bg-base-300"
+													aria-hidden="true"
+												/>
+											)}
+											<div className="min-w-0 flex-1">
+												<Link
+													to={`/@${creator.handle}`}
+													className="font-medium link-hover truncate block"
+												>
+													{creator.displayName || `@${creator.handle}`}
+												</Link>
+												<div className="text-xs text-base-content/50 truncate">
+													@{creator.handle} · hidden {formatWhen(creator.createdAt)}
+												</div>
+											</div>
+											<button
+												type="button"
+												className="btn btn-ghost btn-xs"
+												onClick={() => showAgain("creators", creator.id)}
+												disabled={clearing === `creators-${creator.id}`}
+											>
+												{clearing === `creators-${creator.id}` ? "Showing…" : "Show again"}
+											</button>
+										</li>
+									))}
+								</ul>
+							)}
+						</div>
+					</>
+				)}
+			</div>
+		</div>
+	);
+}
+
+interface HiddenWorkRow {
+	id: number;
+	publicId: number;
+	slug: string;
+	title: string;
+	thumbnail: string | null;
+	creatorHandle: string;
+	createdAt: string;
+}
+
+interface HiddenCreatorRow {
+	id: number;
+	handle: string;
+	displayName: string | null;
+	avatar: string | null;
+	createdAt: string;
+}
+
+/** What `GET /api/accounts/me/hidden` sends: the two lists, oldest first. */
+interface HiddenLists {
+	works: HiddenWorkRow[];
+	creators: HiddenCreatorRow[];
+}
+
+/**
  * Blocked Accounts — and the only place a block can be lifted.
  *
  * It has to exist for the feature to be honest. Blocking makes the other person's
@@ -3261,6 +3453,10 @@ export default function SettingsPage() {
 					{/* What the user meets at each rung, as two cards: the ratings and the flags. */}
 					<RatingControlsSection />
 					<ContentControlsSection />
+
+					{/* The reader's own hide lists — the two *Don't Show* rows on a Discovery
+					    tile, and the only route back to a hidden entry. */}
+					<HiddenFromDiscoverySection />
 
 					{/* Blocked Accounts — the only place a block can be lifted, since a blocked
 					    profile no longer resolves. */}

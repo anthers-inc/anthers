@@ -46,6 +46,8 @@ import {
 	badges,
 	comments,
 	follows,
+	hiddenCreators,
+	hiddenWorks,
 	moderationReports,
 	poolDistributions,
 	posts,
@@ -66,7 +68,7 @@ import {
 import { eq } from "drizzle-orm";
 
 /** Bump when the shape changes in a way a consumer would notice. */
-export const EXPORT_FORMAT_VERSION = 4;
+export const EXPORT_FORMAT_VERSION = 5;
 
 export interface AccountExport {
 	format: string;
@@ -94,6 +96,8 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 		followingRows,
 		followerRows,
 		blockRows,
+		hiddenWorkRows,
+		hiddenCreatorRows,
 		libraryRows,
 		commentRows,
 		ratingRows,
@@ -115,6 +119,8 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 		db.select().from(follows).where(eq(follows.followerId, userId)),
 		db.select().from(follows).where(eq(follows.creatorId, userId)),
 		db.select().from(userBlocks).where(eq(userBlocks.blockerId, userId)),
+		db.select().from(hiddenWorks).where(eq(hiddenWorks.userId, userId)),
+		db.select().from(hiddenCreators).where(eq(hiddenCreators.userId, userId)),
 		db.select().from(userLibraryItems).where(eq(userLibraryItems.userId, userId)),
 		db.select().from(comments).where(eq(comments.userId, userId)),
 		db.select().from(reviews).where(eq(reviews.userId, userId)),
@@ -189,6 +195,14 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			// already visible to you as a count. Ids only — no names, no emails.
 			followers: followerRows.map((f) => ({ followerId: f.followerId, createdAt: f.createdAt })),
 			blocked: blockRows.map((b) => ({ blockedId: b.blockedId, createdAt: b.createdAt })),
+			// The two hide lists: what this reader asked Discovery not to show. Ids only,
+			// beside `blocked` because they are the same kind of row — the reader's own
+			// decision about somebody else's account or work.
+			hiddenWorks: hiddenWorkRows.map((h) => ({ workId: h.workId, createdAt: h.createdAt })),
+			hiddenCreators: hiddenCreatorRows.map((h) => ({
+				creatorId: h.creatorId,
+				createdAt: h.createdAt,
+			})),
 			// What the person kept — Works, Projects and posts in one Library.
 			library: libraryRows,
 		},

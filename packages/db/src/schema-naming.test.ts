@@ -99,6 +99,9 @@ const FAMILIES: Readonly<Record<string, { root?: string; why: string }>> = {
 	creator_: { why: "What settlement owes creators and how it moved" },
 	dmca_: { why: "Statutory copyright notices" },
 	financial_plan_: { why: "The plan tool's own document and its phases" },
+	hidden_: {
+		why: "One reader's own hide lists over the stream: the Works and creators they asked Discovery not to show",
+	},
 	hosted_: { why: "Identities Anthers issues and the session it writes through" },
 	invoice_: { root: "invoices", why: "The per-destination split of one charge" },
 	legal_: { why: "Holds that suspend automated destruction" },

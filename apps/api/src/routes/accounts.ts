@@ -16,6 +16,11 @@
  *                                     and `?scope=global` widens it to every creator for
  *                                     Discovery
  *   GET    /me/blocks               — who the current user has blocked
+ *   GET    /me/hidden               — the Works and creators this account hides from Discovery
+ *   POST   /me/hidden/works/:id     — hide one Work from the stream (a preference, not a block)
+ *   DELETE /me/hidden/works/:id     — put it back
+ *   POST   /me/hidden/creators/:id  — hide a creator's entries from the stream
+ *   DELETE /me/hidden/creators/:id  — put them back
  *   GET    /me/adult-access         — the opt-in and adulthood verification, and whether
  *                                     the two together open the Adult rung
  *   POST   /me/adult-access/setup   — start a card check (SetupIntent; no charge)
@@ -128,7 +133,13 @@ import {
 	contentPreferencesFor,
 	disableAdultAccess,
 	enableAdultAccess,
+	hideCreator,
+	hideWork,
+	listHiddenContent,
+	notHiddenFrom,
 	setMaturityDisplay,
+	unhideCreator,
+	unhideWork,
 } from "../services/content-preferences.js";
 import { composeCreatorCard } from "../services/creator-card.js";
 import { isCreator, isCreatorWhere } from "../services/creator-standing.js";
@@ -1260,6 +1271,9 @@ const accountRoutes = new Hono()
 								notBlockedBy(sessionUser.id, posts.creatorId),
 								notSuspendedAccount(posts.creatorId),
 								notTestAccount(posts.creatorId),
+								// The reader's own hide lists. A post is not a Work, so only the
+								// creator half applies here; the release half below carries both.
+								notHiddenFrom(sessionUser.id, { creatorId: posts.creatorId }),
 								eq(posts.isPublished, true),
 								// The tags the user multi-selected, AND semantics over the post's own.
 								...(tagFilter.length > 0
@@ -1318,6 +1332,13 @@ const accountRoutes = new Hono()
 								notBlockedBy(sessionUser.id, works.creatorId),
 								notSuspendedAccount(works.creatorId),
 								notTestAccount(works.creatorId),
+								// The reader's own hide lists, both halves: this Work, or this
+								// Work's creator. Scoped to the stream on purpose — the Work stays
+								// listed in search, the Catalog and the creator's profile.
+								notHiddenFrom(sessionUser.id, {
+									workId: works.id,
+									creatorId: works.creatorId,
+								}),
 								eq(works.visibility, "released"),
 								// The feed is a listing, and a release by a followed creator is
 								// no exception to the invisibility rule — following somebody is
@@ -2461,6 +2482,56 @@ const accountRoutes = new Hono()
 	.get("/me/blocks", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
 		return c.json({ blocks: await listBlocks(sessionUser.id) });
+	})
+
+	// ── Hidden from Discovery ────────────────────────────────────────────────
+	// The reader's own filter over the stream, and NOT a block: a hidden Work and a
+	// hidden creator's profile both stay reachable by search, by direct link and in the
+	// Library, and nothing here touches the follow, the Badge or a purchase. Both lists
+	// and their listing condition live in `services/content-preferences.ts`.
+	.get("/me/hidden", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		return c.json(await listHiddenContent(sessionUser.id));
+	})
+
+	.post("/me/hidden/works/:id", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const workId = Number(c.req.param("id"));
+		if (!Number.isInteger(workId)) return c.json({ error: "Work not found" }, 404);
+		const result = await hideWork(sessionUser.id, workId);
+		if ("error" in result) return c.json({ error: "Work not found" }, 404);
+		return c.json({ hidden: true }, 201);
+	})
+
+	.delete("/me/hidden/works/:id", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const workId = Number(c.req.param("id"));
+		if (!Number.isInteger(workId)) return c.json({ error: "Not hidden" }, 404);
+		const { unhidden } = await unhideWork(sessionUser.id, workId);
+		if (!unhidden) return c.json({ error: "Not hidden" }, 404);
+		return c.body(null, 204);
+	})
+
+	.post("/me/hidden/creators/:id", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const creatorId = Number(c.req.param("id"));
+		if (!Number.isInteger(creatorId)) return c.json({ error: "Account not found" }, 404);
+		const result = await hideCreator(sessionUser.id, creatorId);
+		if ("error" in result) {
+			return result.error === "self"
+				? c.json({ error: "You cannot hide yourself" }, 400)
+				: c.json({ error: "Account not found" }, 404);
+		}
+		return c.json({ hidden: true }, 201);
+	})
+
+	.delete("/me/hidden/creators/:id", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const creatorId = Number(c.req.param("id"));
+		if (!Number.isInteger(creatorId)) return c.json({ error: "Not hidden" }, 404);
+		const { unhidden } = await unhideCreator(sessionUser.id, creatorId);
+		if (!unhidden) return c.json({ error: "Not hidden" }, 404);
+		return c.body(null, 204);
 	})
 
 	// ── Export ───────────────────────────────────────────────────────────────

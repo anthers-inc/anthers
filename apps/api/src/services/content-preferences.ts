@@ -1,19 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Content preferences — the only writer of what a user has asked to meet: the Adult opt-in,
- * the adulthood verification behind it, the per-rung display setting for each of them, and the
- * display setting for each kind of content a Work may contain, whatever its rating.
+ * the adulthood verification behind it, the per-rung display setting for each of them, the
+ * display setting for each kind of content a Work may contain, whatever its rating, and the
+ * two lists of Works and Creators a reader has asked Discovery not to show.
  *
  * Follows the one-writer pattern `services/content-rating.ts`, `services/moderation.ts` and
  * `services/quarantine.ts` establish. Every door into this state comes through here, so an
  * account cannot end up opted in to something it was never verified for.
  *
- * 🚨 **Every write here asks `maturityLocked` first, and that is the parental lock's only
- * enforcement point.** It used to sit at `PATCH /me/content-preferences` alone, which left the
- * two routes that write `adultOptIn` and `adultVerifiedAt` — the columns that actually decide
- * whether an account reaches Adult work — outside a lock a guardian had been told closed
- * exactly that gap. A check derived from the account rather than from the request belongs in
- * the writer, because the writer is the thing every door has to go through.
+ * 🚨 **Every write here that can loosen what the account meets asks `maturityLocked`
+ * first, and that is the parental lock's only enforcement point.** It used to sit at
+ * `PATCH /me/content-preferences` alone, which left the two routes that write `adultOptIn`
+ * and `adultVerifiedAt` — the columns that actually decide whether an account reaches Adult
+ * work — outside a lock a guardian had been told closed exactly that gap. A check derived
+ * from the account rather than from the request belongs in the writer, because the writer is
+ * the thing every door has to go through.
+ *
+ * ⚠️ **A write that only TIGHTENS is exempt, and the asymmetry is deliberate.** Opting out
+ * of Adult access is one; hiding a Work or a creator from the stream is the other. A lock
+ * that refused either would be stopping somebody making their own view narrower, which
+ * protects nobody — the lock exists to hold a door shut, not to stop it being closed further.
  *
  * 🚨 **Every setting here belongs to the USER and reaches nobody else.** A user hiding or
  * blurring a rung changes what *they* meet: the Work stays listed for everyone else, stays
@@ -56,7 +63,14 @@
  */
 
 import { db } from "@anthers/db/client";
-import { stripeCustomers, userPreferences, works } from "@anthers/db/schema";
+import {
+	hiddenCreators,
+	hiddenWorks,
+	stripeCustomers,
+	userPreferences,
+	users,
+	works,
+} from "@anthers/db/schema";
 import {
 	type ContentNote,
 	DEFAULT_MATURITY_DISPLAY,
@@ -68,7 +82,7 @@ import {
 	RATING_ROWS,
 	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
-import { eq, type SQL, sql } from "drizzle-orm";
+import { and, eq, type SQL, sql } from "drizzle-orm";
 import { createSetupIntent, listCardPaymentMethods, paymentsConfigured } from "../lib/processor.js";
 import { ensureStripeCustomer } from "./billing.js";
 import { maturityLocked } from "./parental-controls.js";
@@ -338,6 +352,190 @@ export async function adultVisibility(userId: number | null): Promise<{
 		access: prefs.adultAccess,
 		prefs,
 		hidden: maturityHiddenFrom(prefs, userId),
+	};
+}
+
+/**
+ * The reader's own hide lists, as one listing condition: a Work whose row is in
+ * `hidden_works`, or whose creator is in `hidden_creators`, is not in the stream.
+ *
+ * ⭐ **The stream is the whole scope, and that is the feature rather than an omission.**
+ * *Don't Show this Work* and *Don't Show this Creator* are the two menu rows on a Discovery
+ * tile. What they suppress is the entry — so the condition belongs in `/me/feed` (which
+ * serves Discovery's whole-site stream as `?scope=global` and My Network as itself) and in
+ * no other listing. Search, the Catalog, a creator's profile, a Work's own page and the
+ * Library are all untouched, and a hidden Work is reachable by direct link the moment
+ * somebody has one; that is exactly what separates hiding from a block, which is why there
+ * is a test on each of those surfaces rather than a comment here.
+ *
+ * 🚨 **Not a deny-list, and it cannot be**: the rows are the reader's own, so the question
+ * is whether *this* row exists, not whether some value is absent from a set of known values.
+ * `NOT EXISTS` over the reader's own row is the same shape `notBlockedBy` uses, for the same
+ * reason — it applies before the query's `LIMIT`, where filtering a page after the fact
+ * would silently return short pages. Unlike a block, the read is one-directional: only the
+ * reader's own row decides what the reader meets.
+ *
+ * ⚠️ **`workId` is optional and `creatorId` is not**, because a post is not a Work: a
+ * creator's posts and releases both answer to the creator list, and only the release answers
+ * to the Work list.
+ *
+ * `undefined` for a signed-out reader, so it drops into `and()` without branching.
+ */
+export function notHiddenFrom(
+	user: number | null,
+	columns: { workId?: SQL | unknown; creatorId: SQL | unknown },
+): SQL | undefined {
+	if (user == null) return undefined;
+
+	const clauses = [
+		sql`NOT EXISTS (
+			SELECT 1 FROM hidden_creators hc
+			WHERE hc.user_id = ${user} AND hc.creator_id = ${columns.creatorId}
+		)`,
+	];
+	if (columns.workId !== undefined) {
+		clauses.push(sql`NOT EXISTS (
+			SELECT 1 FROM hidden_works hw
+			WHERE hw.user_id = ${user} AND hw.work_id = ${columns.workId}
+		)`);
+	}
+	return sql`(${sql.join(clauses, sql` AND `)})`;
+}
+
+/**
+ * Ask Discovery not to show this Work again. Idempotent.
+ *
+ * The existence check is what turns a stale menu — a tile left on screen after the Work was
+ * deleted — into a 404 rather than a foreign-key error, and it is cheap because hiding is a
+ * rare, human-paced act.
+ */
+export async function hideWork(
+	userId: number,
+	workId: number,
+): Promise<{ hidden: true } | { error: "not_found" }> {
+	const [row] = await db.select({ id: works.id }).from(works).where(eq(works.id, workId)).limit(1);
+	if (!row) return { error: "not_found" };
+	await db.insert(hiddenWorks).values({ userId, workId }).onConflictDoNothing();
+	return { hidden: true };
+}
+
+/** Put a Work back in the stream. Reports whether a row was there, so a repeated click says so. */
+export async function unhideWork(userId: number, workId: number): Promise<{ unhidden: boolean }> {
+	const removed = await db
+		.delete(hiddenWorks)
+		.where(and(eq(hiddenWorks.userId, userId), eq(hiddenWorks.workId, workId)))
+		.returning({ id: hiddenWorks.id });
+	return { unhidden: removed.length > 0 };
+}
+
+/**
+ * Ask Discovery not to show this creator's entries again. Idempotent.
+ *
+ * 🚨 **Hiding yourself is refused.** The row would work, and it would leave an account
+ * whose own posts and releases are missing from its own stream with an entry in its settings
+ * naming itself — a state nobody means to create, and the feed already includes the account's
+ * own work deliberately.
+ *
+ * ⚠️ **Nothing else about the relationship changes**: the follow stays, the Badge stays, a
+ * purchase stays, and the profile keeps answering at its own address. Undoing the hide is not
+ * a re-follow because there was never an unfollow.
+ */
+export async function hideCreator(
+	userId: number,
+	creatorId: number,
+): Promise<{ hidden: true } | { error: "self" } | { error: "not_found" }> {
+	if (userId === creatorId) return { error: "self" };
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.id, creatorId))
+		.limit(1);
+	if (!row) return { error: "not_found" };
+	await db.insert(hiddenCreators).values({ userId, creatorId }).onConflictDoNothing();
+	return { hidden: true };
+}
+
+/** Put a creator back in the stream. */
+export async function unhideCreator(
+	userId: number,
+	creatorId: number,
+): Promise<{ unhidden: boolean }> {
+	const removed = await db
+		.delete(hiddenCreators)
+		.where(and(eq(hiddenCreators.userId, userId), eq(hiddenCreators.creatorId, creatorId)))
+		.returning({ id: hiddenCreators.id });
+	return { unhidden: removed.length > 0 };
+}
+
+/** One hidden Work, as the settings list draws it. */
+export interface HiddenWork {
+	id: number;
+	publicId: number;
+	slug: string;
+	title: string;
+	thumbnail: string | null;
+	creatorHandle: string;
+	createdAt: Date;
+}
+
+/** One hidden creator, as the settings list draws it. */
+export interface HiddenCreator {
+	id: number;
+	handle: string;
+	displayName: string | null;
+	avatar: string | null;
+	createdAt: Date;
+}
+
+/**
+ * Both of the reader's lists, oldest first.
+ *
+ * ⚠️ **Read without any listing condition on the Works themselves**, deliberately: this is
+ * the one surface that must show a Work the reader has hidden, because it is how they
+ * un-hide it. A removed or quarantined Work is a different matter and is not filtered here
+ * either — the row still names it, and the settings row's title is what lets somebody
+ * recognize what they hid years afterwards.
+ */
+export async function listHiddenContent(
+	userId: number,
+): Promise<{ works: HiddenWork[]; creators: HiddenCreator[] }> {
+	const [workRows, creatorRows] = await Promise.all([
+		db
+			.select({
+				id: works.id,
+				publicId: works.publicId,
+				slug: works.slug,
+				title: works.title,
+				thumbnail: works.thumbnail,
+				creatorHandle: users.atprotoHandle,
+				createdAt: hiddenWorks.createdAt,
+			})
+			.from(hiddenWorks)
+			.innerJoin(works, eq(hiddenWorks.workId, works.id))
+			.innerJoin(users, eq(works.creatorId, users.id))
+			.where(eq(hiddenWorks.userId, userId))
+			.orderBy(hiddenWorks.createdAt),
+		db
+			.select({
+				id: users.id,
+				handle: users.atprotoHandle,
+				displayName: users.displayName,
+				avatar: users.avatar,
+				createdAt: hiddenCreators.createdAt,
+			})
+			.from(hiddenCreators)
+			.innerJoin(users, eq(hiddenCreators.creatorId, users.id))
+			.where(eq(hiddenCreators.userId, userId))
+			.orderBy(hiddenCreators.createdAt),
+	]);
+
+	return {
+		works: workRows.map((row) => ({
+			...row,
+			title: row.title ?? "",
+			thumbnail: row.thumbnail === "" ? null : row.thumbnail,
+		})),
+		creators: creatorRows,
 	};
 }
 
