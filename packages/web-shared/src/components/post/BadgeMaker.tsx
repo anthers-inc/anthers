@@ -1267,12 +1267,10 @@ export default function BadgeMaker({
 								first save.
 							</p>
 						) : (
-							<>
-								<p className="truncate text-sm text-base-content/60">
-									{label.trim() || "Untitled"} ·{" "}
-									{threshold.trim() ? `$${Number(threshold).toFixed(2)}/mo` : "No amount yet"}
-								</p>
-							</>
+							<p className="truncate text-sm text-base-content/60">
+								{label.trim() || "Untitled"} ·{" "}
+								{threshold.trim() ? `$${Number(threshold).toFixed(2)}/mo` : "No amount yet"}
+							</p>
 						)}
 					</div>
 				</div>
