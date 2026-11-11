@@ -4,6 +4,7 @@
         db-generate db-migrate db-push db-studio db-seed sessions-clean \
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify verify-inner verify-fast verify-fast-inner verify-docs typecheck test lint lint-fix format \
+        ffmpeg-verify \
         e2e-install e2e-preflight screenshots test-e2e test-e2e-inner test-e2e-ui test-e2e-ui-inner test-gauntlet test-gauntlet-inner \
         spec-diff spec-apply lex-publish deploy-status promote-version release-notes-audit resource-snapshot resource-alerts webhook-check stripe-walk dev-local \
         worktree worktrees worktree-remove \
@@ -321,6 +322,25 @@ verify-fast-inner:
 verify-docs: ## Run only the checks that read markdown (the pre-push hook's docs-only path)
 	bun run lint
 	bun test scripts/american-spelling-guard.test.ts scripts/credential-shape-guard.test.ts
+
+# ─── The pinned FFmpeg build (scripts/install-ffmpeg.sh) ───
+# Both images carry one static FFmpeg, and it is the encoder that decides what a transcode
+# produces. `make verify` cannot see this — it does not build images — so this is the loop
+# for moving the pin: build both, then hold the two version lines against each other. A bump
+# that updated one image and not the other fails here rather than as a difference in
+# production nobody can attribute.
+ffmpeg-verify: ## Build both images and prove they carry the same pinned FFmpeg
+	docker build -f .github/ci-image/Dockerfile -t anthers-ci:ffmpeg-check .
+	docker build -f apps/api/Dockerfile -t anthers-api:ffmpeg-check .
+	@ci="$$(docker run --rm anthers-ci:ffmpeg-check ffmpeg -version | head -1)"; \
+	api="$$(docker run --rm anthers-api:ffmpeg-check ffmpeg -version | head -1)"; \
+	if [ "$$ci" != "$$api" ]; then \
+		echo "the two images carry different FFmpeg builds:" >&2; \
+		echo "  ci:  $$ci" >&2; \
+		echo "  api: $$api" >&2; \
+		exit 1; \
+	fi; \
+	echo "$$ci"
 
 # The browser suite's own session: a database, a network, and free ports for the API and the
 # preview server, which is what lets it run beside `make dev` on :8000.
