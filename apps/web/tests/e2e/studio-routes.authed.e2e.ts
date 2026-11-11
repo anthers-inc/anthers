@@ -105,6 +105,11 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	page,
 	context,
 }) => {
+	// 🚨 **The walk needs more than Playwright's 30s default.** It waits out a 30s profile
+	// fetch below and then does three more legs, so the default budget expires while the
+	// explicit wait is still honoring itself — a test that can never grant the time it
+	// asks for. A loaded CI runner is exactly where that arithmetic bites.
+	test.setTimeout(120_000);
 	await signInAsCreator(context);
 	const studioSidebar = page.getByRole("navigation", { name: "Studio", exact: true });
 	const userSidebar = page.getByRole("navigation", { name: "Anthers", exact: true });
