@@ -100,11 +100,6 @@ export function TypeIcon({ type, className }: { type: string; className?: string
 	return <Icon className={className} />;
 }
 
-/** Whether the type is downloadable-build capable (games/software carry build assets). */
-export function isBuildType(type: string): boolean {
-	return type === "game" || type === "software";
-}
-
 /**
  * Processing lifecycle of an item, derived (no new schema) from its latest transcode.
  * `none` = nothing to process (or not yet queued); `processing` = pending/processing;

@@ -17,10 +17,14 @@
  */
 
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
-import { deliverableIsEmpty, isListened, supportsPreviewMedia } from "@anthers/shared/content";
+import {
+	deliverableIsEmpty,
+	isBuildType,
+	isListened,
+	supportsPreviewMedia,
+} from "@anthers/shared/content";
 import { gridFor, normalizeMaturityRows } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
-import { isBuildType } from "@anthers/web-shared/content/works";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { usePageTitle } from "@anthers/web-shared/page-title";
 import { workUrl } from "@anthers/web-shared/postUrl";
@@ -69,7 +73,7 @@ import {
 import WorkMediaFrame from "../components/work/WorkMediaFrame";
 import WorkSideColumn, { ShowingsStub } from "../components/work/WorkSideColumn";
 import { WorkTagChips } from "../components/work/WorkTags";
-import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
+import { pageShowsDeliverable, reportExternalActivity, useAttentionClaim } from "../lib/attention";
 import { publicAccessSpent, useMeteredBudget } from "../lib/public-access";
 import { useShareToken, withShareToken } from "../lib/share-link";
 import { useWorkVersionHistory } from "../lib/version-history";
@@ -295,6 +299,8 @@ export default function WorkPage() {
 	// The deliverableRef gates the presence claim on the deliverable being on screen, so a
 	// Work scrolled past into a long comment thread stops earning — the comments are not
 	// the work. Playback claims don't consult the ref (audio in the mini-player is exempt).
+	// `pageShowsDeliverable` is the other half: a page that renders no deliverable — a
+	// download-only build's storefront, a build that plays on `/play` — earns nothing.
 	const deliverableRef = useRef<HTMLElement>(null);
 	const presence = work ? consumptionModeFor(work.type) === "presence" : false;
 	useAttentionClaim({
@@ -305,6 +311,7 @@ export default function WorkPage() {
 			!!work &&
 			presence &&
 			isTimePoolEligible(work.type) &&
+			pageShowsDeliverable(work) &&
 			isAccessResult(work.access) &&
 			work.access.canAccess,
 		elementRef: presence ? deliverableRef : undefined,

@@ -22,6 +22,7 @@ import {
 	eventTypeFor,
 	isTimePoolEligible,
 } from "@anthers/shared/attention";
+import { deliverableIsEmpty, hasBrowserDeliverable, isBuildType } from "@anthers/shared/content";
 import { useAuth } from "@anthers/web-shared/auth";
 import { client, nativeRuntime } from "@anthers/web-shared/rpc";
 import { type RefObject, useEffect, useRef } from "react";
@@ -483,6 +484,42 @@ export async function flushAttentionNow(): Promise<void> {
 	}
 	closeAllRanges();
 	await flushEvents();
+}
+
+// ── Which pages may claim ────────────────────────────────────────────────────
+
+/**
+ * Whether this page mounts the Work's deliverable rather than a listing or a door.
+ *
+ * The presence claim exists so time spent *with a Work* is credited, so a page with
+ * nothing of the Work to consume raises none. 🚨 **A download-only build Work's media
+ * area is its download card** — the files are the deliverable, and the page offering
+ * them is a storefront; crediting presence there writes a range that says somebody
+ * played a Work they never opened. A hosted build that needs cross-origin isolation
+ * plays on `/play` instead, and this page offers only the way there; that page runs its
+ * own tracker. An inline hosted build or an embed is consumed here and does earn.
+ *
+ * `deliverableIsEmpty` covers a draft or a deliverable the server withheld; the build
+ * branch covers the gap it leaves, because a download-only Work is not empty — its files
+ * are the deliverable, just not one this page can consume.
+ */
+export function pageShowsDeliverable(work: {
+	type: string;
+	webPlayable?: boolean;
+	webPlayPath?: "inline" | "page" | null;
+	embedUrl?: string | null;
+	sourceKey?: string | null;
+	bodyHtml?: string | null;
+	originalUrl?: string | null;
+	transcoding?: {
+		hlsManifestUrl?: string | null;
+		outputFileUrl?: string | null;
+	} | null;
+	assets?: unknown[];
+}): boolean {
+	if (deliverableIsEmpty(work)) return false;
+	if (!isBuildType(work.type)) return true;
+	return hasBrowserDeliverable(work) && work.webPlayPath !== "page";
 }
 
 // ── Hooks ────────────────────────────────────────────────────────────────────

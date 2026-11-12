@@ -22,7 +22,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { attentionEvents } from "@anthers/db/schema";
+import { attentionEvents, workAssets, workBuilds } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -108,6 +108,20 @@ let textWorkId: number;
 let lockedWorkId: number;
 /** A video Work still staging — never released, so not publicly consumable. */
 let privateWorkId: number;
+/**
+ * A game carrying only downloadable builds → no browser deliverable, so its page is a
+ * storefront and earns nothing.
+ */
+let downloadOnlyGameId: number;
+/**
+ * Both delivery flags on, but still only downloadable files. Stream being enabled does
+ * not invent a browser deliverable — the files remain the only way to play it.
+ */
+let filesOnlyGameId: number;
+/** A game with a hosted browser build → its page plays it, so it earns. */
+let hostedBuildGameId: number;
+/** A game with an external embed → it plays in the page, so it earns. */
+let embeddedGameId: number;
 
 beforeAll(async () => {
 	const stamp = Date.now().toString(36);
@@ -151,6 +165,65 @@ beforeAll(async () => {
 			access: FREE,
 		})
 	).id;
+
+	downloadOnlyGameId = (
+		await insertWork({
+			creatorId: creator.id,
+			type: "game",
+			title: "A Download",
+			access: FREE,
+			streamEnabled: false,
+			downloadEnabled: true,
+		})
+	).id;
+	filesOnlyGameId = (
+		await insertWork({
+			creatorId: creator.id,
+			type: "game",
+			title: "Stream and Download, Files Only",
+			access: FREE,
+			streamEnabled: true,
+			downloadEnabled: true,
+		})
+	).id;
+	hostedBuildGameId = (
+		await insertWork({
+			creatorId: creator.id,
+			type: "game",
+			title: "Plays in the Browser",
+			access: FREE,
+			streamEnabled: true,
+		})
+	).id;
+	embeddedGameId = (
+		await insertWork({
+			creatorId: creator.id,
+			type: "game",
+			title: "Embedded",
+			access: FREE,
+			streamEnabled: true,
+			embedUrl: "https://example.com/play",
+		})
+	).id;
+
+	// The only difference between the two halves is this: file rows on the Work, or a
+	// primary browser build. Both are legitimate released Works of the same type.
+	await db.insert(workAssets).values(
+		[downloadOnlyGameId, filesOnlyGameId].map((workId, i) => ({
+			workId,
+			file: `creators/${creator.id}/assets/eligibility-game-${i}.zip`,
+			filename: `eligibility-game-${i}.zip`,
+			fileSize: 100,
+			mimeType: "application/zip",
+			platform: "windows",
+			isPrimary: true,
+		})),
+	);
+	await db.insert(workBuilds).values({
+		workId: hostedBuildGameId,
+		entryPath: "index.html",
+		isPrimary: true,
+	});
 }, DB_SETUP_TIMEOUT);
 
 describe("attention eligibility is decided server-side", () => {
@@ -203,6 +276,43 @@ describe("attention eligibility is decided server-side", () => {
 		]);
 		expect(body.ineligible).toBe(1);
 		expect(await creditedTo(user.id, creator.id)).toBe(before);
+	});
+
+	it("refuses time against a download-only Work whose page is a storefront", async () => {
+		// The Work is free and released, and its page is all a reader meets — but the page
+		// carries the download card rather than a medium, so a `play` range there says a
+		// person played something they never opened. This is the record Parker's activity
+		// history showed for a downloadable title.
+		const before = await creditedTo(user.id, creator.id);
+		const body = await claim(user.cookie, [
+			{ creatorId: creator.id, eventType: "play", durationSeconds: 60, workId: downloadOnlyGameId },
+		]);
+		expect(body.ineligible).toBe(1);
+		expect(await creditedTo(user.id, creator.id)).toBe(before);
+	});
+
+	it("refuses time against a files-only Work even when streaming is switched on", async () => {
+		// `streamEnabled` alone does not create a browser deliverable. With only
+		// downloadable builds the page still renders the download card.
+		const before = await creditedTo(user.id, creator.id);
+		const body = await claim(user.cookie, [
+			{ creatorId: creator.id, eventType: "play", durationSeconds: 60, workId: filesOnlyGameId },
+		]);
+		expect(body.ineligible).toBe(1);
+		expect(await creditedTo(user.id, creator.id)).toBe(before);
+	});
+
+	it("credits time against a build Work that plays in the browser", async () => {
+		// A hosted build and an embed are both browser deliverables; their pages mount
+		// the thing itself, so time there is consumption.
+		const before = await creditedTo(user.id, creator.id);
+		const body = await claim(user.cookie, [
+			{ creatorId: creator.id, eventType: "play", durationSeconds: 30, workId: hostedBuildGameId },
+			{ creatorId: creator.id, eventType: "play", durationSeconds: 20, workId: embeddedGameId },
+		]);
+		expect(body.recorded).toBe(2);
+		expect(body.ineligible).toBe(0);
+		expect(await creditedTo(user.id, creator.id)).toBe(before + 50);
 	});
 
 	it("refuses time with no Work context at all", async () => {

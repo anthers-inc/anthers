@@ -37,7 +37,7 @@ import {
 	WorkPlaceholder,
 } from "../components/work/WorkLayout";
 import WorkMediaFrame from "../components/work/WorkMediaFrame";
-import { useAttentionClaim } from "../lib/attention";
+import { pageShowsDeliverable, useAttentionClaim } from "../lib/attention";
 import { publicAccessSpent, useMeteredBudget } from "../lib/public-access";
 import { withShareToken } from "../lib/share-link";
 
@@ -90,7 +90,8 @@ export default function EmbedWorkPage() {
 
 	// The presence claim for the media that have no player of their own — the same wiring
 	// as the full Work page, gated on the deliverable being on screen. Playback-mode media
-	// claim from inside their players instead.
+	// claim from inside their players instead. A Work this page renders nothing for — a
+	// download-only build, whose files live on the full page — raises no claim.
 	const deliverableRef = useRef<HTMLElement>(null);
 	const presence = work ? consumptionModeFor(work.type) === "presence" : false;
 	useAttentionClaim({
@@ -101,6 +102,7 @@ export default function EmbedWorkPage() {
 			!!work &&
 			presence &&
 			isTimePoolEligible(work.type) &&
+			pageShowsDeliverable(work) &&
 			isAccessResult(work.access) &&
 			work.access.canAccess,
 		elementRef: presence ? deliverableRef : undefined,

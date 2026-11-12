@@ -21,6 +21,7 @@ import {
 	MAX_RANGE_SECONDS,
 	RANGE_LOOKBACK_SECONDS,
 	splitOverlappingRanges,
+	workEarnsTime,
 } from "./attention.js";
 import { WORK_TYPES } from "./content.js";
 
@@ -75,6 +76,37 @@ describe("consumption modes", () => {
 
 	test("every medium but a listing earns", () => {
 		expect(WORK_TYPES.filter((t) => !isTimePoolEligible(t))).toEqual(["physical", "service"]);
+	});
+});
+
+describe("work eligibility — what a Work actually delivers", () => {
+	test("a downloadable-only build Work has nothing to consume here", () => {
+		expect(workEarnsTime({ type: "game" })).toBe(false);
+		expect(workEarnsTime({ type: "software", webPlayable: false, embedUrl: "" })).toBe(false);
+	});
+
+	test("a hosted build or an embed makes a build Work consumable", () => {
+		expect(workEarnsTime({ type: "game", webPlayable: true })).toBe(true);
+		expect(workEarnsTime({ type: "software", embedUrl: "https://example.com/play" })).toBe(true);
+	});
+
+	test("an embed the page would refuse does not make it consumable", () => {
+		// `embedUrlProblem` refuses http and Anthers' own domain; the serializer blanks
+		// both, so a claim resting on one is resting on nothing.
+		expect(workEarnsTime({ type: "game", embedUrl: "http://example.com/play" })).toBe(false);
+		expect(workEarnsTime({ type: "game", embedUrl: "https://anthers.org/play" })).toBe(false);
+	});
+
+	test("every other earning kind is consumable on its page", () => {
+		for (const type of ["video", "music", "audio", "text", "image", "comic", "ebook"]) {
+			expect(workEarnsTime({ type })).toBe(true);
+		}
+	});
+
+	test("the kinds that never earn stay inert whatever they deliver", () => {
+		expect(workEarnsTime({ type: "physical", webPlayable: true })).toBe(false);
+		expect(workEarnsTime({ type: "service", embedUrl: "https://example.com/x" })).toBe(false);
+		expect(workEarnsTime({ type: "something-new", webPlayable: true })).toBe(false);
 	});
 });
 

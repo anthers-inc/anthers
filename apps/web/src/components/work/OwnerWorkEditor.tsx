@@ -46,6 +46,7 @@
 import {
 	deliverableIsEmpty,
 	embedUrlProblem,
+	isBuildType,
 	isEmptyWriting,
 	isListened,
 	isOwnThumbnail,
@@ -80,7 +81,6 @@ import {
 	WorkTypeFacts,
 } from "@anthers/web-shared/content/work-media";
 import {
-	isBuildType,
 	LIBRARY_TYPE_OPTIONS,
 	TypeIcon,
 	typeLabel,
