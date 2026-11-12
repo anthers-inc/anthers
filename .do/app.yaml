@@ -369,6 +369,16 @@ envs:
   - key: ACCESS_SIGNING_JWK
     scope: RUN_TIME
     type: SECRET
+  # The key the API signs playback tokens with: the Work-scoped `?media=` credential a
+  # packaged shell's media element carries, and the play token a hosted build's address
+  # carries. A shell cannot send the bearer header a media element needs, so the delivery
+  # door admits this token instead; a deployment without the key mints nothing and the
+  # shell's playback 401s. Rotation only expires outstanding tokens, which is self-healing.
+  # Filed in Bitwarden Secrets ("Anthers Prod"), dashboard-set here, like the other
+  # app-level secrets.
+  - key: WEB_BUILD_SIGNING_KEY
+    scope: RUN_TIME
+    type: SECRET
 
 ingress:
   rules:
