@@ -5,15 +5,16 @@
  * ⭐ **One component, because the two pages would otherwise drift into two different accounts**
  * of the same connection, exactly as `SignedInAccountCard` says of itself.
  *
- * The states are genuinely different things and the copy says which one a reader is in: never
- * linked; linked into the members' channels but not yet a creator; linked with the creators'
- * channels open; and the deployment where no application exists yet, which renders nothing at
- * all rather than a button that cannot work.
+ * ⭐ **The card leads with state and roles, not with prose.** The title row says whether the
+ * account is connected, the chips say which Discord roles it holds, and the button says what
+ * can be done; the callback's success outcome is deliberately silent, because the linked state
+ * is already on the card and a green alert repeating it was the loudest thing here.
  *
  * ⚠️ **Disconnecting is not leaving.** It stops the role updates and takes back the Creator role,
- * and the person stays in the server holding the members' role — the copy has to say that,
- * because "Disconnect" reads like "leave" to anyone who has used another app's button.
+ * and the person stays in the server holding the members' role. The line under the button says
+ * so, because "Disconnect" reads like "leave" to anyone who has used another app's button.
  */
+import { ExclamationCircleIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../lib/auth";
 import { isNative } from "../../lib/desktop";
@@ -22,23 +23,16 @@ import { apiBaseUrl, apiFetch } from "../../lib/rpc";
 
 /** What the callback's `discord=` code means, in words somebody can act on. */
 const OUTCOMES: Record<string, string> = {
-	linked: "Your account is connected. The roles follow what the account has earned.",
 	taken: "That Discord account is already connected to a different Anthers account.",
-	state: "The sign-in took too long, so nothing changed. Try connecting again.",
+	state: "That took too long. Try again.",
 	denied: "The Discord sign-in was canceled, so nothing changed.",
-	join: "Discord wouldn't let us add you to the server. Nothing changed; try again in a moment.",
+	join: "Discord wouldn't add you to the server. Try again in a moment.",
 	signin: "Sign in to Anthers again before connecting Discord.",
 	unavailable: "The Discord connection isn't open yet.",
-	error: "Discord didn't answer the way we expected. Nothing changed.",
+	error: "Discord didn't answer the way we expected. Try again.",
 };
 
-export default function DiscordCard({
-	surface = "account",
-	className,
-}: {
-	surface?: "account" | "creator";
-	className?: string;
-}) {
+export default function DiscordCard({ className }: { className?: string }) {
 	const { user, refreshUser } = useAuth();
 	const [params, setParams] = useSearchParams();
 	const [notice, setNotice] = useState<string | null>(null);
@@ -46,11 +40,13 @@ export default function DiscordCard({
 	const [error, setError] = useState<string | null>(null);
 
 	// Read the callback's outcome once, then take it out of the address so a refresh does not
-	// repeat a message about something that happened yesterday.
+	// repeat a message about something that happened yesterday. A successful link is silent:
+	// the card already shows the connection, and saying it again was the redundancy that made
+	// this card read like a paragraph.
 	useEffect(() => {
 		const outcome = params.get("discord");
 		if (!outcome) return;
-		setNotice(OUTCOMES[outcome] ?? OUTCOMES.error);
+		if (outcome !== "linked") setNotice(OUTCOMES[outcome] ?? OUTCOMES.error);
 		setParams(
 			(prev) => {
 				const next = new URLSearchParams(prev);
@@ -63,6 +59,7 @@ export default function DiscordCard({
 
 	const disconnect = useCallback(async () => {
 		setBusy(true);
+		setNotice(null);
 		setError(null);
 		try {
 			const res = await apiFetch("/api/discord/unlink", { method: "POST" });
@@ -84,58 +81,89 @@ export default function DiscordCard({
 
 	const linked = user.isDiscordLinked;
 	const verified = user.isCreator === true;
+	// A linked creator's two role chips already say they are in the server with both roles; a
+	// sentence repeating it is exactly the filler this card is shedding. The two states that
+	// still need a line are the one that has a next step and the one that has an action.
 	const body = linked
 		? verified
-			? "You're in the server, with the creators' channels open."
-			: "You're in the server. Finishing creator setup opens the creators' channels."
-		: surface === "creator"
-			? "The creators' channels on Anthers' Discord server are for creators. Connecting adds you to the server and opens them."
-			: "Anthers has a Discord server where readers and creators talk. Connecting your account adds you to it and gives you the roles your account has earned.";
+			? null
+			: "Creator setup opens the creators' channels."
+		: "Join the Anthers server.";
+	const message = error ?? notice;
 
 	return (
-		<div data-discord-card className={`card bg-base-200 ${className ?? ""}`}>
-			<div className="card-body">
-				<h3 className="card-title text-lg">Community</h3>
-				<p className="text-sm text-base-content/60">{body}</p>
-
-				{notice && (
-					<div
-						className={`alert text-sm ${notice === OUTCOMES.linked ? "alert-success" : "alert-info"}`}
+		<div
+			data-discord-card
+			className={`card border border-base-content/5 bg-base-200 ${className ?? ""}`}
+		>
+			<div className="card-body gap-0">
+				<div className="flex flex-wrap items-center gap-4">
+					<span
+						aria-hidden="true"
+						className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-base-300 text-base-content/60"
 					>
-						<span>{notice}</span>
-					</div>
-				)}
-				{error && (
-					<div className="alert alert-error text-sm">
-						<span>{error}</span>
-					</div>
-				)}
+						<UserGroupIcon className="h-6 w-6" />
+					</span>
 
-				<div className="flex flex-wrap items-center gap-2">
-					{linked ? (
-						<>
+					<div className="min-w-0 flex-1">
+						<div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+							<h3 className="card-title text-lg">Discord</h3>
+							{linked && (
+								<span
+									role="status"
+									className="inline-flex items-center gap-1.5 text-xs font-medium text-base-content/55"
+								>
+									<span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
+									Connected
+								</span>
+							)}
+						</div>
+						{body && <p className="mt-1 text-sm text-base-content/60">{body}</p>}
+						{linked && (
+							<div className="mt-2 flex flex-wrap gap-1.5">
+								<span className="badge badge-ghost badge-sm">Member</span>
+								{verified && <span className="badge badge-ghost badge-sm">Creator</span>}
+							</div>
+						)}
+					</div>
+
+					<div className="flex shrink-0 flex-col items-end gap-1">
+						{linked ? (
+							<>
+								<button
+									type="button"
+									className="btn btn-ghost btn-sm"
+									onClick={disconnect}
+									disabled={busy}
+									aria-describedby="discord-disconnect-note"
+								>
+									{busy ? "Disconnecting…" : "Disconnect"}
+								</button>
+								<span id="discord-disconnect-note" className="text-xs text-base-content/45">
+									You stay in the server.
+								</span>
+							</>
+						) : (
 							<button
 								type="button"
-								className="btn btn-ghost btn-sm w-fit"
-								onClick={disconnect}
-								disabled={busy}
+								className="btn btn-primary btn-sm"
+								onClick={() => window.location.assign(`${apiBaseUrl()}/api/discord/connect`)}
 							>
-								{busy ? "Disconnecting…" : "Disconnect Discord"}
+								Connect
 							</button>
-							<span className="text-xs text-base-content/50">
-								Stops the role updates and leaves you in the server.
-							</span>
-						</>
-					) : (
-						<button
-							type="button"
-							className="btn btn-primary btn-sm w-fit"
-							onClick={() => window.location.assign(`${apiBaseUrl()}/api/discord/connect`)}
-						>
-							Connect Discord
-						</button>
-					)}
+						)}
+					</div>
 				</div>
+
+				{message && (
+					<p role="alert" className="mt-3 flex items-start gap-2 text-sm text-base-content/70">
+						<ExclamationCircleIcon
+							aria-hidden="true"
+							className="mt-0.5 h-4 w-4 shrink-0 text-warning"
+						/>
+						<span>{message}</span>
+					</p>
+				)}
 			</div>
 		</div>
 	);

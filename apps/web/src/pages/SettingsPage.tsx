@@ -3355,7 +3355,7 @@ export default function SettingsPage() {
 
 					{/* The Discord connection, under the card that says who this is — the two
 					    answer "who am I here" and "where else am I known". */}
-					<DiscordCard surface="account" className="mb-6" />
+					<DiscordCard className="mb-6" />
 
 					{/* Creator mode toggle */}
 					<div
