@@ -480,7 +480,7 @@ export default function StudioSettingsPage() {
 
 			<div className="flex flex-col gap-6">
 				<SignedInAccountCard />
-				<DiscordCard surface="creator" />
+				<DiscordCard />
 				<EarningsSection />
 				<CommunicationsSection />
 				<AtmospherePublishingSection />
