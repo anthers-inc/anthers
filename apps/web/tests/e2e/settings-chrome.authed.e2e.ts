@@ -11,7 +11,7 @@
  *
  * ⭐ **The settings sections moved from a row at the top of the page into the sidebar on
  * 2026-11-06** (Parker). The second test pins that shape: the tablist lives inside the
- * `aside`, it carries the seven labels in order, and the page column no longer carries a
+ * `aside`, it carries the section labels in order, and the page column no longer carries a
  * tab row of its own. The third test is the Experience tab's own behavior: a theme pick
  * reaches the document's `data-theme`, the attribute the whole palette keys on, rather than
  * only the control. It also proves the catalog reaches the card as four families, that the
@@ -48,6 +48,7 @@ test("the settings sections are a sidebar tablist, not a row at the top of the p
 		"Experience",
 		"Badges",
 		"Purchases",
+		"Time",
 		"Identity & Devices",
 		"Content & Safety",
 		"Activity & Data",
@@ -99,6 +100,24 @@ test("Badges and Purchases are separate tabs, and each old address lands on its 
 	await expect(page).toHaveURL(/\/settings\?tab=badges$/);
 	await page.goto("/purchases");
 	await expect(page).toHaveURL(/\/settings\?tab=purchases$/);
+});
+
+test("Time is its own tab, carrying the pool and the activity record it divides by", async ({
+	page,
+}) => {
+	await page.goto("/settings?tab=time");
+	await expect(page.getByRole("tab", { name: "Time", exact: true })).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
+	await expect(page.getByRole("heading", { name: "Time Pool" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Activity Details" })).toBeVisible();
+
+	// The record is no longer a card on Activity & Data; that tab keeps the notification
+	// settings and the data controls.
+	await page.goto("/settings?tab=activity");
+	await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Activity Details" })).toHaveCount(0);
 });
 
 test("the Experience tab carries the theme card, and a pick changes the document", async ({

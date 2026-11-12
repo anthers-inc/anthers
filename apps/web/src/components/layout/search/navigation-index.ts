@@ -135,9 +135,16 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		kind: "setting",
 	},
 	{
+		id: "setting-time",
+		label: "Time",
+		keywords: ["settings", "time", "pool", "attention", "history", "activity"],
+		href: "/settings?tab=time",
+		kind: "setting",
+	},
+	{
 		id: "setting-activity",
 		label: "Activity & Data",
-		keywords: ["settings", "notifications", "history", "export", "deletion", "data"],
+		keywords: ["settings", "notifications", "export", "deletion", "data"],
 		href: "/settings?tab=activity",
 		kind: "setting",
 	},
@@ -259,9 +266,9 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 	},
 	{
 		id: "setting-activity-history",
-		label: "Your Activity History",
+		label: "Activity Details",
 		keywords: ["settings", "activity", "history", "attention"],
-		href: "/settings?tab=activity",
+		href: "/settings?tab=time",
 		kind: "setting",
 	},
 	{

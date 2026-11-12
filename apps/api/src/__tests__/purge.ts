@@ -29,6 +29,7 @@ import {
 	adminAccountEvents,
 	adminAccounts,
 	adminSessions,
+	badgeCharges,
 	charitableLedger,
 	comments,
 	creatorCredits,
@@ -201,6 +202,11 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 			.delete(creatorCredits)
 			.where(or(inArray(creatorCredits.creatorId, ids), inArray(creatorCredits.subscriberId, ids)));
 		await db.delete(invoices).where(inArray(invoices.userId, ids));
+		// Badge first transactions are a second money rail beside the invoices, and
+		// `buyer_id` is `set null` for the same outlive-the-account reason. A suite that
+		// exercises them leaves the rows behind unless they are taken here, while the
+		// buyer still names them.
+		await db.delete(badgeCharges).where(inArray(badgeCharges.buyerId, ids));
 
 		// A Sticker names its giver and its creator through `set null` columns, for the same reason
 		// a distribution does, so it outlives both unless it is taken here.

@@ -1344,6 +1344,12 @@ export interface PoolDistribution {
 	billingCycle: string;
 	poolAmount: string;
 	badgeAmount: string;
+	/**
+	 * What this subscriber directed at this creator as a Sticker, out of their own Time
+	 * Pool. Part of the pool's money rather than a fourth source, so a Time Pool breakdown
+	 * shows it beside the by-time share rather than as a separate pot.
+	 */
+	stickerAmount: string;
 	attentionSeconds: number | null;
 	createdAt: string;
 	updatedAt: string;
@@ -1443,6 +1449,8 @@ export interface BadgeHolding {
 	 * holding's own `threshold` stays the rung's price.
 	 */
 	projectedCharge?: string;
+	/** Whether this holding is the Anthers account's own Badge rather than a creator's. */
+	isAnthers?: boolean;
 	creator: {
 		handle: string;
 		displayName: string | null;
@@ -1452,6 +1460,40 @@ export interface BadgeHolding {
 /** Response of GET /subscriptions/my-badges — the Badges the user holds this cycle. */
 export interface BadgeHoldingsResponse {
 	badges: BadgeHolding[];
+}
+
+/** One destination's charge in one month of the Badges tab's rolling row. */
+export interface BadgeMonthChargeRow {
+	/** Stable identity: `anthers` or `creator:<id>`. */
+	key: string;
+	/** The creator's id, or null for the Anthers line and a creator who is gone. */
+	creatorId: number | null;
+	isAnthers: boolean;
+	handle: string;
+	displayName: string | null;
+	/** What this destination charges in the month, two decimal places. */
+	amount: string;
+	/** The prorate credit folded into `amount`; `0.00` on a paid month. */
+	reduction: string;
+}
+
+/**
+ * One month in the Badges tab's rolling five-month row.
+ *
+ * `paid` is recorded money, or a month with nothing charged; `estimated` is a projection
+ * from the standing commitment for a month that has not been invoiced yet.
+ */
+export interface BadgeMonthCharge {
+	cycle: string;
+	state: "paid" | "estimated";
+	badges: BadgeMonthChargeRow[];
+	total: string;
+	reduction: string;
+}
+
+/** Response of GET /subscriptions/badge-months. */
+export interface BadgeMonthsResponse {
+	months: BadgeMonthCharge[];
 }
 
 /** Response of GET /subscriptions/access/:postId (post-scoped access check). */
