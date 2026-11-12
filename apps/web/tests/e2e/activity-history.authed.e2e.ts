@@ -16,11 +16,11 @@
 import { expect, test } from "@playwright/test";
 
 test("a person can read their own activity record in settings", async ({ page }) => {
-	// The Activity & Data tab, where the record lives.
-	await page.goto("/settings?tab=activity");
+	// The Time tab, where the record lives beside the pool it divides by.
+	await page.goto("/settings?tab=time");
 
 	await expect(
-		page.getByRole("heading", { name: /your activity history/i }),
+		page.getByRole("heading", { name: "Activity Details" }),
 		"the record the Privacy Policy says is readable is not there",
 	).toBeVisible();
 

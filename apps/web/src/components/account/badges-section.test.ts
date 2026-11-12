@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Badges tab's structural contract after the 2026-11-10 cleanup.
+ * The Badges and Time tabs' structural contract after the 2026-11-12 rework.
  *
- * Two of the changes Parker asked for are absences rather than features — the ladder chips
- * under a held Badge, and the creator-earnings card on a supporter's page — and neither has
- * a behavior a test can exercise. Pinning them as source facts is the same guard the
- * two-tab rework uses (`../pages/two-tabs.test.ts`): each is a decision a refactor can
- * quietly undo, and the card would keep rendering while it did.
+ * The pieces Parker asked for are mostly arrangements rather than behaviors: one collection
+ * with Anthers first, the All Badges selection, the details section and its
+ * Multiple-Badges-Selected state, and the Time Pool moving to its own tab with the activity
+ * record following the month above it. Each is a decision a refactor can quietly undo while
+ * every card still renders, so each is pinned here — the same source-text guard family as
+ * `two-tabs.test.ts`.
  */
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -15,38 +16,70 @@ import { join } from "node:path";
 const read = (path: string) => readFileSync(join(import.meta.dir, path), "utf8");
 
 const badges = read("BadgesSection.tsx");
-const studioSettings = read("../../../../../packages/web-shared/src/pages/StudioSettingsPage.tsx");
+const timePool = read("TimePoolSection.tsx");
+const activity = read("ActivityDetailsSection.tsx");
+const settings = read("../../pages/SettingsPage.tsx");
 
-describe("a held Badge card shows the Badge held", () => {
-	it("does not repeat the creator's whole ladder as chips", () => {
-		expect(badges).not.toContain("row.rungs.map");
-		expect(badges).not.toContain("badge badge-xs");
+describe("the Badges tab is one collection", () => {
+	it("puts the Anthers tile before the creator tiles", () => {
+		expect(badges).toContain('name="Anthers"');
+		expect(badges.indexOf('name="Anthers"')).toBeLessThan(badges.indexOf("{creatorBadges.map"));
 	});
 
-	it("still finds the held rung's position for the emblem it draws", () => {
-		expect(badges).toContain("row.rungs.findIndex");
+	it("offers the whole collection as one wide control", () => {
+		expect(badges).toContain("All Badges");
+		expect(badges).toContain('aria-pressed={selected === "all"}');
+	});
+
+	it("keeps the details section and its all-badges state", () => {
+		expect(badges).toContain("Badge Details");
+		expect(badges).toContain("Multiple Badges Selected");
+	});
+
+	it("draws the rolling five-month row from the server's charge record", () => {
+		expect(badges).toContain("badge-months");
+		expect(badges).toContain("Monthly Charges");
+		expect(badges).toContain("Estimated");
+		expect(badges).toContain("prorate");
+	});
+
+	it("no longer carries the Time Pool table", () => {
+		expect(badges).not.toContain("Where Your Month Went");
+		expect(badges).not.toContain("cycleTableTotals");
 	});
 });
 
-describe("the month table totals its own columns", () => {
-	it("reads every total from the one arithmetic module", () => {
-		expect(badges).toContain("cycleTableTotals");
+describe("the Time tab owns the pool and the activity record", () => {
+	it("is a tab below Purchases", () => {
+		expect(settings).toContain('{ id: "time", label: "Time" }');
+		const purchases = settings.indexOf('{ id: "purchases"');
+		const time = settings.indexOf('{ id: "time"');
+		const identity = settings.indexOf('{ id: "identity"');
+		expect(purchases).toBeLessThan(time);
+		expect(time).toBeLessThan(identity);
 	});
 
-	it("ends with a Totals row and no Time-Pool-only tail", () => {
-		expect(badges).toContain(">Totals</span>");
-		expect(badges).not.toContain("Time Pool total");
-	});
-});
-
-describe("creator earnings live in Creator Settings", () => {
-	it("the Badges tab neither fetches nor renders them", () => {
-		expect(badges).not.toContain("Your Creator Earnings");
-		expect(badges).not.toContain("subscriptions.earnings");
+	it("renders the pool above the activity record from one month", () => {
+		expect(settings).toContain("<TimeSection />");
+		expect(settings).toContain('id: "time"');
+		expect(settings).toContain("<TimePoolSection cycle={cycle}");
+		expect(settings).toContain("<ActivityDetailsSection cycle={cycle} />");
 	});
 
-	it("the Creator Settings page carries the card", () => {
-		expect(studioSettings).toContain("Your Creator Earnings");
-		expect(studioSettings).toContain("subscriptions.earnings");
+	it("shows the by-time and directed halves of the same pool", () => {
+		expect(timePool).toContain("Directed by You");
+		expect(timePool).toContain("timePoolTotals");
+		expect(timePool).toContain("stickerAmount");
+	});
+
+	it("renames the record and stops carrying its own month control", () => {
+		expect(activity).toContain("Activity Details");
+		expect(activity).not.toContain("This billing period");
+		expect(activity).not.toContain("previousCycleKey");
+		expect(activity).toContain("export default function ActivityDetailsSection({ cycle }");
+	});
+
+	it("leaves the activity record out of Activity & Data", () => {
+		expect(settings).not.toContain("<ActivityHistorySection");
 	});
 });

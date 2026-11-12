@@ -174,12 +174,16 @@ describe("what next month holds", () => {
 		);
 	});
 
-	it("projects no further out than the next cycle", async () => {
+	it("projects the two cycles after this one, and no further", async () => {
 		await makeBadge(creator.userId, "3.00");
 		await setSubscription();
 		current = subscription([{ destination: String(creator.userId), dollars: 3 }]);
 
-		const beyond = nextCycleKey(nextCycleKey(currentCycleKey()));
+		const twoAhead = nextCycleKey(nextCycleKey(currentCycleKey()));
+		const beyond = nextCycleKey(twoAhead);
+		expect((await projectedBadgeHoldings(supporter.userId, twoAhead))[0]?.projectedCharge).toBe(
+			"3.00",
+		);
 		expect(await projectedBadgeHoldings(supporter.userId, beyond)).toEqual([]);
 	});
 
