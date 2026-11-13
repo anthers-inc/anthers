@@ -1266,17 +1266,11 @@ export async function publicPostCard(param: string) {
 	if (embedded.length > 0) {
 		// `mentionableWorks` is the allow-list a title's mention already resolves through, so
 		// asking it which embedded Works this reader may see keeps the image and the name on
-		// one rule: a Work it filters out contributes no thumbnail either.
+		// one rule: a Work it filters out contributes no thumbnail either. It also resolves a
+		// stored key into a URL, so the preview never carries a relative storage path.
 		const mentionable = await mentionableWorks(embedded, null);
 		const first = embedded.find((publicId) => mentionable.has(publicId));
-		if (first !== undefined) {
-			const [row] = await db
-				.select({ thumbnail: works.thumbnail })
-				.from(works)
-				.where(eq(works.publicId, first))
-				.limit(1);
-			image = row?.thumbnail ? row.thumbnail : null;
-		}
+		if (first !== undefined) image = mentionable.get(first)?.thumbnail ?? null;
 	}
 	return {
 		displayTitle,

@@ -25,6 +25,7 @@ import { db } from "@anthers/db/client";
 import { follows, posts, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
+import { storage } from "../services/storage/index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayoutsFor } from "./payouts-fixture";
@@ -45,6 +46,8 @@ function withCookie(cookie: string) {
 
 const SHARED_WORK = `Graph work ${run}`;
 const SHARED_POST = `Graph post ${run}`;
+const KEY_THUMB_WORK = `Key-thumbnail good ${run}`;
+const EMBED_POST = `Announcement of the good ${run}`;
 const BLOCKED_WORK = `Blocked work ${run}`;
 const BUSY_WORK = `Busy creator's run ${run}`;
 const TAG = `graph-tag-${run}`;
@@ -54,6 +57,7 @@ let followedCreatorId = 0;
 let unfollowedCreatorId = 0;
 let busyCreatorId = 0;
 let secondFollowedCreatorId = 0;
+let keyThumbKey = "";
 
 async function feed(cookie: string, query = "") {
 	const res = await req(`/api/accounts/me/feed${query}`, withCookie(cookie));
@@ -65,6 +69,7 @@ async function feed(cookie: string, query = "") {
 			title: string;
 			source: string;
 			creatorId: number;
+			thumbnail?: string | null;
 			reason?: { stage: string; code: string; label: string };
 		}>;
 	};
@@ -119,6 +124,25 @@ describe("Discovery's graph and ticker routes", () => {
 			publicId: testPublicId(),
 			isPublished: true,
 			tags: [TAG],
+		});
+
+		// A physical good's cover reaches `works.thumbnail` as a bare storage key (the
+		// listing writer's legacy shape). Both the release tile and a post that embeds the
+		// Work must hand a reader the resolved address, not a relative path.
+		keyThumbKey = `creators/${unfollowedCreatorId}/thumbnails/unknown/key-thumb-${run}.png`;
+		const keyed = await insertWork({
+			creatorId: unfollowedCreatorId,
+			type: "physical",
+			title: KEY_THUMB_WORK,
+			thumbnail: keyThumbKey,
+		});
+		await db.insert(posts).values({
+			creatorId: unfollowedCreatorId,
+			title: EMBED_POST,
+			slug: `dsc-embed-post-${run}`,
+			publicId: testPublicId(),
+			isPublished: true,
+			body: `Read [the good](/works/${keyed.slug}-${keyed.publicId}).`,
 		});
 
 		await req(`/api/accounts/users/${followed.handle}/follow`, {
@@ -232,6 +256,18 @@ describe("Discovery's graph and ticker routes", () => {
 		expect(byTitle.get(SHARED_POST)?.kind).toBe("post");
 		expect(byTitle.get(SHARED_WORK)?.source).toBe("discovery");
 		expect(byTitle.get(SHARED_POST)?.source).toBe("discovery");
+	});
+
+	it("resolves a key-shaped Work cover for the release tile and the post that embeds it", async () => {
+		const ticker = await feed(viewerCookie, "?scope=global");
+		const byTitle = new Map(ticker.entries.map((entry) => [entry.title, entry]));
+		const address = await storage.getUrl(keyThumbKey);
+
+		// The release entry carries the Work's own cover; the post entry carries the first
+		// Work its body embeds. A raw key would make both `<img src>` values relative to
+		// the page, where the app answers with HTML.
+		expect(byTitle.get(KEY_THUMB_WORK)?.thumbnail).toBe(address);
+		expect(byTitle.get(EMBED_POST)?.thumbnail).toBe(address);
 	});
 
 	it("keeps a blocked creator out of the global ticker", async () => {
