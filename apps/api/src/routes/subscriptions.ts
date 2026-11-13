@@ -109,6 +109,7 @@ import {
 import { anthersUserId, loadAnthersLadder } from "../services/anthers-badges.js";
 import { creditedSeconds, creditedSecondsByDayAndCreator } from "../services/attention-ranges.js";
 import { composeBadgeArt, recomposeBadgeArt } from "../services/badge-art-compose.js";
+import { badgeChargeMonths } from "../services/badge-months.js";
 import { projectedBadgeHoldings } from "../services/badge-projection.js";
 import {
 	ensureAnthersProduct,
@@ -1489,8 +1490,10 @@ const subscriptionRoutes = new Hono()
 	 * rather than windowed because the point is inspection, not a total.
 	 *
 	 * `day` (an optional `YYYY-MM-DD`, UTC) narrows the record to one day — the
-	 * drill-down a graph bar opens. The filter changes nothing about what a row is:
-	 * the same columns, whole ranges, the same order the record keeps everywhere.
+	 * drill-down a graph bar opens. `cycle` narrows it to one billing cycle, which is how
+	 * the Time tab's Activity Details follows the month chosen above it. The filters
+	 * change nothing about what a row is: the same columns, whole ranges, the same order
+	 * the record keeps everywhere.
 	 */
 	.get("/attention/history", requireAuth, async (c) => {
 		const user = c.get("user");
@@ -1500,7 +1503,13 @@ const subscriptionRoutes = new Hono()
 		if (day != null && !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
 			return c.json({ error: "Bad day" }, 400);
 		}
+		const cycle = c.req.query("cycle");
+		if (cycle != null && !isCycleKey(cycle)) {
+			return c.json({ error: "Bad cycle" }, 400);
+		}
 		const dayFromMs = day != null ? new Date(`${day}T00:00:00.000Z`).getTime() : null;
+		const cycleFrom = cycle != null ? cycleStart(cycle) : null;
+		const cycleTo = cycle != null ? cycleEnd(cycle) : null;
 
 		const rows = await db
 			.select({
@@ -1526,6 +1535,12 @@ const subscriptionRoutes = new Hono()
 				and(
 					eq(attentionEvents.userId, user.id),
 					sql`${attentionEvents.durationSeconds} > 0`,
+					...(cycleFrom != null && cycleTo != null
+						? [
+								gte(attentionEvents.startedAt, cycleFrom),
+								sql`${attentionEvents.startedAt} < ${cycleTo.toISOString()}::timestamptz`,
+							]
+						: []),
 					...(dayFromMs != null
 						? [
 								gte(attentionEvents.startedAt, new Date(dayFromMs)),
@@ -1789,6 +1804,20 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
+	/**
+	 * The rolling five-month charge record behind the Badges tab's month row.
+	 *
+	 * Two months back, this month, and two forward: the past and present from the paid
+	 * invoice lines and completed Badge charges, the future from the standing subscription
+	 * less any prorate reduction recorded against that cycle. The current month falls back
+	 * to this cycle's holdings only when nothing has been recorded for it yet, and says so
+	 * with `estimated`.
+	 */
+	.get("/badge-months", requireAuth, async (c) => {
+		const user = c.get("user");
+		return c.json({ months: await badgeChargeMonths(user.id) });
+	})
+
 	// ── The user's own Badge holdings ────────────────────────────────────────
 	// What this user holds this cycle: one discrete Badge per creator, written by the
 	// activation webhook from the subscription's directed items. Holding a creator's
@@ -1808,6 +1837,7 @@ const subscriptionRoutes = new Hono()
 			return c.json({ badges: await projectedBadgeHoldings(user.id, cycle) });
 		}
 
+		const anthersId = await anthersUserId();
 		const result = await db
 			.select({
 				badge: badges,
@@ -1838,6 +1868,9 @@ const subscriptionRoutes = new Hono()
 				updatedAt: r.badge.updatedAt,
 				billingCycle: r.holding.billingCycle,
 				createdAt: r.holding.createdAt,
+				// The Anthers line is an ordinary destination, so the grid can put its tile
+				// first only if the response says which holding it is.
+				isAnthers: r.badge.creatorId === anthersId,
 				creator: {
 					handle: r.creatorHandle,
 					displayName: r.creatorDisplayName,
