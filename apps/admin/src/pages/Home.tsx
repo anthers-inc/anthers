@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The admin app's home: what is owed on a date, what is waiting on somebody, then how the
- * platform is growing.
+ * The admin app's home: the queues of work waiting on somebody, how the platform is
+ * growing, then what is owed on a date and how dispute standing looks.
  *
- * Deadlines come first because a missed one is the costliest thing on this page: every obligation
- * with a due date, from the rights requests and DMCA windows in the database to the Compliance
- * Calendar's filings, in one list — past due at the top, terminal misses marked. Below it, the
- * queues of work waiting on somebody, then growth. Each section loads on its own, so one slow
- * queue does not hold up the rest.
+ * Deadlines sit at the bottom by design, with dispute standing beside them: every
+ * obligation with a due date, from the rights requests and DMCA windows in the database to
+ * the Compliance Calendar's filings, in one list — past due at the top, terminal misses
+ * marked. Each section loads on its own, so one slow queue does not hold up the rest.
  */
 import { Link } from "react-router-dom";
 import {
@@ -205,91 +204,6 @@ export default function Home() {
 				description="What is waiting on somebody, and how the platform is growing."
 			/>
 
-			{/* Everything with a due date, from every source — the list half of the decision that
-			    anything with a deadline reaches the operator by email and is acted on in the app.
-			    Past-due items sit at the top and carry the error border; the endpoint has already
-			    sorted them. */}
-			<section className="mb-10">
-				<SectionHeading>
-					Deadlines
-					{pastDueCount > 0 && (
-						<span className="ml-2 badge badge-error">{pastDueCount} past due</span>
-					)}
-				</SectionHeading>
-				{deadlines.error && <ErrorAlert>{deadlines.error}</ErrorAlert>}
-				{!deadlines.data ? (
-					deadlines.error ? null : (
-						<Loading />
-					)
-				) : deadlines.data.deadlines.length === 0 ? (
-					<p className="text-sm text-base-content/60">Nothing with a due date is open right now.</p>
-				) : (
-					<div className="grid gap-3">
-						{deadlines.data.deadlines.map((row) => (
-							<DeadlineRowCard key={row.key} row={row} />
-						))}
-					</div>
-				)}
-			</section>
-
-			{/* The dispute-standing panel — the ratio-threshold alert's app half (Parker,
-			    2026-10-02). The lines are Visa's VAMP rule: non-compliant at a 0.5%
-			    dispute+EFW ratio or a count of 5 in a month, so the alert fires at those
-			    numbers as an early warning and at half of them as "approaching". Count and
-			    ratio are both stated because a small account trips the count first — a ratio
-			    alone would stay quiet through exactly the account most likely to cross it. */}
-			<section className="mb-10">
-				<SectionHeading>Dispute Standing</SectionHeading>
-				{disputes.error && <ErrorAlert>{disputes.error}</ErrorAlert>}
-				{!disputes.data ? (
-					disputes.error ? null : (
-						<Loading />
-					)
-				) : disputes.data.standing.count === 0 && disputes.data.standing.openCount === 0 ? (
-					// Quiet is stated plainly rather than hidden: "no disputes" is the answer,
-					// and an absent panel would be indistinguishable from a broken one.
-					<p className="text-sm text-base-content/60">
-						No disputes — nothing has been charged back, and there is nothing to act on.
-					</p>
-				) : (
-					<div
-						className={`rounded-box border p-4 ${
-							disputes.data.standing.state === "early-warning"
-								? "border-error"
-								: disputes.data.standing.state === "approaching"
-									? "border-warning"
-									: "border-base-300"
-						}`}
-					>
-						<div className="flex flex-wrap items-baseline gap-3">
-							<span className="text-2xl font-semibold tabular-nums">
-								{disputes.data.standing.count}
-							</span>
-							<span className="text-sm text-base-content/60">
-								disputes in the last 30 days
-								{" · "}
-								{disputes.data.standing.ratio === null
-									? "no successful payments to measure a ratio against"
-									: `${(disputes.data.standing.ratio * 100).toFixed(2)}% of successful payments`}
-								{" · "}
-								{disputes.data.standing.openCount} open
-							</span>
-						</div>
-						<p className="mt-1 text-sm text-base-content/70">
-							{disputes.data.standing.state === "early-warning"
-								? "Past the early-warning line — look at the list before anything else."
-								: "Approaching the early-warning line — worth a look."}
-						</p>
-						<p className="mt-2 text-xs text-base-content/50">
-							The lines: early-warning at 0.5% or 5 disputes in the window, approaching at half
-							that. The count is what a small account trips first, which is why both are stated.
-							Measured over a rolling 30 days on Anthers' own records — an early warning, not an
-							audit; the networks measure calendar months on theirs.
-						</p>
-					</div>
-				)}
-			</section>
-
 			<section className="mb-10">
 				<SectionHeading>Needs Attention</SectionHeading>
 				<div className="grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -420,6 +334,91 @@ export default function Home() {
 							</div>
 						</div>
 					</>
+				)}
+			</section>
+
+			{/* Everything with a due date, from every source — the list half of the decision that
+			    anything with a deadline reaches the operator by email and is acted on in the app.
+			    Past-due items sit at the top and carry the error border; the endpoint has already
+			    sorted them. */}
+			<section className="mb-10">
+				<SectionHeading>
+					Deadlines
+					{pastDueCount > 0 && (
+						<span className="ml-2 badge badge-error">{pastDueCount} past due</span>
+					)}
+				</SectionHeading>
+				{deadlines.error && <ErrorAlert>{deadlines.error}</ErrorAlert>}
+				{!deadlines.data ? (
+					deadlines.error ? null : (
+						<Loading />
+					)
+				) : deadlines.data.deadlines.length === 0 ? (
+					<p className="text-sm text-base-content/60">Nothing with a due date is open right now.</p>
+				) : (
+					<div className="grid gap-3">
+						{deadlines.data.deadlines.map((row) => (
+							<DeadlineRowCard key={row.key} row={row} />
+						))}
+					</div>
+				)}
+			</section>
+
+			{/* The dispute-standing panel — the ratio-threshold alert's app half (Parker,
+			    2026-10-02). The lines are Visa's VAMP rule: non-compliant at a 0.5%
+			    dispute+EFW ratio or a count of 5 in a month, so the alert fires at those
+			    numbers as an early warning and at half of them as "approaching". Count and
+			    ratio are both stated because a small account trips the count first — a ratio
+			    alone would stay quiet through exactly the account most likely to cross it. */}
+			<section>
+				<SectionHeading>Dispute Standing</SectionHeading>
+				{disputes.error && <ErrorAlert>{disputes.error}</ErrorAlert>}
+				{!disputes.data ? (
+					disputes.error ? null : (
+						<Loading />
+					)
+				) : disputes.data.standing.count === 0 && disputes.data.standing.openCount === 0 ? (
+					// Quiet is stated plainly rather than hidden: "no disputes" is the answer,
+					// and an absent panel would be indistinguishable from a broken one.
+					<p className="text-sm text-base-content/60">
+						No disputes — nothing has been charged back, and there is nothing to act on.
+					</p>
+				) : (
+					<div
+						className={`rounded-box border p-4 ${
+							disputes.data.standing.state === "early-warning"
+								? "border-error"
+								: disputes.data.standing.state === "approaching"
+									? "border-warning"
+									: "border-base-300"
+						}`}
+					>
+						<div className="flex flex-wrap items-baseline gap-3">
+							<span className="text-2xl font-semibold tabular-nums">
+								{disputes.data.standing.count}
+							</span>
+							<span className="text-sm text-base-content/60">
+								disputes in the last 30 days
+								{" · "}
+								{disputes.data.standing.ratio === null
+									? "no successful payments to measure a ratio against"
+									: `${(disputes.data.standing.ratio * 100).toFixed(2)}% of successful payments`}
+								{" · "}
+								{disputes.data.standing.openCount} open
+							</span>
+						</div>
+						<p className="mt-1 text-sm text-base-content/70">
+							{disputes.data.standing.state === "early-warning"
+								? "Past the early-warning line — look at the list before anything else."
+								: "Approaching the early-warning line — worth a look."}
+						</p>
+						<p className="mt-2 text-xs text-base-content/50">
+							The lines: early-warning at 0.5% or 5 disputes in the window, approaching at half
+							that. The count is what a small account trips first, which is why both are stated.
+							Measured over a rolling 30 days on Anthers' own records — an early warning, not an
+							audit; the networks measure calendar months on theirs.
+						</p>
+					</div>
 				)}
 			</section>
 		</div>
