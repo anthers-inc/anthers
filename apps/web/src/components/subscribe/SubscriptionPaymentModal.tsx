@@ -277,7 +277,13 @@ function PaymentForm({
 	const quoteBlock = (
 		<div className="rounded-lg bg-base-200 p-4 my-3 text-sm flex flex-col gap-2">
 			<div className="flex items-center justify-between">
-				<span>{isChange ? "Due today (prorated)" : pending ? "Charged today" : "Before tax"}</span>
+				<span>
+					{isChange
+						? "Due today (prorated)"
+						: pending
+							? "Charged today"
+							: "Charged today, before tax"}
+				</span>
 				<strong>${pending?.amountDue ?? preview.chargeNow}</strong>
 			</div>
 			<div className="flex items-center justify-between text-base-content/70">

@@ -96,10 +96,11 @@ test("the Adult warning names both proofs, and the (i) explains the check", asyn
 	await expect(ratings.getByRole("button", { name: /turn on adult content/i })).toHaveCount(0);
 
 	// The reason links to the one settings surface that saves the proof, and that surface
-	// is the card-plus-address block now — the old address-only card is gone.
+	// now splits the two: the card lives at Stripe, the US billing address stays inline.
 	await page.getByRole("link", { name: "Account settings" }).click();
 	await expect(page.getByRole("heading", { name: "Save payment info" })).toBeVisible();
-	await expect(page.getByRole("button", { name: "Add payment info" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Add a card at Stripe" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Add billing address" })).toBeVisible();
 	await expect(page.getByRole("heading", { name: "Billing Address" })).toHaveCount(0);
 });
 
