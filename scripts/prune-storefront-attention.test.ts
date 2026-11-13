@@ -9,7 +9,8 @@
  * download-only shape the correction exists for.
  */
 import { describe, expect, test } from "bun:test";
-import { isStorefrontOnly, rolledUpRanges } from "./prune-storefront-attention";
+import { rolledUpRanges } from "./attention-prune-lib";
+import { isStorefrontOnly } from "./prune-storefront-attention";
 
 const NONE = { currentBuilds: 0, archivedWebBuilds: 0 };
 
