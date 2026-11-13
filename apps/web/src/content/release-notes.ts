@@ -71,6 +71,20 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.13",
+		date: "2026-11-13",
+		lede: "A saved card and billing address now follow a supporter from checkout to settings, and a monthly support receipt names who received the money.",
+		entries: [
+			"Every purchase now creates or reuses a Stripe customer, saves the billing address from that purchase for the next checkout, and offers to save the card. A one-time purchase keeps a card only when the buyer ticks the box, while a recurring Badge keeps the card its renewal needs. Account settings shows the saved card and address and links card changes to Stripe's payment-method page.",
+			"The Privacy Policy describes the Stripe customer record that every purchase now creates, the saved card and billing address, and their deletion. Deleting an account now deletes the customer record and the cards saved to it, rather than only clearing the saved address.",
+			"The cart collects the billing address through Stripe's US-only address element, and shows a delivery address only when the cart holds a physical good. The monthly support card step uses the payment element and shows the first invoice's tax-inclusive amount.",
+			"A trial invoice that charges nothing no longer sends a support receipt, and a receipt for support that reached only Anthers names Anthers rather than showing an empty list.",
+			"A Badge whose completed checkout never created its recurring subscription can be repaired from the original charge. The repair attaches the card, saves its billing address, and reduces the first renewal by the days before the Badge began, so the supporter is not charged twice for the same month.",
+			"The theme picker moved into the signed-in topbar, and the cart and notification bell stay visible beside it.",
+			"The supporters page is retired, along with the setting that listed supporters on a profile. The pages and emails that named it no longer do.",
+		],
+	},
+	{
 		version: "2026.11.12",
 		date: "2026-11-12",
 		lede: "A minute counts only where there is something of the Work to spend it with, and a supporter's month reads from one Badges grid with the Time Pool on a tab of its own.",
