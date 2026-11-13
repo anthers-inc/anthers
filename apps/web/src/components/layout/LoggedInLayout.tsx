@@ -363,14 +363,14 @@ function LoggedInLayoutInner() {
 
 						<div className="navbar-end gap-1">
 							{/* Notifications, theme, cart — in that order, left to right (Parker,
-					    2026-11-13). The bell keeps its appear-when-there-is-something rule, with
-					    a count riding the shared store so one poll serves every surface. The
-					    theme picker is the marketing shell's own dropdown, because the choice is
-					    about the page in front of the reader in either mode. The cart is always
-					    here — the one surface where money changes hands should not come and go —
-					    and only its count badge is conditional, because a permanent "0" is
-					    noise. Studio leaves out the bell and the cart: creator chrome, not reader
-					    chrome. */}
+					    2026-11-13). All three hold their place; only a count badge is
+					    conditional, because a permanent "0" is noise and a control that comes
+					    and goes is worse. The bell's count rides the shared store so one poll
+					    serves every surface. The theme picker is the marketing shell's own
+					    dropdown, because the choice is about the page in front of the reader in
+					    either mode. The cart is the one surface where money changes hands, so it
+					    should not depend on being non-empty to exist. Studio leaves out the bell
+					    and the cart: creator chrome, not reader chrome. */}
 							{!studio && <NotificationBell />}
 							<ThemeSelect />
 							{!studio && (

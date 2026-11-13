@@ -386,36 +386,21 @@ export async function unsubscribeGroup(token: string, group: DeliveryGroup): Pro
 	return true;
 }
 
+/**
+ * How many of this person's notifications are unread — the bell's one number.
+ *
+ * ⭐ **Counted in the database rather than by reading rows back and taking their length**:
+ * the bell polls this every 30 seconds in every open tab, so the only thing that should
+ * cross the wire is a number. The bell is always present (Parker, 2026-11-13), so a zero
+ * here means an unbadged bell rather than a hidden one — the endpoint used to answer a
+ * `total` too, solely so the client could decide whether to draw one at all.
+ */
 export async function unreadCount(userId: number): Promise<number> {
-	const rows = await db
-		.select({ id: notifications.id })
+	const [row] = await db
+		.select({ n: sql<number>`count(*)::int` })
 		.from(notifications)
 		.where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
-	return rows.length;
-}
-
-/**
- * Both numbers the bell needs, from one scan: how much is new, and whether this person
- * has ever been told anything.
- *
- * ⭐ **`total` is what decides whether the bell exists at all**, and it is a different
- * question from `unread`. The bell is chrome that appears once there is something behind
- * it and stays afterwards (`components/layout/NotificationBell.tsx`), so "unread is zero"
- * cannot be the test — a person who has read everything still needs the door back to the
- * feed. Hiding it until the first notification also keeps the header honest for the many
- * accounts that have never been told anything.
- */
-export async function notificationCounts(
-	userId: number,
-): Promise<{ total: number; unread: number }> {
-	const [row] = await db
-		.select({
-			total: sql<number>`count(*)::int`,
-			unread: sql<number>`count(*) filter (where ${notifications.readAt} is null)::int`,
-		})
-		.from(notifications)
-		.where(eq(notifications.userId, userId));
-	return { total: row?.total ?? 0, unread: row?.unread ?? 0 };
+	return row?.n ?? 0;
 }
 
 /** Mark some (or all) of a user's notifications read. Scoped to the owner. */

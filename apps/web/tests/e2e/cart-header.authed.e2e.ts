@@ -282,7 +282,7 @@ test("the header's cart badge counts what the cart holds and drops when the serv
 	await context.close();
 });
 
-test("the header keeps the cart link when the cart is empty, with no count badge", async ({
+test("the header keeps the cart and the bell when both are empty, with no count badges", async ({
 	browser,
 }) => {
 	const context = await newBuyerContext(browser);
@@ -293,6 +293,13 @@ test("the header keeps the cart link when the cart is empty, with no count badge
 	await expect(link, "the cart link is missing on an empty cart").toBeVisible();
 	await expect(link).toHaveAttribute("href", "/cart");
 	await expect(link.locator(".badge")).toHaveCount(0);
+
+	// The bell follows the same rule (Parker, 2026-11-13): it holds its place, and only
+	// the badge waits for something unread. This buyer has never been notified, so the
+	// zero here is the badge's absence rather than a hidden control.
+	const bell = header(page).getByRole("link", { name: "Notifications", exact: true });
+	await expect(bell, "the bell is missing on an account with no notifications").toBeVisible();
+	await expect(bell.locator(".badge")).toHaveCount(0);
 	await context.close();
 });
 

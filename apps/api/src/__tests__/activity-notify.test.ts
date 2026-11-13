@@ -320,7 +320,7 @@ describe("emitters", () => {
 			headers: { Cookie: people.author.cookie },
 		});
 		expect(res.status).toBe(200);
-		const body = (await res.json()) as { unread: number; total: number };
+		const body = (await res.json()) as { unread: number; total?: number };
 		// The same number the list read reports — the two endpoints are one count from one
 		// service, and a drift here would be the bell saying something the page's own
 		// header contradicts.
@@ -330,9 +330,9 @@ describe("emitters", () => {
 		const listedBody = (await listed.json()) as { unread: number };
 		expect(body.unread).toBe(listedBody.unread);
 		expect(body.unread).toBeGreaterThan(0);
-		// The bell draws only when `total` is non-zero — the same read answers both, and a
-		// total below the unread count would mean the aggregate's two halves disagreed.
-		expect(body.total).toBeGreaterThanOrEqual(body.unread);
+		// ⭐ **No `total` rides along any more** (Parker, 2026-11-13): the bell is always in
+		// the header, so the count is the only thing its poll answers.
+		expect(body).not.toHaveProperty("total");
 	});
 });
 

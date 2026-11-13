@@ -2,16 +2,14 @@
 /**
  * The bell — the header's way into the notifications feed, wearing the unread count.
  *
- * 🚨 **Rendered only when it has something behind it.** A bell with a `0` badge is
- * furniture; the header is tight on mobile and a permanent control that answers "nothing
- * has happened" belongs behind something that has. **The first notification opens it, and
- * from then on it stays** — so the test is `total > 0`, not `unread > 0`: a person who has
- * read everything still needs the way back, and the affordance someone who has been told
- * something once may need again is worth the corner of chrome. The cart used to follow the
- * same rule and stopped on 2026-11-13 (Parker): a cart is always here, with only its count
- * badge conditional.
+ * 🚨 **Always here, with only the badge conditional** (Parker, 2026-11-13): a bell with a
+ * `0` badge is furniture, but a bell that comes and goes is worse — the door to the feed
+ * should not depend on a count that is zero for most accounts most days, and the cart
+ * settled on the same rule earlier the same day. So the bell renders unconditionally and
+ * `unread > 0` is only what puts a number on it. A person who has read everything still
+ * needs the way back, which is why the badge clears rather than the bell disappearing.
  *
- * The counts are the store's (`lib/notifications.ts`): one poll shared across pages,
+ * The count is the store's (`lib/notifications.ts`): one poll shared across pages,
  * refreshed here on every navigation so moving around the site is itself the poll the
  * sitting-still interval backs up.
  */
@@ -38,10 +36,9 @@ export default function NotificationBell() {
 		refreshUnreadCount();
 	}, [pathname]);
 
-	// `null` is "signed out or not yet loaded", and `0` is "nothing has ever happened" —
-	// neither is a state the bell can be drawn from.
-	if (!counts || counts.total === 0) return null;
-	const { unread } = counts;
+	// `null` is "signed out or not yet loaded" — the bell still renders, wearing no badge,
+	// and the first poll fills the count in.
+	const unread = counts?.unread ?? 0;
 
 	return (
 		<Link

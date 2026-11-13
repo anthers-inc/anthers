@@ -32,13 +32,7 @@ import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { eraseAccount } from "../services/account-deletion.js";
 import { saveOnPurchase } from "../services/library.js";
-import {
-	listNotifications,
-	markRead,
-	notificationCounts,
-	notify,
-	unreadCount,
-} from "../services/notifications.js";
+import { listNotifications, markRead, notify, unreadCount } from "../services/notifications.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -491,15 +485,11 @@ describe("reading them", () => {
 
 		const { marked } = await markRead(recipientId);
 		expect(marked).toBe(before);
-		expect(await unreadCount(recipientId)).toBe(0);
 
-		// ⭐ **Reading everything empties the badge and leaves the bell.** The two numbers
-		// the bell reads are different questions: `unread` wears the badge, `total` decides
-		// whether the bell is drawn at all — so a read-all must move the first and not the
-		// second, or the door to the feed disappears the moment somebody uses it.
-		const counts = await notificationCounts(recipientId);
-		expect(counts.unread).toBe(0);
-		expect(counts.total).toBeGreaterThan(0);
+		// ⭐ **Reading everything empties the badge, and the bell itself is chrome that
+		// stays** (Parker, 2026-11-13): there is one number left to move — the unread
+		// count — so the assertion is that it reaches zero and nothing else changes.
+		expect(await unreadCount(recipientId)).toBe(0);
 	});
 
 	it("will not let one user mark another's as read", async () => {
