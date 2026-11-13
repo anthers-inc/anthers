@@ -284,6 +284,15 @@ envs:
   - key: STRIPE_PUBLISHABLE_KEY
     scope: RUN_TIME
     value: pk_live_51T9K9C3WJAPZ8pU6Ork5QyDxB39FXOuQig2866QiqjFjzC3fC4Qrszw1Sm2gr7Szrz9DopUgmj42bVQmUWcvVGqp002jowXSre
+  # The saved-payment card's home: the Billing Portal configuration the settings card
+  # opens into. Public identifier, not a secret. It allows payment-method update and
+  # invoice history only — the app still owns "Stop supporting", the Badge ladder and
+  # every subscription item change, and the US-only billing address stays in settings.
+  # The configuration is the account's default today; naming it here keeps a future
+  # default from silently changing what the settings card opens.
+  - key: STRIPE_BILLING_PORTAL_CONFIGURATION
+    scope: RUN_TIME
+    value: bpc_1UbOQN3WJAPZ8pU6ZUQPw9cZ
   # Card-only checkout: the account's Default payment-method configuration is
   # card-only in the Dashboard (narrowed 2026-10-06 — card on, every other method
   # off; completed 2026-10-07 when the separate "Card only" configuration was

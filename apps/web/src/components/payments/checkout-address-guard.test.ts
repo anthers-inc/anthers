@@ -61,7 +61,7 @@ describe("the purchase surface's billing address", () => {
 			);
 		});
 
-		it(`${name} collects the address through Anthers' US-only form`, () => {
+		it(`${name} collects the address through the US-only billing block`, () => {
 			expect(source, `${name} lost its billing address block entirely`).toContain(
 				"CheckoutBillingAddressBlock",
 			);
@@ -94,6 +94,19 @@ describe("the purchase surface's billing address", () => {
 			);
 		});
 	}
+});
+
+describe("the billing block's address element", () => {
+	it("mounts the advanced AddressElement, restricted to the US", () => {
+		// The Checkout-flavored BillingAddressElement has no `allowedCountries`; the
+		// advanced element does, and its value feeds `checkout.updateBillingAddress`.
+		const block = read("src/components/payments/CheckoutBillingAddressBlock.tsx");
+		expect(block, "the billing block lost its Stripe address element").toContain("<AddressElement");
+		expect(block, "the billing block is no longer US-only").toContain('allowedCountries: ["US"]');
+		expect(block, "the billing block remounted Anthers' own form").not.toContain(
+			"<UsBillingAddressForm",
+		);
+	});
 });
 
 describe("checkout lives in exactly one place", () => {

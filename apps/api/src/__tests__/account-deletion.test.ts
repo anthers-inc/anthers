@@ -25,6 +25,8 @@
  * stay separate.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { db } from "@anthers/db/client";
 import { comments, posts, purchases, reviews, users, works } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -407,4 +409,13 @@ describe("what 'deleted' means, table by table", () => {
 			expect(Number((list[0] as { n: number }).n)).toBe(0);
 		}
 	});
+});
+
+it("deletes the Stripe Customer before the account wipe", () => {
+	// The Customer is the record that knows the address and the cards; the wipe is what
+	// erases the only pointer to it. A source guard because the suite's Stripe client is
+	// unconfigured, and the ordering is the promise the policy makes.
+	const source = readFileSync(join(import.meta.dir, "../services/account-deletion.ts"), "utf8");
+	expect(source).toContain("deleteBillingCustomer(userId)");
+	expect(source).not.toContain("clearSavedBillingAddress(userId)");
 });

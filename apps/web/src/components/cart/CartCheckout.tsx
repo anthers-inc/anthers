@@ -36,9 +36,11 @@ import {
 	PaymentElement,
 	useCheckoutElements,
 } from "@stripe/react-stripe-js/checkout";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getStripe } from "../../lib/stripe";
+import { stripeAppearance } from "../../lib/stripeCard";
 import CheckoutBillingAddressBlock from "../payments/CheckoutBillingAddressBlock";
+import CheckoutShippingAddressBlock from "../payments/CheckoutShippingAddressBlock";
 import { formatAddress } from "../payments/UsBillingAddressForm";
 import { useSavedBillingAddress } from "../payments/useSavedBillingAddress";
 import {
@@ -47,6 +49,7 @@ import {
 	sessionTotalsFrom,
 	useSessionBillingAddress,
 } from "../payments/useSessionBillingAddress";
+import { useSessionShippingAddress } from "../payments/useSessionShippingAddress";
 
 interface CartCheckoutProps {
 	/**
@@ -76,12 +79,20 @@ interface CartCheckoutProps {
 		} | null,
 	) => void;
 	onComplete: () => void;
+	/** True when the cart carries a physical line, so a delivery address is needed. */
+	hasPhysical: boolean;
 }
 
-function CheckoutForm({ buyerTotal, onComplete, onTotals }: Omit<CartCheckoutProps, "contentKey">) {
+function CheckoutForm({
+	buyerTotal,
+	hasPhysical,
+	onComplete,
+	onTotals,
+}: Omit<CartCheckoutProps, "contentKey">) {
 	const checkoutState = useCheckoutElements();
 	const savedPrefill = useSavedBillingAddress();
 	const billing = useSessionBillingAddress(checkoutState, savedPrefill);
+	const shipping = useSessionShippingAddress({ checkoutState, billing, enabled: hasPhysical });
 	const [processing, setProcessing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [succeeded, setSucceeded] = useState(false);
@@ -191,6 +202,7 @@ function CheckoutForm({ buyerTotal, onComplete, onTotals }: Omit<CartCheckoutPro
 	const canConfirm =
 		checkoutState.type === "success" &&
 		mayConfirm(checkoutState.checkout.canConfirm, billing.accepted) &&
+		(!hasPhysical || shipping.accepted) &&
 		totals?.buyerTotal != null;
 
 	return (
@@ -199,7 +211,13 @@ function CheckoutForm({ buyerTotal, onComplete, onTotals }: Omit<CartCheckoutPro
 			    offers no country allow-list, so this form is US by construction. Address
 			    edits resolve the session's tax automatically as they settle — this form's
 			    submit is the Pay button and nothing else. */}
-			<CheckoutBillingAddressBlock billing={billing} />
+			<CheckoutBillingAddressBlock billing={billing} prefill={savedPrefill} />
+			{hasPhysical && (
+				<CheckoutShippingAddressBlock
+					shipping={shipping}
+					billingAddress={billing.acceptedAddress}
+				/>
+			)}
 			<div className="rounded-lg border border-base-300 p-3">
 				{/* `fields.billingDetails: "never"` because the address above already
 				    collected everything AVS would check — asking twice on one screen is
@@ -292,6 +310,7 @@ function useCartClientSecret(contentKey: string) {
 
 export default function CartCheckout(props: CartCheckoutProps) {
 	const { secret, failed, fetching, retry } = useCartClientSecret(props.contentKey);
+	const appearance = useMemo(stripeAppearance, []);
 	if (failed) {
 		return (
 			<div className="alert alert-warning text-sm">
@@ -310,18 +329,19 @@ export default function CartCheckout(props: CartCheckoutProps) {
 			stripe={getStripe()}
 			options={{
 				clientSecret: secret,
-				// The purchase saves the account's one payment method and offers the saved
-				// card back on the next checkout. The 2026-10-06 Link sub-form that made this
-				// "never" is why the save is a normal part of the payment info settings now;
-				// if the sub-form reappears and holds `canConfirm`, the card is still saved by
-				// the session's own `payment_method_save` and the display can fall back.
+				// The purchase saves the account's payment method and offers the saved
+				// card back on the next checkout. The save is the buyer's checkbox; the
+				// shared appearance keeps the card on the site's theme rather than Stripe's
+				// default blue.
 				elementsOptions: {
+					appearance,
 					savedPaymentMethod: { enableSave: "auto", enableRedisplay: "auto" },
 				},
 			}}
 		>
 			<CheckoutForm
 				buyerTotal={props.buyerTotal}
+				hasPhysical={props.hasPhysical}
 				onTotals={props.onTotals}
 				onComplete={props.onComplete}
 			/>

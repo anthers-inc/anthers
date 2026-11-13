@@ -81,6 +81,7 @@ function Parent({ items, reportTotalsPulse }: HarnessProps) {
 	return createElement(CartCheckout, {
 		contentKey: cartContentKey([...items]), // a fresh derivation every render
 		buyerTotal: "9.99",
+		hasPhysical: false,
 		onTotals: reportTotalsPulse ? () => undefined : undefined,
 		onComplete: () => undefined,
 	});

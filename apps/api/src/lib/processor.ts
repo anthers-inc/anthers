@@ -272,6 +272,19 @@ export async function createCustomer(
 }
 
 /**
+ * Mirrors `stripe.customers.del` — permanently deleting the buyer's Customer.
+ *
+ * The account-deletion path's last Stripe write: deleting the Customer removes the saved
+ * billing address and all card details, and prevents any further operation against it.
+ * The subscription is canceled first, so this is the record itself going rather than a
+ * live billing relationship; a missing Customer is the ordinary no-op.
+ */
+export async function deleteCustomer(customerId: string): Promise<boolean> {
+	const deleted = await getStripe()?.customers.del(customerId);
+	return deleted?.deleted === true;
+}
+
+/**
  * Mirrors `stripe.customers.retrieve` — the Customer a saved billing address prefills
  * from. The only customer read the saved-address flow makes; callers treat null as
  * "nothing on file" as well as "payments unconfigured", which is the same no-op. A

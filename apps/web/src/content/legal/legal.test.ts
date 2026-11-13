@@ -233,6 +233,23 @@ describe("published legal documents", () => {
 		);
 	});
 
+	it("describes the customer record every checkout creates and the opt-in card save", () => {
+		/*
+		 * The 2026-11-13 posture: every checkout creates or reuses a Stripe Customer, the
+		 * billing address is saved to it, and a card is kept only when the buyer ticks the
+		 * box. These assertions are the policy half of the code change; the old sentences
+		 * promised the opposite and must not creep back.
+		 */
+		const text = LEGAL_DOCUMENTS.privacy.blocks.join("\n");
+		expect(text).toContain("A Stripe customer record is created for every checkout");
+		expect(text).toContain("A card is saved only when you choose to save one");
+		expect(text).toContain("checkout offers a save box");
+		expect(text).toContain("Your Stripe customer record is deleted");
+		expect(text).not.toContain("changes nothing on its own");
+		expect(text).not.toContain("nothing at checkout ever offers to save");
+		expect(text).not.toContain("no lasting profile of you exists at Stripe");
+	});
+
 	it("makes no claim Anthers is a 501(c)(3)", () => {
 		// Copy rule, and a live one until the determination letter arrives: the honest
 		// word is "nonprofit". Asserted here because a legal page is the most plausible

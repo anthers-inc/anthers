@@ -76,7 +76,13 @@ function fakeStripe() {
 			}),
 			create: record("products.create", () => ({ id: `prod_${uid()}` })),
 		},
-		customers: { create: record("customers.create", () => ({ id: `cus_${uid()}` })) },
+		customers: {
+			create: record("customers.create", () => ({ id: `cus_${uid()}` })),
+			update: record("customers.update", (id: string, params: Record<string, unknown>) => ({
+				id,
+				...params,
+			})),
+		},
 		paymentMethods: { list: record("paymentMethods.list", () => ({ data: [] })) },
 		subscriptions: {
 			create: record("subscriptions.create", () => ({
@@ -87,6 +93,13 @@ function fakeStripe() {
 			update: record("subscriptions.update", () => subscription({ anthers: 3 })),
 		},
 		coupons: { create: record("coupons.create", () => ({ id: `coup_${uid()}` })) },
+		billingPortal: {
+			sessions: {
+				create: record("billingPortal.sessions.create", () => ({
+					url: "https://billing.stripe.com/session/test",
+				})),
+			},
+		},
 		invoices: { updateLines: record("invoices.updateLines", () => ({})) },
 	} as unknown as Stripe;
 
@@ -95,6 +108,7 @@ function fakeStripe() {
 		responses,
 		callsTo: (method: string) => calls.filter((c) => c.method === method),
 		lastCall: (method: string) => calls.filter((c) => c.method === method).at(-1),
+		order: () => calls.map((c) => c.method),
 		reset: () => {
 			calls.length = 0;
 		},
@@ -281,6 +295,39 @@ describe("a new subscription is anchored to the 1st", () => {
 		// because Stripe takes a unix timestamp and a local midnight is a different one.
 		const expected = Math.floor(new Date(`${currentCycleKey()}T00:00:00.000Z`).getTime() / 1000);
 		expect(params?.backdate_start_date).toBe(expected);
+	});
+
+	it("saves the billing address to the Customer before creating the subscription", async () => {
+		// Stripe finalizes the first invoice when the subscription is created and taxes it
+		// at finalization, so the address has to be on the Customer first. The response
+		// still returns the confirmation secret; the order is what makes the invoice taxed.
+		await clearSubscription();
+		const res = await setSupport({
+			anthersSupport: 6,
+			billingAddress: {
+				name: "Parker Davis",
+				line1: "123 Main St",
+				line2: null,
+				city: "Denver",
+				state: "CO",
+				postalCode: "80202",
+			},
+		});
+		expect(res.status).toBe(200);
+
+		const update = fake.lastCall("customers.update");
+		expect(update).toBeTruthy();
+		const [, params] = update?.args as [string, Stripe.CustomerUpdateParams];
+		expect(params.address).toMatchObject({
+			line1: "123 Main St",
+			city: "Denver",
+			state: "CO",
+			postal_code: "80202",
+			country: "US",
+		});
+		const order = fake.order();
+		expect(order.indexOf("customers.update")).toBeGreaterThan(-1);
+		expect(order.indexOf("customers.update")).toBeLessThan(order.indexOf("subscriptions.create"));
 	});
 
 	/**
@@ -975,5 +1022,46 @@ describe("a raise never falls back to prorating from today", () => {
 			Math.floor(new Date(`${currentCycleKey()}T00:00:00.000Z`).getTime() / 1000),
 		);
 		delete fake.responses["subscriptions.retrieve"];
+	});
+});
+
+describe("the Billing Portal split", () => {
+	function portal(path: string) {
+		return req(path, {
+			method: "POST",
+			headers: { ...json, Cookie: supporterCookie },
+		});
+	}
+
+	it("deep-links settings to the payment-method page and names the configuration", async () => {
+		const previous = process.env.STRIPE_BILLING_PORTAL_CONFIGURATION;
+		process.env.STRIPE_BILLING_PORTAL_CONFIGURATION = "bpc_test";
+		try {
+			const res = await portal("/api/subscriptions/payment-method-portal");
+			expect(res.status).toBe(200);
+			const params = fake.lastCall("billingPortal.sessions.create")
+				?.args[0] as Stripe.BillingPortal.SessionCreateParams;
+			expect(params.configuration).toBe("bpc_test");
+			expect(params.flow_data).toMatchObject({
+				type: "payment_method_update",
+				after_completion: {
+					type: "redirect",
+					redirect: { return_url: "http://localhost:3000/settings?tab=account" },
+				},
+			});
+			expect(params.return_url).toBe("http://localhost:3000/settings?tab=account");
+		} finally {
+			if (previous === undefined) delete process.env.STRIPE_BILLING_PORTAL_CONFIGURATION;
+			else process.env.STRIPE_BILLING_PORTAL_CONFIGURATION = previous;
+		}
+	});
+
+	it("keeps the Badges portal on the subscription return path", async () => {
+		const res = await portal("/api/subscriptions/billing-portal");
+		expect(res.status).toBe(200);
+		const params = fake.lastCall("billingPortal.sessions.create")
+			?.args[0] as Stripe.BillingPortal.SessionCreateParams;
+		expect(params.return_url).toBe("http://localhost:3000/settings?tab=badges");
+		expect(params.flow_data).toBeUndefined();
 	});
 });

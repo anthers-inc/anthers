@@ -49,6 +49,7 @@ import {
 	createProduct,
 	createSetupIntent,
 	createSubscription,
+	deleteCustomer,
 	detachPaymentMethod,
 	listActiveProducts,
 	listCardPaymentMethods,
@@ -666,10 +667,13 @@ export interface SavedCard {
 	funding: string | null;
 }
 
-/** The customer's saved card, if one is on file. */
-export async function savedCardFor(customerId: string): Promise<SavedCard | null> {
-	const pms = await listCardPaymentMethods({ customer: customerId, type: "card", limit: 1 });
-	const pm = pms?.data[0];
+/** A PaymentMethod reference, whether Stripe expanded it or sent the id. */
+function paymentMethodId(value: string | Stripe.PaymentMethod | null | undefined): string | null {
+	if (!value) return null;
+	return typeof value === "string" ? value : (value.id ?? null);
+}
+
+function cardOf(pm: Stripe.PaymentMethod | undefined | null): SavedCard | null {
 	return pm?.card
 		? {
 				id: pm.id,
@@ -680,7 +684,26 @@ export async function savedCardFor(customerId: string): Promise<SavedCard | null
 		: null;
 }
 
-/** The account's one saved payment method, as the settings card and the Adult control read it. */
+/** The Customer's saved address, or null when it has none or it is not a US address. */
+function addressFromCustomer(
+	customer: Stripe.Customer | Stripe.DeletedCustomer | null,
+): SavedBillingAddress | null {
+	if (!customer || customer.deleted) return null;
+	const address = customer.address;
+	// The country check doubles as the null check (an optional chain): anything that is
+	// not an address with a US country is exactly "nothing saved".
+	if (address?.country !== "US" || !address.line1) return null;
+	return {
+		name: customer.name ?? "",
+		line1: address.line1,
+		line2: address.line2 ?? null,
+		city: address.city ?? "",
+		state: address.state ?? "",
+		postalCode: address.postal_code ?? "",
+	};
+}
+
+/** The account's canonical saved payment method, as the settings card and the Adult control read it. */
 export interface PaymentInfo {
 	address: SavedBillingAddress | null;
 	card: SavedCard | null;
@@ -689,41 +712,41 @@ export interface PaymentInfo {
 }
 
 /**
- * Read the one saved payment method. The address and the card are one object on the settings
- * surface even though Stripe stores them on different records (the Customer and the
- * PaymentMethod); the subscription read answers whether this card is the one a live renewal
- * uses, which is what the chip states and what blocks removal.
+ * Read the account's canonical saved card and address.
+ *
+ * ⭐ **The card is chosen by what will actually be charged, not by list order.** When a
+ * subscription exists, its own `default_payment_method` is the card that renews; with no
+ * subscription, the Customer's invoice default is the card; only when neither names one
+ * does the newest card stand in. The old read took `listCardPaymentMethods(limit: 1)` and
+ * compared that single card to the subscription, which went wrong the moment checkout or
+ * the Portal attached a second card.
  */
 export async function paymentInfoFor(userId: number): Promise<PaymentInfo> {
-	const address = await savedBillingAddress(userId);
 	const customerId = await stripeCustomerIdFor(userId);
-	if (!customerId) return { address, card: null, subscriptionAttached: false };
-	const card = await savedCardFor(customerId);
-	if (!card) return { address, card: null, subscriptionAttached: false };
+	if (!customerId) return { address: null, card: null, subscriptionAttached: false };
 
-	const [acct] = await db
-		.select({ subscriptionId: stripeCustomers.stripeSubscriptionId })
-		.from(stripeCustomers)
-		.where(eq(stripeCustomers.userId, userId))
-		.limit(1);
-	let subscriptionAttached = false;
-	if (acct?.subscriptionId) {
-		const sub = await retrieveSubscription(acct.subscriptionId);
-		if (sub) {
-			const subPm = sub.default_payment_method;
-			const subPmId = typeof subPm === "string" ? subPm : subPm?.id;
-			if (subPmId) {
-				subscriptionAttached = subPmId === card.id;
-			} else {
-				// A subscription with no explicit card uses the customer's invoice default.
-				const customer = await retrieveCustomer(customerId);
-				const defaultPm =
-					customer && !customer.deleted ? customer.invoice_settings?.default_payment_method : null;
-				const defaultId = typeof defaultPm === "string" ? defaultPm : defaultPm?.id;
-				subscriptionAttached = defaultId === card.id;
-			}
-		}
-	}
+	// One customer read and one card list, in parallel with the local subscription id.
+	const [customer, pms, acct] = await Promise.all([
+		retrieveCustomer(customerId),
+		listCardPaymentMethods({ customer: customerId, type: "card", limit: 100 }),
+		db
+			.select({ subscriptionId: stripeCustomers.stripeSubscriptionId })
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, userId))
+			.limit(1),
+	]);
+	const address = addressFromCustomer(customer);
+	if (!customer || customer.deleted) return { address, card: null, subscriptionAttached: false };
+
+	const sub = acct?.[0]?.subscriptionId ? await retrieveSubscription(acct[0].subscriptionId) : null;
+	const subPmId = paymentMethodId(sub?.default_payment_method);
+	const customerDefaultId = paymentMethodId(customer.invoice_settings?.default_payment_method);
+	const preferredId = subPmId ?? customerDefaultId;
+	const listed = preferredId
+		? (pms?.data.find((pm) => pm.id === preferredId) ?? pms?.data[0])
+		: pms?.data[0];
+	const card = cardOf(listed);
+	const subscriptionAttached = Boolean(sub && card && (subPmId ?? customerDefaultId) === card.id);
 	return { address, card, subscriptionAttached };
 }
 
@@ -863,15 +886,14 @@ export async function clearPaymentInfo(
 }
 
 /**
- * A buyer's **saved billing address** — the one opt-in address the 2026-10-11 decision
- * offers, and the only address Anthers stores nowhere: the address lives on the buyer's
- * Stripe Customer (`address`), the name that goes with it on the Customer's own `name`
- * field (`Stripe.Address` carries neither name nor anywhere else usable — that is what
- * its shape costs us, and the two are saved and cleared together), and this module
- * carries only the existing `stripeCustomerId`. No cache. The shape mirrors what the
+ * A buyer's **saved billing address** — the address Stripe holds on the Customer, and the
+ * one checkout prefills from. It is written by settings, by checkout's
+ * `customer_update.address: "auto"`, and by the subscription route before it creates a new
+ * subscription; the transaction record keeps its own snapshot. The shape mirrors what the
  * purchase surfaces collect (an `UsAddressInput` less the country, which is US by
  * construction); `line2` is null when the buyer left it empty rather than a whitespace
- * string.
+ * string. A non-US address is reported as nothing, because the purchase surfaces would
+ * refuse it anyway.
  */
 export interface SavedBillingAddress {
 	name: string;
@@ -897,27 +919,15 @@ export async function savedBillingAddress(userId: number): Promise<SavedBillingA
 		.where(eq(stripeCustomers.userId, userId))
 		.limit(1);
 	if (!acct?.stripeCustomerId) return null;
-	const customer = await retrieveCustomer(acct.stripeCustomerId);
-	if (!customer || customer.deleted) return null;
-	const address = customer.address;
-	// The country check doubles as the null check (an optional chain): anything that is
-	// not an address with a US country is exactly "nothing saved".
-	if (address?.country !== "US" || !address.line1) return null;
-	return {
-		name: customer.name ?? "",
-		line1: address.line1,
-		line2: address.line2 ?? null,
-		city: address.city ?? "",
-		state: address.state ?? "",
-		postalCode: address.postal_code ?? "",
-	};
+	return addressFromCustomer(await retrieveCustomer(acct.stripeCustomerId));
 }
 
 /**
  * Save (or replace) the buyer's billing address on their Stripe Customer — creating the
- * row and the Customer on first save through `ensureStripeCustomer`. This route is the
- * ONLY write of an address for reuse; checkout never writes to it, and nothing is
- * persistent for a buyer who has never come here.
+ * row and the Customer on first save through `ensureStripeCustomer`. This is the service
+ * writer; checkout reaches it through `customer_update.address: "auto"`, and the
+ * subscription route calls it before creating a new subscription so the first invoice is
+ * taxed from the address. The Customer is the only home for the saved address.
  */
 export async function saveBillingAddress(
 	userId: number,
@@ -1051,6 +1061,33 @@ export async function clearSavedBillingAddress(
 			address: "",
 		});
 		return "cleared";
+	} catch {
+		return "failed";
+	}
+}
+
+/**
+ * Delete the buyer's Stripe Customer and everything attached to it. The account-deletion
+ * path's write, and the one that keeps the Privacy Policy's promise that a deleted account
+ * leaves no saved payment information at Stripe: `customers.del` removes the address and
+ * the card details with the record, so this replaces the address-only clear there.
+ *
+ * 🚨 **A failure is a deferral, not a partial success.** The caller retries the deletion
+ * tomorrow, the same way it does for a subscription that would not cancel.
+ */
+export async function deleteBillingCustomer(
+	userId: number,
+): Promise<"deleted" | "none" | "failed"> {
+	if (!paymentsConfigured()) return "none";
+	const [acct] = await db
+		.select({ stripeCustomerId: stripeCustomers.stripeCustomerId })
+		.from(stripeCustomers)
+		.where(eq(stripeCustomers.userId, userId))
+		.limit(1);
+	if (!acct?.stripeCustomerId) return "none";
+	try {
+		const deleted = await deleteCustomer(acct.stripeCustomerId);
+		return deleted ? "deleted" : "failed";
 	} catch {
 		return "failed";
 	}
