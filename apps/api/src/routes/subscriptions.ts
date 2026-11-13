@@ -31,14 +31,15 @@ import {
 	userCycles,
 	userPreferences,
 	users,
+	workBuilds,
 	works,
 } from "@anthers/db/schema";
 import {
 	type AttentionEventType,
 	eventTypeFor,
-	isTimePoolEligible,
 	MAX_RANGE_SECONDS,
 	RANGE_LOOKBACK_SECONDS,
+	workEarnsTime,
 } from "@anthers/shared/attention";
 import {
 	type BadgeComposeParams,
@@ -487,7 +488,11 @@ interface WorkEligibility {
 	 * and null matches nobody, so there is no creator left to pay.
 	 */
 	creatorId: number | null;
-	/** Event types this Work can earn — empty means it earns nothing. */
+	/**
+	 * Event types this Work can earn — empty means it earns nothing. Empty for a build
+	 * Work with no hosted build and no embed: its page is a storefront, so a timed claim
+	 * against it is not consumption (`workEarnsTime` in the shared policy).
+	 */
 	earns: Set<AttentionEventType>;
 	/** Whether the claiming user may actually consume it. */
 	accessible: boolean;
@@ -522,13 +527,32 @@ async function loadWorkEligibility(
 	const workRows = await db.select().from(works).where(inArray(works.id, workIds));
 	if (workRows.length === 0) return byId;
 
+	// Whether a build Work has something to play in the browser. A downloadable-only
+	// build has no primary build and no embed, so its page is a storefront and time
+	// there cannot be consumption — `workEarnsTime` carries the rule, this carries the
+	// fact it needs. Loaded for every claimed Work rather than the build kinds alone so
+	// the query does not depend on the type list staying in step.
+	const buildRows = await db
+		.select({ workId: workBuilds.workId })
+		.from(workBuilds)
+		.where(and(inArray(workBuilds.workId, workIds), eq(workBuilds.isPrimary, true)));
+	const browserBuild = new Set(buildRows.map((row) => row.workId));
+
 	const ctx = await buildAccessContext(userId, {
 		workIds: workRows.map((w) => w.id),
 		sharedBy,
 	});
 	for (const work of workRows) {
 		const earns = new Set<AttentionEventType>();
-		if (isTimePoolEligible(work.type)) earns.add(eventTypeFor(work.type));
+		if (
+			workEarnsTime({
+				type: work.type,
+				webPlayable: browserBuild.has(work.id),
+				embedUrl: work.embedUrl,
+			})
+		) {
+			earns.add(eventTypeFor(work.type));
+		}
 		const access = resolveAccessSync(work as AccessibleWork, ctx);
 		byId.set(work.id, {
 			creatorId: work.creatorId,
@@ -1318,7 +1342,7 @@ const subscriptionRoutes = new Hono()
 			}
 			const wellFormed = events.filter((e) => e.durationSeconds <= 0 || !malformed.includes(e));
 
-			// Anything claiming *time* then has to earn it, against four checks:
+			// Anything claiming *time* then has to earn it, against five checks:
 			//
 			//   1. It names a Work. A claim with no Work context is connective tissue by
 			//      definition (a post body, a profile, discovery) and those earn nothing.
@@ -1326,8 +1350,10 @@ const subscriptionRoutes = new Hono()
 			//      consumption, so it cannot be consumed by the public.
 			//   3. The claimed creator really is the Work's creator — otherwise the
 			//      attribution is simply forged.
-			//   4. The Work's type earns this event type, and the user can actually
-			//      access it.
+			//   4. The Work earns this event type. A build Work with no browser deliverable
+			//      has only files, so its page is a storefront and time there is not
+			//      consumption — `workEarnsTime` carries the rule.
+			//   5. The user can actually access it.
 			const eligibility = await loadWorkEligibility(
 				[
 					...new Set(

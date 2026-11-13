@@ -190,6 +190,20 @@ export function isPaged(type: string): boolean {
 }
 
 /**
+ * The Work kinds that arrive as a build: a game or a piece of software.
+ *
+ * A build Work's browser deliverable is a hosted build or an embed address, and its
+ * downloadable builds are rows on the same Work — one Work however many platforms it
+ * ships for. `hasBrowserDeliverable` is the derived question a page or a claim asks
+ * about one, so the kinds are named once here rather than compared inline.
+ */
+export const BUILD_WORK_TYPES = ["game", "software"] as const satisfies readonly WorkType[];
+
+export function isBuildType(type: string): boolean {
+	return (BUILD_WORK_TYPES as readonly string[]).includes(type);
+}
+
+/**
  * The Work kinds that carry an ordered set of source files in `work_source_files`: the
  * paged kinds, whose set renders into the pages a reader turns, and the image kind,
  * whose set IS the gallery the Work displays. The set routes and the Studio's set
@@ -395,9 +409,27 @@ export function deliverableIsEmpty(work: {
 	if (workNeedsFile(work.type)) return !work.sourceKey;
 	// A build kind is its embed, its builds, or its hosted build — the editor's own rule,
 	// moved here so the Record cannot drift from it.
-	if (work.type === "game" || work.type === "software")
-		return !work.embedUrl && (work.assets ?? []).length === 0 && !work.webPlayable;
+	if (isBuildType(work.type))
+		return !hasBrowserDeliverable(work) && (work.assets ?? []).length === 0;
 	return false;
+}
+
+/**
+ * Whether a build Work has something to play **in the browser**: a hosted build the
+ * Work page frames, or an embed address an iframe can open.
+ *
+ * 🚨 **A build Work with only downloadable files has none, and its page is then a
+ * storefront rather than a medium.** That distinction decides more than rendering:
+ * the page raises no Time Pool claim, the intake records no timed range, and
+ * `review-eligibility` asks its reader for the download rather than for time on the
+ * page. Downloadable builds live on `works.assets` and never answer this question —
+ * an entitlement to a file is not a way to play it here.
+ */
+export function hasBrowserDeliverable(work: {
+	webPlayable?: boolean | null;
+	embedUrl?: string | null;
+}): boolean {
+	return Boolean(work.webPlayable) || Boolean(work.embedUrl && !embedUrlProblem(work.embedUrl));
 }
 
 /** The longest embed address a game or software Work may carry. */
@@ -521,7 +553,7 @@ export function deliveryModeOf(
  */
 export function deliveryOffers(type: string): readonly DeliveryMode[] {
 	if (isGoodsType(type)) return [];
-	if (type === "video" || isListened(type) || type === "game" || type === "software") {
+	if (type === "video" || isListened(type) || isBuildType(type)) {
 		return DELIVERY_MODES;
 	}
 	return ["stream"];
@@ -539,7 +571,7 @@ export function defaultDelivery(type: string): {
 	downloadEnabled: boolean;
 } {
 	if (isGoodsType(type)) return { streamEnabled: false, downloadEnabled: false };
-	if (type === "game" || type === "software") {
+	if (isBuildType(type)) {
 		return { streamEnabled: false, downloadEnabled: true };
 	}
 	return { streamEnabled: true, downloadEnabled: false };

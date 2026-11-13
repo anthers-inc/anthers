@@ -27,7 +27,7 @@
  * sign of life.
  */
 
-import type { WorkType } from "./content.js";
+import { hasBrowserDeliverable, isBuildType, type WorkType } from "./content.js";
 
 /** The kind of evidence a content type needs before its seconds count. */
 export type ConsumptionMode =
@@ -93,6 +93,31 @@ export function eventTypeFor(contentType: string): AttentionEventType {
 /** Whether time spent with this content entity can earn Time Pool minutes at all. */
 export function isTimePoolEligible(contentType: string): boolean {
 	return consumptionModeFor(contentType) !== "none";
+}
+
+/**
+ * Whether time spent with this Work earns Time Pool minutes — the type's consumption
+ * mode **and** whether the Work has anything to consume here.
+ *
+ * 🚨 **A build Work with neither a hosted build nor an embed address has no browser
+ * deliverable, so its page is a storefront rather than a medium.** Its files are the
+ * deliverable, they leave by a download, and time on the page offering them is not time
+ * with the work: crediting it writes an activity-history range saying a person played
+ * something they never opened, and — when the Work is marked streaming, which makes its
+ * seconds Public Access — pays a creator from the pool for a page view. That is the same
+ * distinction `review-eligibility` draws when it asks a downloadable-only Work's reader
+ * for the download rather than for time on the page. The caller supplies the hosted-build
+ * answer because only it knows how to load a Work's builds; every other kind's deliverable
+ * is the page itself, so its consumption mode is the whole answer.
+ */
+export function workEarnsTime(work: {
+	type: string;
+	webPlayable?: boolean | null;
+	embedUrl?: string | null;
+}): boolean {
+	if (!isTimePoolEligible(work.type)) return false;
+	if (!isBuildType(work.type)) return true;
+	return hasBrowserDeliverable(work);
 }
 
 /** How long without a sign of life before an attended claim stops crediting. */
