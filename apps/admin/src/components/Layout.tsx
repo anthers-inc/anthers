@@ -29,6 +29,7 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 		items: [
 			{ to: "/", label: "Home", end: true },
 			{ to: "/traffic", label: "Traffic" },
+			{ to: "/users", label: "Users" },
 		],
 	},
 	{

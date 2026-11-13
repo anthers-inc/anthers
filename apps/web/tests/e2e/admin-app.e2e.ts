@@ -209,6 +209,52 @@ test.describe
 			expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
 		});
 
+		test("the users directory searches by handle and states an empty result", async ({ page }) => {
+			// The directory is a new page over a new endpoint, and the failure this guards is
+			// the one `admin-atproto` below was created for: a page that requests the wrong
+			// path still renders, because the admin static site answers index.html with a 200.
+			// A browser walk is the only place that shows up.
+			const errors = trackErrorsStrict(page, [/status of 401/]);
+
+			await page.goto(ADMIN_ORIGIN);
+			await page.getByLabel("Email Address").fill(OPERATOR_EMAIL);
+			await page.getByRole("button", { name: "Send a Code" }).click();
+			await page.getByLabel("Code").fill(await emailedCode(OPERATOR_EMAIL, 15_000, Date.now()));
+			await page.getByRole("button", { name: "Sign In" }).click();
+			await expect(page.getByText(`E2E Operator ${RUN}`)).toBeVisible();
+
+			// Home reads queues first and the date-bearing sections last. The order is the
+			// page's own decision, so it gets an assertion rather than a screenshot alone.
+			const sectionTitles = await page.locator("main h2").allTextContents();
+			expect(sectionTitles.indexOf("Deadlines")).toBeGreaterThan(sectionTitles.indexOf("Activity"));
+			expect(sectionTitles.indexOf("Dispute Standing")).toBeGreaterThan(
+				sectionTitles.indexOf("Deadlines"),
+			);
+
+			await page.locator("main").screenshot({ path: `.screenshots/admin-home-${RUN}.png` });
+
+			await page.getByRole("link", { name: "Users", exact: true }).click();
+			await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
+
+			// The account made for the other walks in this file, found the way an operator
+			// would find it: by the handle a profile link carries.
+			await page.getByLabel("Search users").fill(subjectHandle);
+			await page.getByRole("button", { name: "Search" }).click();
+			const row = page.locator("tr", { hasText: `@${subjectHandle}` }).first();
+			await expect(row).toBeVisible();
+			await expect(row.getByText("active")).toBeVisible();
+
+			await page.locator("main").screenshot({ path: `.screenshots/admin-users-${RUN}.png` });
+
+			// A search that names nobody states it — proof the query reached the API rather
+			// than the page filtering a list it already had.
+			await page.getByLabel("Search users").fill(`nobody-${RUN}`);
+			await page.getByRole("button", { name: "Search" }).click();
+			await expect(page.getByText("No account matches that search.")).toBeVisible();
+
+			expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
+		});
+
 		test("the ATProto Records page loads its report and highlights only itself", async ({
 			page,
 		}) => {
