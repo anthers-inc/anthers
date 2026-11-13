@@ -64,7 +64,6 @@
 		"./account/DiscordCard": "./src/components/account/DiscordCard.tsx",
 		"./ui/Logo": "./src/components/ui/Logo.tsx",
 		"./ui/ThemeSelect": "./src/components/ui/ThemeSelect.tsx",
-		"./ui/ThemeCard": "./src/components/ui/ThemeCard.tsx",
 		"./ui/FormField": "./src/components/ui/FormField.tsx",
 		"./ui/LoadingSpinner": "./src/components/ui/LoadingSpinner.tsx",
 		"./ui/FileUpload": "./src/components/ui/FileUpload.tsx",

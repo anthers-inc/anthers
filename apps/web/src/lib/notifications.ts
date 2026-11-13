@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The bell's store — how much is new, and whether this person has ever been told
- * anything, polled once and shared by every subscriber.
+ * The bell's store — how much is new, polled once and shared by every subscriber.
  *
  * 🚨 **A module store rather than per-component state, because the bell is chrome**: the
  * header renders in every mode and every route, so per-component polling would be one
@@ -25,17 +24,13 @@ import { useEffect, useState } from "react";
 const POLL_MS = 30_000;
 
 /**
- * What the bell is drawn from.
- *
- * ⚠️ **`unread` and `total` answer two different questions and both are needed**: `unread`
- * wears the badge, `total` decides whether there is a bell at all. `total === 0` is a
- * person who has never been told anything, and a door to an empty feed is furniture in a
- * header that is tight on mobile; `unread === 0` is somebody who has read everything and
- * still needs the way back.
+ * What the bell is drawn from. One number now that the bell is always present
+ * (Parker, 2026-11-13): `unread` wears the badge, and a zero means an unbadged bell
+ * rather than a missing one — the endpoint used to answer a `total` too, solely to
+ * decide whether the bell existed.
  */
 export interface NotificationCounts {
 	unread: number;
-	total: number;
 }
 
 let counts: NotificationCounts | null = null;
@@ -60,7 +55,7 @@ async function load(): Promise<void> {
 			return;
 		}
 		const body = (await res.json()) as unknown as NotificationCounts;
-		publish({ unread: body.unread ?? 0, total: body.total ?? 0 });
+		publish({ unread: body.unread ?? 0 });
 	} catch {
 		// Leave the last counts standing: a dropped poll is not evidence of zero.
 	}
@@ -81,15 +76,13 @@ export function refreshUnreadCount(): void {
  * Drop the badge after a read-all — the notifications page marks everything read, and the
  * bell must move in the same tick rather than waiting out the poll.
  *
- * `total` is deliberately preserved: the person has still been told those things, so the
- * bell stays; only the count of what they have not seen resets. A store that has never
- * loaded (counts `null`) is left alone — there is no `total` to preserve, and publishing
- * a zero here would hide the bell until the next poll. The page's own read then refreshes
- * the counts, so the unknown case settles in a moment rather than in thirty seconds.
+ * Only the count resets; the bell itself is chrome and stays. A store that has never
+ * loaded (counts `null`) is left alone — the page's own read then refreshes the counts,
+ * so the unknown case settles in a moment rather than in thirty seconds.
  */
 export function clearUnread() {
 	if (!counts) return;
-	publish({ unread: 0, total: counts.total });
+	publish({ unread: 0 });
 }
 
 /** The bell's subscription. Returns the counts; null means "not loaded / signed out". */

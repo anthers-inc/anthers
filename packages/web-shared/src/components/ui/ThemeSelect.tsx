@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The marketing shell's corner theme picker. A daisyUI dropdown rather than a form
-// select: an icon-only circle trigger (the corner utilities' own shape) over a panel
+// The theme picker, carried by both shells. A daisyUI dropdown rather than a form
+// select: an icon-only circle trigger (the header utilities' own shape) over a panel
 // that leads with the variant toggle and follows with the palette list, each palette
 // carrying a swatch of its primary color in the variant on screen. Both halves are
-// `ThemePicker`, the same component the account settings card renders, so the two
-// surfaces cannot drift apart.
+// `ThemePicker`, the same component both shells mount, so the surfaces cannot drift
+// apart.
 //
 // ⭐ **A palette pick does not dismiss the panel** (Parker, 2026-11-06): the point is to
 // compare palettes in place, so the swatches and the page behind update while the menu
 // stays open. An outside click closes it.
 //
-// ⚠️ **The signed-in site does not use this.** Its theme choice moved into the account
-// settings page's card (Parker, 2026-10-26) — a preference that belongs to the account
-// belongs with the account's other preferences, and the signed-in header's corner is for
-// things that act on the page in front of you. This picker is the signed-out visitor's
-// alone, and the two surfaces share `useThemeChoice` so the pick behaves identically.
+// ⭐ **Both shells carry it: the marketing corner and the signed-in topbar** (Parker,
+// 2026-11-13). The signed-in surface had it in the account settings card from 2026-10-26
+// until the theme moved back into the topbar; the choice is about the page in front of
+// the reader, and the two shells share `useThemeChoice` so the pick behaves identically.
 
 import { SwatchIcon } from "@heroicons/react/24/outline";
 import ThemePicker from "./ThemePicker";
@@ -41,7 +40,7 @@ export default function ThemeSelect({ className = "" }: { className?: string }) 
 				    over, so the panel's edge can dissolve at light themes (Parker,
 				    2026-10-16) — the shadow alone doesn't state the box the way this
 				    hairline does. */}
-				<ThemePicker layout="menu" />
+				<ThemePicker />
 			</div>
 		</div>
 	);

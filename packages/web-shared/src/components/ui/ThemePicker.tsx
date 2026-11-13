@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The shared theme controls. Both surfaces that offer a theme render this: the marketing
-// shell's corner dropdown (a menu) and the account settings card (a form). A variant
-// toggle comes first, then the palette list, and every palette carries a small swatch of
-// its primary color in the variant on screen.
+// The shared theme controls, mounted by both shells: the marketing corner dropdown and
+// the signed-in topbar's, which is the same `ThemeSelect`. A variant toggle comes first,
+// then the palette list, and every palette carries a small swatch of its primary color in
+// the variant on screen.
 //
 // ⭐ **The swatch is a nested `data-theme` scope**, so `bg-primary` resolves to that
 // family's primary in the currently selected variant. Nothing here repeats a color value,
@@ -12,8 +12,6 @@
 import type { Theme, ThemeFamily, ThemeGroup } from "../../lib/theme";
 import { themeFamilies, themeFamily, themeVariant, withVariant } from "../../lib/theme";
 import { useThemeChoice } from "../../lib/theme-choice";
-
-type Layout = "card" | "menu";
 
 /** The family's entry for the variant on screen; its first entry if the family lacks one. */
 function valueFor(family: ThemeFamily, variant: ThemeGroup): Theme {
@@ -31,21 +29,14 @@ function ThemeSwatch({ value }: { value: Theme }) {
 	);
 }
 
-export default function ThemePicker({
-	layout = "card",
-	className = "",
-}: {
-	/** The menu gets DaisyUI item styling; the card gets a roomier list of its own. */
-	layout?: Layout;
-	className?: string;
-}) {
+export default function ThemePicker() {
 	const { theme, choose } = useThemeChoice();
 	const family = themeFamily(theme);
 	const variant = themeVariant(theme);
 	const families = themeFamilies();
 
 	return (
-		<div className={className}>
+		<>
 			<fieldset className="m-0 border-0 p-0">
 				<legend className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-base-content/50">
 					Variant
@@ -74,27 +65,17 @@ export default function ThemePicker({
 					Palette
 				</legend>
 				<div className="mt-1">
-					<ul className={layout === "menu" ? "menu menu-sm w-full p-0" : "space-y-1"}>
+					<ul className="menu menu-sm w-full p-0">
 						{families.map((option) => {
 							const value = valueFor(option, variant);
 							const active = option.label === family;
-							const itemClass =
-								layout === "menu"
-									? active
-										? "bg-primary/10 font-semibold text-primary"
-										: ""
-									: `flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
-											active
-												? "bg-primary/10 font-semibold text-primary"
-												: "text-base-content/75 hover:bg-base-300/60 hover:text-base-content"
-										}`;
 							return (
 								<li key={option.label}>
 									<button
 										type="button"
 										aria-pressed={active}
 										onClick={() => choose(value)}
-										className={itemClass}
+										className={active ? "bg-primary/10 font-semibold text-primary" : ""}
 									>
 										<ThemeSwatch value={value} />
 										<span>{option.label}</span>
@@ -105,6 +86,6 @@ export default function ThemePicker({
 					</ul>
 				</div>
 			</fieldset>
-		</div>
+		</>
 	);
 }
