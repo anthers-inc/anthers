@@ -65,6 +65,21 @@ interface SidebarContextValue {
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);
 
+/**
+ * ⭐ **The open/closed choice belongs to the session, not to whichever layout is drawing the
+ * sidebar.** Two route groups mount a signed-in layout — the authenticated group and
+ * `PublicShell`'s shared pages — so React tears one shell down and builds the other when a
+ * person moves between a Work and Library, Discovery or Settings. This provider therefore
+ * wraps `<App />` at the root in `index.tsx`, above the router's `<Routes>`; a choice made on
+ * either side is the same boolean on the other, and nothing about navigation resets it.
+ *
+ * 🚨 **The one exception for a sidebar beside the page is the window narrowing across the
+ * breakpoint above.** A sidebar open beside a wide window has nowhere to sit once the page
+ * turns vertical, so it puts itself away there. Widening again deliberately does not reopen
+ * it: the person's last choice is still the one to keep, and only the toggle changes it. (A
+ * phone's drawer is the over-page shape, and its own rule closes it on navigation — the
+ * effect below.)
+ */
 export function SidebarProvider({ children }: { children: ReactNode }) {
 	const [sidebarOpen, setSidebarOpen] = useState(sidebarFitsBeside);
 	const [pageContent, setPageContentState] = useState<ReactNode | null>(null);
@@ -99,6 +114,20 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 		lastPathname.current = pathname;
 		if (!sidebarFitsBeside()) setSidebarOpen(false);
 	}, [pathname]);
+
+	// The window's one vote: narrowing across the breakpoint collapses the sidebar, because
+	// below it the sidebar opens OVER the page rather than beside it and an open one would
+	// cover the content. The rule runs one way on purpose — widening does not reopen what
+	// somebody closed; that is the toggle's job.
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const query = window.matchMedia(SIDEBAR_BESIDE_QUERY);
+		const handleChange = (event: MediaQueryListEvent) => {
+			if (!event.matches) setSidebarOpen(false);
+		};
+		query.addEventListener("change", handleChange);
+		return () => query.removeEventListener("change", handleChange);
+	}, []);
 
 	return (
 		<SidebarContext
