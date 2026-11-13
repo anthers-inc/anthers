@@ -38,7 +38,6 @@ import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import { useSidebar } from "@anthers/web-shared/sidebar";
 import type { NotificationDeliveryMode } from "@anthers/web-shared/types";
-import ThemeCard from "@anthers/web-shared/ui/ThemeCard";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import ActivityDetailsSection from "../components/account/ActivityDetailsSection";
@@ -2579,9 +2578,11 @@ function DataSection() {
  * standing relationship; Purchases is the one-time receipts. Both sit between Experience
  * and Identity.
  *
- * ⭐ **Experience is the appearance-and-playback tab** (Parker, 2026-11-06): the theme, the
+ * ⭐ **Experience is the appearance-and-playback tab** (Parker, 2026-11-06): the
  * starting tab, the per-browser media preferences, the miniplayer and the keyboard chords
- * are all "how the app feels to use", not facts about the account. **Parents** is its own
+ * are all "how the app feels to use", not facts about the account. The theme is not here —
+ * it lives in the signed-in topbar as the same dropdown the marketing shell carries
+ * (Parker, 2026-11-13). **Parents** is its own
  * tab at the end because a guardian's controls are written by somebody other than the
  * account holder and deserve to be findable without reading the safety filters first.
  *
@@ -2873,12 +2874,12 @@ export default function SettingsPage() {
 
 			{visitedTabs.has("experience") && (
 				<div hidden={activeTab !== "experience"}>
-					{/* How the app looks and behaves: the account's theme and starting tab, the
-					    per-browser playback preferences, where audio lives, the chords, and the
-					    Music Player lens's own scope. */}
-					<ThemeCard className="mb-6" />
+					{/* How the app behaves: the starting tab, the per-browser playback
+					    preferences, where audio lives, the chords, and the Music Player lens's
+					    own scope. The theme picker is not a settings row — it lives in the
+					    topbar (Parker, 2026-11-13).
 
-					{/* Where a session starts: one tab, chosen here rather than by the nav's
+					    Where a session starts: one tab, chosen here rather than by the nav's
 					    arrangement, which is fixed. */}
 					<StartingTabSection />
 

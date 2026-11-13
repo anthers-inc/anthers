@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The signed-in header is for the page in front of you, and the account's theme and
- * sections are settings like the others.
+ * The signed-in header is for the page in front of you, and the account's theme is a
+ * header control.
  *
- * ⭐ **The header's account menu and corner theme picker both came out on 2026-10-26**
- * (Parker). Everything the menu held is reachable elsewhere — Settings is a sidebar row —
- * and the theme became a settings card. Both removals are absences, so nothing else in the
- * repository can tell them from a header that merely renders them hidden; that is why the
- * first test is here.
+ * ⭐ **The header's account menu came out on 2026-10-26** (Parker). Everything the menu
+ * held is reachable elsewhere — Settings is a sidebar row — so what this spec pins is the
+ * absence, which nothing else in the repository can tell from a header that merely renders
+ * it hidden.
+ *
+ * ⭐ **The theme picker came back to the header on 2026-11-13** (Parker), after a spell as
+ * a card on the Experience tab, and it is the marketing shell's own dropdown. The first
+ * test pins the header's shape; the last walks the picker and proves a pick reaches the
+ * document's `data-theme`, the attribute the whole palette keys on.
  *
  * ⭐ **The settings sections moved from a row at the top of the page into the sidebar on
  * 2026-11-06** (Parker). The second test pins that shape: the tablist lives inside the
  * `aside`, it carries the section labels in order, and the page column no longer carries a
- * tab row of its own. The third test is the Experience tab's own behavior: a theme pick
- * reaches the document's `data-theme`, the attribute the whole palette keys on, rather than
- * only the control. It also proves the catalog reaches the card as four families, that the
- * variant toggle comes first, and that a palette pick keeps the variant it was made under.
+ * tab row of its own.
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -28,10 +29,10 @@ function familyOf(value: string): string {
 	return prefix.charAt(0).toUpperCase() + prefix.slice(1);
 }
 
-test("the signed-in header has neither an account menu nor a theme picker", async ({ page }) => {
+test("the signed-in header has a theme picker and no account menu", async ({ page }) => {
 	await page.goto("/discovery");
 	await expect(header(page).getByRole("button", { name: "Your account" })).toHaveCount(0);
-	await expect(header(page).getByRole("button", { name: "Color theme" })).toHaveCount(0);
+	await expect(header(page).getByRole("button", { name: "Color theme" })).toBeVisible();
 });
 
 test("the settings sections are a sidebar tablist, not a row at the top of the page", async ({
@@ -73,7 +74,10 @@ test("the settings sections are a sidebar tablist, not a row at the top of the p
 		"aria-selected",
 		"true",
 	);
-	await expect(page.getByRole("heading", { name: "Color Theme" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Where You Start" })).toBeVisible();
+	// The theme is not a settings card any more (Parker, 2026-11-13): it lives in the
+	// header, and the Experience tab keeps only the behavior preferences.
+	await expect(page.getByRole("heading", { name: "Color Theme" })).toHaveCount(0);
 });
 
 test("Badges and Purchases are separate tabs, and each old address lands on its own half", async ({
@@ -120,27 +124,25 @@ test("Time is its own tab, carrying the pool and the activity record it divides 
 	await expect(page.getByRole("heading", { name: "Activity Details" })).toHaveCount(0);
 });
 
-test("the Experience tab carries the theme card, and a pick changes the document", async ({
+test("the header's theme picker changes the document, and the Experience tab carries no theme card", async ({
 	page,
 }) => {
+	// The theme left the Experience tab when it returned to the header (Parker,
+	// 2026-11-13): the tab keeps the behavior preferences, not the appearance ones.
 	await page.goto("/settings?tab=experience");
-
-	// The Account tab is where the theme used to live; it stays out of that surface.
-	await page.goto("/settings?tab=account");
+	await expect(page.getByRole("heading", { name: "Where You Start" })).toBeVisible();
 	await expect(page.getByRole("heading", { name: "Color Theme" })).toHaveCount(0);
 
-	await page.goto("/settings?tab=experience");
-	const card = page
-		.locator(".card")
-		.filter({ has: page.getByRole("heading", { name: "Color Theme" }) });
-	await expect(card, "the Experience tab has no theme card").toBeVisible();
+	await page.goto("/discovery");
+	const picker = header(page).getByRole("button", { name: "Color theme" });
+	await expect(picker).toBeVisible();
+	await picker.click();
 
-	// ⭐ The card leads with the variant and lists the palettes under it (Parker,
+	// ⭐ The panel leads with the variant and lists the palettes under it (Parker,
 	// 2026-11-06), the same order the marketing dropdown uses, and each palette carries
 	// its primary-color swatch.
-	await expect(card).not.toContainText("Applies right away");
-	const variantGroup = card.getByRole("group", { name: "Variant" });
-	const paletteGroup = card.getByRole("group", { name: "Palette" });
+	const variantGroup = page.getByRole("group", { name: "Variant" });
+	const paletteGroup = page.getByRole("group", { name: "Palette" });
 	await expect(variantGroup).toBeVisible();
 	await expect(paletteGroup).toBeVisible();
 

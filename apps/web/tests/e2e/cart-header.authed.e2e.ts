@@ -5,9 +5,10 @@
  *
  * 🚨 **This spec exists because `/cart` was linked from no layout or header component
  * at all.** A buyer who added an item and navigated anywhere had no way back except the
- * browser's back button — on the one surface where money changes hands. The header link
- * renders only when the cart has items, so the tight header costs nothing when empty;
- * this spec pins both halves (appears when non-empty, absent when empty) and the count.
+ * browser's back button — on the one surface where money changes hands. The header link is
+ * always present now (Parker, 2026-11-13); only its count badge waits for the cart to hold
+ * something. This spec pins both halves (the link at every width, the badge appearing and
+ * disappearing with the server cart) and the count.
  *
  * The cart is the SERVER's now (`cart_items`, moved off localStorage — Parker,
  * 2026-10-03), so the spec seeds it through the storage routes rather than into a
@@ -240,26 +241,29 @@ test.describe.configure({ mode: "serial" });
 // (2026-11-07), and the top-bar icon is the one door at every width.
 const header = (page: Page) => page.getByRole("banner");
 
-test("the header shows a cart link with a count when the cart has items, and drops it when the server empties", async ({
+test("the header's cart badge counts what the cart holds and drops when the server empties it", async ({
 	browser,
 }) => {
 	const context = await newBuyerContext(browser);
 	const page = await context.newPage();
 	await page.goto("/discovery");
 	// The page has read an empty cart and cached it. Seeding behind the tab is what a
-	// purchase in another tab looks like to this one.
-	await expect(header(page).getByRole("link", { name: /Cart/ })).toHaveCount(0);
+	// purchase in another tab looks like to this one. The link is there before anything
+	// is in the cart; only the badge waits.
+	const emptyLink = header(page).getByRole("link", { name: "Cart", exact: true });
+	await expect(emptyLink).toBeVisible();
+	await expect(emptyLink.locator(".badge")).toHaveCount(0);
 	await seedThisBuyersCart(await buyerCookie(context));
 
 	// 🚨 **A tab coming back into view re-reads the server** — no reload. The count must
 	// not wait for a full page load to notice a cart that changed elsewhere.
 	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 	const link = header(page).getByRole("link", { name: /Cart \(1 item\)/ });
-	await expect(link, "the cart link did not appear in the header").toBeVisible();
+	await expect(link, "the cart count did not appear in the header").toBeVisible();
 	await expect(link).toHaveAttribute("href", "/cart");
-	// The count badge is the load-bearing part — a link that is always there with no
-	// count is a different, weaker control.
-	await expect(header(page).locator(".badge").filter({ hasText: "1" })).toBeVisible();
+	// The count badge is the load-bearing part — the link alone says a cart exists, not
+	// that it holds anything.
+	await expect(link.locator(".badge")).toHaveText("1");
 
 	// And the completion the tab did not see: the checkout webhook empties the rows while
 	// the buyer is on another surface. The stale count is the bug this pins.
@@ -269,22 +273,33 @@ test("the header shows a cart link with a count when the cart has items, and dro
 	});
 	fixtureExpect(emptied.status, `emptying the cart failed: ${await emptied.text()}`).toBe(200);
 	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+	const emptiedLink = header(page).getByRole("link", { name: "Cart", exact: true });
+	await expect(emptiedLink).toBeVisible();
 	await expect(
-		header(page).getByRole("link", { name: /Cart/ }),
+		emptiedLink.locator(".badge"),
 		"the header kept the count after the server cart was emptied",
 	).toHaveCount(0);
 	await context.close();
 });
 
-test("the header hides the cart link when the cart is empty", async ({ browser }) => {
+test("the header keeps the cart and the bell when both are empty, with no count badges", async ({
+	browser,
+}) => {
 	const context = await newBuyerContext(browser);
 	const page = await context.newPage();
 	// No seed — an empty cart is what an account nobody added to holds.
 	await page.goto("/discovery");
-	await expect(
-		header(page).getByRole("link", { name: /Cart/ }),
-		"the cart link appeared when the cart was empty",
-	).toHaveCount(0);
+	const link = header(page).getByRole("link", { name: "Cart", exact: true });
+	await expect(link, "the cart link is missing on an empty cart").toBeVisible();
+	await expect(link).toHaveAttribute("href", "/cart");
+	await expect(link.locator(".badge")).toHaveCount(0);
+
+	// The bell follows the same rule (Parker, 2026-11-13): it holds its place, and only
+	// the badge waits for something unread. This buyer has never been notified, so the
+	// zero here is the badge's absence rather than a hidden control.
+	const bell = header(page).getByRole("link", { name: "Notifications", exact: true });
+	await expect(bell, "the bell is missing on an account with no notifications").toBeVisible();
+	await expect(bell.locator(".badge")).toHaveCount(0);
 	await context.close();
 });
 

@@ -157,13 +157,9 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 	},
 
 	// ── Settings' cards, each pointing at its tab ───────────────────────────
-	{
-		id: "setting-color-theme",
-		label: "Color Theme",
-		keywords: ["settings", "theme", "light", "dark", "meadow", "color", "appearance"],
-		href: "/settings?tab=experience",
-		kind: "setting",
-	},
+	// The Color Theme entry left with the settings card (Parker, 2026-11-13): the
+	// picker is a topbar control, and a search result pointing at a settings tab that
+	// no longer carries it is a dead end.
 	{
 		id: "setting-where-you-start",
 		label: "Where You Start",

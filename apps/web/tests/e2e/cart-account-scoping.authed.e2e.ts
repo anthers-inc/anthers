@@ -231,12 +231,16 @@ test("account A's cart stays account A's, and account B starts empty", async ({ 
 	await signOutThroughUi(page);
 	expect((await serverCart(buyerACookie)).workIds).toContain(workX.id);
 
-	// B signs in on the SAME browser: the badge must read nothing.
+	// B signs in on the SAME browser: the badge must read nothing. The cart link itself
+	// is always in the header (Parker, 2026-11-13), so the emptiness is the badge's
+	// absence rather than the control's.
 	await signInThroughCallback(page, buyerBId);
 	await page.goto("/discovery");
+	const bCart = page.getByRole("banner").getByRole("link", { name: "Cart", exact: true });
+	await expect(bCart, "B's header lost the cart link").toBeVisible();
 	await expect(
-		page.getByRole("banner").getByRole("link", { name: /Cart/ }),
-		"B's header offered a cart their account never built",
+		bCart.locator(".badge"),
+		"B's header offered a count their account never built",
 	).toHaveCount(0);
 	// And the server half agrees — B's account cart is empty.
 	const bCookie = await apiSession(buyerBId);

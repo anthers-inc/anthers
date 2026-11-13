@@ -249,9 +249,12 @@ test.describe("the cart purchase flow", () => {
 		await clearServerCart(page);
 		await gotoWork(page);
 
-		// The header badge is empty before the add.
+		// The header badge is empty before the add — the link is always there and only
+		// its count waits (Parker, 2026-11-13).
 		const header = page.getByRole("banner");
-		await expect(header.getByRole("link", { name: /Cart/ })).toHaveCount(0);
+		const cartLink = header.getByRole("link", { name: "Cart", exact: true });
+		await expect(cartLink).toBeVisible();
+		await expect(cartLink.locator(".badge")).toHaveCount(0);
 
 		await page.getByRole("button", { name: /Buy Now/ }).click();
 
