@@ -29,6 +29,7 @@ import People from "./pages/moderation/People";
 import RatingAppeals from "./pages/moderation/RatingAppeals";
 import SignIn from "./pages/SignIn";
 import Traffic from "./pages/Traffic";
+import Users from "./pages/Users";
 
 export default function App() {
 	const { account, loading } = useSession();
@@ -41,6 +42,7 @@ export default function App() {
 			<Route element={<Layout />}>
 				<Route index element={<Home />} />
 				<Route path="traffic" element={<Traffic />} />
+				<Route path="users" element={<Users />} />
 				<Route path="legal/rights-requests" element={<RightsRequests />} />
 				<Route path="legal/quarantine" element={<Quarantine />} />
 				<Route path="legal/abuse-reports" element={<AbuseReports />} />

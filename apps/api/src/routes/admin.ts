@@ -132,6 +132,7 @@ import {
 	trafficTimeseries,
 	trafficTopPaths,
 } from "../services/traffic.js";
+import { loadUserDirectory } from "../services/user-directory.js";
 import { editWorkListing, notifyListingCorrected } from "../services/work-edit.js";
 import { adminAccountRoutes } from "./admin-accounts.js";
 import { adminAuthRoutes } from "./admin-auth.js";
@@ -997,6 +998,21 @@ const adminRoutes = new Hono<AdminEnv>()
 		const result = await unsuspendAccount({ userId, adminId: admin.id, note });
 		if (!result) return c.json({ error: "Account not found" }, 404);
 		return c.json(result);
+	})
+
+	// ── The users directory ─────────────────────────────────────────────────
+	// Every account, searchable and paged — the read for "who is this person?"
+	// when the thing in hand is a name, an address or an account number rather
+	// than a queue item. Deliberately not `/people`, which lists only suspended
+	// or reported accounts; `loadUserDirectory` carries why the two are separate.
+	.get("/users", async (c) => {
+		const page = Number(c.req.query("page") ?? 0);
+		return c.json(
+			await loadUserDirectory({
+				query: c.req.query("q")?.trim() || undefined,
+				page: Number.isFinite(page) ? page : 0,
+			}),
+		);
 	})
 
 	// ── People ─────────────────────────────────────────────────────────────
