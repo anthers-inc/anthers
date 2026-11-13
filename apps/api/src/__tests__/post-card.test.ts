@@ -21,6 +21,7 @@ import { posts, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { suspendAccount } from "../services/moderation";
+import { storage } from "../services/storage/index";
 import { createAccount } from "./account-fixture";
 import { createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
@@ -94,6 +95,23 @@ describe("GET /posts/:slug/card", () => {
 			// Markdown never reaches a preview: the body ships as the text a reader would see.
 			expect(preview.description).toStartWith("A short note about the garden.");
 			expect(preview.image).toBe(THUMBNAIL);
+		},
+		DB_SETUP_TIMEOUT,
+	);
+
+	it(
+		"resolves a Work cover stored as a storage key before putting it in the preview",
+		async () => {
+			const key = `creators/${creatorId}/thumbnails/unknown/post-card-${run}.png`;
+			const work = await aWork({ thumbnail: key });
+			const post = await aPost({ body: `A short note.\n\n${embed(work)}` });
+
+			const res = await req(canonical(post));
+			expect(res.status).toBe(200);
+			const { preview } = (await res.json()) as {
+				preview: { image: string | null };
+			};
+			expect(preview.image).toBe(await storage.getUrl(key));
 		},
 		DB_SETUP_TIMEOUT,
 	);

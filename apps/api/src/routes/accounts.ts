@@ -172,6 +172,7 @@ import { matchesFields } from "../services/search-query.js";
 import { storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
 import { storageReadingFor } from "../services/storage-reading.js";
+import { resolveThumbnailUrl } from "../services/thumbnails.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1366,6 +1367,17 @@ const accountRoutes = new Hono()
 						)
 						.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
 						.limit(50);
+
+		// Resolve every stored cover before it becomes a card. A thumbnail column holds
+		// either a URL or, in older rows (the physical listing used to copy its cover's
+		// key), a bare storage key — and a key in an `<img src>` is a relative path the app
+		// answers with its own HTML. The Library, Catalog and open-works listings resolve
+		// the same way; the feed is a listing too.
+		await Promise.all(
+			feedWorks.map(async (row) => {
+				row.work.thumbnail = await resolveThumbnailUrl(row.work.thumbnail);
+			}),
+		);
 
 		// One access context over the whole batch — the same `buildAccessContext` a
 		// Catalog page runs, resolving each verdict without an N+1. Without it a gated
