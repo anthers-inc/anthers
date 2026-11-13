@@ -100,29 +100,13 @@ export const stripeCustomers = pgTable("stripe_customers", {
  * org-only UI state do not sit on a `node`-tagged identity row.
  */
 // org — a user's settings are opinions about org-served behavior (which rungs to meet,
-// whether to appear on the supporters page, light or dark), which is org-side in the
-// current topology: the same reasoning as `parentalControls`.
+// light or dark), which is org-side in the current topology: the same reasoning as
+// `parentalControls`.
 export const userPreferences = pgTable("user_preferences", {
 	// The PK, because this row has no other key and there is no second row per user.
 	userId: integer("user_id")
 		.primaryKey()
 		.references(() => users.id, { onDelete: "cascade" }),
-	/**
-	 * Whether this person appears on the public supporters page.
-	 *
-	 * ⭐ **Listed by default, and told so at the moment they start** (Parker, 2026-09-04).
-	 * The wiki promises "a place on the supporters page, if you want one", and the way that
-	 * promise is kept is the heads-up in the support flow rather than an unchecked box — the
-	 * standard shape for this kind of page, and the one that gets a decision out of somebody
-	 * while they are thinking about it instead of never.
-	 *
-	 * 🚨 **A default of `true` only honors the promise for people who SAW the notice.**
-	 * Anybody who supported before it shipped has not been asked, and turning the page on
-	 * would list them without their knowing. The page filters on this column, so switching
-	 * those rows to `false` — or asking them — is a launch step and not an implementation
-	 * detail.
-	 */
-	listedAsSupporter: boolean("listed_as_supporter").notNull().default(true),
 
 	// ── Adult access (the wiki's *Content Standards* § The funding type is the age signal) ──
 	// Three columns and no fourth, and the shortness is the design rather than a first

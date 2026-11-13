@@ -16,7 +16,6 @@
 		"./badge-art": "./src/badge-art.ts",
 		"./votes": "./src/votes.ts",
 		"./stickers": "./src/stickers.ts",
-		"./supporters": "./src/supporters.ts",
 		"./parental-controls": "./src/parental-controls.ts",
 		"./public-access": "./src/public-access.ts",
 		"./moderation": "./src/moderation.ts",
