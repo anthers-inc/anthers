@@ -17,6 +17,7 @@ import { studioUrl } from "../../lib/studio";
 import { USER_TABS, userTabPath } from "../../lib/user-tabs";
 import { isStudioNavActive, STUDIO_NAV } from "../../studio/studio-nav";
 import PlayerBar from "../media/PlayerBar";
+import AlphaNotice from "./AlphaNotice";
 import { type AppMode, useAppMode } from "./app-mode";
 import IdentityServerBanner from "./IdentityServerBanner";
 import NotificationBell from "./NotificationBell";
@@ -401,6 +402,10 @@ export default function LoggedInLayout() {
 
 				<PublishingPermissionBanner />
 				<IdentityServerBanner />
+				{/* The alpha notice comes last of the three strips: it is the calmest of them, and a
+				    real permission problem belongs above a standing announcement rather than under
+				    it. It is also the only one that stays until the reader closes it. */}
+				<AlphaNotice />
 
 				{/* Body: sidebar + main content */}
 				<div className="relative flex flex-1 overflow-hidden">
