@@ -199,6 +199,13 @@ export async function createSubscription(
 	return (await getStripe()?.subscriptions.create(params)) ?? null;
 }
 
+/** Mirrors `stripe.subscriptions.list` — the repair path's idempotency read. */
+export function listSubscriptions(
+	params: Stripe.SubscriptionListParams,
+): Stripe.ApiListPromise<Stripe.Subscription> | null {
+	return getStripe()?.subscriptions.list(params) ?? null;
+}
+
 /** Mirrors `stripe.setupIntents.retrieve` — a saved-card SetupIntent by id. */
 export async function retrieveSetupIntent(id: string): Promise<Stripe.SetupIntent | null> {
 	return (await getStripe()?.setupIntents.retrieve(id)) ?? null;
@@ -207,6 +214,21 @@ export async function retrieveSetupIntent(id: string): Promise<Stripe.SetupInten
 /** Mirrors `stripe.paymentMethods.detach` — remove a card from its customer. */
 export async function detachPaymentMethod(id: string): Promise<Stripe.PaymentMethod | null> {
 	return (await getStripe()?.paymentMethods.detach(id)) ?? null;
+}
+
+/**
+ * Mirrors `stripe.paymentMethods.attach` — put a card on a Customer.
+ *
+ * The repair path's write: a Badge checkout that ran customerless left its card unattached,
+ * and the recurrence subscription cannot name it as `default_payment_method` until it is
+ * attached. A failure reaches the caller; a repair that cannot attach must not create a
+ * subscription that would fail its first renewal.
+ */
+export async function attachPaymentMethod(
+	id: string,
+	customer: string,
+): Promise<Stripe.PaymentMethod | null> {
+	return (await getStripe()?.paymentMethods.attach(id, { customer })) ?? null;
 }
 
 /**

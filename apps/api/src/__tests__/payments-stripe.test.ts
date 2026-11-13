@@ -149,6 +149,17 @@ function fakeStripe() {
 		},
 		customers: {
 			create: record("customers.create", () => ({ id: `cus_${uid()}` })),
+			retrieve: record("customers.retrieve", (id: string) => ({
+				id,
+				object: "customer",
+				deleted: false,
+				address: null,
+				invoice_settings: { default_payment_method: null },
+			})),
+			update: record("customers.update", (id: string, params: Record<string, unknown>) => ({
+				id,
+				...params,
+			})),
 		},
 		products: {
 			// The badge rung's Product (`ensureBadgeProduct`): created on first use with the
@@ -163,6 +174,27 @@ function fakeStripe() {
 		},
 		paymentMethods: {
 			list: record("paymentMethods.list", () => ({ data: [] })),
+			retrieve: record("paymentMethods.retrieve", (id: string) => ({
+				id,
+				object: "payment_method",
+				type: "card",
+				customer: null,
+				card: { brand: "visa", funding: "credit" },
+				billing_details: {
+					name: "Test Buyer",
+					address: {
+						line1: "123 Main St",
+						city: "Denver",
+						state: "CO",
+						postal_code: "80202",
+						country: "US",
+					},
+				},
+			})),
+			attach: record("paymentMethods.attach", (id: string, params: { customer: string }) => ({
+				id,
+				customer: params.customer,
+			})),
 		},
 		paymentIntents: {
 			// A fresh id per call: `purchases.stripe_payment_intent_id` is UNIQUE, so a

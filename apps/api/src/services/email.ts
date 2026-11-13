@@ -1064,13 +1064,15 @@ export function renderSupportReceiptEmail(args: {
 	lines: ReceiptLine[];
 	tax: string;
 	total: string;
+	/** True when the payment reached Anthers only; the intro names it rather than "creators". */
+	anthersOnly?: boolean;
 }): RenderedEmail {
 	return {
 		subject: `Your Anthers support receipt: ${usd(args.total)}`,
 		html: shell(
 			"Your monthly support receipt",
 			`${receiptMeta(args.date, args.reference)}
-			<p style="margin:0 0 14px;">Thanks for supporting creators. Here's your payment for <strong style="color:${MEADOW.ink};">${escapeHtml(args.billingCycle)}</strong>:</p>
+			<p style="margin:0 0 14px;">Thanks for supporting ${args.anthersOnly ? "Anthers" : "creators"}. Here's your payment for <strong style="color:${MEADOW.ink};">${escapeHtml(args.billingCycle)}</strong>:</p>
 			${itemsTable({ lines: args.lines, tax: args.tax, totalLabel: "Total charged", total: args.total })}
 			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a monthly support payment was made from your account.</p>`,
 		),
@@ -1087,6 +1089,7 @@ export async function sendSupportReceiptEmail(args: {
 	lines: ReceiptLine[];
 	tax: string;
 	total: string;
+	anthersOnly?: boolean;
 }): Promise<SendResult> {
 	const { subject, html } = renderSupportReceiptEmail(args);
 	return sendEmail({ to: args.to, subject, html });

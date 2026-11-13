@@ -35,6 +35,7 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
+import { renderSupportReceiptEmail } from "../services/email";
 import { sendPurchaseReceipts, sendRefundReceipts, sendSupportReceipt } from "../services/receipts";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -319,6 +320,72 @@ describe("Receipts: monthly support", () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0].kind).toBe("receipt");
 		expect(rows[0].detail?.receiptKind).toBe("invoice");
+	});
+
+	it("a $0 trial invoice earns no receipt", async () => {
+		// The invoice is a trial's bookkeeping row: no money moved and no creator line
+		// exists. A receipt for it announces a charge that never happened.
+		const [invoiceRow] = await db
+			.insert(invoices)
+			.values({
+				userId: buyerId,
+				stripeInvoiceId: `in_rcp_${run}_zero`,
+				stripePaymentIntentId: `pi_rcp_${run}_zero`,
+				billingCycle: "2026-11",
+				status: "paid",
+				subtotal: "0.00",
+				discount: "0.00",
+				tax: "0.00",
+				total: "0.00",
+				processingFee: "0.00",
+				paidAt: new Date(),
+			})
+			.returning();
+
+		await sendSupportReceipt(invoiceRow);
+		expect(await receiptRows(`invoice:in_rcp_${run}_zero:buyer:${buyerId}`)).toHaveLength(0);
+	});
+
+	it("names Anthers when the payment reached no creator", async () => {
+		// An Anthers-only subscription has a null line in the invoice-lines table. The
+		// receipt names it rather than showing an empty itemization, and the intro does not
+		// claim the money reached creators.
+		const [invoiceRow] = await db
+			.insert(invoices)
+			.values({
+				userId: buyerId,
+				stripeInvoiceId: `in_rcp_${run}_anthers`,
+				stripePaymentIntentId: `pi_rcp_${run}_anthers`,
+				billingCycle: "2026-11",
+				status: "paid",
+				subtotal: "3.00",
+				discount: "0.00",
+				tax: "0.00",
+				total: "3.00",
+				processingFee: "0.39",
+				paidAt: new Date(),
+			})
+			.returning();
+		await db
+			.insert(invoiceLines)
+			.values({ invoiceId: invoiceRow.id, creatorId: null, amount: "3.00" });
+
+		await sendSupportReceipt(invoiceRow);
+		const [row] = await receiptRows(`invoice:in_rcp_${run}_anthers:buyer:${buyerId}`);
+		expect(row?.detail?.receiptKind).toBe("invoice");
+
+		const { html } = renderSupportReceiptEmail({
+			reference: invoiceRow.stripeInvoiceId,
+			date: new Date(),
+			billingCycle: "2026-11",
+			lines: [{ description: "Support for Anthers", amount: "3.00" }],
+			tax: "0.00",
+			total: "3.00",
+			anthersOnly: true,
+		});
+		expect(html).toContain("Support for Anthers");
+		expect(html).toContain("Thanks for supporting Anthers");
+		expect(html).not.toContain("supporters page");
 	});
 
 	it("a detached invoice (its buyer deleted) is receipted by nobody", async () => {

@@ -331,6 +331,10 @@ export async function sendRefundReceipts(rows: PurchaseRow[]): Promise<void> {
 export async function sendSupportReceipt(invoiceRow: InvoiceRow): Promise<void> {
 	const buyerEmail = await emailOf(invoiceRow.userId);
 	if (!buyerEmail) return;
+	// A $0 invoice is a trial's bookkeeping row, not a payment. Mailing a receipt for it
+	// announces a charge that never happened and names no creator, which is exactly the
+	// false receipt a trial start produced on 2026-11-13.
+	if (Number(invoiceRow.total) <= 0) return;
 
 	const lines = await db
 		.select({ creatorId: invoiceLines.creatorId, amount: invoiceLines.amount })
@@ -357,6 +361,14 @@ export async function sendSupportReceipt(invoiceRow: InvoiceRow): Promise<void> 
 			description: `Support for ${names.get(l.creatorId as number) ?? "a creator"}`,
 			amount: l.amount,
 		}));
+	// An Anthers-only payment has a null line in the same table. It is named rather than
+	// left out: the supporter gave Anthers money, and a receipt with no line at all
+	// cannot answer who it reached.
+	const anthersLine = lines.find((l) => l.creatorId == null);
+	const anthersOnly = receiptLines.length === 0 && anthersLine != null;
+	if (anthersOnly) {
+		receiptLines.push({ description: "Support for Anthers", amount: anthersLine.amount });
+	}
 
 	await sendOnce(
 		{
@@ -375,6 +387,7 @@ export async function sendSupportReceipt(invoiceRow: InvoiceRow): Promise<void> 
 				lines: receiptLines,
 				tax: invoiceRow.tax,
 				total: invoiceRow.total,
+				anthersOnly,
 			}),
 	);
 }
