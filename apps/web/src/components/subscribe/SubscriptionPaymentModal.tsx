@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
+
+import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import { client } from "@anthers/web-shared/rpc";
+import type { SavedBillingAddress } from "@anthers/web-shared/types";
 import Modal from "@anthers/web-shared/ui/Modal";
 import {
 	AddressElement,
-	CardElement,
 	Elements,
+	PaymentElement,
 	useElements,
 	useStripe,
 } from "@stripe/react-stripe-js";
-import type { StripeAddressElementChangeEvent, StripeCardElement } from "@stripe/stripe-js";
+import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
 import { useEffect, useMemo, useState } from "react";
 import { getStripe } from "../../lib/stripe";
-import { cardElementStyle } from "../../lib/stripeCard";
+import { stripeAppearance } from "../../lib/stripeCard";
 
 /** What the confirmation modal needs — computed server-side by /subscriptions/preview. */
 export interface SubscriptionPreview {
@@ -36,11 +39,7 @@ interface Props {
 	 *
 	 * The subscription carries ONE ITEM PER DESTINATION — `anthersSupport` and each of
 	 * these — because everything a user gives arrives on one monthly charge, which is also
-	 * what amortizes the fixed card fee across the creators on it. ⚠️ This said the
-	 * *quantity* was `anthersSupport` plus these until 2026-08-16; a quantity can only
-	 * express multiples of one unit, so the retirement replaced it with itemized amounts.
-	 * Omitted everywhere the caller only changes the Anthers amount (the post unlock,
-	 * the Badges tab on /settings).
+	 * what amortizes the fixed card fee across the creators on it.
 	 */
 	directed?: { creatorId: number; amount: number }[];
 	badgeName: string;
@@ -48,6 +47,15 @@ interface Props {
 	/** Called after the change is confirmed — the webhook then applies the new amount. */
 	onComplete: () => void;
 	onClose: () => void;
+}
+
+/** The invoice that already exists when a new card is being confirmed. */
+interface PendingPayment {
+	clientSecret: string;
+	/** The address saved before the subscription was created, for the card's AVS details. */
+	billingAddress: SavedBillingAddress | null;
+	/** The first invoice's tax-inclusive amount due, when Stripe reported it. */
+	amountDue: string | null;
 }
 
 function formatDate(unix: number | null): string | null {
@@ -76,15 +84,47 @@ export function quoteDisagrees(
 	return Math.round(quoted * 100) !== Math.round(billed * 100);
 }
 
+/** The Address Element's value in the shape the subscription route saves to the Customer. */
+function savedAddressFrom(value: StripeAddressElementChangeEvent["value"]): SavedBillingAddress {
+	return {
+		name: value.name.trim(),
+		line1: value.address.line1.trim(),
+		line2: value.address.line2?.trim() ? value.address.line2.trim() : null,
+		city: value.address.city.trim(),
+		state: value.address.state.trim(),
+		postalCode: value.address.postal_code.trim(),
+	};
+}
+
+/** The saved address in the shape the Payment Element's billing details take. */
+function billingDetailsFrom(address: SavedBillingAddress) {
+	return {
+		name: address.name,
+		address: {
+			line1: address.line1,
+			...(address.line2 ? { line2: address.line2 } : {}),
+			city: address.city,
+			state: address.state,
+			postal_code: address.postalCode,
+			country: "US" as const,
+		},
+	};
+}
+
 function PaymentForm({
 	open,
 	anthersSupport,
 	directed,
 	badgeName,
 	preview,
+	pending,
+	onPending,
 	onComplete,
 	onClose,
-}: Props) {
+}: Props & {
+	pending: PendingPayment | null;
+	onPending: (payment: PendingPayment) => void;
+}) {
 	const stripe = useStripe();
 	const elements = useElements();
 	const [processing, setProcessing] = useState(false);
@@ -92,13 +132,12 @@ function PaymentForm({
 	// New subscriptions can choose saved vs new card; a change always uses the
 	// subscription's card on file. Default to the saved card when there is one.
 	const [useNewCard, setUseNewCard] = useState(!preview.savedCard);
-	const cardStyle = useMemo(cardElementStyle, []);
 
 	/**
 	 * The billing address a new supporter enters, collected because the subscription's
 	 * automatic tax resolves the rate from it. Anthers sells to US billing addresses at
-	 * launch, so the element offers only the US; the address rides on the payment
-	 * method's `billing_details` at confirm, which is what Stripe Tax reads.
+	 * launch, so the element offers only the US; the address rides on the payment method's
+	 * `billing_details` at confirm, which is what Stripe Tax reads.
 	 */
 	const [billingAddress, setBillingAddress] = useState<
 		StripeAddressElementChangeEvent["value"] | null
@@ -118,25 +157,12 @@ function PaymentForm({
 
 	/**
 	 * 🚨 **The quote and the charge must be the same number**, checked at the last point
-	 * before money moves.
-	 *
-	 * This modal is the only place that holds both: `preview.recurring.amount`, which is
-	 * what the user has just read, and `anthersSupport + directed`, which is what the POST
-	 * will bill. They are derived independently by the caller, and on 2026-08-16
-	 * `/signup` derived them **differently** — quoting $9 and charging $1 — with nothing
-	 * between the discrepancy and the card.
-	 *
-	 * ⚠️ Honest about what it is: `recurring.amount` echoes the amount the client asked
-	 * `preview/:amount` about, so this is a **consistency** check and not server
-	 * verification. That is still exactly the defect class — one caller computing the
-	 * displayed number and the billed number by two routes — and it is the shape the
-	 * ceremony bug had. Real server-side authority would mean the preview issuing a token
-	 * the charge has to present, which is a larger change than this guard.
-	 *
-	 * `chargeNow` is deliberately NOT compared: on a change it is a real Stripe proration
-	 * and legitimately differs from the recurring amount.
+	 * before money moves. This modal is the only place that holds both: the quote the user
+	 * just read and the amount the POST will bill.
 	 */
 	const mismatch = quoteDisagrees(preview.recurring.amount, anthersSupport, directed);
+
+	const needsNewAddress = !isChange && (!savedCard || useNewCard);
 
 	const submit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -146,58 +172,56 @@ function PaymentForm({
 			setError("This doesn't add up — we won't charge you. Please reload and try again.");
 			return;
 		}
+		if (needsNewAddress && !billingAddress) {
+			setError("Enter your billing address — sales tax is calculated from it.");
+			return;
+		}
+		const address = needsNewAddress && billingAddress ? savedAddressFrom(billingAddress) : null;
 		setProcessing(true);
 		setError(null);
 		try {
 			const res = await client.api.subscriptions.account.$post({
-				json: { anthersSupport, ...(directed?.length ? { directed } : {}) },
+				json: {
+					anthersSupport,
+					...(directed?.length ? { directed } : {}),
+					...(address ? { billingAddress: address } : {}),
+				},
 			});
 			if (!res.ok) {
 				setError("Couldn't update your support. Please try again.");
 				setProcessing(false);
 				return;
 			}
-			const data = (await res.json()) as { pending?: boolean; clientSecret?: string | null };
+			const data = (await res.json()) as {
+				pending?: boolean;
+				clientSecret?: string | null;
+				amountDue?: string | null;
+			};
 
-			// A new subscription returns a client secret to confirm inline. A change is
-			// charged to the card on file, so there's nothing to confirm here.
 			if (data.pending && data.clientSecret) {
-				if (!stripe) {
-					setError("Payments aren't ready. Please try again.");
-					setProcessing(false);
-					return;
-				}
-				let payment_method:
-					| string
-					| {
-							card: StripeCardElement;
-							billing_details: { address: StripeAddressElementChangeEvent["value"]["address"] };
-					  };
+				// A new subscription returns a client secret. The card on file path confirms
+				// the first invoice without showing a card form; a new card moves to the
+				// Payment Element step, where the invoice's confirmation secret is mounted.
 				if (savedCard && !useNewCard) {
-					payment_method = savedCard.id;
+					if (!stripe) {
+						setError("Payments aren't ready. Please try again.");
+						setProcessing(false);
+						return;
+					}
+					const { error: err } = await stripe.confirmCardPayment(data.clientSecret, {
+						payment_method: savedCard.id,
+					});
+					if (err) {
+						setError(err.message ?? "Payment failed.");
+						setProcessing(false);
+						return;
+					}
 				} else {
-					const card = elements?.getElement(CardElement);
-					if (!card) {
-						setError("Card field isn't ready. Please try again.");
-						setProcessing(false);
-						return;
-					}
-					// The billing address rides on the new payment method — this is what
-					// Stripe Tax resolves the subscription's rate from. A saved card carries
-					// its own address, already on the customer.
-					const address = billingAddress?.address;
-					if (!address) {
-						setError("Enter your billing address — sales tax is calculated from it.");
-						setProcessing(false);
-						return;
-					}
-					payment_method = { card, billing_details: { address } };
-				}
-				const { error: err } = await stripe.confirmCardPayment(data.clientSecret, {
-					payment_method,
-				});
-				if (err) {
-					setError(err.message ?? "Payment failed.");
+					onPending({
+						clientSecret: data.clientSecret,
+						billingAddress: address,
+						amountDue: data.amountDue ?? null,
+					});
 					setProcessing(false);
 					return;
 				}
@@ -209,6 +233,116 @@ function PaymentForm({
 		}
 	};
 
+	const confirmNewCard = async () => {
+		if (!stripe || !elements || !pending || processing) return;
+		setProcessing(true);
+		setError(null);
+		try {
+			const submitted = await elements.submit();
+			if (submitted.error) {
+				setError(submitted.error.message ?? "Check the card details and try again.");
+				setProcessing(false);
+				return;
+			}
+			const { error: err } = await stripe.confirmPayment({
+				elements,
+				clientSecret: pending.clientSecret,
+				confirmParams: {
+					return_url: `${window.location.origin}${STRIPE_RETURN_PATHS.billingPortalReturn}`,
+					...(pending.billingAddress
+						? {
+								payment_method_data: {
+									billing_details: billingDetailsFrom(pending.billingAddress),
+								},
+							}
+						: {}),
+				},
+				// Cards confirm in place; the return URL is only ever navigated by a
+				// redirect-based method, which the account's card-only configuration
+				// does not offer.
+				redirect: "if_required",
+			});
+			if (err) {
+				setError(err.message ?? "Payment failed.");
+				setProcessing(false);
+				return;
+			}
+			onComplete();
+		} catch {
+			setError("Payment failed — please try again.");
+			setProcessing(false);
+		}
+	};
+
+	const quoteBlock = (
+		<div className="rounded-lg bg-base-200 p-4 my-3 text-sm flex flex-col gap-2">
+			<div className="flex items-center justify-between">
+				<span>
+					{isChange
+						? "Due today (prorated)"
+						: pending
+							? "Charged today"
+							: "Charged today, before tax"}
+				</span>
+				<strong>${pending?.amountDue ?? preview.chargeNow}</strong>
+			</div>
+			<div className="flex items-center justify-between text-base-content/70">
+				<span>Then</span>
+				<span>
+					${preview.recurring.amount}/{preview.recurring.interval}
+				</span>
+			</div>
+			{nextDate && (
+				<div className="flex items-center justify-between text-base-content/70">
+					<span>Next charge</span>
+					<span>{nextDate}</span>
+				</div>
+			)}
+		</div>
+	);
+
+	if (pending) {
+		return (
+			<Modal open={open}>
+				<div className="modal-box max-w-md">
+					<h3 className="font-bold text-lg mb-1">Confirm your card</h3>
+					<p className="text-xs text-base-content/50 mb-3">
+						Your billing address is saved. Nothing else is charged until you confirm.
+					</p>
+					{quoteBlock}
+					<div className="border border-base-300 rounded-lg p-3 bg-base-100 mb-3">
+						<PaymentElement options={{ fields: { billingDetails: "never" } }} />
+					</div>
+					{error && (
+						<div className="alert alert-error text-sm">
+							<span>{error}</span>
+						</div>
+					)}
+					<div className="flex gap-2 justify-end mt-1">
+						<button type="button" className="btn btn-ghost" onClick={onClose} disabled={processing}>
+							Cancel
+						</button>
+						<button
+							type="button"
+							className="btn btn-primary"
+							onClick={() => void confirmNewCard()}
+							disabled={processing || !stripe || !elements}
+						>
+							{processing ? "Processing…" : `Pay $${pending.amountDue ?? preview.chargeNow}`}
+						</button>
+					</div>
+				</div>
+				<button
+					type="button"
+					className="modal-backdrop"
+					onClick={onClose}
+					aria-label="Close"
+					disabled={processing}
+				/>
+			</Modal>
+		);
+	}
+
 	return (
 		<Modal open={open}>
 			<div className="modal-box max-w-md">
@@ -216,25 +350,7 @@ function PaymentForm({
 					{isChange ? `Switch to ${badgeName}` : `Give ${badgeName}`}
 				</h3>
 
-				{/* What they'll be charged — now and going forward */}
-				<div className="rounded-lg bg-base-200 p-4 my-3 text-sm flex flex-col gap-2">
-					<div className="flex items-center justify-between">
-						<span>{isChange ? "Due today (prorated)" : "Charged today"}</span>
-						<strong>${preview.chargeNow}</strong>
-					</div>
-					<div className="flex items-center justify-between text-base-content/70">
-						<span>Then</span>
-						<span>
-							${preview.recurring.amount}/{preview.recurring.interval}
-						</span>
-					</div>
-					{nextDate && (
-						<div className="flex items-center justify-between text-base-content/70">
-							<span>Next charge</span>
-							<span>{nextDate}</span>
-						</div>
-					)}
-				</div>
+				{quoteBlock}
 				<p className="text-xs text-base-content/50 mb-3">
 					Renews automatically. Stop anytime — your support stays active through the period you've
 					paid for.
@@ -270,13 +386,17 @@ function PaymentForm({
 							    path. */}
 							<div className="border border-base-300 rounded-lg p-3 bg-base-100 mb-3">
 								<AddressElement
-									options={{ mode: "billing", allowedCountries: ["US"] }}
+									options={{
+										mode: "billing",
+										allowedCountries: ["US"],
+										fields: { phone: "never" },
+									}}
 									onChange={(e) => setBillingAddress(e.complete ? e.value : null)}
 								/>
 							</div>
-							<div className="border border-base-300 rounded-lg p-3 bg-base-100">
-								<CardElement options={{ style: cardStyle }} />
-							</div>
+							<p className="text-xs text-base-content/50">
+								The card is entered on the next step, after the subscription is prepared.
+							</p>
 							{savedCard && (
 								<button
 									type="button"
@@ -304,7 +424,9 @@ function PaymentForm({
 								? "Processing…"
 								: isChange
 									? "Confirm change"
-									: `Subscribe · $${preview.chargeNow}`}
+									: savedCard && !useNewCard
+										? `Subscribe · $${preview.chargeNow}`
+										: "Continue to card"}
 						</button>
 					</div>
 				</form>
@@ -321,9 +443,22 @@ function PaymentForm({
 }
 
 export default function SubscriptionPaymentModal(props: Props) {
+	const [pending, setPending] = useState<PendingPayment | null>(null);
+	const appearance = useMemo(stripeAppearance, []);
+
+	// A closed modal starts fresh; the incomplete subscription, if one was created, is
+	// Stripe's to expire, and the next open begins at the address step.
+	useEffect(() => {
+		if (!props.open) setPending(null);
+	}, [props.open]);
+
 	return (
-		<Elements stripe={getStripe()}>
-			<PaymentForm {...props} />
+		<Elements
+			key={pending?.clientSecret ?? "address"}
+			stripe={getStripe()}
+			options={pending ? { clientSecret: pending.clientSecret, appearance } : { appearance }}
+		>
+			<PaymentForm {...props} pending={pending} onPending={setPending} />
 		</Elements>
 	);
 }

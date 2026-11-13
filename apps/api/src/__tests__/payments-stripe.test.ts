@@ -2391,36 +2391,37 @@ describe("Checkout — session construction under automatic tax", () => {
 		});
 	});
 
-	it("reuses the buyer's Customer when they have one, and creates none when they don't", async () => {
-		// The 2026-10-11 posture in the session itself. Nothing to reuse: the params name
-		// `if_required` — a buyer who saved nothing and holds no subscription leaves no
-		// Customer at Stripe behind. Something to reuse: `customer` — the session pays on
-		// the record the saved address (or subscription) already made, so one buyer
-		// accumulates into one Customer rather than one per flow.
+	it("creates a Customer for a buyer who has none, then reuses it next time", async () => {
+		// The 2026-11-13 posture in the session itself: every checkout names a Customer, so
+		// a first-time buyer can save a card and have the billing address prefilled next
+		// time. Nothing is left to `customer_creation` — the route creates the record
+		// through `ensureStripeCustomer` before the session exists.
 		await db.delete(stripeCustomers).where(eq(stripeCustomers.userId, buyerId));
 		const { res: noneRes } = await checkout();
 		expect(noneRes.status).toBe(200);
 		const none = fake.lastCall("checkout.sessions.create")
 			?.args[0] as Stripe.Checkout.SessionCreateParams;
-		expect(none.customer_creation).toBe("if_required");
-		expect(none.customer).toBeUndefined();
-		// The either-or's positive half: no Customer, so the verified account's email
-		// rides the session — the 2026-10-06 greyed-Pay-button rule.
-		expect(none.customer_email).toBe(`${buyerName}@example.com`);
+		expect(none.customer).toBeTruthy();
+		expect(none.customer_creation).toBeUndefined();
+		expect(none.customer_email).toBeUndefined();
+		expect(none.customer_update).toEqual({ address: "auto" });
+		expect(none.saved_payment_method_options).toEqual({
+			payment_method_save: "enabled",
+			payment_method_remove: "disabled",
+		});
 
-		const savedId = `cus_saved_${uid()}`;
-		await db
-			.insert(stripeCustomers)
-			.values({ userId: buyerId, stripeCustomerId: savedId })
-			.onConflictDoUpdate({ target: stripeCustomers.userId, set: { stripeCustomerId: savedId } });
+		const [created] = await db
+			.select({ id: stripeCustomers.stripeCustomerId })
+			.from(stripeCustomers)
+			.where(eq(stripeCustomers.userId, buyerId));
+		expect(String(created?.id)).toBe(String(none.customer));
+
 		const { res: reuseRes } = await checkout();
 		expect(reuseRes.status).toBe(200);
 		const reuse = fake.lastCall("checkout.sessions.create")
 			?.args[0] as Stripe.Checkout.SessionCreateParams;
-		expect(reuse.customer).toBe(savedId);
+		expect(reuse.customer).toBe(none.customer);
 		expect(reuse.customer_creation).toBeUndefined();
-		// And the pair's refusal shape never appears: no `customer_email` beside a
-		// named Customer.
 		expect(reuse.customer_email).toBeUndefined();
 	});
 

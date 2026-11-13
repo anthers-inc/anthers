@@ -13,6 +13,7 @@ import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import app from "../index";
 import { setStripeClient } from "../lib/stripe";
+import { deleteBillingCustomer } from "../services/billing.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -48,6 +49,7 @@ function fakeStripe() {
 		customer: null as Record<string, unknown> | null,
 		cards: [] as FakeCard[],
 		subscription: null as { id: string; default_payment_method: string | null } | null,
+		failCustomerDelete: false,
 		setupIntent: {
 			id: "seti_1",
 			customer: "cus_1",
@@ -77,6 +79,12 @@ function fakeStripe() {
 			create: () => {
 				calls.push({ method: "customers.create", args: [] });
 				return Promise.resolve({ id: "cus_1" });
+			},
+			del: (id: string) => {
+				calls.push({ method: "customers.del", args: [id] });
+				if (state.failCustomerDelete) return Promise.reject(new Error("stripe down"));
+				state.customer = { id, deleted: true };
+				return Promise.resolve({ id, deleted: true });
 			},
 			retrieve: (id: string) => {
 				calls.push({ method: "customers.retrieve", args: [id] });
@@ -336,4 +344,17 @@ it("removes the card once nothing renews on it", async () => {
 	const after = await me();
 	const body = (await after.json()) as { card: unknown };
 	expect(body.card).toBeNull();
+});
+
+it("deletes the Customer on account deletion and defers on a Stripe refusal", async () => {
+	// The account-deletion path's write: deleting the Customer removes the address and the
+	// card details with it. A refusal is the caller's deferral signal, never a partial
+	// success.
+	fake.state.failCustomerDelete = false;
+	expect(await deleteBillingCustomer(userId)).toBe("deleted");
+	expect(fake.callsTo("customers.del").map((c) => c.args[0])).toContain("cus_1");
+
+	fake.state.failCustomerDelete = true;
+	expect(await deleteBillingCustomer(userId)).toBe("failed");
+	fake.state.failCustomerDelete = false;
 });

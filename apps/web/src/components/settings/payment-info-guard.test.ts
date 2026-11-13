@@ -3,18 +3,16 @@
 // What the settings payment card may and may not mount.
 //
 // 🚨 **This is a source-text guard, in the family of `payments/checkout-address-guard.test.ts`.**
-// No browser spec reaches this form: the browser session has no Stripe key, so the setup POST
-// 503s before any Element mounts, and the e2e only asserts the card's heading. Until a live
-// walk exists, nothing but this file notices the shape the 2026-11-11 change settled:
+// No browser spec reaches this form: the browser session has no Stripe key, so the portal
+// POST 503s before any Element mounts, and the e2e only asserts the card's heading. Until a
+// live walk exists, nothing but this file notices the shape the 2026-11-13 split settled:
 //
-// 1. **Both halves are Stripe's Elements.** The address is an `AddressElement` in billing
-//    mode, restricted to the US; the card is a `PaymentElement`. The legacy `CardElement`
-//    collected a postal code by default, which is what made a reader type the same ZIP twice.
-// 2. **The ZIP is collected once.** The Payment Element runs `fields.billingDetails: "never"`
-//    because the Address Element above it already collected everything AVS would check.
-// 3. **The address is not posted before the card.** It rides the SetupIntent at confirmation,
-//    so `stripe.confirmSetup` is the confirm call and the billing-address route is written
-//    only by the address-only form.
+// 1. **Settings owns the billing address.** The address is an `AddressElement` in billing
+//    mode, restricted to the US; it is the only address UI on this surface.
+// 2. **Stripe owns the card.** The card section is a read-only summary plus the Portal's
+//    payment-method deep link; the SetupIntent and PaymentElement form that used to live
+//    here are gone, and a reintroduction is a regression of the split.
+// 3. **The address is written only from the address form.**
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -35,20 +33,15 @@ describe("the settings payment card", () => {
 		);
 	});
 
-	it("mounts the Payment Element with billing details turned off", () => {
-		expect(source, "the settings card lost its Stripe card element").toContain("<PaymentElement");
-		// The address above already collected everything AVS would check; the docs' remedy
-		// for the re-ask is `fields.billingDetails: "never"`. If this line is ever removed,
-		// the reader is being asked for the same address twice on one screen.
-		expect(source, "the card element re-asks for billing details").toContain(
-			'fields: { billingDetails: "never" }',
+	it("keeps the card form out of settings and opens the Portal instead", () => {
+		// The split: the Portal's payment-method page owns adding, replacing and removing a
+		// card. A card field reappearing here is the old surface coming back, not a polish.
+		expect(source, "the settings card remounted a card field").not.toContain("<PaymentElement");
+		expect(source, "the legacy card field came back").not.toMatch(/\bCardElement\b/);
+		expect(source, "the settings card started a SetupIntent again").not.toContain("confirmSetup");
+		expect(source, "the settings card lost its Portal link").toContain(
+			"/api/subscriptions/payment-method-portal",
 		);
-	});
-
-	it("does not mount the legacy card field that asked for a second ZIP", () => {
-		// `CardElement` collects a postal code by default (`hidePostalCode` defaults to
-		// false). Reintroducing it puts the duplicate ZIP back, which is the defect.
-		expect(source, "the legacy CardElement came back").not.toMatch(/\bCardElement\b/);
 	});
 
 	it("does not mount Anthers' own address form on this surface", () => {
@@ -59,26 +52,12 @@ describe("the settings payment card", () => {
 		);
 	});
 
-	it("confirms the SetupIntent with the elements group, not a card element", () => {
-		expect(source, "the settings card stopped confirming through the Elements group").toContain(
-			"stripe.confirmSetup(",
-		);
-		expect(source, "the settings card still confirms a bare card element").not.toContain(
-			"confirmCardSetup",
-		);
-	});
-
 	it("writes the billing-address route only from the address-only form", () => {
-		// The card path lets the SetupIntent carry the address; a call inside `CardSetupForm`
-		// is the pre-confirm POST this change removed. The address-only form and the
-		// removal's clear are the route's remaining writers.
-		const cardStart = source.indexOf("function CardSetupForm");
 		const addressStart = source.indexOf("function AddressForm");
-		expect(cardStart, "CardSetupForm is gone — update this guard").toBeGreaterThan(-1);
-		expect(addressStart, "AddressForm is gone — update this guard").toBeGreaterThan(cardStart);
+		expect(addressStart, "AddressForm is gone — update this guard").toBeGreaterThan(-1);
 		expect(
-			source.slice(cardStart, addressStart),
-			"the card path posts the address before confirming",
-		).not.toContain("/api/accounts/me/billing-address");
+			source.slice(addressStart),
+			"the address route is written outside the address form",
+		).toContain("/api/accounts/me/billing-address");
 	});
 });

@@ -74,6 +74,7 @@ import {
 	stickerAmount,
 	stickerLevelFor,
 } from "@anthers/shared/stickers";
+import { isUsState } from "@anthers/shared/us-states";
 import { zValidator } from "@hono/zod-validator";
 import Decimal from "decimal.js";
 import { and, desc, eq, gte, inArray, isNull, lte, ne, notInArray, sql } from "drizzle-orm";
@@ -116,6 +117,7 @@ import {
 	periodEndFromSub,
 	periodStartFromSub,
 	planItemChange,
+	saveBillingAddress,
 	supportItems,
 	taxCodeForBadge,
 } from "../services/billing.js";
@@ -165,6 +167,36 @@ const MAX_ANTHERS_SUPPORT = 300;
  * same vendor rule is what floors a creator's own amounts.
  */
 const MIN_INVOICE_TOTAL = STRIPE_MIN_CHARGE;
+
+/**
+ * The billing address a new subscription saves before its first invoice exists.
+ *
+ * 🚨 **The order is the tax fix.** Stripe finalizes a `charge_automatically` invoice
+ * immediately and calculates tax at finalization, so a Customer with no address produces
+ * an untaxed first invoice. The modal posts this with the subscription; the route writes
+ * it to the Customer before `createSubscription`, which is also what makes it available
+ * to the settings card and checkout prefill.
+ */
+const subscriptionBillingAddressSchema = z.object({
+	name: z.string().trim().min(1).max(200),
+	line1: z.string().trim().min(1).max(200),
+	line2: z
+		.string()
+		.trim()
+		.max(200)
+		.nullish()
+		.transform((v) => (v ? v : null)),
+	city: z.string().trim().min(1).max(200),
+	state: z
+		.string()
+		.trim()
+		.transform((v) => v.toUpperCase())
+		.refine((code) => isUsState(code), "Not a US state code"),
+	postalCode: z
+		.string()
+		.trim()
+		.regex(/^\d{5}(-\d{4})?$/, "Not a US ZIP code"),
+});
 
 /** The Badge ladder (Free … Blossom), each with its monthly amount + decomposition. Shared
  *  with the signup page via `badgeViews()` so the two never drift. */
@@ -888,11 +920,18 @@ const subscriptionRoutes = new Hono()
 					)
 					.max(50)
 					.optional(),
+				/**
+				 * The US billing address a new subscription's first invoice is taxed from.
+				 * Optional at the schema because a change to an existing subscription already
+				 * has the Customer's address; a new subscription that omits it keeps the old
+				 * behavior rather than refusing, but the modal sends it.
+				 */
+				billingAddress: subscriptionBillingAddressSchema.optional(),
 			}),
 		),
 		async (c) => {
 			const user = c.get("user");
-			const { anthersSupport, directed = [] } = c.req.valid("json");
+			const { anthersSupport, directed = [], billingAddress } = c.req.valid("json");
 			if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
 			const acct = await ensureAccount(user.id);
@@ -953,6 +992,14 @@ const subscriptionRoutes = new Hono()
 
 			const product = await ensureAnthersProduct();
 			const customerId = await ensureStripeCustomer(user.id, user.email ?? "");
+
+			// The address is written before the subscription exists, so the first invoice's
+			// automatic tax resolves from it rather than from nothing. `saveBillingAddress`
+			// is the one writer of the Customer's saved address; this is the subscription
+			// door into it.
+			if (billingAddress) {
+				await saveBillingAddress(user.id, user.email ?? "", billingAddress);
+			}
 
 			// A Product per creator, so each line on the invoice names who it is for.
 			const creators =
@@ -1122,6 +1169,10 @@ const subscriptionRoutes = new Hono()
 				pending: true,
 				subscriptionId: sub.id,
 				clientSecret: invoice?.confirmation_secret?.client_secret ?? null,
+				// The first invoice's actual amount due, tax included. The client shows this
+				// on the card step instead of the pre-tax preview figure, so the number on the
+				// button is the one the invoice will charge.
+				amountDue: invoice?.amount_due != null ? (invoice.amount_due / 100).toFixed(2) : null,
 			});
 		},
 	)
@@ -1226,6 +1277,45 @@ const subscriptionRoutes = new Hono()
 		const session = await createBillingPortalSession({
 			customer: customerId,
 			return_url: `${base}${STRIPE_RETURN_PATHS.billingPortalReturn}`,
+			...(process.env.STRIPE_BILLING_PORTAL_CONFIGURATION?.trim()
+				? { configuration: process.env.STRIPE_BILLING_PORTAL_CONFIGURATION.trim() }
+				: {}),
+		});
+		if (!session?.url) return c.json({ error: "Payments are not configured." }, 503);
+		return c.json({ portalUrl: session.url });
+	})
+
+	/**
+	 * The settings card's door into the Portal's payment-method page.
+	 *
+	 * 🚨 **The card form is Stripe's now, and this is the deep link that reaches it.** The
+	 * split Parker settled on 2026-11-13 keeps the US-only billing address in settings and
+	 * gives card management to the Portal; `flow_data` opens that one page instead of the
+	 * portal homepage, and both the session return and the after-completion redirect land
+	 * back on the Account tab. The portal configuration must have
+	 * `payment_method_update.enabled` on, which the named configuration does.
+	 */
+	.post("/payment-method-portal", requireAuth, async (c) => {
+		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
+		const user = c.get("user");
+		const customerId = await ensureStripeCustomer(user.id, user.email);
+		const base =
+			process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000";
+		const session = await createBillingPortalSession({
+			customer: customerId,
+			return_url: `${base}${STRIPE_RETURN_PATHS.paymentInfoReturn}`,
+			...(process.env.STRIPE_BILLING_PORTAL_CONFIGURATION?.trim()
+				? { configuration: process.env.STRIPE_BILLING_PORTAL_CONFIGURATION.trim() }
+				: {}),
+			flow_data: {
+				type: "payment_method_update",
+				after_completion: {
+					type: "redirect",
+					redirect: {
+						return_url: `${base}${STRIPE_RETURN_PATHS.paymentInfoReturn}`,
+					},
+				},
+			},
 		});
 		if (!session?.url) return c.json({ error: "Payments are not configured." }, 503);
 		return c.json({ portalUrl: session.url });

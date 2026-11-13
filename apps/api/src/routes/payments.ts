@@ -78,10 +78,10 @@ import {
 	applyDirectedSupport,
 	ensureBadgeProduct,
 	ensureCreatorProduct,
+	ensureStripeCustomer,
 	linkCheckoutCustomer,
 	refundBadgeChargesForIntent,
 	savedBillingAddress,
-	stripeCustomerIdFor,
 	syncSubscriptionToAccount,
 } from "../services/billing.js";
 import {
@@ -599,14 +599,15 @@ async function resolveStoredCart(
  * the platform, where it already was.
  *
  * ⚠️ **US billing addresses only, enforced client-side by construction, backstopped
- * here.** The purchase surfaces collect the address through Anthers' own US-only form
- * (the Checkout-flavored Billing Address Element offers no country allow-list, which is
- * why it was replaced), so the session a browser creates carries a US address by
- * construction — there is no country field to enter anything else into. The completion
- * path below is the backstop for anything that reaches the API anyway: a hand-rolled
- * session built against the API directly, or a form a modified client skipped. It
- * refuses a session whose resolved billing address is not US, leaving the rows `pending`
- * for a hand refund — the boundary holds even when the client's half does not.
+ * here.** The purchase surfaces collect the address through Stripe's advanced
+ * `AddressElement` in billing mode with `allowedCountries: ["US"]` (the Checkout-flavored
+ * `BillingAddressElement` offers no country allow-list, which is why the advanced element
+ * is the one mounted), so the session a browser creates carries a US address by
+ * construction. The completion path below is the backstop for anything that reaches the
+ * API anyway: a hand-rolled session built against the API directly, or a form a modified
+ * client skipped. It refuses a session whose resolved billing address is not US, leaving
+ * the rows `pending` for a hand refund — the boundary holds even when the client's half
+ * does not.
  *
  * `buyerTotal` is the price itself: tax joins it inside the session, resolved per buyer,
  * and `total_details.amount_tax` is what the completion path stamps onto the purchase rows.
@@ -617,20 +618,12 @@ function purchaseSession(params: {
 	/** One line per Work, each carrying the tax code for what the buyer receives. */
 	lineItems: Stripe.Checkout.SessionCreateParams.LineItem[];
 	/**
-	 * The buyer's existing Stripe Customer id, when one is on file — the session reuses
-	 * it rather than building a second one. Null for a buyer whose first money door this
-	 * is, which is the ordinary case under the 2026-10-11 decision (a Customer is created
-	 * `if_required`, or by checkout when Stripe needs one, and the completion webhook then
-	 * links it — `linkCheckoutCustomer`).
+	 * The buyer's Stripe Customer id. 🚨 **Never null since 2026-11-13** — every checkout
+	 * creates or reuses one, because a saved card and the prefilled billing address are
+	 * ordinary convenience features now, not a subscriber-only side effect. The session
+	 * names it, and checkout's collected address is written back to it.
 	 */
-	customerId: string | null;
-	/**
-	 * The buyer's account email, put on the session as its Customer's address. None of the
-	 * purchase surfaces collect an email (the address form is name-and-address), so without
-	 * this the session held none and Stripe's `canConfirm` stayed false forever — the
-	 * greyed-out Pay button Parker found on the live checkout (2026-10-06). See below.
-	 */
-	customerEmail: string;
+	customerId: string;
 	/**
 	 * A Badge's recurrence awaits on this charge when no active subscription exists (the
 	 * checkout computes it — see the cart route's note); the card save is no longer the
@@ -661,65 +654,41 @@ function purchaseSession(params: {
 		...(params.shippingAddress === "us"
 			? { shipping_address_collection: { allowed_countries: ["US" as const] } }
 			: {}),
-		// 🚨 **The email is what confirms the session.** Stripe requires a valid customer
-		// email before a session may be confirmed — `canConfirm` stays false without one —
-		// and none of the purchase surfaces collect one: no Contact Details Element, no
-		// email field on the address form, and no `customer_email` here. Every buyer is a
-		// verified account (`requireVerified`), so the email is already held, already
-		// proven, and simply belongs on the session — the receipt and the Customer record
-		// both want it anyway. Found as the disabled Pay button (2026-10-06): all three
-		// address fields resolved a real tax, the card was filled, and the button never
-		// un-greyed.
+		// 🚨 **The Customer is what carries the email into the session.** Stripe requires a
+		// valid email before a session may be confirmed — `canConfirm` stays false without
+		// one — and none of the purchase surfaces collect one. Every buyer is a verified
+		// account (`requireVerified`), and the route passes its email to
+		// `ensureStripeCustomer`, so the session takes the email off the Customer. Found as
+		// the disabled Pay button (2026-10-06): all three address fields resolved a real
+		// tax, the card was filled, and the button never un-greyed.
 		//
 		// 🚨 **`customer` and `customer_email` are either-or, never both** — Stripe refuses
-		// the pair outright ("You may only specify one of these parameters"), found live
-		// 2026-10-15: a buyer with a Customer on file — which the saved billing address
-		// now routinely creates — 500s the checkout the moment both ride the create. With
-		// a Customer named, the session takes its email from the Customer (every door that
-		// creates one passes the account's email — `ensureStripeCustomer`), so the email
-		// requirement is met through it; without a Customer, the account's own verified
-		// email rides the session.
-		...(params.customerId ? {} : { customer_email: params.customerEmail }),
+		// the pair outright. With a Customer always present since 2026-11-13, no
+		// `customer_email` is sent at all.
 		// The buyer's billing address is what tax resolves from, and it is required in full
 		// because local tax is address-level rather than state-level — the same full street
 		// address the return worksheets and the threshold forecast later read off the row.
 		billing_address_collection: "required",
-		// 🚨 **A Customer exists only for a buyer with something to reuse, per the
-		// 2026-10-11 decision.** A buyer whose billing row carries a customer id pays on
-		// that same Customer (`customer`), so a saved address or a subscription
-		// accumulates into the one record; nobody else leaves a Customer behind at all
-		// (`if_required` creates one only when the session needs it, and a plain card
-		// payment without a save does not) — and if Stripe does create one, the
-		// completion webhook links it via `linkCheckoutCustomer` so the next purchase
-		// reuses it. Before the decision, every one-time buyer kept a permanent
-		// customer object with their address and email on it.
-		//
-		// ⚠️ **Two riders go only with the customer, found by the probe (2026-10-15,
-		// test mode):**
-		// - `saved_payment_method_options` is REFUSED on a customerless session outright
-		//   ("requires a customer") — so the suppression pair below rides only when a
-		//   customer does. A customerless session renders no save UI to suppress
-		//   (nothing is on file to save, and the client's own `enableSave: "never"`
-		//   governs what the element would offer), so the suppression is redundant
-		//   there, and required here.
-		// - `customer_update[address]` is what makes checkout's collected address SAVE
-		//   onto the Customer (and what automatic_tax requires a customer-carried
-		//   session to carry when that customer has no address yet — the same probe's
-		//   second rejection). The saved-billing-address door reads the customer's
-		//   address, so this is the persistence path as well as the acceptance one.
-		...(params.customerId
-			? {
-					customer: params.customerId,
-					customer_update: { address: "auto" as const },
-					saved_payment_method_options: {
-						// A purchase saves the card for the account's one saved payment method
-						// (the settings card and the Adult control's proof). Removal stays on
-						// the settings surface, where a live subscription can block it.
-						payment_method_save: "enabled",
-						payment_method_remove: "disabled",
-					},
-				}
-			: { customer_creation: "if_required" as const }),
+		// 🚨 **Every checkout names a Customer, and a purchase writes its address back to
+		// it** (Parker, 2026-11-13). A saved card and the prefilled address are ordinary
+		// convenience features, not a subscriber-only side effect: the route creates or
+		// reuses the Customer through `ensureStripeCustomer`, this session carries it, and
+		// `customer_update[address]` is what makes the address collected at checkout
+		// persist for the next one. `payment_method_save` is the opt-in checkbox — the
+		// buyer chooses whether the card is kept; declining leaves the Customer with the
+		// address and no payment method.
+		customer: params.customerId,
+		customer_update: {
+			address: "auto" as const,
+			// A session that collects a delivery address must let Stripe write it to the
+			// Customer too; automatic tax refuses the combination otherwise (the same
+			// 2026-10-15 probe that found the address rider).
+			...(params.shippingAddress ? { shipping: "auto" as const } : {}),
+		},
+		saved_payment_method_options: {
+			payment_method_save: "enabled",
+			payment_method_remove: "disabled",
+		},
 		// 🚨 Card-only is the account-wide Default configuration (Parker, 2026-10-06:
 		// the Dashboard's Default narrowed to card and nothing else, matching the
 		// buyer-facing decision rather than overriding it per deployment). No
@@ -737,25 +706,14 @@ function purchaseSession(params: {
 		...(process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim()
 			? { payment_method_configuration: process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION.trim() }
 			: {}),
-		// 🚨 **The Link consent block is suppressed on the sessions it could render on.** A
-		// plain purchase never stores a card (`setup_future_usage` is nowhere), so the
-		// session does not ask to save — and Checkout renders Link's consent block ("Save
-		// my information for faster checkout", an email + MOBILE NUMBER sub-form, checkbox
-		// checked by default) whenever a Customer rides the session: a saved one passed
-		// in, or one Stripe created. A buyer who ignores the block left the phone field
-		// empty and Stripe held `canConfirm` false forever: the fully-filled form with a
-		// greyed Pay button (2026-10-06, live payment_method collection blocked all day;
-		// the client-side `savedPaymentMethod.enableSave: "never"` below removes the
-		// sub-form from its side too). The suppression is the customer-riding branch's
-		// rider — on a customerless session there is no save UI to suppress (nothing is
-		// on file, and the probe showed the pair itself is refused there).
-		//
-		// ⚠️ The one exception is `saveCard` — set when a Badge's recurrence awaits and
-		// the buyer has no active subscription (Parker, 2026-10-15). The suppression pair
-		// is the customer-riding branch's rider now (`saved_payment_method_options` is
-		// REFUSED on a customerless session — the probe's finding above); a save driven
-		// through `setup_future_usage` asks no consent question, and the client's
-		// `savedPaymentMethod.enableSave: "never"` governs the element's side either way.
+		// ⚠️ **The save checkbox is the intended consent now, and Link itself is off.**
+		// `payment_method_save` above is Stripe's own "save this card" checkbox, and the
+		// client mirrors it with `savedPaymentMethod.enableSave: "auto"`; the buyer
+		// chooses. The 2026-10-06 Link sub-form — a pre-checked email and mobile number
+		// block that could hold `canConfirm` false — cannot render because Link is off in
+		// the account's Default payment-method configuration. If Link is ever turned back
+		// on, probe that block before the change ships; this is the exact interplay the
+		// earlier incident lived in.
 		line_items: params.lineItems,
 		automatic_tax: { enabled: true },
 		payment_intent_data: {
@@ -1806,8 +1764,7 @@ const paymentRoutes = new Hono()
 				origin:
 					process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000",
 				lineItems: [workLineItem(work, totalCents, taxCode)],
-				customerId: await stripeCustomerIdFor(user.id),
-				customerEmail: user.email,
+				customerId: await ensureStripeCustomer(user.id, user.email ?? ""),
 				metadata: {
 					kind: "direct_purchase",
 					workId: String(work.id),
@@ -2354,8 +2311,7 @@ const paymentRoutes = new Hono()
 				origin:
 					process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000",
 				lineItems,
-				customerId: await stripeCustomerIdFor(user.id),
-				customerEmail: user.email,
+				customerId: await ensureStripeCustomer(user.id, user.email ?? ""),
 				saveCard,
 				// A charge carrying goods needs somewhere to send them, and the address the
 				// buyer confirms is what the creator ships to. Checkout collects it in its own
@@ -2524,8 +2480,7 @@ const paymentRoutes = new Hono()
 				origin:
 					process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000",
 				lineItems,
-				customerId: await stripeCustomerIdFor(user.id),
-				customerEmail: user.email,
+				customerId: await ensureStripeCustomer(user.id, user.email ?? ""),
 				saveCard,
 				metadata: {
 					kind: "direct_purchase_badge",

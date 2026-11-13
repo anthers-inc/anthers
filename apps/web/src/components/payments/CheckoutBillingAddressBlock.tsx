@@ -1,40 +1,105 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The billing address block on a purchase surface: Anthers' own US-only form, resolving
- * tax automatically as the buyer types — and STAYING OPEN (Parker, 2026-10-04: the
- * post-fill collapse was disorienting; the buyer sees their address through the whole
- * purchase and gets a checkmark once the tax resolved from it).
+ * The billing address block on a purchase surface: Stripe's advanced `AddressElement` in
+ * billing mode, restricted to the US, resolving tax automatically as the buyer types and
+ * STAYING OPEN (Parker, 2026-10-04: the post-fill collapse was disorienting; the buyer sees
+ * their address through the whole purchase and gets a checkmark once the tax resolved from
+ * it).
+ *
+ * 🚨 **Why this is the advanced element and not the Checkout one.** The Checkout-flavored
+ * `BillingAddressElement` offers no `allowedCountries`, so a buyer could choose any country
+ * it offers and only the server-side completion path would refuse it. The advanced
+ * `AddressElement` in billing mode does support `allowedCountries: ["US"]`, and its value
+ * feeds `checkout.updateBillingAddress` through the shared hook, so the US boundary stays
+ * client-side and the buyer gets Stripe's autocomplete and validation.
  *
  * There is NO submit button here (Parker, 2026-10-03: "the only button you click is the
  * button to complete the purchase") — the block is an owned `<div>`, never a `<form>`,
  * because a purchase surface's only `<form>` is the checkout's own, whose submit is the
  * Pay button. Tax resolution lives in `useSessionBillingAddress`: once the typed address
  * is complete and settled, it is written to the session and Stripe Tax resolves the rate;
- * `accepted` carries the checkmark, and the resolved rate appears in the summary beside
- * the form ("Sales tax from your address" turns into a figure there).
- *
- * An edit is nothing special any more: the fields are always on screen, so the buyer who
- * typoed their ZIP just fixes it, and the hook's resolve effect re-resolves the session's
- * tax from the changed value (the gate re-arms because `accepted` is only set by a
- * successful `updateBillingAddress`).
+ * `accepted` carries the checkmark.
  */
-import UsBillingAddressForm, { type UsAddressInput } from "./UsBillingAddressForm";
+import type { SavedBillingAddress } from "@anthers/web-shared/types";
+import { AddressElement, Elements } from "@stripe/react-stripe-js";
+import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
+import { useMemo } from "react";
+import { getStripe } from "../../lib/stripe";
+import { stripeAppearance } from "../../lib/stripeCard";
+import type { UsAddressInput } from "./UsBillingAddressForm";
+import type { SavedPrefill } from "./useSavedBillingAddress";
 import type { SessionBillingAddress } from "./useSessionBillingAddress";
+
+/** The element's value in the form shape the tax hook owns. */
+function addressFromValue(value: StripeAddressElementChangeEvent["value"]): UsAddressInput {
+	return {
+		name: value.name,
+		line1: value.address.line1 ?? "",
+		line2: value.address.line2 ?? "",
+		city: value.address.city ?? "",
+		state: value.address.state ?? "",
+		postalCode: value.address.postal_code ?? "",
+	};
+}
+
+/** The saved address in the element's mount-time defaults. */
+function addressDefaults(prefill: SavedPrefill) {
+	if (!prefill) return undefined;
+	return {
+		name: prefill.name,
+		address: {
+			line1: prefill.line1,
+			line2: prefill.line2 ?? "",
+			city: prefill.city,
+			state: prefill.state,
+			postal_code: prefill.postalCode,
+			country: "US",
+		},
+	};
+}
 
 export default function CheckoutBillingAddressBlock({
 	billing,
+	prefill,
 }: {
 	billing: SessionBillingAddress;
+	/** The saved address, or null when none; `undefined` while the fetch is still in flight. */
+	prefill: SavedPrefill;
 }) {
-	const { address, setAddress, accepted, error, updating } = billing;
+	const { setAddress, accepted, error, updating } = billing;
+	const appearance = useMemo(stripeAppearance, []);
+	const options = useMemo(
+		() => ({
+			mode: "billing" as const,
+			allowedCountries: ["US" as const],
+			fields: { phone: "never" as const },
+			defaultValues: addressDefaults(prefill),
+		}),
+		[prefill],
+	);
+
+	// The element has no imperative prefill; gate its mount on the saved-address fetch so
+	// the defaults are applied once, from the value the buyer will see.
+	if (prefill === undefined) {
+		return (
+			<div className="border border-base-300 rounded-lg p-3 bg-base-100">
+				<div className="skeleton h-4 w-32" />
+				<div className="mt-3 flex flex-col gap-2">
+					<div className="skeleton h-10 w-full" />
+					<div className="skeleton h-10 w-full" />
+					<div className="skeleton h-10 w-2/3" />
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className="border border-base-300 rounded-lg p-3 bg-base-100">
 			<div className="flex items-center justify-between mb-2">
 				<span className="font-semibold text-sm">Billing address</span>
-				{/* The checkmark IS the "the session took it" moment the old collapse used to
-				    announce: tax resolved against this address, and the buyer's total is real.
-				    `accepted` flips only on a successful `updateBillingAddress` — see the hook. */}
+				{/* The checkmark IS the "the session took it" moment: tax resolved against
+				    this address, and the buyer's total is real. `accepted` flips only on a
+				    successful `updateBillingAddress` — see the hook. */}
 				{accepted && (
 					<span
 						className="inline-flex items-center gap-1 text-success text-xs font-medium"
@@ -52,7 +117,12 @@ export default function CheckoutBillingAddressBlock({
 				)}
 			</div>
 			<div data-testid="billing-address-form">
-				<UsBillingAddressForm value={address} onChange={setAddress} />
+				<Elements stripe={getStripe()} options={{ appearance }}>
+					<AddressElement
+						options={options}
+						onChange={(event) => setAddress(addressFromValue(event.value))}
+					/>
+				</Elements>
 			</div>
 			{updating && (
 				<p className="text-base-content/60 text-xs mt-2" data-testid="tax-resolving">
@@ -71,7 +141,5 @@ export default function CheckoutBillingAddressBlock({
 /**
  * The typed address a purchase surface resolves from — re-exported so a consumer that
  * formats an address for elsewhere (a summary line, a receipt) keeps one `formatAddress`.
- * The accepted-summary line the old block showed is gone with the collapse; the address
- * is on screen in full, so nothing repeats it.
  */
-export type { UsAddressInput };
+export type { SavedBillingAddress, UsAddressInput };

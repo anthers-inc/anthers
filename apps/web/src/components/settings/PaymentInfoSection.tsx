@@ -1,40 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The account's **one saved payment method** — the card and the full US billing address
- * together, on the Stripe Customer the app already keeps.
+ * The account's saved payment information — the card at Stripe and the US billing address
+ * here.
  *
- * ⭐ **One object, one card** (Parker, 2026-11-07). The settings section used to save only
- * an address; it now saves the card with it, because a saved card is a normal thing to have
- * and the Adult control reads it. A live subscription that renews on the card is stated
- * with a chip and the card can be replaced, but not removed: the renewal must always have
- * a card, and the account does not keep a second one beside it.
- *
- * ⭐ **Both halves are Stripe's own Elements** (Parker, 2026-11-11). The card and the
- * address are collected by one Elements group — an `AddressElement` in billing mode,
- * restricted to the US, beside a `PaymentElement` that asks for no billing details of its
- * own — so the ZIP is typed once. The address attaches to the SetupIntent at confirmation
- * and `finalizePaymentInfo` reads it off the confirmed payment method, which is what makes
- * the saved object one thing rather than an address that can disagree with the card.
+ * ⭐ **The split is deliberate** (Parker, 2026-11-13). Stripe's Billing Portal owns the
+ * card: adding, replacing and removing one happen on its payment-method page, reached by
+ * the deep link this card opens. Settings owns the billing address, because it is the only
+ * surface that can enforce the US-only boundary the purchase surfaces require, and it
+ * keeps the read-only summary — the card in use, whether a subscription renews on it, and
+ * the Adult-proof note — beside that address.
  *
  * 🚨 **The address is Stripe's, and so is the record.** The saved address is the Customer's
  * `address`/`name`; checkout prefills from it and writes the address it collected back to
  * it (`customer_update.address: "auto"` in `routes/payments.ts`). Nothing here stores an
  * address in Anthers' database.
  *
- * 🚨 **Cards only, and nothing is charged.** The SetupIntent saves the card so the Adult
- * rung can read its funding type; replacing the card moves the subscription to the new one
- * before the old card is detached.
+ * 🚨 **Nothing here charges anything.** The portal's card page is a card-management flow,
+ * not a payment; the Adult rung reads the saved card's funding type, and a debit card works
+ * for purchases but cannot unlock Adult content.
  */
-import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import type { SavedBillingAddress } from "@anthers/web-shared/types";
-import {
-	AddressElement,
-	Elements,
-	PaymentElement,
-	useElements,
-	useStripe,
-} from "@stripe/react-stripe-js";
+import { AddressElement, Elements, useElements } from "@stripe/react-stripe-js";
 import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getStripe } from "../../lib/stripe";
@@ -61,7 +48,7 @@ type AddressValue = StripeAddressElementChangeEvent["value"];
  * The saved address as the Address Element's mount-time defaults.
  *
  * The element has no imperative prefill — `defaultValues` is applied when it mounts — so the
- * card and address forms are remounted from the saved address each time they open.
+ * address form is remounted from the saved address each time it opens.
  */
 function addressDefaults(address: SavedBillingAddress | null) {
 	if (!address) return undefined;
@@ -108,12 +95,11 @@ function announcePaymentInfoChanged() {
 }
 
 /**
- * The billing address, shared by both forms.
+ * The billing address, shared by the summary and the edit form.
  *
  * This is the advanced Address Element, whose billing mode supports `allowedCountries` —
- * the Checkout-flavored `BillingAddressElement` does not, which is why checkout keeps
- * Anthers' own US-only form (`UsBillingAddressForm`). The phone field is hidden because
- * nothing here reads one.
+ * the Checkout-flavored `BillingAddressElement` does not, which is why checkout's address
+ * element is this one too. The phone field is hidden because nothing here reads one.
  */
 function BillingAddress({ saved }: { saved: SavedBillingAddress | null }) {
 	return (
@@ -128,109 +114,7 @@ function BillingAddress({ saved }: { saved: SavedBillingAddress | null }) {
 	);
 }
 
-/**
- * The card + address form, inside the SetupIntent's `Elements`.
- *
- * The address is not posted separately: it rides the SetupIntent at confirmation, and the
- * finalize call reads it off the payment method, makes the card the default, moves a
- * subscription onto it, and drops the old cards.
- */
-function CardSetupForm({
-	savedAddress,
-	onSaved,
-	onCancel,
-}: {
-	savedAddress: SavedBillingAddress | null;
-	onSaved: (info: PaymentInfo) => void;
-	onCancel: () => void;
-}) {
-	const stripe = useStripe();
-	const elements = useElements();
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	const save = async () => {
-		if (!stripe || !elements || busy) return;
-		setBusy(true);
-		setError(null);
-		try {
-			const address = await elements.getElement(AddressElement)?.getValue();
-			if (!address?.complete) {
-				setError("Enter your billing address — it is what the saved card is filed under.");
-				return;
-			}
-			// Stripe's own validation for the card half; the address was checked above.
-			const submitted = await elements.submit();
-			if (submitted.error) {
-				setError(submitted.error.message ?? "Check the card details and try again.");
-				return;
-			}
-			const { error: stripeError, setupIntent } = await stripe.confirmSetup({
-				elements,
-				confirmParams: {
-					return_url: `${window.location.origin}${STRIPE_RETURN_PATHS.paymentInfoReturn}`,
-				},
-				// Cards confirm in place; the return URL is only ever navigated by a
-				// redirect-based method, which this account's card-only configuration
-				// does not offer.
-				redirect: "if_required",
-			});
-			// Stripe's own message says which thing about the card was wrong.
-			if (stripeError) {
-				setError(stripeError.message ?? "That card couldn't be added.");
-				return;
-			}
-			if (!setupIntent) {
-				setError("That card setup didn't complete. Please try again.");
-				return;
-			}
-
-			const finalized = await apiFetch("/api/accounts/me/payment-info/finalize", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ setupIntentId: setupIntent.id }),
-			});
-			if (!finalized.ok) {
-				const body = (await finalized.json().catch(() => null)) as { error?: string } | null;
-				throw new Error(body?.error ?? "That card couldn't be saved.");
-			}
-			onSaved((await finalized.json()) as PaymentInfo);
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "That card couldn't be saved.");
-		} finally {
-			setBusy(false);
-		}
-	};
-
-	return (
-		<div className="flex flex-col gap-3">
-			<BillingAddress saved={savedAddress} />
-			<div className="rounded-box border border-base-300 bg-base-100 px-3 py-3">
-				<PaymentElement options={{ fields: { billingDetails: "never" } }} />
-			</div>
-			<p className="text-xs text-base-content/50">
-				Nothing is charged. The card is stored at Stripe with the address, and replacing it later
-				keeps your subscription on the new card.
-			</p>
-			{error && <p className="text-sm text-error">{error}</p>}
-			<div className="flex gap-2">
-				<button
-					type="button"
-					className="btn btn-primary btn-sm"
-					disabled={busy || !stripe || !elements}
-					onClick={() => void save()}
-				>
-					{busy ? "Saving…" : "Save payment info"}
-				</button>
-				<button type="button" className="btn btn-ghost btn-sm" onClick={onCancel} disabled={busy}>
-					Cancel
-				</button>
-			</div>
-		</div>
-	);
-}
-
-/** The address alone, for editing the prefill without touching the card. */
+/** The address alone; the card is managed at Stripe. */
 function AddressForm({
 	savedAddress,
 	onSaved,
@@ -295,8 +179,7 @@ function AddressForm({
 export default function PaymentInfoSection() {
 	const [info, setInfo] = useState<PaymentInfo | null>(null);
 	const [loaded, setLoaded] = useState(false);
-	const [mode, setMode] = useState<"idle" | "card" | "address">("idle");
-	const [setupSecret, setSetupSecret] = useState<string | null>(null);
+	const [mode, setMode] = useState<"idle" | "address">("idle");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [savedJustNow, setSavedJustNow] = useState(false);
@@ -315,19 +198,29 @@ export default function PaymentInfoSection() {
 		void load();
 	}, [load]);
 
-	const startCard = async () => {
-		setError(null);
-		setSavedJustNow(false);
+	/**
+	 * Open the Portal's payment-method page.
+	 *
+	 * 🚨 **A failure is the server's sentence, not a silent dead end.** The Portal is the
+	 * only place a card is added or replaced now, so a 503 or a Stripe refusal has to say
+	 * what happened and leave the button retryable.
+	 */
+	const openCardPortal = async () => {
+		if (busy) return;
 		setBusy(true);
+		setError(null);
 		try {
-			const res = await apiFetch("/api/accounts/me/payment-info/setup", { method: "POST" });
-			if (!res.ok) throw new Error();
-			const { clientSecret } = (await res.json()) as { clientSecret: string };
-			setSetupSecret(clientSecret);
-			setMode("card");
-		} catch {
-			setError("We couldn't start the card setup. Please try again shortly.");
-		} finally {
+			const res = await apiFetch("/api/subscriptions/payment-method-portal", { method: "POST" });
+			const body = (await res.json().catch(() => null)) as {
+				portalUrl?: string;
+				error?: string;
+			} | null;
+			if (!res.ok || !body?.portalUrl) {
+				throw new Error(body?.error ?? "We couldn't open the card page. Please try again.");
+			}
+			window.location.assign(body.portalUrl);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "We couldn't open the card page.");
 			setBusy(false);
 		}
 	};
@@ -338,37 +231,17 @@ export default function PaymentInfoSection() {
 		setMode("address");
 	};
 
-	const remove = async () => {
-		if (info?.subscriptionAttached || busy) return;
-		setBusy(true);
-		setError(null);
-		try {
-			const res = await apiFetch("/api/accounts/me/payment-info", { method: "DELETE" });
-			if (!res.ok) {
-				const body = (await res.json().catch(() => null)) as { error?: string } | null;
-				throw new Error(body?.error ?? "We couldn't remove the saved card.");
-			}
-			// The address is part of the same saved object; clearing the card clears it too.
-			await apiFetch("/api/accounts/me/billing-address", { method: "DELETE" });
-			announcePaymentInfoChanged();
-			setSavedJustNow(false);
-			await load();
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "We couldn't remove the saved card.");
-		} finally {
-			setBusy(false);
-		}
-	};
-
-	if (!loaded) return null;
-
-	const onCardSaved = (next: PaymentInfo) => {
-		setInfo(next);
-		setMode("idle");
-		setSetupSecret(null);
-		setSavedJustNow(true);
-		announcePaymentInfoChanged();
-	};
+	if (!loaded) {
+		return (
+			<div className="card bg-base-200 mb-6" data-testid="payment-info-section">
+				<div className="card-body gap-3" aria-busy="true">
+					<div className="skeleton h-6 w-44" />
+					<div className="skeleton h-4 w-full" />
+					<div className="skeleton h-10 w-56" />
+				</div>
+			</div>
+		);
+	}
 
 	const onAddressSaved = (address: SavedBillingAddress) => {
 		setInfo((current) =>
@@ -376,6 +249,7 @@ export default function PaymentInfoSection() {
 		);
 		setMode("idle");
 		setSavedJustNow(true);
+		announcePaymentInfoChanged();
 	};
 
 	const hasCard = Boolean(info?.card);
@@ -387,9 +261,8 @@ export default function PaymentInfoSection() {
 			<div className="card-body gap-3">
 				<h3 className="card-title text-lg">Save payment info</h3>
 				<p className="text-sm text-base-content/60">
-					Save a card and billing address for faster checkout. Both are stored at Stripe, with your
-					payment records rather than on Anthers' servers; checkout prefills from them, and the
-					address you enter there updates the saved one.
+					Your saved card and billing address, stored at Stripe. Checkout uses them, and nothing
+					here charges anything.
 				</p>
 				{savedJustNow && (
 					<p className="text-success text-sm" data-testid="payment-info-saved">
@@ -398,19 +271,7 @@ export default function PaymentInfoSection() {
 				)}
 				{error && <p className="text-error text-sm">{error}</p>}
 
-				{mode === "card" && setupSecret ? (
-					<Elements stripe={getStripe()} options={{ clientSecret: setupSecret, appearance }}>
-						<CardSetupForm
-							savedAddress={info?.address ?? null}
-							onSaved={onCardSaved}
-							onCancel={() => {
-								setMode("idle");
-								setSetupSecret(null);
-								setError(null);
-							}}
-						/>
-					</Elements>
-				) : mode === "address" ? (
+				{mode === "address" ? (
 					<Elements stripe={getStripe()} options={{ appearance }}>
 						<AddressForm
 							savedAddress={info?.address ?? null}
@@ -421,37 +282,43 @@ export default function PaymentInfoSection() {
 							}}
 						/>
 					</Elements>
-				) : hasCard || hasAddress ? (
+				) : (
 					<div className="flex flex-col gap-3">
-						{hasCard && info?.card && (
-							<div className="flex flex-wrap items-center gap-2 text-sm">
-								<span className="font-medium capitalize">
-									{info.card.brand} •••• {info.card.last4}
-								</span>
-								{subscriptionAttached && (
-									<span className="badge badge-primary badge-sm">Used for your subscription</span>
-								)}
-								{info.card.funding !== "credit" && (
-									<span className="text-xs text-base-content/50">
-										Debit — works for purchases, not Adult content.
+						<div className="flex flex-wrap items-center gap-2 text-sm">
+							{hasCard && info?.card ? (
+								<>
+									<span className="font-medium capitalize">
+										{info.card.brand} •••• {info.card.last4}
 									</span>
-								)}
-							</div>
-						)}
-						{info?.address && (
+									{subscriptionAttached && (
+										<span className="badge badge-primary badge-sm">Used for your subscription</span>
+									)}
+									{info.card.funding !== "credit" && (
+										<span className="text-xs text-base-content/50">
+											Debit card: works for purchases, not Adult content.
+										</span>
+									)}
+								</>
+							) : (
+								<span className="text-base-content/60">No card saved.</span>
+							)}
+						</div>
+						{info?.address ? (
 							<p className="text-sm" data-testid="payment-info-address">
 								{displayAddress(info.address)}
 							</p>
+						) : (
+							<p className="text-sm text-base-content/60">No billing address saved.</p>
 						)}
 						<div className="flex flex-wrap gap-2">
 							<button
 								type="button"
 								className="btn btn-sm"
-								onClick={() => void startCard()}
+								onClick={() => void openCardPortal()}
 								disabled={busy}
 								data-testid="payment-info-card-button"
 							>
-								{hasCard ? "Replace card" : "Add a card"}
+								{busy ? "Opening…" : hasCard ? "Manage card at Stripe" : "Add a card at Stripe"}
 							</button>
 							<button
 								type="button"
@@ -460,34 +327,10 @@ export default function PaymentInfoSection() {
 								disabled={busy}
 								data-testid="payment-info-address-button"
 							>
-								Edit address
-							</button>
-							<button
-								type="button"
-								className="btn btn-ghost btn-sm text-error"
-								onClick={() => void remove()}
-								disabled={busy || subscriptionAttached}
-								title={
-									subscriptionAttached
-										? "Your subscription renews on this card. Replace it, or cancel the subscription first."
-										: undefined
-								}
-								data-testid="payment-info-remove"
-							>
-								Remove
+								{hasAddress ? "Edit address" : "Add billing address"}
 							</button>
 						</div>
 					</div>
-				) : (
-					<button
-						type="button"
-						className="btn btn-sm w-fit"
-						onClick={() => void startCard()}
-						disabled={busy}
-						data-testid="payment-info-add"
-					>
-						Add payment info
-					</button>
 				)}
 			</div>
 		</div>

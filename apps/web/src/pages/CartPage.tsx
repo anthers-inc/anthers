@@ -528,6 +528,9 @@ export default function CartPage() {
 							<CartCheckout
 								contentKey={contentKey}
 								buyerTotal={quote.subtotal}
+								hasPhysical={quote.items.some(
+									(item) => item.kind === "work" && item.type === "physical",
+								)}
 								onTotals={handleTotals}
 								onComplete={() => {
 									setSessionTotals(null);
