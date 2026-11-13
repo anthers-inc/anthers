@@ -4,8 +4,9 @@
  *
  * ⭐ **The panel leads with the variant toggle and lists the palettes under it** (Parker,
  * 2026-11-06), and every palette carries a swatch of its primary color in the variant on
- * screen. This is the behavior the settings card shares through `ThemePicker`; the card's
- * own spec covers that surface, and this one keeps the signed-out dropdown honest.
+ * screen. This is the component the signed-in topbar mounts too (Parker, 2026-11-13);
+ * `settings-chrome.authed.e2e.ts` covers that surface, and this one keeps the signed-out
+ * dropdown honest.
  */
 import { expect, test } from "@playwright/test";
 

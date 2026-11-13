@@ -7,6 +7,7 @@ import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useLocation } from "@anthers/web-shared/router";
 import { SidebarProvider, useSidebar } from "@anthers/web-shared/sidebar";
 import Logo from "@anthers/web-shared/ui/Logo";
+import ThemeSelect from "@anthers/web-shared/ui/ThemeSelect";
 import { ChevronLeftIcon, Cog6ToothIcon, ShoppingCartIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo } from "react";
 import { useCart } from "../../lib/cart";
@@ -315,8 +316,9 @@ function LoggedInLayoutInner() {
 				}`}
 			>
 				{/* Top bar: brand and the mode switch on the left, search in the middle, the
-		    reader's notifications on the right. It is the one header in both modes; studio
-		    mode leaves out search and the cart, which belong to user mode. The sidebar's
+		    reader's own controls on the right. It is the one header in both modes; studio
+		    mode leaves out search, the notifications and the cart, which belong to user mode,
+		    and keeps the theme picker, which belongs to the whole app. The sidebar's
 		    own toggle used to live here too and moved onto the sidebar's edge (2026-10-16),
 		    and the account menu left on 2026-10-26 — the sidebar is the door to Settings and
 		    Badges and Purchases live in the account pages' sidebar rows.
@@ -360,28 +362,33 @@ function LoggedInLayoutInner() {
 						</div>
 
 						<div className="navbar-end gap-1">
-							{/* Cart — only rendered when it has items, so an empty cart costs no
-					    header space. The header is tight on mobile and a permanent "0" badge
-					    would be noise; a control that appears when it has content is strictly
-					    better than one that is always there. The count is a `badge` so a
-					    buyer who navigates away from the Work page can always get back to
-					    the one surface where money changes hands. */}
-							{!studio && cartCount > 0 && (
+							{/* Notifications, theme, cart — in that order, left to right (Parker,
+					    2026-11-13). The bell keeps its appear-when-there-is-something rule, with
+					    a count riding the shared store so one poll serves every surface. The
+					    theme picker is the marketing shell's own dropdown, because the choice is
+					    about the page in front of the reader in either mode. The cart is always
+					    here — the one surface where money changes hands should not come and go —
+					    and only its count badge is conditional, because a permanent "0" is
+					    noise. Studio leaves out the bell and the cart: creator chrome, not reader
+					    chrome. */}
+							{!studio && <NotificationBell />}
+							<ThemeSelect />
+							{!studio && (
 								<Link
 									to="/cart"
 									className="btn btn-ghost btn-sm btn-circle relative"
-									aria-label={`Cart (${cartCount} item${cartCount > 1 ? "s" : ""})`}
+									aria-label={
+										cartCount > 0 ? `Cart (${cartCount} item${cartCount > 1 ? "s" : ""})` : "Cart"
+									}
 								>
 									<ShoppingCartIcon className="w-5 h-5" />
-									<span className="badge badge-primary badge-xs absolute -top-1 -right-1">
-										{cartCount}
-									</span>
+									{cartCount > 0 && (
+										<span className="badge badge-primary badge-xs absolute -top-1 -right-1">
+											{cartCount}
+										</span>
+									)}
 								</Link>
 							)}
-							{/* The bell — the same appear-when-there's-content rule as the cart, with the
-					    count riding the shared store so one poll serves every surface. Studio mode
-					    leaves it out with search and the cart: creator chrome, not reader chrome. */}
-							{!studio && <NotificationBell />}
 						</div>
 					</div>
 				</header>

@@ -13,10 +13,9 @@
 //      (no flash). That snippet can't import from the bundle, so it hard-codes THEME_KEY
 //      and the value list — keep it in sync with packages/shared/src/theme.ts.
 //   2. This module reads/writes that device choice (localStorage) and reflects it onto
-//      the document; <ThemeSelect>, <ThemeCard> and useTheme() ride it at runtime.
+//      the document; <ThemeSelect> and useTheme() ride it at runtime.
 //   3. When signed in, the account's saved preference overrides the device choice —
-//      AuthProvider applies it on load and the picker or the settings card persists
-//      changes back (see below).
+//      AuthProvider applies it on load and the picker persists changes back (see below).
 
 import type { ThemeValue } from "@anthers/shared/theme";
 import { useSyncExternalStore } from "react";
@@ -40,7 +39,7 @@ export interface ThemeDefinition {
 	/** The stored value — and the `data-theme` attribute the stylesheet keys the palette on. */
 	value: Theme;
 	/** The family's name as the picker shows it. Every variant of a family shares it, which
-	 *  is how the settings card groups the catalog into family and variant radios. */
+	 *  is how the picker groups the catalog into family and variant controls. */
 	label: string;
 	group: ThemeGroup;
 }
