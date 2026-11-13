@@ -71,6 +71,17 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.12",
+		date: "2026-11-12",
+		lede: "A minute counts only where there is something of the Work to spend it with, and a supporter's month reads from one Badges grid with the Time Pool on a tab of its own.",
+		entries: [
+			"Time spent on a download-only Work's page no longer counts as time with the Work. A game or software Work with only a downloadable file shows a download card where a player would sit, so a minute there is a visit, not time with the Work. No time is recorded and nothing reaches the Time Pool. Timed records already written for those pages were removed, so Activity Details no longer lists them.",
+			"The Badges settings tab is one collection now: a grid of every Badge the account carries with Anthers always present, an All Badges view, a Badge Details section, and a rolling five-month record that separates amounts paid from estimates and names any prorate credit.",
+			"The Time Pool has a tab of its own below Purchases, carrying the pool's by-time and Sticker-directed halves. Activity Details follows the month selected in the Time Pool card above it.",
+			"The Discord card in Account settings leads with the connection: the title row carries the state, Member and Creator chips show the roles the account holds, and the separate success alert is gone. A linked account carries no further explanation, and the unlinked card keeps the invitation to join and one Connect action.",
+		],
+	},
+	{
 		version: "2026.11.11",
 		date: "2026-11-11",
 		lede: "Discovery's stream leaves out a Work or a Creator a user asked it not to show, a Work's Reviews tab sets a user's own verdict apart from everyone else's, and the settings that read a supporter's month total every column and show the next cycle's charge.",
