@@ -1072,7 +1072,6 @@ export function renderSupportReceiptEmail(args: {
 			`${receiptMeta(args.date, args.reference)}
 			<p style="margin:0 0 14px;">Thanks for supporting creators. Here's your payment for <strong style="color:${MEADOW.ink};">${escapeHtml(args.billingCycle)}</strong>:</p>
 			${itemsTable({ lines: args.lines, tax: args.tax, totalLabel: "Total charged", total: args.total })}
-			<p style="margin:0 0 18px;"><a href="${frontendUrl()}/supporters" style="color:${BRAND};">See who your support reached</a> on the supporters page.</p>
 			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a monthly support payment was made from your account.</p>`,
 		),
 	};

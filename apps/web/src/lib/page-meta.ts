@@ -56,11 +56,6 @@ const PAGES: Record<string, PageMeta> = {
 		description:
 			"A nonprofit creative garden for everyone: what Anthers is, what its Articles require of it, and who it answers to.",
 	},
-	"/supporters": {
-		title: "Supporters",
-		description:
-			"The people who support Anthers, with no amounts shown, and what their support funds.",
-	},
 	"/faq": {
 		title: "FAQ",
 		description:

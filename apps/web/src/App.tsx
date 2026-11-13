@@ -119,7 +119,6 @@ const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
 const IssueReportsPage = lazy(() => import("./pages/IssueReportsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const UnsubscribePage = lazy(() => import("./pages/UnsubscribePage"));
-const SupportersPage = lazy(() => import("./pages/SupportersPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
 const ResumeSignupPage = lazy(() => import("./pages/ResumeSignupPage"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
@@ -234,7 +233,10 @@ export default function App() {
 						    that prompted the review. See the vault's "Decide what resources we
 						    actually need". */}
 						<Route path="/about" element={<AboutPage />} />
-						<Route path="/supporters" element={<SupportersPage />} />
+						{/* /supporters was retired on 2026-11-13, after it had been live and linked
+						    from the footer, signup and the support receipt. The address resolves to
+						    the page the footer grouped it under rather than 404ing in an inbox. */}
+						<Route path="/supporters" element={<Navigate to="/about" replace />} />
 						{/* The resources landing gets the botanical decor; the calculators below
 						stay outside it so nothing crowds their dense controls/tables. */}
 						<Route path="/resources" element={<ResourcesPage />} />

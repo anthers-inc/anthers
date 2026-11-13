@@ -1,0 +1,1 @@
+ALTER TABLE "user_preferences" DROP COLUMN "listed_as_supporter";

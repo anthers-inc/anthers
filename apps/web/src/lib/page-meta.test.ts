@@ -12,7 +12,6 @@ const PATHS = [
 	"/compare/itch-io",
 	"/compare/ghost",
 	"/about",
-	"/supporters",
 	"/faq",
 	"/parents",
 	"/abuse",
