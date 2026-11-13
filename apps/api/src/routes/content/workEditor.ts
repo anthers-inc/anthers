@@ -1375,11 +1375,16 @@ const workEditorRoutes = new Hono()
 		// good's art is its product photos, so the 16:9 poster is derived from the first
 		// one rather than edited as a second, disconnected image. An empty gallery clears
 		// the derived cover; the card falls back to the kind's placeholder.
+		//
+		// ⚠️ The column takes the address, not the key. Every other writer of
+		// `works.thumbnail` stores a URL, and a bare key only renders where that surface
+		// remembers to resolve it — anywhere else is a broken image. The gallery row keeps
+		// its keys; this derived cover is the one value that leaves the listing.
 		const cover = saved.listing.images.find((image) => image.cover) ?? saved.listing.images[0];
 		await db
 			.update(works)
 			.set({
-				thumbnail: cover?.key ?? "",
+				thumbnail: cover?.url ?? "",
 				thumbnailSource: "",
 				thumbnailCrop: null,
 			})

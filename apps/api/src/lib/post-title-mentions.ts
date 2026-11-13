@@ -29,6 +29,7 @@ import { notSuspendedAccount, notTestAccount } from "../services/account-visibil
 import { notBlockedBy } from "../services/blocks.js";
 import { adultVisibility } from "../services/content-preferences.js";
 import { parentalVisibility } from "../services/parental-controls.js";
+import { resolveThumbnailUrl } from "../services/thumbnails.js";
 import { pgWorkTitleMentionPattern } from "./post-work-links.js";
 
 /** A Work a title may name: the durable id plus what a mention renders and links with. */
@@ -87,13 +88,18 @@ export async function mentionableWorks(
 				parental.hidden,
 			),
 		);
-	for (const row of rows) {
-		map.set(row.publicId, {
-			...row,
-			title: row.title ?? "",
-			thumbnail: row.thumbnail === "" ? null : row.thumbnail,
-		});
-	}
+	// A card reads this value as an `<img src>`, so a bare storage key — the shape a
+	// physical good's cover is stored in — would become a relative path against whatever
+	// page rendered it. Resolve here, where both the tile and the link preview read it.
+	await Promise.all(
+		rows.map(async (row) => {
+			map.set(row.publicId, {
+				...row,
+				title: row.title ?? "",
+				thumbnail: row.thumbnail === "" ? null : await resolveThumbnailUrl(row.thumbnail),
+			});
+		}),
+	);
 	return map;
 }
 
