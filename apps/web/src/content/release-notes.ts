@@ -71,6 +71,15 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.14",
+		date: "2026-11-13",
+		lede: "A physical good's thumbnail now loads on the cards that show it, and the sidebar keeps its open or closed state across the signed-in areas.",
+		entries: [
+			"The feed, post tiles, and link previews now carry a physical good's thumbnail as an address the browser can fetch, so the card shows the picture rather than a broken image. A physical listing saved from now on stores that address rather than the bare key behind it.",
+			"The sidebar's open or closed state now survives the move between a Work and the Library, Discovery, or Settings. The signed-in areas build their own shell, so the choice used to reset on the way from one to the other, and it now lives above all of them. A window too narrow to sit beside the page still collapses the sidebar, and widening does not reopen it; only the toggle does.",
+		],
+	},
+	{
 		version: "2026.11.13",
 		date: "2026-11-13",
 		lede: "A saved card and billing address now follow a supporter from checkout to settings, and a monthly support receipt names who received the money.",
