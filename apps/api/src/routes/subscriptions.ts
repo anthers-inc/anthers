@@ -28,8 +28,6 @@ import {
 	stickers,
 	stripeCustomers,
 	userBadges,
-	userCycles,
-	userPreferences,
 	users,
 	workBuilds,
 	works,
@@ -76,7 +74,6 @@ import {
 	stickerAmount,
 	stickerLevelFor,
 } from "@anthers/shared/stickers";
-import { groupSupporters } from "@anthers/shared/supporters";
 import { zValidator } from "@hono/zod-validator";
 import Decimal from "decimal.js";
 import { and, desc, eq, gte, inArray, isNull, lte, ne, notInArray, sql } from "drizzle-orm";
@@ -2472,92 +2469,6 @@ const subscriptionRoutes = new Hono()
 		});
 	})
 
-	// ── The supporters page ────────────────────────────────────────────────────
-
-	/**
-	 * Everybody who has ever supported Anthers and has not opted out.
-	 *
-	 * 🚨 **Reads the per-cycle record, never live standing.** Eligibility is having *ever*
-	 * supported, so somebody who gave for three months and stopped keeps their place — a
-	 * query over the held Badge (or live anything) would quietly drop them the month they
-	 * stopped, which is the opposite of what the page is for.
-	 *
-	 * ⚠️ **The lifetime total leaves this function and never leaves the server.**
-	 * `groupSupporters` is what strips it; the response carries names and an order.
-	 */
-	.get("/supporters", async (c) => {
-		const rows = await db
-			.select({
-				handle: users.atprotoHandle,
-				displayName: users.displayName,
-				lifetime: sql<string>`COALESCE(SUM(${userCycles.anthersSupport}), 0)`,
-			})
-			.from(userCycles)
-			.innerJoin(users, eq(users.id, userCycles.userId))
-			// INNER, and the join is what makes "ever supported AND opted in" one condition:
-			// a user with cycles but no preferences row has answered nothing, and the column
-			// default (listed) is theirs — an INNER join would drop them. LEFT JOIN plus
-			// `COALESCE(listed, true)` reads the default for the row that is absent, which is
-			// exactly what the eager-creatable table's default means.
-			.leftJoin(userPreferences, eq(userPreferences.userId, userCycles.userId))
-			.where(sql`COALESCE(${userPreferences.listedAsSupporter}, true)`)
-			.groupBy(users.id, users.atprotoHandle, users.displayName)
-			.having(sql`COALESCE(SUM(${userCycles.anthersSupport}), 0) > 0`);
-
-		// ⚠️ **A supporter with no name at all is left off rather than rendered blank** — an
-		// empty line on a thank-you page is worse than an absence, because it looks like the
-		// page is broken rather than like somebody is missing. `atprotoHandle` is never null,
-		// so this now only drops a row when both name fields would render as nothing.
-		const named = rows.flatMap((r) => {
-			const handle = r.handle;
-			const displayName = r.displayName || null;
-			if (!handle && !displayName) return [];
-			return [{ handle, displayName, lifetimeDollars: Number(r.lifetime) }];
-		});
-
-		return c.json({ groups: groupSupporters(named) });
-	})
-
-	/**
-	 * Whether this person appears there.
-	 *
-	 * ⭐ Listed by default and told so when they start supporting, so this is the control
-	 * that notice points at rather than a setting somebody has to go looking for.
-	 */
-	.get("/supporters/listing", requireAuth, async (c) => {
-		const user = c.get("user");
-		const [prefs] = await db
-			.select({ listed: userPreferences.listedAsSupporter })
-			.from(userPreferences)
-			.where(eq(userPreferences.userId, user.id))
-			.limit(1);
-		// No row yet means the user has set nothing — the column's default (listed) is the
-		// answer, which is what the eager-creatable table makes an absent row mean.
-		return c.json({ listed: prefs?.listed ?? true });
-	})
-
-	.patch(
-		"/supporters/listing",
-		requireAuth,
-		zValidator("json", z.object({ listed: z.boolean() })),
-		async (c) => {
-			const user = c.get("user");
-			const { listed } = c.req.valid("json");
-			// Insert-or-update rather than an update behind a lookup: the preferences row is
-			// eagerly creatable now, so a user who has never written a preference can still
-			// take themselves off the page — and the old 404 ("no account") dies with the
-			// row-per-user lifecycle the split gave this table.
-			const [row] = await db
-				.insert(userPreferences)
-				.values({ userId: user.id, listedAsSupporter: listed })
-				.onConflictDoUpdate({
-					target: userPreferences.userId,
-					set: { listedAsSupporter: listed, updatedAt: new Date() },
-				})
-				.returning({ listed: userPreferences.listedAsSupporter });
-			return c.json({ listed: row.listed });
-		},
-	)
 	// ── Stickers ───────────────────────────────────────────────────────────────
 	//
 	// A user directing part of their own Time Pool at one creator, by hand. The money is
@@ -2622,9 +2533,8 @@ const subscriptionRoutes = new Hono()
 	 *
 	 * ⚠️ **Public, and it publishes who gave what to nobody.** A Sticker is a visible gesture,
 	 * so the page has to show it, but pairing a name with a sum is a statement about somebody's
-	 * finances, exactly as the supporters page reasons. The reader's own Stickers come back
-	 * identified — that is the only handle the picker has for taking one back now that the
-	 * chips are gone.
+	 * finances. The reader's own Stickers come back identified — that is the only handle the
+	 * picker has for taking one back now that the chips are gone.
 	 *
 	 * 🚨 **Removed and voided Stickers are both excluded here.** A giver's removal is
 	 * display-only — `stickersDirectedIn` still counts it against the allowance and the creator

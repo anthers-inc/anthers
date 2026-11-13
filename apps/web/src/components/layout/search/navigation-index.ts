@@ -184,13 +184,6 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		kind: "setting",
 	},
 	{
-		id: "setting-supporters",
-		label: "List Me on the Supporters Page",
-		keywords: ["settings", "supporters", "listing", "privacy"],
-		href: "/settings?tab=account",
-		kind: "setting",
-	},
-	{
 		id: "setting-billing-address",
 		label: "Billing Address",
 		keywords: ["settings", "billing", "address", "receipts", "tax"],

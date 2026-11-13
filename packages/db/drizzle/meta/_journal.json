@@ -1527,6 +1527,13 @@
       "when": 1794372675448,
       "tag": "20261111-045115_tan_black_crow",
       "breakpoints": true
+    },
+    {
+      "idx": 218,
+      "version": "7",
+      "when": 1794587069445,
+      "tag": "20261113-162429_tricky_gladiator",
+      "breakpoints": true
     }
   ]
 }
