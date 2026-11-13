@@ -184,10 +184,11 @@ async function main() {
 	}
 
 	const totalSeconds = [...byWork.values()].reduce((sum, held) => sum + held.seconds, 0);
+	const withRanges = storefront.filter((work) => (byWork.get(work.id)?.rows ?? 0) > 0);
 	console.log(
-		`prune-storefront-attention: ${storefront.length} storefront-only Work(s), ${ranges.length} timed range(s), ${Math.round(totalSeconds)}s (${fmtDuration(totalSeconds)})`,
+		`prune-storefront-attention: ${storefront.length} storefront-only Work(s); ${ranges.length} timed range(s) across ${withRanges.length} of them, ${Math.round(totalSeconds)}s (${fmtDuration(totalSeconds)})`,
 	);
-	for (const work of storefront) {
+	for (const work of withRanges) {
 		const held = byWork.get(work.id);
 		if (!held) continue;
 		const delivery = work.streamEnabled ? "stream + download, files only" : "download-only";
@@ -233,4 +234,9 @@ async function main() {
 	console.log(`prune-storefront-attention: deleted ${deleted} range(s).`);
 }
 
-if (import.meta.main) await main();
+if (import.meta.main) {
+	await main();
+	// The pool holds sockets open, so a finished script otherwise hangs the command
+	// that ran it until the harness kills it. `db-row-counts.ts` exits the same way.
+	process.exit(process.exitCode ?? 0);
+}
