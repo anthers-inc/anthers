@@ -46,6 +46,7 @@ import { attentionEvents, workBuilds, workMediaVersions, works } from "@anthers/
 import { ATTENTION_RAW_RETENTION_DAYS } from "@anthers/shared/constants";
 import { BUILD_WORK_TYPES, hasBrowserDeliverable, isBuildType } from "@anthers/shared/content";
 import { and, gt, inArray } from "drizzle-orm";
+import { deleteAttentionRanges, fmtDuration, rolledUpRanges } from "./attention-prune-lib.js";
 
 /** A build Work reduced to what the storefront test asks about. */
 export interface StorefrontCandidate {
@@ -76,32 +77,6 @@ export function isStorefrontOnly(work: StorefrontCandidate, evidence: BuildEvide
 	if (!isBuildType(work.type)) return false;
 	if (evidence.currentBuilds > 0 || evidence.archivedWebBuilds > 0) return false;
 	return !hasBrowserDeliverable({ embedUrl: work.embedUrl });
-}
-
-/**
- * Whether any selected range is old enough that the prune job may already have rolled
- * it into `attention_daily`. Such a row cannot be corrected by deleting the raw range.
- */
-export function rolledUpRanges<T extends { startedAt: Date | null; createdAt: Date }>(
-	ranges: T[],
-	now = Date.now(),
-): T[] {
-	const cutoff = now - ATTENTION_RAW_RETENTION_DAYS * 86_400_000;
-	return ranges.filter((range) => (range.startedAt ?? range.createdAt).getTime() < cutoff);
-}
-
-/** Split ids into batches a single `IN (…)` can carry without hitting a parameter limit. */
-function chunks<T>(items: T[], size: number): T[][] {
-	const out: T[][] = [];
-	for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-	return out;
-}
-
-function fmtDuration(seconds: number): string {
-	const m = Math.round(seconds / 60);
-	if (m < 60) return `${m} min`;
-	const h = Math.floor(m / 60);
-	return m % 60 === 0 ? `${h} hr` : `${h} hr ${m % 60} min`;
 }
 
 async function main() {
@@ -218,19 +193,7 @@ async function main() {
 		return;
 	}
 
-	let deleted = 0;
-	await db.transaction(async (tx) => {
-		for (const batch of chunks(
-			ranges.map((range) => range.id),
-			500,
-		)) {
-			const result = await tx
-				.delete(attentionEvents)
-				.where(inArray(attentionEvents.id, batch))
-				.returning({ id: attentionEvents.id });
-			deleted += result.length;
-		}
-	});
+	const deleted = await deleteAttentionRanges(ranges.map((range) => range.id));
 	console.log(`prune-storefront-attention: deleted ${deleted} range(s).`);
 }
 
