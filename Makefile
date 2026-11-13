@@ -470,6 +470,17 @@ receipt-replay: ## Re-send a past transaction's buyer receipt (INTENT=pi_… or 
 	BWS_ACCESS_TOKEN=$${BWS_ACCESS_TOKEN:-$$(cat $$HOME/.config/bws/anthers-prod-token)} \
 		bws run --project-id $$PID -- '$(MAKE) prod-db "CMD=bun run scripts/receipt-replay.ts$(if $(INTENT), --intent $(INTENT),)$(if $(REFUND), --refund $(REFUND),)"'
 
+# A completed Badge checkout should leave a trialing subscription for the next 1st. If a
+# partial webhook failure leaves the charge and holding without one, this repairs the named
+# accounts, using each charge's own date for the day-exact reduction. Dry run unless APPLY=1.
+#   make repair-badge-recurrences HANDLES="amaiguri.bsky.social parkerhdavis.com" APPLY=1
+repair-badge-recurrences: ## Repair a missed Badge recurrence for named handles (APPLY=1 to write)
+	@if [ -z "$(HANDLES)" ]; then \
+		echo 'Usage: make repair-badge-recurrences HANDLES="@handle1 @handle2" [APPLY=1]' >&2; exit 64; fi
+	@PID=$$(bun run scripts/bws-project-id.ts prod) || exit 1; \
+	BWS_ACCESS_TOKEN=$${BWS_ACCESS_TOKEN:-$$(cat $$HOME/.config/bws/anthers-prod-token)} \
+		bws run --project-id $$PID -- '$(MAKE) prod-db "CMD=bun run apps/api/src/scripts/repair-badge-recurrences.ts $(if $(APPLY),--apply,) $(HANDLES)"'
+
 # Support from signup through settlement against test-mode Stripe, on a test clock. Needs `bws`
 # (the Anthers Dev key) and the network, and takes a few minutes, so it is not part of `verify`.
 # Run it after changing how invoices are read, discounted, recorded or settled — hand-built

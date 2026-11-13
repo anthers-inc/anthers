@@ -44,6 +44,7 @@ import Decimal from "decimal.js";
 import { and, eq, ne, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import {
+	attachPaymentMethod,
 	cancelSubscription,
 	createCustomer,
 	createProduct,
@@ -1524,6 +1525,47 @@ export async function applyBadgeRecurrence(
 	// the saved card and lapses honestly when it fails.
 	const customerId = await ensureStripeCustomer(userId, "");
 	const trialEnd = Math.floor(cycleStart(nextCycleKey(currentCycleKey())).getTime() / 1000);
+
+	// 🚨 **A customerless Badge checkout leaves the card unattached, and a subscription
+	// cannot name an unattached card as its default.** Attach it and carry its billing
+	// address onto the Customer before the create; this is the repair path for a charge
+	// whose original completion failed after the holding was written, and the same guard
+	// makes a retry from the charge alone sufficient. The address is also what automatic
+	// tax needs on a Customer that has none.
+	if (pmId) {
+		const method = await retrievePaymentMethod(pmId);
+		const attachedTo =
+			typeof method?.customer === "string" ? method.customer : (method?.customer?.id ?? null);
+		if (method && attachedTo !== customerId) await attachPaymentMethod(pmId, customerId);
+		const customer = await retrieveCustomer(customerId);
+		if (customer && !customer.deleted) {
+			const billing = method?.billing_details;
+			const address = billing?.address;
+			const customerAddress = customer.address;
+			await updateCustomer(customerId, {
+				...(billing?.name ? { name: billing.name } : {}),
+				...(address?.line1 &&
+				address.city &&
+				address.state &&
+				address.postal_code &&
+				address.country &&
+				!customerAddress?.line1
+					? {
+							address: {
+								line1: address.line1,
+								...(address.line2 ? { line2: address.line2 } : {}),
+								city: address.city,
+								state: address.state,
+								postal_code: address.postal_code,
+								country: address.country,
+							},
+						}
+					: {}),
+				invoice_settings: { default_payment_method: pmId },
+			});
+		}
+	}
+
 	await createSubscription({
 		customer: customerId,
 		items: picks.map(lineOf),
