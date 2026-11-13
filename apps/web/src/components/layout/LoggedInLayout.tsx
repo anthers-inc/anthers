@@ -5,7 +5,7 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { MeadowBackdrop } from "@anthers/web-shared/decor/MeadowBackdrop";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useLocation } from "@anthers/web-shared/router";
-import { SidebarProvider, useSidebar } from "@anthers/web-shared/sidebar";
+import { useSidebar } from "@anthers/web-shared/sidebar";
 import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeSelect from "@anthers/web-shared/ui/ThemeSelect";
 import { ChevronLeftIcon, Cog6ToothIcon, ShoppingCartIcon } from "@heroicons/react/24/outline";
@@ -212,7 +212,13 @@ function PhoneTabs({ hidden }: { hidden: boolean }) {
 	);
 }
 
-function LoggedInLayoutInner() {
+/**
+ * The signed-in shell. The sidebar's open/closed state is NOT owned here: `SidebarProvider`
+ * wraps the whole app in `index.tsx`, because the two route groups that mount this layout
+ * (the authenticated one and `PublicShell`'s shared pages) are separate instances, and a
+ * choice made on a Work has to survive the move to Library, Discovery or Settings.
+ */
+export default function LoggedInLayout() {
 	const { user } = useAuth();
 	const { currentTrack } = useMediaPlayer();
 	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent, sharedContent, topBarContent } =
@@ -561,13 +567,5 @@ function LoggedInLayoutInner() {
 				{phoneTabbed && <PhoneTabs hidden={sidebarOpen} />}
 			</div>
 		</ViewFilterProvider>
-	);
-}
-
-export default function LoggedInLayout() {
-	return (
-		<SidebarProvider>
-			<LoggedInLayoutInner />
-		</SidebarProvider>
 	);
 }

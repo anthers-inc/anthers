@@ -3,6 +3,7 @@
 import { AuthProvider } from "@anthers/web-shared/auth";
 import { ContentPreferencesProvider } from "@anthers/web-shared/content-preferences";
 import { LanguageFilterProvider } from "@anthers/web-shared/language-filter";
+import { SidebarProvider } from "@anthers/web-shared/sidebar";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
@@ -25,7 +26,17 @@ createRoot(root).render(
 				    are read by surfaces far from where they are set. */}
 				<LanguageFilterProvider>
 					<MediaPlayerProvider>
-						<App />
+						{/* ⭐ **The sidebar's open/closed choice is the session's, not the layout's.**
+						    Two route groups mount a signed-in layout — the authenticated group and
+						    `PublicShell`'s shared pages — so a Work and Library, Discovery or
+						    Settings are drawn by different shell instances, and moving between
+						    them remounts the layout. A provider inside the layout would forget
+						    the choice at that seam; here one boolean survives every route
+						    change, and only narrowing the window puts the sidebar away (its
+						    reasoning lives in `web-shared/src/lib/sidebar.tsx`). */}
+						<SidebarProvider>
+							<App />
+						</SidebarProvider>
 					</MediaPlayerProvider>
 				</LanguageFilterProvider>
 			</ContentPreferencesProvider>
