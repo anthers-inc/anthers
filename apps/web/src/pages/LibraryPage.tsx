@@ -23,7 +23,7 @@
  *      sits in the play queue.
  *
  * The controls live in the SIDEBAR (the house structure, 2026-10-11, v2): the tab-shared
- * LENSES are the section above the second divider, the shared filters (Access, Type,
+ * LENSES are the section above the second divider, the shared filters (Access, Types,
  * Tags) beneath them — the page body keeps only the content the view selects, plus the
  * Show-hidden toggle, whose invariant is absolute (see below). The lens switcher used
  * to be a page-level tabs row, kept deliberately apart from the media tabs for the
@@ -365,7 +365,7 @@ export default function LibraryPage() {
 	// Hidden entries are filtered HERE rather than by the request — see `load`.
 	const visible = showHidden ? items : items.filter((i) => !i.hidden);
 	// The topbar's Filter mode is the broadest term filter and applies before the Library's
-	// own controls, so the Access, Type and Tags sections narrow what is already matched
+	// own controls, so the Access, Types and Tags sections narrow what is already matched
 	// rather than fighting it.
 	const searched = useMemo(
 		() =>
@@ -403,7 +403,7 @@ export default function LibraryPage() {
 
 	const filtered = useMemo(() => {
 		if (!activeType) return withTags;
-		// "posts" is the shared Type row's id for the post kind; every other id is a Work
+		// "posts" is the shared Types row's id for the post kind; every other id is a Work
 		// type, so a post drops under those and a Work drops under Posts.
 		if (activeType === "posts") return withTags.filter((i) => i.kind === "post");
 		return withTags.filter((i) => i.kind === "work" && i.work?.type === activeType);
@@ -417,7 +417,7 @@ export default function LibraryPage() {
 	 */
 	const unavailableTypes = useMemo(() => {
 		const set = new Set<string>();
-		// A lens decides what it draws on, so under it the Type list cannot narrow what
+		// A lens decides what it draws on, so under it the Types list cannot narrow what
 		// the lens reorganizes — non-participating types gray, and a participating one
 		// grays on empty stock exactly as it does lensless.
 		const lensIncluded: string[] | null =
