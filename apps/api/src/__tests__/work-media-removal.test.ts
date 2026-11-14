@@ -19,6 +19,7 @@ import {
 	users,
 	workBuilds,
 	workPages,
+	workPhysicalListings,
 	workSourceFiles,
 	works,
 	workTranscodingJobs,
@@ -150,6 +151,36 @@ describe("remove an unpublished Work's media", () => {
 				expect(deleted).toContain(thumb);
 				// The run prefix arrives the shape it is derived in — master minus file.
 				expect(sweptPrefixes).toContain(`creators/${creatorId}/videos/hls/run${work.id}`);
+			} finally {
+				restoreStorage();
+			}
+		},
+		DB_SETUP_TIMEOUT,
+	);
+
+	it(
+		"a physical listing's gallery images are swept, and the listing stops naming them",
+		async () => {
+			const work = await makeWork({ type: "physical", title: "gallery", visibility: "private" });
+			const gallery = `creators/${creatorId}/thumbnails/unknown/g-${work.id}.png`;
+			await db.insert(workPhysicalListings).values({
+				workId: work.id,
+				images: [{ key: gallery, alt: "", cover: true }],
+			});
+
+			captureStorage();
+			try {
+				const res = await req(`/api/content/works/${work.id}/media`, {
+					method: "DELETE",
+					headers: { Cookie: creatorCookie, Origin: ORIGIN },
+				});
+				expect(res.status).toBe(200);
+				expect(deleted).toContain(gallery);
+				const [listing] = await db
+					.select()
+					.from(workPhysicalListings)
+					.where(eq(workPhysicalListings.workId, work.id));
+				expect(listing.images).toEqual([]);
 			} finally {
 				restoreStorage();
 			}

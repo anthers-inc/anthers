@@ -15,6 +15,7 @@ import {
 	workAssets,
 	workBuilds,
 	workPages,
+	workPhysicalListings,
 	workSaves,
 	workSectionAssets,
 	workSections,
@@ -480,6 +481,12 @@ const workMediaRoutes = new Hono()
 			await tx.delete(workPages).where(eq(workPages.workId, work.id));
 			await tx.delete(workSourceFiles).where(eq(workSourceFiles.workId, work.id));
 			await tx.delete(workTranscodingJobs).where(eq(workTranscodingJobs.workId, work.id));
+			// A physical good's storefront pictures are part of its media; the sweep below
+			// deletes their objects, so the listing must stop naming them in the same step.
+			await tx
+				.update(workPhysicalListings)
+				.set({ images: [], updatedAt: new Date() })
+				.where(eq(workPhysicalListings.workId, work.id));
 			await tx
 				.update(works)
 				.set({

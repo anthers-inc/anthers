@@ -17,6 +17,7 @@ import {
 	workAssets,
 	workCaptionTracks,
 	workMediaVersions,
+	workPhysicalListings,
 	workPreviewMedia,
 	works,
 	workTranscodingJobs,
@@ -180,5 +181,46 @@ describe("the Work-media migration", () => {
 		};
 		expect(rerun.summary.skipped).toBe(1);
 		expect(rerun.summary.objects).toBe(0);
+	});
+
+	it("moves a physical listing's gallery images and rewrites its JSON", async () => {
+		const work = await insertWork({
+			creatorId,
+			type: "physical",
+			title: "Physical gallery fixture",
+		});
+		const oldA = `creators/${creatorId}/thumbnails/unknown/gallery-${work.id}-a.png`;
+		const oldB = `creators/${creatorId}/thumbnails/unknown/gallery-${work.id}-b.png`;
+		await put(oldA);
+		await put(oldB);
+		await db.insert(workPhysicalListings).values({
+			workId: work.id,
+			images: [
+				{ key: oldA, alt: "front", cover: true },
+				{ key: oldB, alt: "back", cover: false },
+			],
+		});
+
+		const report = join(REPO, "cache", `migration-physical-${Date.now()}.json`);
+		const run = Bun.spawnSync(
+			["bun", "run", SCRIPT, "--work", String(work.id), "--apply", "--report", report],
+			{ cwd: REPO, env: process.env },
+		);
+		expect(run.exitCode, run.stderr.toString()).toBe(0);
+		expect(await storage.exists(oldA)).toBe(false);
+		expect(await storage.exists(oldB)).toBe(false);
+
+		const newA = `works/${work.id}/thumbnails/unknown/gallery-${work.id}-a.png`;
+		const newB = `works/${work.id}/thumbnails/unknown/gallery-${work.id}-b.png`;
+		const [listing] = await db
+			.select()
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, work.id));
+		expect(listing.images).toEqual([
+			{ key: newA, alt: "front", cover: true },
+			{ key: newB, alt: "back", cover: false },
+		]);
+		expect(await storage.exists(newA)).toBe(true);
+		expect(await storage.exists(newB)).toBe(true);
 	});
 });

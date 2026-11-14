@@ -50,6 +50,7 @@ import {
 	workCaptionTracks,
 	workMediaVersions,
 	workPages,
+	workPhysicalListings,
 	workPreviewMedia,
 	workSectionAssets,
 	workSections,
@@ -104,6 +105,8 @@ interface WorkPlan {
 	buildFiles: { id: number; storageKey: string }[];
 	versions: { id: number; media: (typeof workMediaVersions.$inferSelect)["media"] }[];
 	jobs: { id: number; hlsManifestUrl: string | null; outputFileUrl: string | null }[];
+	/** The physical good's storefront gallery, whose images are bare storage keys. */
+	listing: typeof workPhysicalListings.$inferSelect | null;
 	scans: { id: number; storageKey: string }[];
 }
 
@@ -178,6 +181,7 @@ async function planWork(work: WorkRow): Promise<WorkPlan> {
 		buildFiles: [],
 		versions: [],
 		jobs: [],
+		listing: null,
 		scans: [],
 	};
 	const seen = new Set<string>();
@@ -188,31 +192,42 @@ async function planWork(work: WorkRow): Promise<WorkPlan> {
 	await addRef(plan, work.thumbnail, seen, "works.thumbnail");
 	await addRef(plan, work.thumbnailSource, seen, "works.thumbnail_source");
 
-	const [assets, sourceFiles, pages, sections, sectionAssets, captions, previews, versions, jobs] =
-		await Promise.all([
-			db.select().from(workAssets).where(eq(workAssets.workId, workId)),
-			db.select().from(workSourceFiles).where(eq(workSourceFiles.workId, workId)),
-			db.select().from(workPages).where(eq(workPages.workId, workId)),
-			db.select().from(workSections).where(eq(workSections.workId, workId)),
-			db.select().from(workSectionAssets).where(eq(workSectionAssets.workId, workId)),
-			db
-				.select({ id: workCaptionTracks.id, storageKey: workCaptionTracks.storageKey })
-				.from(workCaptionTracks)
-				.where(eq(workCaptionTracks.workId, workId)),
-			db.select().from(workPreviewMedia).where(eq(workPreviewMedia.workId, workId)),
-			db
-				.select({ id: workMediaVersions.id, media: workMediaVersions.media })
-				.from(workMediaVersions)
-				.where(eq(workMediaVersions.workId, workId)),
-			db
-				.select({
-					id: workTranscodingJobs.id,
-					hlsManifestUrl: workTranscodingJobs.hlsManifestUrl,
-					outputFileUrl: workTranscodingJobs.outputFileUrl,
-				})
-				.from(workTranscodingJobs)
-				.where(eq(workTranscodingJobs.workId, workId)),
-		]);
+	const [
+		assets,
+		sourceFiles,
+		pages,
+		sections,
+		sectionAssets,
+		captions,
+		previews,
+		versions,
+		jobs,
+		listingRows,
+	] = await Promise.all([
+		db.select().from(workAssets).where(eq(workAssets.workId, workId)),
+		db.select().from(workSourceFiles).where(eq(workSourceFiles.workId, workId)),
+		db.select().from(workPages).where(eq(workPages.workId, workId)),
+		db.select().from(workSections).where(eq(workSections.workId, workId)),
+		db.select().from(workSectionAssets).where(eq(workSectionAssets.workId, workId)),
+		db
+			.select({ id: workCaptionTracks.id, storageKey: workCaptionTracks.storageKey })
+			.from(workCaptionTracks)
+			.where(eq(workCaptionTracks.workId, workId)),
+		db.select().from(workPreviewMedia).where(eq(workPreviewMedia.workId, workId)),
+		db
+			.select({ id: workMediaVersions.id, media: workMediaVersions.media })
+			.from(workMediaVersions)
+			.where(eq(workMediaVersions.workId, workId)),
+		db
+			.select({
+				id: workTranscodingJobs.id,
+				hlsManifestUrl: workTranscodingJobs.hlsManifestUrl,
+				outputFileUrl: workTranscodingJobs.outputFileUrl,
+			})
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.workId, workId)),
+		db.select().from(workPhysicalListings).where(eq(workPhysicalListings.workId, workId)).limit(1),
+	]);
 	plan.assets = assets;
 	plan.sourceFiles = sourceFiles;
 	plan.pages = pages;
@@ -222,6 +237,7 @@ async function planWork(work: WorkRow): Promise<WorkPlan> {
 	plan.previews = previews;
 	plan.versions = versions;
 	plan.jobs = jobs;
+	plan.listing = listingRows[0] ?? null;
 
 	for (const row of assets) await addRef(plan, row.file, seen, `asset ${row.id}`);
 	for (const row of sourceFiles) await addRef(plan, row.file, seen, `source file ${row.id}`);
@@ -230,6 +246,9 @@ async function planWork(work: WorkRow): Promise<WorkPlan> {
 	for (const row of sectionAssets) await addRef(plan, row.file, seen, `section asset ${row.id}`);
 	for (const row of captions) await addRef(plan, row.storageKey, seen, `caption ${row.id}`);
 	for (const row of previews) await addRef(plan, row.file, seen, `preview ${row.id}`);
+	for (const image of plan.listing?.images ?? []) {
+		await addRef(plan, image.key, seen, `physical image ${image.key}`);
+	}
 	for (const row of versions) {
 		for (const key of keysInMedia(row.media)) {
 			await addRef(plan, key, seen, `version ${row.id}`);
@@ -322,6 +341,13 @@ async function copyPlan(plan: WorkPlan, apply: boolean, summary: Summary): Promi
 		if (!apply) continue;
 		const copied = await storage.copy(move.oldKey, move.newKey);
 		if (!copied) {
+			// An earlier run may have copied the object and rewritten some of the rows before
+			// it stopped. The target existing is the state this move wants; only a missing
+			// target is a failure.
+			if (await storage.exists(move.newKey)) {
+				summary.objects += 1;
+				continue;
+			}
 			plan.warnings.push(`copy failed: ${move.oldKey} → ${move.newKey}`);
 			return false;
 		}
@@ -377,6 +403,19 @@ async function rewritePlan(plan: WorkPlan): Promise<void> {
 				thumbnailSource: newRef(plan.work.thumbnailSource),
 			})
 			.where(eq(works.id, plan.work.id));
+
+		if (plan.listing) {
+			await tx
+				.update(workPhysicalListings)
+				.set({
+					images: plan.listing.images.map((image) => {
+						const move = byKey.get(urlToKey(image.key));
+						return move ? { ...image, key: move.newKey } : image;
+					}),
+					updatedAt: new Date(),
+				})
+				.where(eq(workPhysicalListings.id, plan.listing.id));
+		}
 
 		for (const row of plan.assets) {
 			await tx

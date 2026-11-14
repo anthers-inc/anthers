@@ -16,7 +16,14 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { userCycles, workAssets, workMediaVersions, workSaves, works } from "@anthers/db/schema";
+import {
+	userCycles,
+	workAssets,
+	workMediaVersions,
+	workPhysicalListings,
+	workSaves,
+	works,
+} from "@anthers/db/schema";
 import { STORAGE_LADDER_GIB, STORAGE_USE_KINDS } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
 import app from "../index";
@@ -109,6 +116,24 @@ describe("the storage meter", () => {
 		expect(creatorRow).toBeDefined();
 		expect(creatorRow!.purposes.catalog).toBe(3000);
 		expect(creatorRow!.bytes).toBe(3000);
+	});
+
+	it("counts a physical listing's gallery images as the Work's catalog bytes", async () => {
+		const listingCreator = (
+			await createAccount(`meter_l_${RUN}`, { fields: { creatorMode: true } })
+		).userId;
+		const work = await insertWork({ creatorId: listingCreator, type: "physical" });
+		const image = await store(
+			`creators/${listingCreator}/thumbnails/unknown/listing-${work.id}.png`,
+			2400,
+		);
+		await db.insert(workPhysicalListings).values({
+			workId: work.id,
+			images: [{ key: image, alt: "", cover: true }],
+		});
+
+		await runStorageUsageSweep();
+		expect(await catalogFor(listingCreator)).toBe(2400);
 	});
 
 	it("attributes cloud saves to the player's account, never the creator's", async () => {
