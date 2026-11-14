@@ -73,6 +73,8 @@ import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/a
 import { resolveAccess } from "../services/access.js";
 import { oweAccessReceipt } from "../services/access-receipts.js";
 import { anthersUserId } from "../services/anthers-badges.js";
+import { badgeOwnerIdsForBadges } from "../services/badge-owners.js";
+import { splitDollarsEvenly } from "../services/badge-splits.js";
 import {
 	applyBadgeRecurrence,
 	applyDirectedSupport,
@@ -1057,72 +1059,174 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	// cycle's settlement reads these rows beside the invoices. A redelivered event finds
 	// no pending rows and is a no-op by the same latch.
 	if (stampedBadges.length > 0 && Number.isFinite(buyerUserId)) {
-		const completable = stampedBadges.filter(({ row }) => row.creatorId != null);
-		const orphans = stampedBadges.length - completable.length;
+		const withIssuer = stampedBadges.filter(({ row }) => row.creatorId != null);
+		const orphans = stampedBadges.length - withIssuer.length;
 		if (orphans > 0)
 			console.error(
 				`badge completion: ${orphans} row(s) on charge ${pi.id} lost their issuer — settled by hand`,
 			);
-		if (completable.length > 0) {
-			await applyDirectedSupport(
-				buyerUserId,
-				completable.map(({ row }) => ({
-					creatorId: row.creatorId as number,
-					amount: Number(row.threshold),
-				})),
-			);
-			// The recurrence lines, with each rung's own Product; a row whose rung was
-			// deleted between checkout and completion bills against the issuer's
-			// per-creator Product instead (the rung's tax-code subtlety is gone with the
-			// rung — the buyer paid, and the line exists to recur).
-			const products: string[] = [];
-			for (const { row } of completable) {
-				const [issuer] = await db
-					.select({ handle: users.atprotoHandle })
-					.from(users)
-					.where(eq(users.id, row.creatorId as number))
-					.limit(1);
-				const handle = issuer?.handle ?? "unknown";
-				if (row.badgeId != null) {
-					const product = await ensureBadgeProduct(
-						row.badgeId,
-						row.badgeLabel ?? `$${row.threshold}`,
-						handle,
-					);
-					if (product) products.push(product);
+		if (withIssuer.length > 0) {
+			// A solo Badge completes one row. A Collab Badge writes one `badge_charges` row
+			// per owner — each with its share and the same full threshold — so the holding
+			// and the recurrence must be grouped by Badge, not looped per row. Grouping by
+			// `badgeId` is what keeps one supporter holding one shared Badge.
+			const byBadge = new Map<number, typeof withIssuer>();
+			const loose: typeof withIssuer = [];
+			for (const entry of withIssuer) {
+				if (entry.row.badgeId != null) {
+					const group = byBadge.get(entry.row.badgeId);
+					if (group) group.push(entry);
+					else byBadge.set(entry.row.badgeId, [entry]);
+				} else {
+					loose.push(entry);
+				}
+			}
+
+			const badgeRows =
+				byBadge.size > 0
+					? await db
+							.select({
+								id: badges.id,
+								creatorId: badges.creatorId,
+								threshold: badges.threshold,
+								label: badges.label,
+							})
+							.from(badges)
+							.where(inArray(badges.id, [...byBadge.keys()]))
+					: [];
+			const badgeById = new Map(badgeRows.map((badge) => [badge.id, badge]));
+
+			const supportPicks: {
+				creatorId: number;
+				amount: number;
+				badgeId?: number | null;
+			}[] = [];
+			for (const [badgeId, group] of byBadge) {
+				const badge = badgeById.get(badgeId);
+				if (!badge) {
+					// The rung was deleted between checkout and completion. The old
+					// per-row path is the fallback: each owner row becomes a solo holding at
+					// the threshold it paid for.
+					for (const { row } of group) {
+						supportPicks.push({
+							creatorId: row.creatorId as number,
+							amount: Number(row.threshold),
+						});
+					}
 					continue;
 				}
-				const product = await ensureCreatorProduct(row.creatorId as number, handle);
-				if (product) products.push(product);
+				supportPicks.push({
+					creatorId: badge.creatorId,
+					amount: Number(badge.threshold),
+					badgeId: badge.id,
+				});
+			}
+			for (const { row } of loose) {
+				supportPicks.push({
+					creatorId: row.creatorId as number,
+					amount: Number(row.threshold),
+				});
+			}
+			if (supportPicks.length > 0) await applyDirectedSupport(buyerUserId, supportPicks);
+
+			// The recurrence lines, one per Badge: the publisher's own Product when the rung
+			// survives, the publisher's per-creator Product when it was deleted. The line's
+			// `badgeId` stamp is what makes the next invoice split across the owner set.
+			const publisherIds = [
+				...new Set([
+					...badgeRows.map((badge) => badge.creatorId),
+					...loose.map(({ row }) => row.creatorId as number),
+				]),
+			];
+			const publisherRows =
+				publisherIds.length > 0
+					? await db
+							.select({ id: users.id, handle: users.atprotoHandle })
+							.from(users)
+							.where(inArray(users.id, publisherIds))
+					: [];
+			const handleById = new Map(publisherRows.map((row) => [row.id, row.handle]));
+			const recurrencePicks: {
+				issuerId: number;
+				product: string;
+				threshold: number;
+				badgeId?: number | null;
+			}[] = [];
+			for (const [badgeId, group] of byBadge) {
+				const badge = badgeById.get(badgeId);
+				if (!badge) {
+					for (const { row } of group) {
+						const creatorId = row.creatorId as number;
+						const handle = handleById.get(creatorId) ?? "unknown";
+						const product = await ensureCreatorProduct(creatorId, handle);
+						if (product) {
+							recurrencePicks.push({
+								issuerId: creatorId,
+								product,
+								threshold: Number(row.threshold),
+							});
+						}
+					}
+					continue;
+				}
+				const handle = handleById.get(badge.creatorId) ?? "unknown";
+				const product = await ensureBadgeProduct(
+					badge.id,
+					badge.label ?? `$${badge.threshold}`,
+					handle,
+				);
+				if (product) {
+					recurrencePicks.push({
+						issuerId: badge.creatorId,
+						product,
+						threshold: Number(badge.threshold),
+						badgeId: badge.id,
+					});
+				}
+			}
+			for (const { row } of loose) {
+				const creatorId = row.creatorId as number;
+				const handle = handleById.get(creatorId) ?? "unknown";
+				const product = await ensureCreatorProduct(creatorId, handle);
+				if (product) {
+					recurrencePicks.push({
+						issuerId: creatorId,
+						product,
+						threshold: Number(row.threshold),
+					});
+				}
 			}
 			await applyBadgeRecurrence(
 				buyerUserId,
-				completable
-					.map(({ row }, idx) => ({
-						issuerId: row.creatorId as number,
-						product: products[idx],
-						threshold: Number(row.threshold),
-					}))
-					// A rung that produced no Product (Stripe unconfigured) is skipped —
-					// the holding stands, the line joins on a later pass of the same job.
-					.filter((pick) => Boolean(pick.product)),
+				recurrencePicks,
 				// The confirmed payment method — what a no-subscription buyer's new
 				// subscription bills with. Null when the charge carried none (the buyer
 				// already had a subscription): the existing-sub branch needs nothing, and
 				// the fresh creation falls back to the honest failed-renewal path.
 				typeof pi.payment_method === "string" ? pi.payment_method : null,
 			);
+
 			// The day-exact missed-days reduction — a Badge's first transaction charged a
 			// full rung today through the charge, so the days before today come off the
-			// next renewal exactly as a subscription-side raise records them.
-			await recordReductions(
-				buyerUserId,
-				new Date(),
-				completable.map(({ row }) => ({
+			// next renewal exactly as a subscription-side raise records them. It is one
+			// line per **publisher**, carrying the group's full first transaction; the
+			// owners' shares are settlement, not separate subscription lines.
+			const reductions: { creatorId: number; amount: number }[] = [];
+			for (const [badgeId, group] of byBadge) {
+				const badge = badgeById.get(badgeId);
+				const creatorId = badge?.creatorId ?? (group[0].row.creatorId as number);
+				reductions.push({
+					creatorId,
+					amount: group.reduce((sum, { row }) => sum + Number(row.chargedAmount), 0),
+				});
+			}
+			for (const { row } of loose) {
+				reductions.push({
 					creatorId: row.creatorId as number,
 					amount: Number(row.chargedAmount),
-				})),
-			);
+				});
+			}
+			await recordReductions(buyerUserId, new Date(), reductions);
 		}
 	}
 }
@@ -2382,24 +2486,33 @@ const paymentRoutes = new Hono()
 		if (purchaseRows.length > 0) await db.insert(purchases).values(purchaseRows);
 
 		/**
-		 * One row per Badge — the first transaction's money record, `badge_charges`. The
-		 * line share is the resolution's pinned figure, the cycle is the one the first
-		 * Month covers (today's — a checkout left pending past a cycle turn is the
-		 * webbhook's problem, rows keyed `pending` waiting for it), and status rides the
-		 * same pending latch the purchase rows use: the completion owns every stamp.
+		 * One row per Badge **owner** — the first transaction's money record,
+		 * `badge_charges`. A solo Badge writes one row; a Collab Badge splits its amount and
+		 * its pinned card-fee share evenly across the owner set, the last owner absorbing
+		 * the rounding cent. `threshold` stays the full Badge amount on every row, because
+		 * it is what the holding names; `chargedAmount` is what this owner is owed from
+		 * this charge. The cycle is the one the first Month covers (today's — a checkout
+		 * left pending past a cycle turn is the webhook's problem, rows keyed `pending`
+		 * waiting for it), and status rides the same pending latch the purchase rows use.
 		 */
-		const badgeChargeRows = badgeLines.map((item) => ({
-			buyerId: user.id,
-			badgeId: item.badge.id,
-			creatorId: item.issuer.id,
-			badgeLabel: item.badge.label,
-			threshold: item.threshold.toFixed(2),
-			chargedAmount: item.amount.toFixed(2),
-			processingFee: item.lineFee.toFixed(2),
-			billingCycle: currentCycleKey(),
-			stripePaymentIntentId: session.id,
-			status: "pending" as const,
-		}));
+		const badgeOwners = await badgeOwnerIdsForBadges(badgeLines.map((item) => item.badge.id));
+		const badgeChargeRows = badgeLines.flatMap((item) => {
+			const owners = badgeOwners.get(item.badge.id) ?? [item.issuer.id];
+			const amounts = splitDollarsEvenly(item.amount, owners.length);
+			const fees = splitDollarsEvenly(item.lineFee, owners.length);
+			return owners.map((creatorId, index) => ({
+				buyerId: user.id,
+				badgeId: item.badge.id,
+				creatorId,
+				badgeLabel: item.badge.label,
+				threshold: item.threshold.toFixed(2),
+				chargedAmount: new Decimal(amounts[index] ?? 0).dividedBy(100).toFixed(2),
+				processingFee: new Decimal(fees[index] ?? 0).dividedBy(100).toFixed(2),
+				billingCycle: currentCycleKey(),
+				stripePaymentIntentId: session.id,
+				status: "pending" as const,
+			}));
+		});
 		if (badgeChargeRows.length > 0) await db.insert(badgeCharges).values(badgeChargeRows);
 
 		// 🚨 **The cart is NOT cleared here** (Parker, 2026-10-19). This route runs the
@@ -2491,18 +2604,25 @@ const paymentRoutes = new Hono()
 		);
 		if (!session?.client_secret) return c.json({ error: "Payments are not configured." }, 503);
 
-		await db.insert(badgeCharges).values({
-			buyerId: user.id,
-			badgeId: one.badge.id,
-			creatorId: one.issuer.id,
-			badgeLabel: one.badge.label,
-			threshold: one.threshold.toFixed(2),
-			chargedAmount: one.amount.toFixed(2),
-			processingFee: fees.processingFee.toFixed(2),
-			billingCycle: currentCycleKey(),
-			stripePaymentIntentId: session.id,
-			status: "pending",
-		});
+		const owners = (await badgeOwnerIdsForBadges([one.badge.id])).get(one.badge.id) ?? [
+			one.issuer.id,
+		];
+		const amounts = splitDollarsEvenly(one.amount, owners.length);
+		const feeShares = splitDollarsEvenly(fees.processingFee, owners.length);
+		await db.insert(badgeCharges).values(
+			owners.map((creatorId, index) => ({
+				buyerId: user.id,
+				badgeId: one.badge.id,
+				creatorId,
+				badgeLabel: one.badge.label,
+				threshold: one.threshold.toFixed(2),
+				chargedAmount: new Decimal(amounts[index] ?? 0).dividedBy(100).toFixed(2),
+				processingFee: new Decimal(feeShares[index] ?? 0).dividedBy(100).toFixed(2),
+				billingCycle: currentCycleKey(),
+				stripePaymentIntentId: session.id,
+				status: "pending" as const,
+			})),
+		);
 
 		return c.json({
 			subtotal: one.amount.toFixed(2),

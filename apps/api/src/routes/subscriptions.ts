@@ -16,6 +16,8 @@ import { db } from "@anthers/db/client";
 import {
 	attentionEvents,
 	badgeArtProvenance,
+	badgeCollaborators,
+	badgePublisherHandovers,
 	badges,
 	creatorCredits,
 	creatorNettingApplications,
@@ -104,10 +106,18 @@ import {
 	resolveAccess,
 	resolveAccessSync,
 } from "../services/access.js";
+import { notSuspendedAccount } from "../services/account-visibility.js";
 import { anthersUserId, loadAnthersLadder } from "../services/anthers-badges.js";
 import { creditedSeconds, creditedSecondsByDayAndCreator } from "../services/attention-ranges.js";
 import { composeBadgeArt, recomposeBadgeArt } from "../services/badge-art-compose.js";
 import { badgeChargeMonths } from "../services/badge-months.js";
+import {
+	badgeOwnedBy,
+	badgeOwnerProfiles,
+	heldAmountsByPublisher,
+	isBadgeOwner,
+	isBadgePublisher,
+} from "../services/badge-owners.js";
 import { projectedBadgeHoldings } from "../services/badge-projection.js";
 import {
 	ensureAnthersProduct,
@@ -121,8 +131,10 @@ import {
 	supportItems,
 	taxCodeForBadge,
 } from "../services/billing.js";
+import { notBlockedBy } from "../services/blocks.js";
 import { commentAncestry, rootOfAncestry } from "../services/comment-thread.js";
 import { isCreator } from "../services/creator-standing.js";
+import { notify } from "../services/notifications.js";
 import { budgetRefusal } from "../services/noun-budget.js";
 import { canBePaid } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
@@ -1015,7 +1027,35 @@ const subscriptionRoutes = new Hono()
 							)
 					: [];
 			const byId = new Map(creators.map((u) => [u.id, u.handle]));
-			const picks: { creatorId: number; product: string; amount: number }[] = [];
+			const directedBadges =
+				directed.length > 0
+					? await db
+							.select({
+								id: badges.id,
+								creatorId: badges.creatorId,
+								threshold: badges.threshold,
+							})
+							.from(badges)
+							.where(
+								inArray(
+									badges.creatorId,
+									directed.map((d) => d.creatorId),
+								),
+							)
+					: [];
+			// A Badge is a rung at one threshold per publisher, so this key is unambiguous.
+			const badgeAt = new Map(
+				directedBadges.map((badge) => [
+					`${badge.creatorId}:${Number(badge.threshold).toFixed(2)}`,
+					badge.id,
+				]),
+			);
+			const picks: {
+				creatorId: number;
+				product: string;
+				amount: number;
+				badgeId: number | null;
+			}[] = [];
 			for (const d of directed) {
 				const handle = byId.get(d.creatorId);
 				if (!handle) return c.json({ error: "Unknown creator in the directed list" }, 400);
@@ -1023,6 +1063,7 @@ const subscriptionRoutes = new Hono()
 					creatorId: d.creatorId,
 					product: await ensureCreatorProduct(d.creatorId, handle),
 					amount: d.amount,
+					badgeId: badgeAt.get(`${d.creatorId}:${new Decimal(d.amount).toFixed(2)}`) ?? null,
 				});
 			}
 			const anthersId = await anthersUserId();
@@ -1936,6 +1977,10 @@ const subscriptionRoutes = new Hono()
 			.innerJoin(badges, eq(badges.id, userBadges.badgeId))
 			.innerJoin(users, eq(users.id, badges.creatorId))
 			.where(and(eq(userBadges.userId, user.id), eq(userBadges.billingCycle, cycle)));
+		const owners = await badgeOwnerProfiles(
+			result.map((row) => row.badge.id),
+			user.id,
+		);
 
 		return c.json({
 			badges: result.map((r) => ({
@@ -1962,6 +2007,7 @@ const subscriptionRoutes = new Hono()
 					handle: r.creatorHandle,
 					displayName: r.creatorDisplayName,
 				},
+				owners: owners.get(r.badge.id) ?? [],
 			})),
 		});
 	})
@@ -1978,10 +2024,19 @@ const subscriptionRoutes = new Hono()
 			const rows = await db
 				.select()
 				.from(badges)
-				.where(eq(badges.creatorId, userId))
+				.where(badgeOwnedBy(userId))
 				.orderBy(badges.sortOrder, badges.threshold);
+			const owners = await badgeOwnerProfiles(
+				rows.map((row) => row.id),
+				userId,
+			);
 
-			return c.json({ badges: rows.map(publicBadge) });
+			return c.json({
+				badges: rows.map((badge) => ({
+					...publicBadge(badge),
+					owners: owners.get(badge.id) ?? [],
+				})),
+			});
 		}
 
 		const [creator] = await db
@@ -1991,12 +2046,17 @@ const subscriptionRoutes = new Hono()
 			.limit(1);
 		if (!creator) return c.json({ error: "Creator not found" }, 404);
 
+		const viewerId = await getOptionalUserId(c);
 		const rows = await db
 			.select({ badge: badges, provenance: badgeArtProvenance })
 			.from(badges)
 			.leftJoin(badgeArtProvenance, eq(badgeArtProvenance.badgeId, badges.id))
-			.where(eq(badges.creatorId, creator.id))
+			.where(badgeOwnedBy(creator.id))
 			.orderBy(badges.sortOrder, badges.threshold);
+		const owners = await badgeOwnerProfiles(
+			rows.map(({ badge }) => badge.id),
+			viewerId,
+		);
 
 		// The artist credit rides on the rung it credits — the flip a supporter reads on a
 		// Badge's detail view. Only the credit's own fields travel: never a storage key,
@@ -2004,6 +2064,7 @@ const subscriptionRoutes = new Hono()
 		return c.json({
 			badges: rows.map(({ badge, provenance }) => ({
 				...publicBadge(badge),
+				owners: owners.get(badge.id) ?? [],
 				artistCredit: provenance
 					? {
 							artistName: provenance.artistName,
@@ -2106,26 +2167,32 @@ const subscriptionRoutes = new Hono()
 			const badgeId = Number(id);
 			const data = c.req.valid("json");
 
+			// The publisher and every accepted collaborator may edit. A non-owner gets the
+			// same 404 the old publisher-only check returned, so the route does not reveal
+			// that a Badge exists.
+			if (!(await isBadgeOwner(badgeId, user.id))) {
+				return c.json({ error: "Badge not found" }, 404);
+			}
+
 			const updated = await db.transaction(async (tx) => {
 				const [row] = await tx
 					.update(badges)
 					.set({ ...data, updatedAt: new Date() })
-					.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+					.where(eq(badges.id, badgeId))
 					.returning();
 				if (!row) return null;
 
 				// 🚨 **A repriced rung takes its gates with it.** A gate's stored threshold is
 				// the rung's amount (`normalizeAccessRows` stamps it), so leaving the old number
 				// behind would leave a gate no rung sits on — the shape this model retired.
+				// Every owner's Works move, not only the editor's: a co-owned Badge can gate a
+				// Work published by any of its owners.
 				if (data.threshold !== undefined) {
 					const gated = await tx
 						.select({ id: works.id, access: works.access })
 						.from(works)
 						.where(
-							and(
-								eq(works.creatorId, user.id),
-								sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${works.access}) AS g WHERE (g->>'badgeId')::int = ${badgeId})`,
-							),
+							sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${works.access}) AS g WHERE (g->>'badgeId')::int = ${badgeId})`,
 						);
 					for (const work of gated) {
 						const rows = (work.access ?? []).map((r) =>
@@ -2138,7 +2205,13 @@ const subscriptionRoutes = new Hono()
 			});
 
 			if (!updated) return c.json({ error: "Badge not found" }, 404);
-			return c.json({ badge: publicBadge(updated) });
+			const owners = await badgeOwnerProfiles([updated.id], user.id);
+			return c.json({
+				badge: {
+					...publicBadge(updated),
+					owners: owners.get(updated.id) ?? [],
+				},
+			});
 		},
 	)
 
@@ -2147,17 +2220,19 @@ const subscriptionRoutes = new Hono()
 		const { id } = c.req.param();
 		const badgeId = Number(id);
 
+		if (!(await isBadgeOwner(badgeId, user.id))) {
+			return c.json({ error: "Badge not found" }, 404);
+		}
+
 		// 🚨 **A rung a Work still gates on cannot be deleted out from under it.** The row
 		// would name a Badge that no longer exists, and nobody could open that Work; the
-		// creator moves the gate first, deliberately.
+		// creator moves the gate first, deliberately. The count covers every owner's Works,
+		// because the Badge belongs to all of them.
 		const [gated] = await db
 			.select({ count: sql<number>`count(*)::int` })
 			.from(works)
 			.where(
-				and(
-					eq(works.creatorId, user.id),
-					sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${works.access}) AS g WHERE (g->>'badgeId')::int = ${badgeId})`,
-				),
+				sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${works.access}) AS g WHERE (g->>'badgeId')::int = ${badgeId})`,
 			);
 		const inUse = Number(gated?.count ?? 0);
 		if (inUse > 0) {
@@ -2175,7 +2250,7 @@ const subscriptionRoutes = new Hono()
 
 		const deleted = await db
 			.delete(badges)
-			.where(and(eq(badges.id, Number(id)), eq(badges.creatorId, user.id)))
+			.where(eq(badges.id, badgeId))
 			.returning({ id: badges.id, artKey: badges.artKey });
 
 		if (deleted.length === 0) return c.json({ error: "Badge not found" }, 404);
@@ -2184,6 +2259,732 @@ const subscriptionRoutes = new Hono()
 		// pointing at an object we already destroyed renders a broken badge forever.
 		if (deleted[0].artKey) await storage.delete(deleted[0].artKey).catch(() => {});
 		return c.body(null, 204);
+	})
+
+	// ── Collaborators ─────────────────────────────────────────────────────────
+	//
+	// A Badge's owner set is its publisher plus every accepted row below. Invitations
+	// stay pending until the invited creator accepts, so the Badge does not appear on
+	// their page (or in their ladder) before they have agreed to co-own it.
+
+	.post(
+		"/badges/:id/collaborators",
+		requireAuth,
+		zValidator("json", z.object({ did: z.string().min(1).max(2048) }).strict()),
+		async (c) => {
+			const user = c.get("user");
+			const badgeId = Number(c.req.param("id"));
+			const { did } = c.req.valid("json");
+
+			if (!(await isBadgeOwner(badgeId, user.id))) {
+				return c.json({ error: "Badge not found" }, 404);
+			}
+			const [badge] = await db
+				.select({ id: badges.id, label: badges.label })
+				.from(badges)
+				.where(eq(badges.id, badgeId))
+				.limit(1);
+			if (!badge) return c.json({ error: "Badge not found" }, 404);
+
+			const [target] = await db
+				.select({
+					id: users.id,
+					handle: users.atprotoHandle,
+					displayName: users.displayName,
+					creatorMode: users.creatorMode,
+				})
+				.from(users)
+				.where(
+					and(
+						eq(users.atprotoDid, did),
+						notSuspendedAccount(users.id),
+						notBlockedBy(user.id, users.id),
+					),
+				)
+				.limit(1);
+			if (!target) return c.json({ error: "That account cannot be invited." }, 404);
+			if (target.id === user.id) {
+				return c.json({ error: "You already own this Badge." }, 400);
+			}
+			if (!target.creatorMode) {
+				return c.json({ error: "That account is not a creator yet." }, 400);
+			}
+
+			const [existing] = await db
+				.select()
+				.from(badgeCollaborators)
+				.where(
+					and(eq(badgeCollaborators.badgeId, badgeId), eq(badgeCollaborators.creatorId, target.id)),
+				)
+				.limit(1);
+			if (existing?.status === "accepted") {
+				return c.json({ error: "That creator already owns this Badge." }, 409);
+			}
+			if (existing?.status === "pending") {
+				return c.json({ error: "That creator has already been invited." }, 409);
+			}
+
+			const [row] = existing
+				? await db
+						.update(badgeCollaborators)
+						.set({
+							status: "pending",
+							invitedById: user.id,
+							respondedAt: null,
+							createdAt: new Date(),
+						})
+						.where(eq(badgeCollaborators.id, existing.id))
+						.returning()
+				: await db
+						.insert(badgeCollaborators)
+						.values({
+							badgeId,
+							creatorId: target.id,
+							invitedById: user.id,
+							status: "pending",
+						})
+						.returning();
+
+			await notify({
+				userId: target.id,
+				category: "activity",
+				kind: "collab_invite",
+				title: `${user.displayName || user.handle} invited you to co-own ${badge.label}`,
+				body: "Both of you can edit it, each of you can leave, and its support is split evenly.",
+				linkPath: "/studio/settings?tab=collabs",
+				dedupeKey: `collab-invite:${badgeId}:${target.id}:${row.createdAt.getTime()}`,
+			});
+
+			return c.json(
+				{
+					collaborator: {
+						id: row.id,
+						creatorId: target.id,
+						status: row.status,
+						handle: target.handle,
+						displayName: target.displayName,
+					},
+				},
+				201,
+			);
+		},
+	)
+
+	.get("/badges/:id/collaborators", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("id"));
+
+		if (!(await isBadgeOwner(badgeId, user.id))) {
+			return c.json({ error: "Badge not found" }, 404);
+		}
+		const [badge] = await db
+			.select({ creatorId: badges.creatorId, label: badges.label })
+			.from(badges)
+			.where(eq(badges.id, badgeId))
+			.limit(1);
+		if (!badge) return c.json({ error: "Badge not found" }, 404);
+
+		const [publisher] = await db
+			.select({
+				id: users.id,
+				handle: users.atprotoHandle,
+				displayName: users.displayName,
+				avatar: users.avatar,
+			})
+			.from(users)
+			.where(eq(users.id, badge.creatorId))
+			.limit(1);
+
+		const collaborators = await db
+			.select({
+				id: badgeCollaborators.id,
+				creatorId: badgeCollaborators.creatorId,
+				status: badgeCollaborators.status,
+				createdAt: badgeCollaborators.createdAt,
+				did: users.atprotoDid,
+				handle: users.atprotoHandle,
+				displayName: users.displayName,
+				avatar: users.avatar,
+			})
+			.from(badgeCollaborators)
+			.innerJoin(users, eq(users.id, badgeCollaborators.creatorId))
+			.where(eq(badgeCollaborators.badgeId, badgeId))
+			.orderBy(badgeCollaborators.createdAt, badgeCollaborators.id);
+
+		const [handover] = await db
+			.select({
+				id: badgePublisherHandovers.id,
+				toCreatorId: badgePublisherHandovers.toCreatorId,
+				handle: users.atprotoHandle,
+				displayName: users.displayName,
+			})
+			.from(badgePublisherHandovers)
+			.innerJoin(users, eq(users.id, badgePublisherHandovers.toCreatorId))
+			.where(
+				and(
+					eq(badgePublisherHandovers.badgeId, badgeId),
+					eq(badgePublisherHandovers.status, "pending"),
+				),
+			)
+			.limit(1);
+
+		return c.json({
+			publisher: publisher
+				? {
+						id: publisher.id,
+						handle: publisher.handle,
+						displayName: publisher.displayName,
+						avatar: publisher.avatar || null,
+					}
+				: null,
+			collaborators: collaborators.map((row) => ({
+				id: row.id,
+				creatorId: row.creatorId,
+				status: row.status,
+				createdAt: row.createdAt,
+				did: row.did,
+				handle: row.handle,
+				displayName: row.displayName,
+				avatar: row.avatar || null,
+			})),
+			pendingHandover: handover ?? null,
+		});
+	})
+
+	.post("/badges/:id/collaborators/accept", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("id"));
+
+		const [row] = await db
+			.select({
+				id: badgeCollaborators.id,
+				invitedById: badgeCollaborators.invitedById,
+			})
+			.from(badgeCollaborators)
+			.where(
+				and(
+					eq(badgeCollaborators.badgeId, badgeId),
+					eq(badgeCollaborators.creatorId, user.id),
+					eq(badgeCollaborators.status, "pending"),
+				),
+			)
+			.limit(1);
+		if (!row) return c.json({ error: "Invitation not found" }, 404);
+
+		await db
+			.update(badgeCollaborators)
+			.set({ status: "accepted", respondedAt: new Date() })
+			.where(eq(badgeCollaborators.id, row.id));
+
+		const [badge] = await db
+			.select({ label: badges.label })
+			.from(badges)
+			.where(eq(badges.id, badgeId))
+			.limit(1);
+		if (row.invitedById && badge) {
+			await notify({
+				userId: row.invitedById,
+				category: "activity",
+				kind: "collab_accepted",
+				title: `${user.displayName || user.handle} accepted your ${badge.label} collaboration`,
+				body: "The Badge now appears on both of your pages, and its support is split evenly.",
+				linkPath: `/@${user.handle}?tab=badges`,
+				dedupeKey: `collab-accepted:${row.id}`,
+			});
+		}
+
+		return c.json({ accepted: true });
+	})
+
+	.post("/badges/:id/collaborators/decline", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("id"));
+
+		const [row] = await db
+			.select({
+				id: badgeCollaborators.id,
+				invitedById: badgeCollaborators.invitedById,
+			})
+			.from(badgeCollaborators)
+			.where(
+				and(
+					eq(badgeCollaborators.badgeId, badgeId),
+					eq(badgeCollaborators.creatorId, user.id),
+					eq(badgeCollaborators.status, "pending"),
+				),
+			)
+			.limit(1);
+		if (!row) return c.json({ error: "Invitation not found" }, 404);
+
+		await db
+			.update(badgeCollaborators)
+			.set({ status: "declined", respondedAt: new Date() })
+			.where(eq(badgeCollaborators.id, row.id));
+
+		const [badge] = await db
+			.select({ label: badges.label })
+			.from(badges)
+			.where(eq(badges.id, badgeId))
+			.limit(1);
+		if (row.invitedById && badge) {
+			await notify({
+				userId: row.invitedById,
+				category: "activity",
+				kind: "collab_declined",
+				title: `${user.displayName || user.handle} declined the ${badge.label} collaboration`,
+				body: "The Badge stays with its current owners. You can send another invitation later.",
+				linkPath: "/studio/settings?tab=collabs",
+				dedupeKey: `collab-declined:${row.id}:${Date.now()}`,
+			});
+		}
+
+		return c.json({ declined: true });
+	})
+
+	.delete("/badges/:id/collaborators/:creatorId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("id"));
+		const creatorId = Number(c.req.param("creatorId"));
+
+		const [badge] = await db
+			.select({
+				creatorId: badges.creatorId,
+				threshold: badges.threshold,
+				artKey: badges.artKey,
+			})
+			.from(badges)
+			.where(eq(badges.id, badgeId))
+			.limit(1);
+		if (!badge) return c.json({ error: "Badge not found" }, 404);
+
+		const [row] = await db
+			.select()
+			.from(badgeCollaborators)
+			.where(
+				and(eq(badgeCollaborators.badgeId, badgeId), eq(badgeCollaborators.creatorId, creatorId)),
+			)
+			.limit(1);
+		if (!row) return c.json({ error: "Collaborator not found" }, 404);
+
+		const isSelf = creatorId === user.id;
+		if (!(await isBadgeOwner(badgeId, user.id))) {
+			return c.json({ error: "Badge not found" }, 404);
+		}
+
+		// A pending invitation can be withdrawn by an owner, or declined by the invitee.
+		// It has not made anyone an owner yet, so it is not a "removal".
+		if (row.status === "pending") {
+			await db
+				.update(badgeCollaborators)
+				.set({ status: "declined", respondedAt: new Date() })
+				.where(eq(badgeCollaborators.id, row.id));
+			return c.body(null, 204);
+		}
+
+		// An accepted collaborator can remove only themselves. The publisher cannot remove
+		// a co-owner, and a co-owner cannot remove the publisher or another collaborator.
+		if (!isSelf) {
+			return c.json({ error: "Each creator can only remove themselves." }, 403);
+		}
+
+		// A leaver's Works cannot be left gated on a Badge they no longer own. The same
+		// refusal the delete route gives, scoped to this creator's Works.
+		const [gated] = await db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(works)
+			.where(
+				and(
+					eq(works.creatorId, user.id),
+					sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${works.access}) AS g WHERE (g->>'badgeId')::int = ${badgeId})`,
+				),
+			);
+		if (Number(gated?.count ?? 0) > 0) {
+			const count = Number(gated?.count ?? 0);
+			return c.json(
+				{
+					error:
+						count === 1
+							? "One of your Works is gated at this Badge. Change its gate before leaving."
+							: `${count} of your Works are gated at this Badge. Change their gates before leaving.`,
+					code: "badge_in_use",
+				},
+				409,
+			);
+		}
+
+		if (badge.creatorId !== user.id) {
+			// An ordinary collaborator leaves by removing their accepted row.
+			await db.delete(badgeCollaborators).where(eq(badgeCollaborators.id, row.id));
+			return c.body(null, 204);
+		}
+
+		// The publisher is leaving. Hand the role to the oldest accepted collaborator; if
+		// there is none, this was the last owner and the Badge goes with them.
+		const [next] = await db
+			.select({ id: badgeCollaborators.id, creatorId: badgeCollaborators.creatorId })
+			.from(badgeCollaborators)
+			.where(
+				and(
+					eq(badgeCollaborators.badgeId, badgeId),
+					eq(badgeCollaborators.status, "accepted"),
+					ne(badgeCollaborators.creatorId, user.id),
+				),
+			)
+			.orderBy(badgeCollaborators.createdAt, badgeCollaborators.id)
+			.limit(1);
+
+		if (!next) {
+			await db.delete(badges).where(eq(badges.id, badgeId));
+			if (badge.artKey) await storage.delete(badge.artKey).catch(() => {});
+			return c.body(null, 204);
+		}
+
+		const [conflict] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.creatorId, next.creatorId), eq(badges.threshold, badge.threshold)))
+			.limit(1);
+		if (conflict) {
+			return c.json(
+				{
+					error:
+						"That creator already has a Badge at this amount. Reprice one of the two before handing over the publisher role.",
+					code: "publisher_threshold_conflict",
+				},
+				409,
+			);
+		}
+
+		await db.transaction(async (tx) => {
+			await tx
+				.update(badges)
+				.set({ creatorId: next.creatorId, updatedAt: new Date() })
+				.where(eq(badges.id, badgeId));
+			// The new publisher is the anchor now, so their collaborator row would duplicate
+			// the fact. The leaving publisher is not written back: they are leaving.
+			await tx.delete(badgeCollaborators).where(eq(badgeCollaborators.id, next.id));
+		});
+		return c.body(null, 204);
+	})
+
+	// ── Publisher handover ─────────────────────────────────────────────────────
+	// The publisher is the Badge's billing and art home, not a rank. Moving it is a
+	// two-step consent: the current publisher asks, the target accepts, then the row moves.
+
+	.post(
+		"/badges/:id/publisher",
+		requireAuth,
+		zValidator("json", z.object({ creatorId: z.number().int().positive() }).strict()),
+		async (c) => {
+			const user = c.get("user");
+			const badgeId = Number(c.req.param("id"));
+			const { creatorId } = c.req.valid("json");
+
+			if (!(await isBadgePublisher(badgeId, user.id))) {
+				return c.json({ error: "Badge not found" }, 404);
+			}
+			if (creatorId === user.id) {
+				return c.json({ error: "You are already the publisher." }, 400);
+			}
+
+			const [target] = await db
+				.select({ id: users.id, handle: users.atprotoHandle, displayName: users.displayName })
+				.from(users)
+				.where(eq(users.id, creatorId))
+				.limit(1);
+			if (!target) return c.json({ error: "Creator not found." }, 404);
+
+			const [row] = await db
+				.select({ id: badgeCollaborators.id })
+				.from(badgeCollaborators)
+				.where(
+					and(
+						eq(badgeCollaborators.badgeId, badgeId),
+						eq(badgeCollaborators.creatorId, creatorId),
+						eq(badgeCollaborators.status, "accepted"),
+					),
+				)
+				.limit(1);
+			if (!row) {
+				return c.json({ error: "That creator is not an accepted owner of this Badge." }, 400);
+			}
+
+			const [open] = await db
+				.select({ id: badgePublisherHandovers.id })
+				.from(badgePublisherHandovers)
+				.where(
+					and(
+						eq(badgePublisherHandovers.badgeId, badgeId),
+						eq(badgePublisherHandovers.status, "pending"),
+					),
+				)
+				.limit(1);
+			if (open) {
+				return c.json({ error: "A publisher change is already waiting." }, 409);
+			}
+
+			const [badge] = await db
+				.select({ label: badges.label })
+				.from(badges)
+				.where(eq(badges.id, badgeId))
+				.limit(1);
+			if (!badge) return c.json({ error: "Badge not found" }, 404);
+
+			const [handover] = await db
+				.insert(badgePublisherHandovers)
+				.values({
+					badgeId,
+					fromCreatorId: user.id,
+					toCreatorId: creatorId,
+					status: "pending",
+				})
+				.returning();
+
+			await notify({
+				userId: creatorId,
+				category: "activity",
+				kind: "publisher_handover",
+				title: `${user.displayName || user.handle} wants to make you the publisher of ${badge.label}`,
+				body: "The publisher holds the Badge's billing and art home. Your share, editing rights and the split do not change.",
+				linkPath: "/studio/settings?tab=collabs",
+				dedupeKey: `publisher-handover:${handover.id}`,
+			});
+
+			return c.json(
+				{
+					handover: {
+						id: handover.id,
+						toCreatorId: creatorId,
+						status: handover.status,
+					},
+				},
+				201,
+			);
+		},
+	)
+
+	.post("/badges/:id/publisher/accept", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("id"));
+
+		const [handover] = await db
+			.select()
+			.from(badgePublisherHandovers)
+			.where(
+				and(
+					eq(badgePublisherHandovers.badgeId, badgeId),
+					eq(badgePublisherHandovers.toCreatorId, user.id),
+					eq(badgePublisherHandovers.status, "pending"),
+				),
+			)
+			.limit(1);
+		if (!handover) return c.json({ error: "Publisher change not found" }, 404);
+
+		const [badge] = await db
+			.select({
+				threshold: badges.threshold,
+				label: badges.label,
+			})
+			.from(badges)
+			.where(eq(badges.id, badgeId))
+			.limit(1);
+		if (!badge) return c.json({ error: "Badge not found" }, 404);
+
+		const [targetRow] = await db
+			.select({ id: badgeCollaborators.id })
+			.from(badgeCollaborators)
+			.where(
+				and(
+					eq(badgeCollaborators.badgeId, badgeId),
+					eq(badgeCollaborators.creatorId, user.id),
+					eq(badgeCollaborators.status, "accepted"),
+				),
+			)
+			.limit(1);
+		if (!targetRow) {
+			return c.json({ error: "You are not an accepted owner of this Badge." }, 400);
+		}
+
+		const [conflict] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.creatorId, user.id), eq(badges.threshold, badge.threshold)))
+			.limit(1);
+		if (conflict) {
+			return c.json(
+				{
+					error:
+						"You already have a Badge at this amount. Reprice one of the two before becoming the publisher.",
+					code: "publisher_threshold_conflict",
+				},
+				409,
+			);
+		}
+
+		await db.transaction(async (tx) => {
+			await tx
+				.update(badges)
+				.set({ creatorId: user.id, updatedAt: new Date() })
+				.where(eq(badges.id, badgeId));
+			await tx.delete(badgeCollaborators).where(eq(badgeCollaborators.id, targetRow.id));
+			// The old publisher stays an owner as an accepted collaborator.
+			await tx
+				.insert(badgeCollaborators)
+				.values({
+					badgeId,
+					creatorId: handover.fromCreatorId,
+					status: "accepted",
+					invitedById: user.id,
+					respondedAt: new Date(),
+				})
+				.onConflictDoUpdate({
+					target: [badgeCollaborators.badgeId, badgeCollaborators.creatorId],
+					set: { status: "accepted", respondedAt: new Date() },
+				});
+			await tx
+				.update(badgePublisherHandovers)
+				.set({ status: "accepted", respondedAt: new Date() })
+				.where(eq(badgePublisherHandovers.id, handover.id));
+		});
+
+		await notify({
+			userId: handover.fromCreatorId,
+			category: "activity",
+			kind: "publisher_handover_accepted",
+			title: `${user.displayName || user.handle} accepted the publisher role for ${badge.label}`,
+			body: "The Badge's billing and art home has moved. Ownership, editing and the split are unchanged.",
+			linkPath: "/studio/settings?tab=collabs",
+			dedupeKey: `publisher-handover-accepted:${handover.id}`,
+		});
+
+		return c.json({ publisher: { id: user.id } });
+	})
+
+	.post("/badges/:id/publisher/decline", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("id"));
+
+		const [handover] = await db
+			.select()
+			.from(badgePublisherHandovers)
+			.where(
+				and(
+					eq(badgePublisherHandovers.badgeId, badgeId),
+					eq(badgePublisherHandovers.toCreatorId, user.id),
+					eq(badgePublisherHandovers.status, "pending"),
+				),
+			)
+			.limit(1);
+		if (!handover) return c.json({ error: "Publisher change not found" }, 404);
+
+		await db
+			.update(badgePublisherHandovers)
+			.set({ status: "declined", respondedAt: new Date() })
+			.where(eq(badgePublisherHandovers.id, handover.id));
+
+		const [badge] = await db
+			.select({ label: badges.label })
+			.from(badges)
+			.where(eq(badges.id, badgeId))
+			.limit(1);
+		await notify({
+			userId: handover.fromCreatorId,
+			category: "activity",
+			kind: "publisher_handover_declined",
+			title: `${user.displayName || user.handle} declined the publisher role for ${badge?.label ?? "your Badge"}`,
+			body: "The Badge stays as it is. You can ask another owner later.",
+			linkPath: "/studio/settings?tab=collabs",
+			dedupeKey: `publisher-handover-declined:${handover.id}`,
+		});
+
+		return c.json({ declined: true });
+	})
+
+	.delete("/badges/:id/publisher", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("id"));
+
+		if (!(await isBadgePublisher(badgeId, user.id))) {
+			return c.json({ error: "Badge not found" }, 404);
+		}
+		await db
+			.update(badgePublisherHandovers)
+			.set({ status: "canceled", respondedAt: new Date() })
+			.where(
+				and(
+					eq(badgePublisherHandovers.badgeId, badgeId),
+					eq(badgePublisherHandovers.status, "pending"),
+				),
+			);
+		return c.body(null, 204);
+	})
+
+	// ── The invitee's side ────────────────────────────────────────────────────
+	.get("/collaborations", requireAuth, async (c) => {
+		const user = c.get("user");
+
+		const invites = await db
+			.select({
+				collaborator: badgeCollaborators,
+				badge: badges,
+				inviterHandle: users.atprotoHandle,
+				inviterDisplayName: users.displayName,
+			})
+			.from(badgeCollaborators)
+			.innerJoin(badges, eq(badges.id, badgeCollaborators.badgeId))
+			.leftJoin(users, eq(users.id, badgeCollaborators.invitedById))
+			.where(
+				and(eq(badgeCollaborators.creatorId, user.id), eq(badgeCollaborators.status, "pending")),
+			);
+
+		const handovers = await db
+			.select({
+				handover: badgePublisherHandovers,
+				badge: badges,
+				fromHandle: users.atprotoHandle,
+				fromDisplayName: users.displayName,
+			})
+			.from(badgePublisherHandovers)
+			.innerJoin(badges, eq(badges.id, badgePublisherHandovers.badgeId))
+			.innerJoin(users, eq(users.id, badgePublisherHandovers.fromCreatorId))
+			.where(
+				and(
+					eq(badgePublisherHandovers.toCreatorId, user.id),
+					eq(badgePublisherHandovers.status, "pending"),
+				),
+			);
+
+		const badgeIds = [
+			...new Set([...invites.map((row) => row.badge.id), ...handovers.map((row) => row.badge.id)]),
+		];
+		const owners = await badgeOwnerProfiles(badgeIds, user.id);
+
+		return c.json({
+			invites: invites.map((row) => ({
+				id: row.collaborator.id,
+				createdAt: row.collaborator.createdAt,
+				badge: {
+					...publicBadge(row.badge),
+					owners: owners.get(row.badge.id) ?? [],
+				},
+				inviter: {
+					handle: row.inviterHandle,
+					displayName: row.inviterDisplayName,
+				},
+			})),
+			handovers: handovers.map((row) => ({
+				id: row.handover.id,
+				createdAt: row.handover.createdAt,
+				badge: {
+					...publicBadge(row.badge),
+					owners: owners.get(row.badge.id) ?? [],
+				},
+				from: {
+					handle: row.fromHandle,
+					displayName: row.fromDisplayName,
+				},
+			})),
+		});
 	})
 
 	// ── Badge art ───────────────────────────────────────────────────────────────
@@ -2204,11 +3005,10 @@ const subscriptionRoutes = new Hono()
 		const user = c.get("user");
 		const badgeId = Number(c.req.param("id"));
 
-		const [badge] = await db
-			.select()
-			.from(badges)
-			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
-			.limit(1);
+		if (!(await isBadgeOwner(badgeId, user.id))) {
+			return c.json({ error: "Badge not found" }, 404);
+		}
+		const [badge] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
 		if (!badge) return c.json({ error: "Badge not found" }, 404);
 
 		const form = await c.req.formData();
@@ -2290,6 +3090,9 @@ const subscriptionRoutes = new Hono()
 	.delete("/badges/:id/art", requireAuth, async (c) => {
 		const user = c.get("user");
 		const badgeId = Number(c.req.param("id"));
+		if (!(await isBadgeOwner(badgeId, user.id))) {
+			return c.json({ error: "Badge not found" }, 404);
+		}
 		const [updated] = await db
 			.update(badges)
 			.set({
@@ -2301,7 +3104,7 @@ const subscriptionRoutes = new Hono()
 				artEmblemOffsetY: null,
 				updatedAt: new Date(),
 			})
-			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+			.where(eq(badges.id, badgeId))
 			.returning({ artKey: badges.artKey });
 		if (!updated) return c.json({ error: "Badge not found" }, 404);
 		// The credit outlives neither the art nor the composition it described.
@@ -2328,6 +3131,16 @@ const subscriptionRoutes = new Hono()
 		const user = c.get("user");
 		const badgeId = Number(c.req.param("id"));
 
+		if (!(await isBadgeOwner(badgeId, user.id))) {
+			return c.json({ error: "Badge not found" }, 404);
+		}
+		const [badge] = await db
+			.select({ creatorId: badges.creatorId })
+			.from(badges)
+			.where(eq(badges.id, badgeId))
+			.limit(1);
+		if (!badge) return c.json({ error: "Badge not found" }, 404);
+
 		const body = await c.req.json().catch(() => null);
 		if (
 			typeof body !== "object" ||
@@ -2344,7 +3157,7 @@ const subscriptionRoutes = new Hono()
 		}
 
 		const outcome = await composeBadgeArt({
-			creatorId: user.id,
+			creatorId: badge.creatorId,
 			badgeId,
 			icon: noun as NounIcon,
 			placement,
@@ -2410,8 +3223,18 @@ const subscriptionRoutes = new Hono()
 			const badgeId = Number(c.req.param("id"));
 			const { shape, fieldColor, edgeColor } = c.req.valid("json");
 
+			if (!(await isBadgeOwner(badgeId, user.id))) {
+				return c.json({ error: "Badge not found" }, 404);
+			}
+			const [badge] = await db
+				.select({ creatorId: badges.creatorId })
+				.from(badges)
+				.where(eq(badges.id, badgeId))
+				.limit(1);
+			if (!badge) return c.json({ error: "Badge not found" }, 404);
+
 			const outcome = await recomposeBadgeArt({
-				creatorId: user.id,
+				creatorId: badge.creatorId,
 				badgeId,
 				shape,
 				fieldColor,
@@ -2463,10 +3286,13 @@ const subscriptionRoutes = new Hono()
 		const user = c.get("user");
 		const badgeId = Number(c.req.param("id"));
 
+		if (!(await isBadgeOwner(badgeId, user.id))) {
+			return c.json({ error: "Badge not found" }, 404);
+		}
 		const [badge] = await db
 			.select({ id: badges.id, perks: badges.perks })
 			.from(badges)
-			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+			.where(eq(badges.id, badgeId))
 			.limit(1);
 		// Same answer the sibling routes give a non-owner: indistinguishable from a missing
 		// badge, because confirming somebody else's badge exists is itself a disclosure.
@@ -2496,10 +3322,13 @@ const subscriptionRoutes = new Hono()
 			const badgeId = Number(c.req.param("id"));
 			const { perks } = c.req.valid("json");
 
+			if (!(await isBadgeOwner(badgeId, user.id))) {
+				return c.json({ error: "Badge not found" }, 404);
+			}
 			const [badge] = await db
 				.select({ id: badges.id, perks: badges.perks })
 				.from(badges)
-				.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+				.where(eq(badges.id, badgeId))
 				.limit(1);
 			if (!badge) return c.json({ error: "Badge not found" }, 404);
 
@@ -2777,18 +3606,23 @@ const subscriptionRoutes = new Hono()
 				: undefined);
 		if (!creator) return c.json({ error: "Creator not found" }, 404);
 
-		// Get the creator's Badge ladder, with each rung's artist credit beside it — the
-		// flip a supporter reads on the Badge's detail view (the public ladder route and
-		// this one both carry it, because a profile's Badge tab and a Works gate table
-		// resolve the same rows).
+		// Get the creator's Badge ladder — every rung they publish, plus every Badge they
+		// co-own — with each rung's artist credit beside it. The flip a supporter reads on
+		// the Badge's detail view; the public ladder route and this one both carry it,
+		// because a profile's Badge tab and a Works gate table resolve the same rows.
 		const ladder = await db
 			.select({ badge: badges, provenance: badgeArtProvenance })
 			.from(badges)
 			.leftJoin(badgeArtProvenance, eq(badgeArtProvenance.badgeId, badges.id))
-			.where(eq(badges.creatorId, creator.id))
+			.where(badgeOwnedBy(creator.id))
 			.orderBy(badges.sortOrder, badges.threshold);
+		const owners = await badgeOwnerProfiles(
+			ladder.map(({ badge }) => badge.id),
+			currentUserId,
+		);
 		const ladderPublic = ladder.map(({ badge, provenance }) => ({
 			...publicBadge(badge),
+			owners: owners.get(badge.id) ?? [],
 			artistCredit: provenance
 				? {
 						artistName: provenance.artistName,
@@ -2801,46 +3635,42 @@ const subscriptionRoutes = new Hono()
 
 		if (!currentUserId) {
 			return c.json({
+				creatorId: creator.id,
 				badge: "free",
 				badgeAmount: "0.00",
 				badges: ladderPublic,
 				unlockedBadges: [],
+				heldByPublisher: {},
 			});
 		}
 
-		// What the user gives Anthers (point-in-time) and what they hold from this creator.
+		// What the user gives Anthers (point-in-time) and what they give each publisher.
+		// The display map is keyed by the Badge's publisher, not by every owner: a shared
+		// Badge's support line names the publisher, and the co-owner's page shows it in its
+		// own section rather than claiming the whole line as their own support.
 		const anthersSupport = await heldAnthersBadgeAmount(currentUserId);
 		const badge = heldBadgeName(anthersSupport);
 		const cycle = currentCycleKey();
-		const [holding] = await db
-			.select({ threshold: badges.threshold })
-			.from(userBadges)
-			.innerJoin(badges, eq(badges.id, userBadges.badgeId))
-			.where(
-				and(
-					eq(userBadges.userId, currentUserId),
-					eq(badges.creatorId, creator.id),
-					eq(userBadges.billingCycle, cycle),
-				),
-			)
-			.limit(1);
+		const heldByPublisher = await heldAmountsByPublisher(currentUserId, cycle);
+		const badgeAmount = heldByPublisher[creator.id] ?? "0.00";
 
-		const badgeAmount = holding?.threshold ?? "0.00";
-
-		// Every Badge is a dollar threshold against what the user gives its issuer this
+		// Every Badge is a dollar threshold against what the user gives its publisher this
 		// cycle — same comparison, and no conversion between units anywhere: the holding's
 		// dollars are the Badge's threshold by construction, which is what removed the
 		// reinterpretation hazard the retired `gate_type` enum used to encode.
 		const given = supportAmount(badgeAmount);
 		const unlockedBadges = ladder
+			.filter((b) => b.badge.creatorId === creator.id)
 			.filter((b) => amountMeets(given, Number(b.badge.threshold)))
 			.map((b) => b.badge.id);
 
 		return c.json({
+			creatorId: creator.id,
 			badge,
 			badgeAmount,
 			badges: ladderPublic,
 			unlockedBadges,
+			heldByPublisher,
 		});
 	});
 

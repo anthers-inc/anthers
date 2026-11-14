@@ -30,6 +30,7 @@ import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type {
 	AccountResponse,
 	BadgeHoldingsResponse,
+	BadgeOwner,
 	CreatorBadge,
 } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
@@ -53,6 +54,7 @@ interface CheckoutState {
 	anthersSupport: number;
 	directed: { creatorId: number; amount: number }[];
 	badgeName: string;
+	owners?: BadgeOwner[];
 	preview: SubscriptionPreview;
 }
 
@@ -71,25 +73,38 @@ function BadgeCard({
 	busy,
 	onAction,
 	onEdit,
+	profileCreatorId,
+	shared,
+	included,
 }: {
 	rung: CreatorBadge;
 	/** The rung's display position, for the fallback mark. */
 	index: number;
 	/** Whether this is the rung the reader's monthly amount currently holds. */
 	current: boolean;
-	/** What the reader gives this creator each month, for the direction. */
+	/** What the reader gives this Badge's publisher each month, for the direction. */
 	held: number;
 	busy: boolean;
 	onAction?: (action: BadgeAction) => void;
 	/** The creator's page only — the pencil that opens the Badge Maker. */
 	onEdit?: () => void;
+	/** The profile being viewed, so the card names the owners who are not them. */
+	profileCreatorId?: number;
+	/** More than one owner — the card wears the collab mark and names the others. */
+	shared?: boolean;
+	/** A Collab Badge the reader's existing support already reaches; no action to take. */
+	included?: boolean;
 }) {
 	const target = Number(rung.threshold);
-	const action: BadgeAction = current
-		? "cancel"
-		: held === 0 || target > held
-			? "upgrade"
-			: "downgrade";
+	const action: BadgeAction = included
+		? "upgrade"
+		: current
+			? "cancel"
+			: held === 0 || target > held
+				? "upgrade"
+				: "downgrade";
+	const otherOwners = (rung.owners ?? []).filter((owner) => owner.id !== profileCreatorId);
+	const otherNames = otherOwners.map((owner) => owner.displayName || `@${owner.handle}`).join(", ");
 
 	return (
 		<article
@@ -116,6 +131,7 @@ function BadgeCard({
 						index={index}
 						label={`${rung.label} badge`}
 						art={rung}
+						owners={rung.owners}
 						size="h-16 w-16"
 					/>
 					{/* The artist credit the supporter reads on the Badge's back, now on the
@@ -142,11 +158,21 @@ function BadgeCard({
 					)}
 				</div>
 				<div className="min-w-0 flex-1">
-					<h4 className="text-xl font-bold leading-tight">{rung.label}</h4>
+					<div className="flex flex-wrap items-center gap-2">
+						<h4 className="text-xl font-bold leading-tight">{rung.label}</h4>
+						{shared && (
+							<span className="badge badge-sm badge-outline border-primary/40 text-primary">
+								Collab
+							</span>
+						)}
+					</div>
 					<p className="mt-1 text-2xl font-semibold leading-none">
 						{amountLabel(rung.threshold)}
 						<span className="ml-0.5 text-sm font-normal text-base-content/50">/mo</span>
 					</p>
+					{shared && otherNames && (
+						<p className="mt-1 text-xs text-base-content/50">with {otherNames}</p>
+					)}
 				</div>
 				{onEdit && (
 					<button
@@ -168,7 +194,11 @@ function BadgeCard({
 			)}
 
 			<div className="mt-auto pt-1">
-				{onEdit ? (
+				{included ? (
+					<p className="text-xs text-base-content/45">
+						Included in your support to this Badge's publisher.
+					</p>
+				) : onEdit ? (
 					!rung.hasArt && (
 						// The fallback is a start, not a design to settle for — said where the
 						// creator is scanning their own ladder. The card already draws an emblem,
@@ -203,7 +233,7 @@ function BadgeCard({
 							onClick={() => onAction("upgrade")}
 						>
 							<BoltIcon className="size-4" />
-							{busy ? "Opening…" : "Upgrade"}
+							{busy ? "Opening…" : shared ? "Support" : "Upgrade"}
 						</button>
 					)
 				) : null}
@@ -235,6 +265,8 @@ export default function BadgesTab({
 	canBuy,
 	authenticated,
 	isOwner,
+	profileCreatorId,
+	heldByPublisher,
 	onEdit,
 	onAdd,
 }: {
@@ -247,6 +279,10 @@ export default function BadgesTab({
 	authenticated: boolean;
 	/** The creator's own page, where each card carries its pencil. */
 	isOwner: boolean;
+	/** The profile's creator id; splits their own ladder from the Badges they co-own. */
+	profileCreatorId?: number;
+	/** What the viewer gives each Badge publisher this cycle, by publisher id. */
+	heldByPublisher?: Record<number, string>;
 	onEdit: (badge: CreatorBadge) => void;
 	onAdd: () => void;
 }) {
@@ -257,10 +293,19 @@ export default function BadgesTab({
 	const [error, setError] = useState<string | null>(null);
 
 	const held = supportAmount(heldAmount);
-	const currentId = currentRungId(rungs, unlockedBadges);
+	// A co-owner's page carries two different lists: their own ladder, where one amount
+	// unlocks every rung, and the Badges they co-own but do not publish, where each card's
+	// support belongs to its publisher. Mixing them would make "Current Badge" and
+	// "Upgrade" ambiguous, so the second list gets its own section.
+	const ownRungs =
+		profileCreatorId == null ? rungs : rungs.filter((rung) => rung.creatorId === profileCreatorId);
+	const collabRungs =
+		profileCreatorId == null ? [] : rungs.filter((rung) => rung.creatorId !== profileCreatorId);
+	const currentId = currentRungId(ownRungs, unlockedBadges);
 	// Cheapest first (Parker, 2026-11-06): the display order is the price order, and the
 	// ladder's stored order stays the creator's own arrangement on their side.
-	const ladder = [...rungs].sort((a, b) => Number(a.threshold) - Number(b.threshold));
+	const ladder = [...ownRungs].sort((a, b) => Number(a.threshold) - Number(b.threshold));
+	const collabLadder = [...collabRungs].sort((a, b) => Number(a.threshold) - Number(b.threshold));
 
 	/**
 	 * Every directed amount this account already carries, as the subscription route needs
@@ -308,9 +353,13 @@ export default function BadgesTab({
 			const recurring =
 				me.anthersSupport + nextDirected.reduce((sum, item) => sum + item.amount, 0);
 			const target = Number(rung.threshold);
+			const heldForRung =
+				rung.creatorId === profileCreatorId
+					? held
+					: supportAmount(heldByPublisher?.[rung.creatorId] ?? "0.00");
 			// A raise is charged today in full — the delta when a rung is held, the whole
 			// first month when none is. A decrease or a cancellation waits for the 1st.
-			const chargeNow = action === "upgrade" ? Math.max(0, target - held) : 0;
+			const chargeNow = action === "upgrade" ? Math.max(0, target - heldForRung) : 0;
 			const nextBillingUnix = me.account.currentPeriodEnd
 				? Math.floor(new Date(me.account.currentPeriodEnd).getTime() / 1000)
 				: Math.floor(cycleEnd(currentCycleKey()).getTime() / 1000);
@@ -318,6 +367,7 @@ export default function BadgesTab({
 				anthersSupport: me.anthersSupport,
 				directed: nextDirected,
 				badgeName: action === "cancel" ? `no Badge from ${creatorName}` : rung.label,
+				owners: rung.owners,
 				preview: {
 					isChange: Boolean(me.account.stripeSubscriptionId),
 					recurring: { amount: recurring.toFixed(2), interval: "month" },
@@ -335,7 +385,7 @@ export default function BadgesTab({
 
 	// A visitor on a ladder with nothing on it gets the sentence; the owner gets the add
 	// card, which is the invitation and the empty state in one.
-	if (rungs.length === 0 && !isOwner) {
+	if (ownRungs.length === 0 && collabRungs.length === 0 && !isOwner) {
 		return (
 			<EmptyState
 				title="No Badges configured"
@@ -345,42 +395,82 @@ export default function BadgesTab({
 	}
 
 	return (
-		<div className="space-y-6">
-			<div>
-				<div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-					<div>
-						<h3 className="text-lg font-bold">Badges</h3>
-						<p className="text-sm text-base-content/50">
-							{isOwner
-								? "The monthly levels supporters can give at. Each one clears the Work gates at or below its amount."
-								: `Badges set by ${creatorName}. Choose a level — it renews monthly until you cancel.`}
-						</p>
+		<div className="space-y-8">
+			{error && <p className="text-sm text-error">{error}</p>}
+
+			{(ownRungs.length > 0 || isOwner) && (
+				<div>
+					<div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+						<div>
+							<h3 className="text-lg font-bold">Badges</h3>
+							<p className="text-sm text-base-content/50">
+								{isOwner
+									? "The monthly levels supporters can give at. Each one clears the Work gates at or below its amount."
+									: `Badges set by ${creatorName}. Choose a level — it renews monthly until you cancel.`}
+							</p>
+						</div>
+					</div>
+
+					{/* The same uniform grid every listing surface uses, with room around the
+					    cards for the current outline and its label to sit OUTSIDE the card. */}
+					<div
+						className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-x-4 gap-y-8 px-1.5 py-2"
+						data-testid="badge-grid"
+					>
+						{ladder.map((rung, index) => (
+							<BadgeCard
+								key={rung.id}
+								rung={rung}
+								index={index}
+								current={!isOwner && rung.id === currentId}
+								held={isOwner ? 0 : held}
+								shared={(rung.owners?.length ?? 0) > 1}
+								profileCreatorId={profileCreatorId}
+								busy={busyId === rung.id}
+								onAction={canBuy ? (action) => void act(rung, action) : undefined}
+								onEdit={isOwner ? () => onEdit(rung) : undefined}
+							/>
+						))}
+						{isOwner && <AddBadgeCard onClick={onAdd} />}
 					</div>
 				</div>
+			)}
 
-				{error && <p className="mb-3 text-sm text-error">{error}</p>}
-
-				{/* The same uniform grid every listing surface uses, with room around the
-				    cards for the current outline and its label to sit OUTSIDE the card. */}
-				<div
-					className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-x-4 gap-y-8 px-1.5 py-2"
-					data-testid="badge-grid"
-				>
-					{ladder.map((rung, index) => (
-						<BadgeCard
-							key={rung.id}
-							rung={rung}
-							index={index}
-							current={!isOwner && rung.id === currentId}
-							held={isOwner ? 0 : held}
-							busy={busyId === rung.id}
-							onAction={canBuy ? (action) => void act(rung, action) : undefined}
-							onEdit={isOwner ? () => onEdit(rung) : undefined}
-						/>
-					))}
-					{isOwner && <AddBadgeCard onClick={onAdd} />}
+			{collabLadder.length > 0 && (
+				<div>
+					<div className="mb-3">
+						<h3 className="text-lg font-bold">Collab Badges</h3>
+						<p className="text-sm text-base-content/50">
+							Badges {creatorName} co-owns with another creator. Support is split evenly between the
+							owners.
+						</p>
+					</div>
+					<div
+						className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-x-4 gap-y-8 px-1.5 py-2"
+						data-testid="collab-badge-grid"
+					>
+						{collabLadder.map((rung, index) => {
+							const publisherHeld = supportAmount(heldByPublisher?.[rung.creatorId] ?? "0.00");
+							const included = !isOwner && Number(rung.threshold) <= publisherHeld;
+							return (
+								<BadgeCard
+									key={rung.id}
+									rung={rung}
+									index={index}
+									current={false}
+									held={isOwner ? 0 : publisherHeld}
+									included={included}
+									shared
+									profileCreatorId={profileCreatorId}
+									busy={busyId === rung.id}
+									onAction={canBuy && !included ? (action) => void act(rung, action) : undefined}
+									onEdit={isOwner ? () => onEdit(rung) : undefined}
+								/>
+							);
+						})}
+					</div>
 				</div>
-			</div>
+			)}
 
 			{checkout && (
 				<SubscriptionPaymentModal
@@ -388,6 +478,7 @@ export default function BadgesTab({
 					anthersSupport={checkout.anthersSupport}
 					directed={checkout.directed}
 					badgeName={checkout.badgeName}
+					owners={checkout.owners}
 					preview={checkout.preview}
 					onComplete={() => {
 						setCheckout(null);

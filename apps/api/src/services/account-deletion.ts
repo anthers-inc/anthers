@@ -62,6 +62,8 @@
 import { db } from "@anthers/db/client";
 import {
 	atprotoSessions,
+	badgeCollaborators,
+	badges,
 	comments,
 	posts,
 	purchases,
@@ -474,6 +476,49 @@ export async function eraseAccount(
 		return { erased: false };
 	}
 
+	// Hand every Badge this account publishes to another accepted owner before the account
+	// cascade reaches it. The plan is read here and applied inside the main transaction
+	// below: a handover that committed while the account deletion rolled back would move the
+	// Badge away from a creator who is still here. A Badge with no other accepted owner is a
+	// solo Badge and goes with the account, which is correct. The threshold check skips an
+	// owner who already has a rung at the same amount: `uq_badges_creator_threshold` would
+	// refuse the transfer, and a Badge that cannot move is better deleted with its publisher
+	// than left ownerless.
+	const publishedBadges = await db
+		.select({ id: badges.id, threshold: badges.threshold })
+		.from(badges)
+		.where(eq(badges.creatorId, userId));
+	const badgeTransfers: {
+		badgeId: number;
+		newPublisherId: number;
+		collaboratorRowId: number;
+	}[] = [];
+	for (const badge of publishedBadges) {
+		const candidates = await db
+			.select({ id: badgeCollaborators.id, creatorId: badgeCollaborators.creatorId })
+			.from(badgeCollaborators)
+			.where(
+				and(eq(badgeCollaborators.badgeId, badge.id), eq(badgeCollaborators.status, "accepted")),
+			)
+			.orderBy(badgeCollaborators.createdAt, badgeCollaborators.id);
+		for (const candidate of candidates) {
+			const [conflict] = await db
+				.select({ id: badges.id })
+				.from(badges)
+				.where(
+					and(eq(badges.creatorId, candidate.creatorId), eq(badges.threshold, badge.threshold)),
+				)
+				.limit(1);
+			if (conflict) continue;
+			badgeTransfers.push({
+				badgeId: badge.id,
+				newPublisherId: candidate.creatorId,
+				collaboratorRowId: candidate.id,
+			});
+			break;
+		}
+	}
+
 	const workIds = (
 		await db.select({ id: works.id }).from(works).where(eq(works.creatorId, userId))
 	).map((w) => w.id);
@@ -562,6 +607,20 @@ export async function eraseAccount(
 		// carries this person's live tokens and cascades from nothing at all.
 		if (user.atprotoDid) {
 			await tx.delete(atprotoSessions).where(eq(atprotoSessions.did, user.atprotoDid));
+		}
+
+		// The Badge handover was planned before the transaction; apply it here so a rollback
+		// leaves the publisher where they were. The old publisher is not written back as a
+		// collaborator because they are leaving; the new publisher's row is removed because
+		// `badges.creatorId` now carries that fact.
+		for (const transfer of badgeTransfers) {
+			await tx
+				.update(badges)
+				.set({ creatorId: transfer.newPublisherId })
+				.where(eq(badges.id, transfer.badgeId));
+			await tx
+				.delete(badgeCollaborators)
+				.where(eq(badgeCollaborators.id, transfer.collaboratorRowId));
 		}
 
 		// And the account. Sessions, ATProto tokens, follows, saved items, blocks,
