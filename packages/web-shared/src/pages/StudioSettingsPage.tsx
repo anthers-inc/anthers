@@ -2,10 +2,15 @@
 /**
  * Studio Settings — the creator-operational settings that live on the Studio side of
  * the boundary: what the creator has earned, the Communications table for creator
- * emails, and the account's AT Protocol connection. Account settings (profile, password,
- * email, identity, the become-a-creator toggle) stay on anthers.org/settings, and the
- * Badge Maker is on the creator's own profile, in the Badges tab beside the ladder it
- * edits.
+ * emails, the account's AT Protocol connection, and the collaborations they share.
+ * Account settings (profile, password, email, identity, the become-a-creator toggle)
+ * stay on anthers.org/settings, and the Badge Maker is on the creator's own profile, in
+ * the Badges tab beside the ladder it edits.
+ *
+ * ⭐ **Tabs, because the page outgrew a single column.** The same URL-carried `?tab=`
+ * rule and visited-tab mounting the account settings page uses; the Collabs tab is the
+ * creator home for Badge invitations and publisher handovers, and the place Collab Work
+ * invitations will land when they ship.
  *
  * ⭐ **The signed-in account card at the top is the one account control this page does
  * carry**, because ending the session belongs wherever a person is working: it is the
@@ -25,6 +30,7 @@ import {
 } from "@anthers/shared/creator-emails";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import CollaborationInvites from "../components/account/CollaborationInvites";
 import DiscordCard from "../components/account/DiscordCard";
 import SignedInAccountCard from "../components/account/SignedInAccountCard";
 import { EarningsBasis } from "../components/economics/EarningsBasis";
@@ -468,23 +474,129 @@ function EarningsSection() {
 	);
 }
 
+type StudioSettingsTab = "general" | "earnings" | "communications" | "atproto" | "collabs";
+
+const STUDIO_TABS: { id: StudioSettingsTab; label: string }[] = [
+	{ id: "general", label: "General" },
+	{ id: "earnings", label: "Earnings" },
+	{ id: "communications", label: "Communications" },
+	{ id: "atproto", label: "ATProto" },
+	{ id: "collabs", label: "Collabs" },
+];
+
+function isStudioSettingsTab(value: string | null): value is StudioSettingsTab {
+	return STUDIO_TABS.some((tab) => tab.id === value);
+}
+
 export default function StudioSettingsPage() {
+	const [searchParams, setSearchParams] = useSearchParams();
+	const tabParam = searchParams.get("tab");
+	const publishingOutcome = searchParams.get("publishing");
+	// A return from the publishing-permission flow lands on the tab that carries its
+	// outcome, not on General. The outcome stays in the URL for the section to read.
+	const activeTab: StudioSettingsTab = publishingOutcome
+		? "atproto"
+		: isStudioSettingsTab(tabParam)
+			? tabParam
+			: "general";
+
+	// The same visited-tab rule the account settings page uses: a tab stays mounted so a
+	// switch does not re-run its loads and reflow the page.
+	const [visitedTabs, setVisitedTabs] = useState<Set<StudioSettingsTab>>(
+		() => new Set([activeTab]),
+	);
+	useEffect(() => {
+		setVisitedTabs((prev) => (prev.has(activeTab) ? prev : new Set([...prev, activeTab])));
+	}, [activeTab]);
+
+	const selectTab = useCallback(
+		(id: StudioSettingsTab) => {
+			setSearchParams(
+				(prev) => {
+					const next = new URLSearchParams(prev);
+					next.set("tab", id);
+					// The publishing outcome is the return leg's message, not a permanent
+					// override of the tab bar.
+					next.delete("publishing");
+					return next;
+				},
+				{ replace: true },
+			);
+		},
+		[setSearchParams],
+	);
+
 	return (
-		<div className="max-w-2xl mx-auto px-4 py-8">
+		<div className="max-w-3xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">Creator Settings</h1>
 			<p className="text-sm text-base-content/50 mb-6">
-				What you earn as a creator, what Anthers emails you about, and your ATProto connection.
-				Account settings (profile, email, identity) live on your Anthers account, and the Badge
-				ladder is on your profile.
+				What you earn as a creator, what Anthers emails you about, your ATProto connection, and the
+				collaborations you share. Account settings (profile, email, identity) live on your Anthers
+				account, and the Badge ladder is on your profile.
 			</p>
 
-			<div className="flex flex-col gap-6">
-				<SignedInAccountCard />
-				<DiscordCard />
-				<EarningsSection />
-				<CommunicationsSection />
-				<AtmospherePublishingSection />
+			<div
+				role="tablist"
+				aria-label="Creator settings sections"
+				className="mb-6 flex flex-wrap gap-1 border-b border-base-300"
+			>
+				{STUDIO_TABS.map((tab) => (
+					<button
+						key={tab.id}
+						type="button"
+						role="tab"
+						aria-selected={activeTab === tab.id}
+						className={`-mb-px border-b-2 px-3 py-2 text-sm ${
+							activeTab === tab.id
+								? "border-primary font-medium text-primary"
+								: "border-transparent text-base-content/60 hover:text-base-content"
+						}`}
+						onClick={() => selectTab(tab.id)}
+					>
+						{tab.label}
+					</button>
+				))}
 			</div>
+
+			{visitedTabs.has("general") && (
+				<div hidden={activeTab !== "general"} className="flex flex-col gap-6">
+					<SignedInAccountCard />
+					<DiscordCard />
+				</div>
+			)}
+
+			{visitedTabs.has("earnings") && (
+				<div hidden={activeTab !== "earnings"}>
+					<EarningsSection />
+				</div>
+			)}
+
+			{visitedTabs.has("communications") && (
+				<div hidden={activeTab !== "communications"}>
+					<CommunicationsSection />
+				</div>
+			)}
+
+			{visitedTabs.has("atproto") && (
+				<div hidden={activeTab !== "atproto"}>
+					<AtmospherePublishingSection />
+				</div>
+			)}
+
+			{visitedTabs.has("collabs") && (
+				<div hidden={activeTab !== "collabs"} className="flex flex-col gap-6">
+					<CollaborationInvites />
+					<div className="card bg-base-200">
+						<div className="card-body">
+							<h3 className="card-title text-lg">Work Collaborations</h3>
+							<p className="text-sm text-base-content/60">
+								Collab Works are not built yet. When they ship, the Works you co-own and the
+								invitations waiting on you will appear here beside your Badge collaborations.
+							</p>
+						</div>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

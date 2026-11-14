@@ -89,6 +89,15 @@ describe("sanitizePostHtml", () => {
 		expect(out).toContain('rel="noopener noreferrer nofollow"');
 	});
 
+	it("preserves the spoiler span and nothing else on it", () => {
+		const out = sanitizePostHtml(
+			'<p><span class="spoiler evil" onclick="alert(1)">hidden</span></p>',
+		);
+		expect(out).toContain('<span class="spoiler">hidden</span>');
+		expect(out).not.toContain("evil");
+		expect(out).not.toContain("onclick");
+	});
+
 	it("passes through empty input", () => {
 		expect(sanitizePostHtml("")).toBe("");
 	});

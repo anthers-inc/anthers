@@ -10,13 +10,14 @@
  * and the editor is the only thing the pencil reveals, rather than a second list of the
  * same rungs standing above the first.
  *
- * ⭐ **Four tabs, because the jobs outgrew one view** (Parker, 2026-10-26, and a fourth on
- * 2026-10-27): Basics (name, short description, monthly amount), Emblem (shape, background,
- * and the emblem itself), Perks (what a supporter gets), and Unlocks (the Works this Badge
- * opens). The art editor used to sit above the fields as one long column, which made the
- * dialog scroll for reasons a creator could not see and put the perks table below the fold;
- * the Works list then sat under the perks table, where it was the one thing on the tab that
- * the creator did not type.
+ * ⭐ **Five tabs, because the jobs outgrew one view** (Parker, 2026-10-26, and a fourth on
+ * 2026-10-27, a fifth with Collab Badges): Basics (name, short description, monthly amount),
+ * Emblem (shape, background, and the emblem itself), Perks (what a supporter gets), Unlocks
+ * (the Works this Badge opens), and Collaborators (the other creators who own it). The art
+ * editor used to sit above the fields as one long column, which made the dialog scroll for
+ * reasons a creator could not see and put the perks table below the fold; the Works list
+ * then sat under the perks table, where it was the one thing on the tab that the creator did
+ * not type.
  *
  * ⭐ **A rung may be saved with nothing in its perks table and no Work unlocked.** It is
  * then a support payment, which is what an empty rung has always meant to a supporter;
@@ -67,6 +68,7 @@ import { TypeIcon } from "../content/works";
 import { BadgeMark } from "../economics/BadgeMark";
 import { CreatorBadgeMark, fallbackBadgeDesign } from "../economics/CreatorBadgeMark";
 import { TakeHome } from "../economics/TakeHome";
+import BadgeCollaboratorsPanel from "./BadgeCollaboratorsPanel";
 import { type EmblemPlacement, NounEmblemPicker } from "./NounEmblemPicker";
 
 /** Coerce to a monthly amount above zero — thresholds are dollars, cents included. */
@@ -84,6 +86,7 @@ const TABS = [
 	{ id: "emblem", label: "Emblem" },
 	{ id: "perks", label: "Perks" },
 	{ id: "unlocks", label: "Unlocks" },
+	{ id: "collaborators", label: "Collaborators" },
 ] as const;
 
 type Tab = (typeof TABS)[number]["id"];
@@ -346,6 +349,12 @@ interface GatedWork {
 	/** A resolved image URL, or empty for a Work with none. */
 	thumbnail: string;
 	imageAlt: string;
+	/**
+	 * Whether this caller owns the Work and can change its gate. A Collab Badge can open
+	 * another owner's Work; it is listed so the group sees it, but only its own creator can
+	 * remove it from the Badge.
+	 */
+	editable?: boolean;
 }
 
 /**
@@ -413,47 +422,60 @@ function GatedWorks({
 	} else {
 		body = (
 			<ul className="divide-y divide-base-300">
-				{works.map((work) => (
-					<li key={work.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
-						{/* The thumbnail is the door to the Work, in the place the "Open in Studio"
-						    button stood. A Work with no image keeps the same door around its own
-						    type's icon, so the row never loses the way in. */}
-						<a
-							href={studioUrl(`/works/${work.publicId}/edit`)}
-							className="h-10 w-10 shrink-0 overflow-hidden rounded border border-base-300"
-							target="_blank"
-							rel="noreferrer"
-							title={`Open ${work.title} in Studio`}
-							aria-label={`Open ${work.title} in Studio`}
-						>
-							{work.thumbnail ? (
-								<img
-									src={work.thumbnail}
-									alt={work.imageAlt}
-									className="h-full w-full object-cover"
-								/>
-							) : (
-								<div className="flex h-full w-full items-center justify-center bg-base-200 text-base-content/40">
-									<TypeIcon type={work.type} className="h-4 w-4" />
-								</div>
-							)}
-						</a>
-						<div className="min-w-0 flex-1">
-							<div className="truncate text-sm font-medium">{work.title}</div>
-							<div className="text-[11px] text-base-content/50">
-								{work.type} · {work.visibility === "released" ? "Released" : "Not released"}
-							</div>
+				{works.map((work) => {
+					const thumb = work.thumbnail ? (
+						<img src={work.thumbnail} alt={work.imageAlt} className="h-full w-full object-cover" />
+					) : (
+						<div className="flex h-full w-full items-center justify-center bg-base-200 text-base-content/40">
+							<TypeIcon type={work.type} className="h-4 w-4" />
 						</div>
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs text-error"
-							onClick={() => onUngate(work)}
-							disabled={busyId === work.id}
-						>
-							{busyId === work.id ? "Removing…" : "Remove from Badge"}
-						</button>
-					</li>
-				))}
+					);
+					return (
+						<li key={work.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+							{/* The thumbnail is the door to the Work, in the place the "Open in Studio"
+							    button stood. A Work with no image keeps the same door around its own
+							    type's icon, so the row never loses the way in. A Work another owner
+							    published is listed but not linked: this caller cannot edit it. */}
+							{work.editable === false ? (
+								<div
+									className="h-10 w-10 shrink-0 overflow-hidden rounded border border-base-300"
+									title={`${work.title} — another owner's Work`}
+								>
+									{thumb}
+								</div>
+							) : (
+								<a
+									href={studioUrl(`/works/${work.publicId}/edit`)}
+									className="h-10 w-10 shrink-0 overflow-hidden rounded border border-base-300"
+									target="_blank"
+									rel="noreferrer"
+									title={`Open ${work.title} in Studio`}
+									aria-label={`Open ${work.title} in Studio`}
+								>
+									{thumb}
+								</a>
+							)}
+							<div className="min-w-0 flex-1">
+								<div className="truncate text-sm font-medium">{work.title}</div>
+								<div className="text-[11px] text-base-content/50">
+									{work.type} · {work.visibility === "released" ? "Released" : "Not released"}
+								</div>
+							</div>
+							{work.editable === false ? (
+								<span className="text-[11px] text-base-content/40">Another owner's Work</span>
+							) : (
+								<button
+									type="button"
+									className="btn btn-ghost btn-xs text-error"
+									onClick={() => onUngate(work)}
+									disabled={busyId === work.id}
+								>
+									{busyId === work.id ? "Removing…" : "Remove from Badge"}
+								</button>
+							)}
+						</li>
+					);
+				})}
 			</ul>
 		);
 	}
@@ -789,6 +811,7 @@ export default function BadgeMaker({
 					index={index}
 					label={previewLabel}
 					art={{ ...current, artShape: shape, artColor: color, artEdgeColor: edge }}
+					owners={current.owners}
 					size="h-16 w-16"
 				/>
 			);
@@ -1318,6 +1341,9 @@ export default function BadgeMaker({
 							{t.id === "unlocks" && gatedWorks && gatedWorks.length > 0
 								? ` (${gatedWorks.length})`
 								: ""}
+							{t.id === "collaborators" && current?.owners && current.owners.length > 1
+								? ` (${current.owners.length})`
+								: ""}
 						</button>
 					))}
 				</div>
@@ -1360,6 +1386,21 @@ export default function BadgeMaker({
 							hidden={tab !== "unlocks"}
 						>
 							{unlocksPanel}
+						</div>
+						<div
+							role="tabpanel"
+							id="badge-panel-collaborators"
+							aria-labelledby="badge-tab-collaborators"
+							hidden={tab !== "collaborators"}
+						>
+							{badgeId != null && (
+								<BadgeCollaboratorsPanel
+									badgeId={badgeId}
+									badgeLabel={current?.label ?? label}
+									onChanged={onChanged}
+									onLeft={onClose}
+								/>
+							)}
 						</div>
 					</>
 				)}

@@ -14,6 +14,7 @@
  * the reply chain is still honest because every reply still sits under what it answers.
  */
 import { useAuth } from "@anthers/web-shared/auth";
+import { SpoilerText } from "@anthers/web-shared/post/Spoiler";
 import {
 	INTERACTION_PERMISSION_HINT,
 	useInteractionPermissionMissing,
@@ -37,6 +38,13 @@ import VoteControl from "./VoteControl";
 
 /** How many levels of reply indent before deeper replies line up at the last one. */
 export const MAX_INDENT = 3;
+
+/**
+ * The one place a commenter learns the convention. A comment is a plain-text field, so
+ * there is no toolbar for the post editor's Spoiler button to live on — the markup is the
+ * affordance, and the empty field is where it is invisible until it is said.
+ */
+const SPOILER_HINT = "Wrap text in || to hide it as a spoiler.";
 
 interface CommentThreadProps {
 	/** `id` is what a Sticker on a new comment resolves its recipient from. */
@@ -187,7 +195,7 @@ export default function CommentThread({ subject }: CommentThreadProps) {
 				<form onSubmit={submit} className="mb-6">
 					<textarea
 						className="textarea textarea-bordered w-full"
-						placeholder="Write a comment..."
+						placeholder={`Write a comment... ${SPOILER_HINT}`}
 						rows={3}
 						value={body}
 						onChange={(e) => setBody(e.target.value)}
@@ -395,8 +403,11 @@ function CommentRow({ comment, isReply }: { comment: Comment; isReply: boolean }
 				</div>
 				{/* The body's text in full, with the returns the person typed kept — a break
 				    is what they pressed, and no spacing is added between paragraphs (replies
-				    render here too, through the same row). */}
-				<p className="text-sm mt-1 break-words whitespace-pre-line">{comment.body}</p>
+				    render here too, through the same row). A spoiler in the text is hidden
+				    behind its own reveal until the reader asks for it. */}
+				<p className="text-sm mt-1 break-words whitespace-pre-line">
+					<SpoilerText text={comment.body} />
+				</p>
 				<div className="mt-1.5 flex items-center gap-3">
 					<VoteControl
 						subjectType="comment"
@@ -485,7 +496,7 @@ function ReplyForm({ replyTo, author }: { replyTo: number; author: string }) {
 			<textarea
 				ref={field}
 				className="textarea textarea-bordered textarea-sm w-full"
-				placeholder={`Reply to ${author}...`}
+				placeholder={`Reply to ${author}... ${SPOILER_HINT}`}
 				aria-label={`Reply to ${author}`}
 				rows={2}
 				value={body}

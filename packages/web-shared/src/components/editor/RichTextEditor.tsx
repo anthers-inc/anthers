@@ -6,6 +6,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { FONTS } from "../../styles/fonts";
 import EditorToolbar from "./EditorToolbar";
+import { SpoilerMark } from "./SpoilerMark";
 
 interface RichTextEditorProps {
 	content: string;
@@ -43,6 +44,10 @@ export default function RichTextEditor({
 				linkOnPaste: true,
 				HTMLAttributes: { class: "link link-primary" },
 			}),
+			// The spoiler belongs to the post editor and to the comment markup beside it. A text
+			// Work's article editor is left without the mark, because that Work's read prints its
+			// stored HTML directly and has no reveal to hide the words behind.
+			...(variant === "article" ? [] : [SpoilerMark]),
 			Placeholder.configure({ placeholder }),
 		],
 		content,
@@ -87,7 +92,7 @@ export default function RichTextEditor({
 
 	return (
 		<div className="border border-base-300 rounded-lg overflow-hidden bg-base-100">
-			<EditorToolbar editor={editor} />
+			<EditorToolbar editor={editor} spoiler />
 			{/* Padding + min-height live on the editable (.tiptap) itself — not the
 			    wrapper — so clicking anywhere in the area places the cursor, and
 			    cursor:text covers the whole box. */}

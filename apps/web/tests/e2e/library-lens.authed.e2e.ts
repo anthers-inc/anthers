@@ -12,7 +12,7 @@
  * The other half is that the lens is not a filter wearing a new name: it reorganizes the
  * same items into releases you open, rather than narrowing a grid. Since the sidebar
  * restructure (2026-10-11) the Lenses are the Library's middle sidebar section and the
- * Type and Tags filters the shared section beneath them — the sidebar spec
+ * Types and Tags filters sit in the shared section beneath them — the sidebar spec
  * (`sidebar-structure.authed.e2e.ts`) pins the structure; this one pins the Library's
  * content: the lens rows, the dial, and the graying.
  */
@@ -92,7 +92,7 @@ test("a lens is a view, not a container — the Library survives switching", asy
 	const before = await libraryCount(page);
 	expect(before, "the fixtures should be in the Library").toBeGreaterThan(0);
 
-	// Scoped to the sidebar's Lenses section: "Music" is also a shared Type row, and
+	// Scoped to the sidebar's Lenses section: "Music" is also a shared Types row, and
 	// the two mean genuinely different things — one reorganizes the Library, the other
 	// narrows it; the lens row says Music Player and the type row says Music.
 	await expect(page.getByRole("heading", { name: "Lenses", exact: true })).toBeVisible();
@@ -104,13 +104,13 @@ test("a lens is a view, not a container — the Library survives switching", asy
 	expectNothingLost(before, await libraryCount(page), "the lens changed what is IN the Library");
 });
 
-test("the Library's sidebar reads Lenses, Access, Type, Tags", async ({ page }) => {
+test("the Library's sidebar reads Lenses, Access, Types, Tags", async ({ page }) => {
 	await page.goto("/library");
 	await saveFixtures(page);
 	await expect(page.getByRole("heading", { name: "Lenses", exact: true })).toBeVisible();
 
 	// The four lens rows in order: the two unbuilt ones grayed with the marker, not
-	// absent — the vocabulary is stable the same way the shared Type list's is.
+	// absent — the vocabulary is stable the same way the shared Types list's is.
 	const sections = page.evaluate(() => {
 		const headings = [...document.querySelectorAll("aside section h3")];
 		const rows = (name: string) => {
@@ -127,7 +127,7 @@ test("the Library's sidebar reads Lenses, Access, Type, Tags", async ({ page }) 
 					)
 			);
 		};
-		return { lenses: rows("Lenses"), type: rows("Type"), access: rows("Access") };
+		return { lenses: rows("Lenses"), type: rows("Types"), access: rows("Access") };
 	});
 	expect((await sections).lenses).toEqual([
 		"No Lens",
@@ -140,7 +140,7 @@ test("the Library's sidebar reads Lenses, Access, Type, Tags", async ({ page }) 
 	expect((await sections).access).toEqual(["Any", "Unlocked", "Locked"]);
 	// Tags carries the feed's shape: with nothing selected, the search input only.
 	expect(await page.getByPlaceholder("Search tags…").count()).toBe(1);
-	// The section ORDER: Lenses above Access above Type above Tags — Lenses, then the
+	// The section ORDER: Lenses above Access above Types above Tags — Lenses, then the
 	// shared filters with Access first (the Library holds locked saves, and Access is
 	// the row that reads them).
 	const y = (name: string) =>
@@ -149,8 +149,8 @@ test("the Library's sidebar reads Lenses, Access, Type, Tags", async ({ page }) 
 			return h ? h.getBoundingClientRect().y : -1;
 		}, name);
 	expect(await y("Lenses")).toBeLessThan(await y("Access"));
-	expect(await y("Access")).toBeLessThan(await y("Type"));
-	expect(await y("Type")).toBeLessThan(await y("Tags"));
+	expect(await y("Access")).toBeLessThan(await y("Types"));
+	expect(await y("Types")).toBeLessThan(await y("Tags"));
 
 	// Every lens row is live on the Library, one per built view — the two newest
 	// flipped live by their own tasks on 2026-10-11, so no (Coming Soon) marker and
@@ -167,7 +167,7 @@ test("a type grays where the Library holds nothing of it; a row with stock stays
 	page,
 }) => {
 	await page.goto("/library");
-	await expect(page.getByRole("heading", { name: "Type", exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Types", exact: true })).toBeVisible();
 
 	// Posts have no stock in this walk's Library (they will once the Save unification
 	// adds posts as Library rows); the row grays by absence like any empty type.
@@ -199,7 +199,7 @@ test("the music lens organizes rather than filters", async ({ page }) => {
 	await expect(page.getByText(TRACK.title, { exact: true })).toHaveCount(0);
 
 	// And the types the lens excludes are GRAYED in the shared section: under the
-	// Music Player the Type list cannot narrow what the lens reorganizes — the lens
+	// Music Player the Types list cannot narrow what the lens reorganizes — the lens
 	// decides what it draws on.
 	await expect(page.getByRole("button", { name: "Games", exact: true })).toBeDisabled();
 	await expect(page.getByRole("button", { name: "Music", exact: true })).toBeEnabled();
@@ -443,13 +443,18 @@ test("the Bookshelf lens stands the saved comic up as a spine", async ({ page })
 
 		await page.goto("/library?lens=bookshelf");
 		await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
-		await expect(page.getByText("A comic that really turns").first()).toBeVisible();
+
+		// The comic stands as a spine titled on the binding, on a board that labels the
+		// range of titles the row holds.
+		const shelf = page.getByTestId("bookshelf-shelf");
+		await expect(shelf.getByText("A comic that really turns")).toBeVisible();
+		await expect(shelf.getByTestId("shelf-label").first()).toBeVisible();
 
 		// The ribbon, at the depth the device got to: round(2 / pageCount) percent.
 		// Scoped to the shelf's own rows — an unfinished position rides the rail above
 		// too, so its spine carries a second, equal marker this walk is not about.
 		const expected = `${Math.round((2 / pageCount) * 100)}%`;
-		await expect(page.getByTestId("bookshelf-shelf").getByTestId("spine-marker")).toHaveAttribute(
+		await expect(shelf.getByTestId("spine-marker")).toHaveAttribute(
 			"style",
 			new RegExp(`height:\\s*${expected.replace("%", "")}%`),
 		);

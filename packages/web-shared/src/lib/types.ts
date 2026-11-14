@@ -1455,6 +1455,8 @@ export interface BadgeHolding {
 		handle: string;
 		displayName: string | null;
 	};
+	/** The Badge's owners, publisher first; more than one is a Collab Badge. */
+	owners?: BadgeOwner[];
 }
 
 /** Response of GET /subscriptions/my-badges — the Badges the user holds this cycle. */
@@ -1509,6 +1511,21 @@ export interface ContentAccessResponse {
 }
 
 /**
+ * One owner of a Badge — the publisher or an accepted collaborator.
+ *
+ * The display needs the avatar, name and handle for the combo avatar and its modal;
+ * `followerCount` and `isFollowing` are the modal's own row.
+ */
+export interface BadgeOwner {
+	id: number;
+	handle: string;
+	displayName: string | null;
+	avatar: string | null;
+	followerCount: number;
+	isFollowing: boolean;
+}
+
+/**
  * One rung of a creator's Badge ladder (GET /subscriptions/badges?creator=…). There is no
  * `gateType`: every rung a creator defines is their own Badge, so the enum the
  * cross-issuer case used to live in has nothing left to distinguish.
@@ -1519,6 +1536,12 @@ export interface CreatorBadge {
 	threshold: string;
 	label: string;
 	description: string | null;
+	/**
+	 * Every creator who owns this Badge, publisher first. A solo Badge carries one entry;
+	 * a Collab Badge carries its publisher and each accepted collaborator. Optional on the
+	 * type so older fixtures and non-ladder reads do not have to invent it.
+	 */
+	owners?: BadgeOwner[];
 	/**
 	 * Whether this rung has the creator's own art.
 	 *
@@ -1565,10 +1588,19 @@ export interface CreatorBadgeListResponse {
 }
 
 export interface CreatorStatus {
+	/** The profile creator's id — what splits their own ladder from the Badges they co-own. */
+	creatorId?: number;
 	badge: Badge;
 	badgeAmount: string;
 	badges: CreatorBadge[];
 	unlockedBadges: number[];
+	/**
+	 * What the viewer gives each **publisher** this cycle, keyed by that publisher's id.
+	 * A Collab Badge's card reads its publisher's amount here; the profile creator's own
+	 * ladder reads `badgeAmount`. The map deliberately does not expand a shared Badge to
+	 * its collaborators — their share is the split, not a separate support line.
+	 */
+	heldByPublisher?: Record<number, string>;
 }
 
 // ─── Notifications ──────────────────────────────────────────────────────────────

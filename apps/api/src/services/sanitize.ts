@@ -8,9 +8,10 @@ import sanitizeHtml from "sanitize-html";
  * to other users via dangerouslySetInnerHTML, so this is the trust boundary.
  * The allowlist mirrors exactly what the web RichTextEditor (TipTap) can
  * produce: StarterKit (paragraphs, headings, marks, lists, blockquote, code
- * blocks, hr), the Image extension, and the Link extension. Everything else —
- * script/style/iframe tags, event-handler attributes, javascript:/data: URLs —
- * is stripped.
+ * blocks, hr), the Image extension, the Link extension, and the Spoiler mark
+ * (`span.spoiler`, the one wrapper a stored body carries for hidden text).
+ * Everything else — script/style/iframe tags, event-handler attributes,
+ * javascript:/data: URLs — is stripped.
  */
 const POST_HTML_OPTIONS: sanitizeHtml.IOptions = {
 	allowedTags: [
@@ -42,6 +43,7 @@ const POST_HTML_OPTIONS: sanitizeHtml.IOptions = {
 		"li",
 		"a",
 		"img",
+		"span",
 	],
 	allowedAttributes: {
 		a: ["href", "target", "rel"],
@@ -50,10 +52,12 @@ const POST_HTML_OPTIONS: sanitizeHtml.IOptions = {
 	},
 	// class is governed here rather than via allowedAttributes (which would
 	// allow arbitrary classes): the Link extension emits DaisyUI link classes,
-	// TipTap code blocks emit language-* hints.
+	// TipTap code blocks emit language-* hints, and the Spoiler mark emits
+	// exactly `spoiler` — the name the renderer and turndown's rule look for.
 	allowedClasses: {
 		a: ["link", "link-primary"],
 		code: [/^language-[\w-]+$/],
+		span: ["spoiler"],
 	},
 	allowedSchemes: ["http", "https", "mailto"],
 	allowedSchemesAppliedToAttributes: ["href", "src"],

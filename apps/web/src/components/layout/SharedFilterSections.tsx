@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The TAB-SHARED sidebar filter sections — TYPE and TAGS — the lower section of the
+ * The TAB-SHARED sidebar filter sections — TYPES and TAGS — the lower section of the
  * house sidebar structure on every user-mode tab (Parker, 2026-10-11): Network, Library
  * and Discovery all render these behind the sidebar's second divider, each page
  * supplying its own params, so this component binds to nothing.
@@ -30,6 +30,7 @@
  * outlived Browse's retired filter machinery.
  */
 
+import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import {
 	CubeTransparentIcon,
 	MagnifyingGlassIcon,
@@ -53,8 +54,9 @@ export const SHARED_FILTER_TYPES = [
 	...CONTENT_TYPES.slice(1),
 ] as const;
 
-const sectionTitleClass =
-	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
+const sectionHeadingClass =
+	"text-xs font-semibold uppercase tracking-wider text-base-content/40 flex items-center gap-1.5";
+const sectionTitleRowClass = "flex items-center gap-1.5 mb-2";
 
 export default function SharedFilterSections({
 	type,
@@ -106,13 +108,16 @@ export default function SharedFilterSections({
 				<AccessFilterSection access={access.value} onAccess={access.onAccess} />
 			)}
 
-			{/*
-			 * TYPE — the unified list. Grayed rows keep their place: they are the
-			 * vocabulary, not the supply. (Was the "Work Type" heading; Parker
-			 * shortened it when this became the shared section, 2026-10-11.)
-			 */}
+			{/* TYPES — the unified list. Grayed rows keep their place: they are the
+			    vocabulary, not the supply. */}
 			<section>
-				<h3 className={sectionTitleClass}>Type</h3>
+				<div className={sectionTitleRowClass}>
+					<h3 className={sectionHeadingClass}>Types</h3>
+					<InfoTip
+						unclipped
+						text="Types narrow the page to one kind of content. All is everything the page holds, the Posts row is posts rather than a kind of Work, and the rest are kinds of Work. A kind the page has none of, or that a lens does not draw on, stays listed in gray."
+					/>
+				</div>
 				<div className="flex flex-col gap-0.5">
 					{SHARED_FILTER_TYPES.map((typeItem) => {
 						const grayed = unavailableTypes?.has(typeItem.id) ?? false;
@@ -135,10 +140,16 @@ export default function SharedFilterSections({
 
 			{/* TAGS — the filtered ones render; a search names candidates. */}
 			<section>
-				<h3 className={sectionTitleClass}>
-					<TagIcon className="w-3.5 h-3.5" />
-					Tags
-				</h3>
+				<div className={sectionTitleRowClass}>
+					<h3 className={sectionHeadingClass}>
+						<TagIcon className="w-3.5 h-3.5" />
+						Tags
+					</h3>
+					<InfoTip
+						unclipped
+						text="Tags narrow the page to items carrying the tags you add. Every tag in the list has to be on an item for it to show, so a second tag narrows rather than widens. A tag the search does not suggest can still be added by typing it and pressing Enter."
+					/>
+				</div>
 				{selected.length > 0 && (
 					<div className="flex flex-wrap gap-1.5 mb-2">
 						{selected.map((t) => (

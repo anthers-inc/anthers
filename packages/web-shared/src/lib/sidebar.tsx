@@ -44,7 +44,7 @@ interface SidebarContextValue {
 	/** Called by pages to register their sidebar content; returns a cleanup fn */
 	setPageContent: (content: ReactNode | null) => void;
 	/**
-	 * The TAB-SHARED filter sections — Type and Tags — rendered behind one more
+	 * The TAB-SHARED filter sections — Types and Tags — rendered behind one more
 	 * divider below the middle section, registered separately so the layout owns
 	 * the seams (Parker, 2026-10-11). A page with no shared filters simply
 	 * registers nothing.

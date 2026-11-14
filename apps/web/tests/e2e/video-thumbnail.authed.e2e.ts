@@ -5,22 +5,65 @@
  * A creator chooses a video's thumbnail, uploaded or picked from a frame, and nothing takes one on
  * their behalf (Parker, 2026-09-18). Picking a frame is drawn in the creator's own browser from the
  * picker's own player (`OwnerWorkEditor`'s ThumbFramePicker), which no API test can reach: what this
- * walk catches is the picker opening, the frame's moment reaching the route, and the route's answer
- * being the saved row. It also checks the section's shape — the (i) beside the heading, the blank
+ * walk catches is the picker opening, the frame's moment reaching the route, the taking state the
+ * section shows while the extraction is queued, and the new picture replacing the old one when the
+ * extraction lands. It also checks the section's shape — the (i) beside the heading, the blank
  * frame, the two buttons — the 2026-10-16 redesign.
  *
  * Runs on the media fixture's video, which is real HLS from a real ffmpeg run, so the picture
  * genuinely decodes. Its thumbnail is put back afterward, since other walks open the same Work.
  */
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
 import { works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { expect, signInAsMediaFixture, test } from "./fixtures";
+import { expect, leashedExecFileSync, signInAsMediaFixture, test } from "./fixtures";
 
 const CLIP = mediaFixtureWork("video");
+// No trailing slash: a `//apps/…` import resolves as its own module instance to Bun, and
+// the child then starts one queue while the handler sends on another (found by its
+// "Database not opened" failure the first time this ran).
+const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url)).replace(/\/$/, "");
 
 let previous: string | null | undefined;
+
+/**
+ * Run the queued extraction the way the worker would, for the one take this walk makes.
+ *
+ * 🚨 **No worker runs in a browser session**, so the row the page polls would stay pending
+ * for ever and the walk could only prove the ask. This calls `extractFrame` directly — the
+ * same handler the worker registers — in a child `bun` process, because importing the API's
+ * job into a web spec would couple the suites and the Playwright worker runs under Node in
+ * CI, where `Bun` (which the handler spawns with) does not exist.
+ *
+ * The queue is started first so the handler's scan enqueue succeeds; nothing drains the scan,
+ * which is this process's only job. The child exits explicitly because the database pool and
+ * pg-boss hold handles open, the same reason the seed scripts do.
+ */
+function extractFrame(jobId: number): void {
+	const dir = mkdtempSync(join(tmpdir(), "anthers-thumb-walk-"));
+	const script = `const { ensureQueueReady } = await import(${JSON.stringify(
+		`${REPO_ROOT}/apps/api/src/jobs/queue.js`,
+	)});
+await ensureQueueReady();
+const { extractFrame } = await import(${JSON.stringify(
+		`${REPO_ROOT}/apps/api/src/jobs/extract-frame.js`,
+	)});
+await extractFrame({ jobId: ${jobId} });
+process.exit(0);
+`;
+	const file = join(dir, "extract.ts");
+	writeFileSync(file, script);
+	try {
+		leashedExecFileSync("bun", [file], { cwd: REPO_ROOT, stdio: "ignore" });
+	} finally {
+		rmSync(dir, { force: true, recursive: true });
+	}
+}
 
 test.afterAll(async () => {
 	if (previous === undefined) return;
@@ -93,18 +136,46 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 		})
 		.not.toBe(0);
 
-	const taken = page.waitForResponse((res) => res.url().includes("/thumbnail-frame") && res.ok());
-	await picker.getByRole("button", { name: "Use This Frame" }).click();
-	const { work } = (await (await taken).json()) as { work: { thumbnail: string } };
-	expect(work.thumbnail).toMatch(/\/thumbnails\/\d+\/\w+\.jpg$/);
+	const image = page.getByRole("img", { name: "The Work's thumbnail" });
+	const beforeSrc = await image.getAttribute("src");
 
-	// The section shows what the route answered, and the row is it — no save to press,
-	// and no save bar promising anything else anywhere on the page.
+	const taken = page.waitForResponse(
+		(res) => res.url().includes("/thumbnail-frame") && res.status() === 202,
+	);
+	await picker.getByRole("button", { name: "Use This Frame" }).click();
+	const answered = await taken;
+	const { job } = (await answered.json()) as { job: { id: number } };
+
+	// The section carries the taking state until the row settles.
+	await expect(page.getByText("Taking this moment…")).toBeVisible();
+
+	// This suite's servers are the two previews and the API — no worker — so the queued
+	// extraction is run here, the way the API suites run a handler. The page's own poll is
+	// what the rest of the walk exercises.
+	extractFrame(job.id);
+
+	// The picture the page was showing is replaced by the frame that landed.
+	await expect
+		.poll(
+			async () => {
+				const [row] = await db
+					.select({ thumbnail: works.thumbnail })
+					.from(works)
+					.where(eq(works.publicId, CLIP.publicId));
+				return row.thumbnail ?? "";
+			},
+			{ timeout: 30_000, message: "the worker never landed a frame for the Work" },
+		)
+		.not.toBe(previous);
+	await expect.poll(() => image.getAttribute("src"), { timeout: 30_000 }).not.toBe(beforeSrc);
+
+	// The section shows what landed, and the row is it — no save to press, and no save bar
+	// promising anything else anywhere on the page.
 	await expect(page.getByRole("img", { name: "The Work's thumbnail" })).toBeVisible();
 	await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 	const [after] = await db
 		.select({ thumbnail: works.thumbnail })
 		.from(works)
 		.where(eq(works.publicId, CLIP.publicId));
-	expect(after.thumbnail).toBe(work.thumbnail);
+	expect(after.thumbnail).toMatch(/\/thumbnails\/\d+\/\w+\.jpg$/);
 });
