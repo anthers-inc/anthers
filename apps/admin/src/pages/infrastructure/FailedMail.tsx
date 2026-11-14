@@ -85,6 +85,7 @@ const EVENT_LABELS: Record<string, string> = {
 	failed: "Failed",
 	complained: "Marked spam",
 	canceled: "Canceled",
+	suppressed: "Suppressed by Resend",
 };
 
 function eventLabel(event: string): string {
