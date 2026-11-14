@@ -167,6 +167,6 @@ test("a music Work plays its original while processing runs", async ({ page, con
 	await page.getByRole("button", { name: "User (Locked)" }).click();
 	await expect(page.locator("audio")).toBeAttached();
 	const userSrc = await page.locator("audio").getAttribute("src");
-	expect(userSrc ?? "").toMatch(new RegExp(`works/${landedWork.id}/original|creators/`));
+	expect(userSrc ?? "").toMatch(new RegExp(`works/${landedWork.id}/`));
 	await expect(page.getByRole("button", { name: "Edit Details" })).toHaveCount(0);
 });
