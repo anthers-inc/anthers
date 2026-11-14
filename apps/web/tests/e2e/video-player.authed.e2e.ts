@@ -169,6 +169,48 @@ test("the settings menu actually changes the playback rate", async ({ page }) =>
 	await expect.poll(async () => (await videoState(page))?.rate).toBe(1.5);
 });
 
+test("the settings menu opens tall enough to show its options", async ({ page }) => {
+	await openPlayer(page);
+
+	const controls = page.locator(CONTROLS);
+	await controls.getByRole("button", { name: "Playback settings" }).click();
+
+	/*
+	 * 🚨 The regression this pins: the panel was capped with `max-h-full`, a percentage
+	 * that resolved against the gear's own `btn-sm` box, so the menu opened one line
+	 * tall with "Speed" in it and every option inside a button-high scroll window.
+	 *
+	 * The rate test above did not catch it, and could not: Playwright scrolls an element
+	 * into view before clicking it, so a menu whose contents live in a 32px scroller
+	 * still passes an assertion that clicking an option works. `toBeInViewport` does not
+	 * scroll, so this is the one that says the options are already on screen when the
+	 * menu opens.
+	 */
+	await expect(page.getByRole("button", { name: "2×", exact: true })).toBeInViewport();
+	await expect(page.getByText("Quality", { exact: true })).toBeInViewport();
+});
+
+test("the play button shows a spinner while the element waits for data", async ({ page }) => {
+	await openPlayer(page);
+
+	const controls = page.locator(CONTROLS);
+	const button = controls.getByRole("button", { name: "Pause", exact: true });
+
+	// The element's own event is the fact the transport reads, so this exercises the
+	// wiring without depending on how long a local buffer takes to fill. A synthetic
+	// dispatch reaches the same listener the real stall does.
+	await page.evaluate(() => document.querySelector("video")?.dispatchEvent(new Event("waiting")));
+	await expect(button).toHaveAttribute("aria-busy", "true");
+	await expect(button.getByTestId("transport-spinner")).toBeVisible();
+	// The icon is gone, not merely covered: a play glyph beside a spinner is two
+	// states claiming the same present.
+	await expect(button.locator("svg")).toHaveCount(0);
+
+	await page.evaluate(() => document.querySelector("video")?.dispatchEvent(new Event("playing")));
+	await expect(button).not.toHaveAttribute("aria-busy", "true");
+	await expect(button.locator("svg")).toHaveCount(1);
+});
+
 test("the quality menu offers Original Media beside the ladder's rungs", async ({ page }) => {
 	await openPlayer(page);
 	const controls = page.locator(CONTROLS);

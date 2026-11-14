@@ -23,7 +23,7 @@ import {
 	PauseIcon,
 	PlayIcon,
 } from "@heroicons/react/24/solid";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useWorkTheater } from "@/lib/work-theater";
 import { formatTime } from "./transport/format";
 import SeekBar from "./transport/SeekBar";
@@ -34,6 +34,15 @@ import VolumeControl from "./transport/VolumeControl";
 /** Playback speeds, slowest first. 1 is the identity and must stay in the list. */
 export const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 
+/**
+ * How far the settings panel stays from the picture's top edge, and the smallest
+ * window it opens at when the player is shorter than the menu wants. The floor is a
+ * compromise rather than a target — at that height the panel scrolls — but a player
+ * with less room than this has nowhere better to put the menu.
+ */
+const SETTINGS_PANEL_CLEARANCE = 16;
+const SETTINGS_PANEL_MIN_HEIGHT = 120;
+
 export interface QualityLevel {
 	/** hls.js level index. */
 	index: number;
@@ -43,6 +52,7 @@ export interface QualityLevel {
 
 export default function VideoControls({
 	playing,
+	buffering,
 	position,
 	duration,
 	buffered,
@@ -67,6 +77,12 @@ export default function VideoControls({
 	chapters,
 }: {
 	playing: boolean;
+	/**
+	 * The element is waiting on data: the gap between a play request and the first
+	 * frame, and every later stall. Distinct from `playing` because a buffer is not
+	 * playback — the transport shows a spinner rather than pretending either state.
+	 */
+	buffering: boolean;
 	position: number;
 	duration: number;
 	buffered: number;
@@ -106,9 +122,33 @@ export default function VideoControls({
 	const theater = useWorkTheater();
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const settingsRef = useRef<HTMLDivElement>(null);
+	/**
+	 * The panel's cap in pixels, measured when it opens. A percentage cap cannot work
+	 * here: `max-h-full` resolves against the gear's own box — a `btn-sm` — which is
+	 * how this menu came to open one line tall with everything under "Speed" scrolled
+	 * inside it. The ceiling is the media stage the player sits in, not the control
+	 * bar: the menu is anchored above the gear inside the bar, and the room it may
+	 * use is everything between.
+	 */
+	const [panelMaxHeight, setPanelMaxHeight] = useState<number>();
 	/** The chapter the playhead is inside, for the name beside the clock. */
 	const currentChapter =
 		chapters.length > 0 ? chapters[chapterIndexFor(chapters, position)] : undefined;
+
+	const measurePanel = useCallback(() => {
+		const button = settingsRef.current;
+		if (!button) return;
+		// A mount with no stage — the Channel Guide's own player — measures from the
+		// viewport instead, which is the only ceiling it has. Full screen is measured
+		// the same way: the stage stays where it was in the page while the section
+		// covers the screen, so its rect would answer for a box nobody can see.
+		const stage = button.closest("[data-media-stage]");
+		const ceiling = document.fullscreenElement?.contains(button)
+			? 0
+			: Math.max(stage?.getBoundingClientRect().top ?? 0, 0);
+		const available = button.getBoundingClientRect().top - ceiling - SETTINGS_PANEL_CLEARANCE;
+		setPanelMaxHeight(Math.max(SETTINGS_PANEL_MIN_HEIGHT, available));
+	}, []);
 
 	// Close on an outside click. Bound only while open, so the page carries no listener
 	// for a menu nobody has opened.
@@ -117,9 +157,16 @@ export default function VideoControls({
 		const onDown = (e: PointerEvent) => {
 			if (!settingsRef.current?.contains(e.target as Node)) setSettingsOpen(false);
 		};
+		// A player that changes size under an open menu — theater mode, a rotated
+		// phone, full screen — has a different amount of room, so the cap is re-read.
+		const onResize = () => measurePanel();
 		document.addEventListener("pointerdown", onDown);
-		return () => document.removeEventListener("pointerdown", onDown);
-	}, [settingsOpen]);
+		window.addEventListener("resize", onResize);
+		return () => {
+			document.removeEventListener("pointerdown", onDown);
+			window.removeEventListener("resize", onResize);
+		};
+	}, [settingsOpen, measurePanel]);
 
 	// A hidden bar takes its menu with it — otherwise the panel floats over the picture
 	// attached to nothing.
@@ -129,7 +176,7 @@ export default function VideoControls({
 
 	return (
 		<div
-			className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent px-2 pb-1 pt-8 transition-opacity duration-200 sm:px-3 ${
+			className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent px-2 pb-3 pt-8 transition-opacity duration-200 sm:px-3 ${
 				visible ? "opacity-100" : "pointer-events-none opacity-0"
 			}`}
 			// The controls sit on video, not on a themed surface, so this is one of the few
@@ -147,12 +194,15 @@ export default function VideoControls({
 			/>
 
 			<div className="flex items-center gap-1 text-white">
+				{/* A press that has not made a picture yet: the element is buffering, so the
+				    button shows that rather than claiming to be paused. */}
 				<TransportButton
-					label={playing ? "Pause" : "Play"}
+					label={playing || buffering ? "Pause" : "Play"}
 					icon={playing ? PauseIcon : PlayIcon}
 					onClick={onTogglePlay}
 					tone="primary"
 					size="sm"
+					busy={buffering}
 				/>
 
 				<span className="ml-1 shrink-0 text-xs tabular-nums text-white/80">
@@ -175,7 +225,12 @@ export default function VideoControls({
 					<TransportButton
 						label="Playback settings"
 						icon={Cog6ToothIcon}
-						onClick={() => setSettingsOpen((v) => !v)}
+						onClick={() => {
+							// Measured before opening, so the panel's first paint is already
+							// the right height rather than resizing under the pointer.
+							if (!settingsOpen) measurePanel();
+							setSettingsOpen((v) => !v);
+						}}
 						active={settingsOpen}
 						size="sm"
 					/>
@@ -184,8 +239,13 @@ export default function VideoControls({
 						    listen) already exceed a short clip's height on a small player, where
 						    a plain panel would overflow and its top rows would be unclickable.
 						    The overflow is INSIDE the panel — it itself stays anchored at the
-						    player's bottom edge. */
-						<div className="absolute bottom-full right-0 z-10 mb-2 max-h-full w-52 overflow-y-auto rounded-box bg-base-100 p-2 text-base-content shadow-xl">
+						    player's bottom edge. The cap comes from `measurePanel`, NOT from a
+						    percentage: `max-h-full` resolves against the gear's own box. */
+						<div
+							data-testid="settings-menu"
+							style={{ maxHeight: panelMaxHeight }}
+							className="absolute bottom-full right-0 z-10 mb-2 w-52 overflow-y-auto rounded-box bg-base-100 p-2 text-base-content shadow-xl"
+						>
 							<p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
 								Speed
 							</p>
