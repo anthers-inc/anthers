@@ -88,7 +88,7 @@ test("the Works table renders with its filters in the sidebar, below the Studio 
 	const aside = page.locator("aside");
 	await expect(aside.getByRole("heading", { name: "Search" })).toBeVisible();
 	await expect(aside.getByRole("heading", { name: "Visibility" })).toBeVisible();
-	await expect(aside.getByRole("heading", { name: "Work Type" })).toBeVisible();
+	await expect(aside.getByRole("heading", { name: "Types" })).toBeVisible();
 
 	// Below the nav, not above it — the section is a sidebar second level, and a
 	// registration bug that rendered nothing would be caught by the visibility calls
