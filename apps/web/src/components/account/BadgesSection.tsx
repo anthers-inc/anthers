@@ -84,6 +84,13 @@ function nameOf(holding: BadgeHolding): string {
 	return holding.creator.displayName || holding.creator.handle || "A creator";
 }
 
+/** The tile's name: both creators for a shared Badge, the publisher alone otherwise. */
+function ownersOf(holding: BadgeHolding): string {
+	const owners = holding.owners ?? [];
+	if (owners.length < 2) return nameOf(holding);
+	return owners.map((owner) => owner.displayName || owner.handle).join(" & ");
+}
+
 /** Fetch a subscriptions GET endpoint that carries query params (raw, credentialed). */
 async function getJson<T>(path: string): Promise<T> {
 	const res = await fetch(`${apiBaseUrl()}/api/subscriptions/${path}`, { credentials: "include" });
@@ -515,7 +522,7 @@ export default function BadgesSection() {
 							key={holding.id}
 							selected={selected === holding.creator.handle}
 							onSelect={() => setSelected(holding.creator.handle)}
-							name={nameOf(holding)}
+							name={ownersOf(holding)}
 							handle={holding.creator.handle}
 							subline={`${holding.label} · ${fmt(holding.threshold)}/mo`}
 							mark={
@@ -524,6 +531,7 @@ export default function BadgesSection() {
 									index={index}
 									label={`${holding.label} badge`}
 									art={holding}
+									owners={holding.owners}
 									size="h-12 w-12"
 								/>
 							}
@@ -894,6 +902,7 @@ function CreatorBadgeDetails({
 								index={index}
 								label={`${rung.label} badge`}
 								art={rung}
+								owners={rung.owners}
 								size="h-16 w-16"
 							/>
 						}

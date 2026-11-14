@@ -1369,6 +1369,85 @@ export const badges = pgTable(
 );
 
 /**
+ * The other creators who own one Badge.
+ *
+ * 🚨 **The publisher is not in this table.** `badges.creatorId` is the publisher, and the
+ * owner set is that id plus every `accepted` row here. Keeping the publisher out means a
+ * solo Badge has no rows at all and the anchor cannot drift out of step with a duplicate
+ * row; a publisher handover deletes the new publisher's row and writes the old publisher's
+ * row in the same transaction, so the two halves always describe one set.
+ *
+ * A row is `pending` until the invited creator accepts; only `accepted` rows are owners.
+ * A `declined` row is kept so the inviter sees what happened and can decide whether to
+ * send it again.
+ */
+// node — the other owners of one Badge; the creator's own ladder, co-owned.
+export const badgeCollaborators = pgTable(
+	"badge_collaborators",
+	{
+		id: serial("id").primaryKey(),
+		badgeId: integer("badge_id")
+			.notNull()
+			.references(() => badges.id, { onDelete: "cascade" }),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** `pending` | `accepted` | `declined`. Only `accepted` is an owner. */
+		status: text("status").notNull().default("pending"),
+		/** Who sent the invitation. Set null when that account is gone; the collaboration outlives it. */
+		invitedById: integer("invited_by_id").references(() => users.id, {
+			onDelete: "set null",
+		}),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		respondedAt: timestamp("responded_at", { withTimezone: true }),
+	},
+	(table) => [
+		uniqueIndex("uq_badge_collaborators_pair").on(table.badgeId, table.creatorId),
+		// "Which Badges am I a collaborator on?" is the read behind the profile ladder and
+		// the invitation list, so the invitee side gets its own index.
+		index("idx_badge_collaborators_creator").on(table.creatorId, table.status),
+	],
+);
+
+/**
+ * One in-flight request to move a Badge's publisher role.
+ *
+ * The publisher is `badges.creatorId`; a handover is a two-step consent because the role
+ * carries the Badge's billing destination and art home. The current publisher opens a
+ * `pending` row naming the target, the target accepts, and the Badge's `creatorId` moves
+ * in the same transaction. A declined row is kept as the record of the answer; a new
+ * request writes a new row.
+ */
+// node — the publisher-role handover between two creators on one Badge.
+export const badgePublisherHandovers = pgTable(
+	"badge_publisher_handovers",
+	{
+		id: serial("id").primaryKey(),
+		badgeId: integer("badge_id")
+			.notNull()
+			.references(() => badges.id, { onDelete: "cascade" }),
+		fromCreatorId: integer("from_creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		toCreatorId: integer("to_creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** `pending` | `accepted` | `declined` | `canceled`. */
+		status: text("status").notNull().default("pending"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		respondedAt: timestamp("responded_at", { withTimezone: true }),
+	},
+	(table) => [
+		// One request can be open at a time. A partial unique index is the database's
+		// guarantee; the route still checks first so a double click reads a clear refusal.
+		uniqueIndex("uq_badge_publisher_handover_pending")
+			.on(table.badgeId)
+			.where(sql`status = 'pending'`),
+		index("idx_badge_publisher_handovers_badge").on(table.badgeId, table.createdAt),
+	],
+);
+
+/**
  * Who drew the emblem on one creator Badge, recorded at the moment it was picked.
  *
  * 🚨 **This row is what makes the artist credit renderable, and what keeps a creator's

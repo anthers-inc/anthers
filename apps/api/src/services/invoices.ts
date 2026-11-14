@@ -28,6 +28,8 @@ import {
 	retrieveSubscription,
 } from "../lib/processor.js";
 import { anthersUserId } from "./anthers-badges.js";
+import { badgeOwnerIdsForBadges } from "./badge-owners.js";
+import { splitDollarsEvenly } from "./badge-splits.js";
 import { itemsFromSub } from "./billing.js";
 import { allInvoiceLines, cycleInvoicePaysFor } from "./stripe-invoice.js";
 
@@ -148,6 +150,7 @@ async function recordLines(
 ): Promise<void> {
 	const subscriptionId = subscriptionOf(invoice);
 	const creatorOfItem = new Map<string, number | null>();
+	const badgeOfItem = new Map<string, number>();
 	if (subscriptionId) {
 		const sub = await retrieveSubscription(subscriptionId);
 		// A retrieve that comes back empty leaves every line unmapped, which credits
@@ -163,22 +166,43 @@ async function recordLines(
 		for (const item of itemsFromSub(
 			sub ?? ({ items: { data: [] } } as unknown as Stripe.Subscription),
 			anthersId,
-		))
+		)) {
 			creatorOfItem.set(item.itemId, item.creatorId === anthersId ? null : item.creatorId);
+			if (item.badgeId != null) badgeOfItem.set(item.itemId, item.badgeId);
+		}
 	}
+
+	// A Collab Badge's line splits across its owners. Load the owner sets once for the
+	// whole invoice; the subscription item's `badgeId` stamp names the Badge, so a
+	// publisher change after the subscription was taken out still credits the current
+	// owners rather than the old routing token.
+	const ownersByBadge = await badgeOwnerIdsForBadges([...new Set(badgeOfItem.values())]);
 
 	const byCreator = new Map<number | null, Decimal>();
 	for (const line of await allInvoiceLines(invoice)) {
 		const itemId = line.parent?.subscription_item_details?.subscription_item;
-		// An unmapped line is credited to Anthers, which is `itemsFromSub`'s documented
-		// fallback for an unstamped item and the migration path for an older subscription.
-		const creatorId = itemId ? (creatorOfItem.get(itemId) ?? null) : null;
+		const fallbackCreatorId = itemId ? (creatorOfItem.get(itemId) ?? null) : null;
+		const badgeId = itemId ? badgeOfItem.get(itemId) : undefined;
 		// 🚨 **Net of its discounts.** A line's `amount` is what it came to BEFORE the day-exact
 		// reduction was spent on it; what was actually charged for it is that less its
 		// `discount_amounts`. Crediting `amount` alone pays a creator the reduction the supporter
 		// was given back.
 		const discounted = (line.discount_amounts ?? []).reduce((sum, d) => sum + (d.amount ?? 0), 0);
 		const amount = dollars((line.amount ?? 0) - discounted);
+		const owners = badgeId != null ? (ownersByBadge.get(badgeId) ?? []) : [];
+		if (owners.length > 1) {
+			// Split in integer cents so the rows reconcile exactly; the last owner absorbs
+			// the remainder, the same rule the card fee uses.
+			const shares = splitDollarsEvenly(amount, owners.length);
+			owners.forEach((ownerId, index) => {
+				const share = new Decimal(shares[index] ?? 0).dividedBy(100);
+				byCreator.set(ownerId, (byCreator.get(ownerId) ?? new Decimal(0)).plus(share));
+			});
+			continue;
+		}
+		// One owner is the publisher; use the Badge's current owner rather than the item's
+		// routing token, which may name a creator who has since handed the role away.
+		const creatorId = owners.length === 1 ? owners[0] : fallbackCreatorId;
 		byCreator.set(creatorId, (byCreator.get(creatorId) ?? new Decimal(0)).plus(amount));
 	}
 

@@ -961,6 +961,8 @@ export default function CreatorProfilePage() {
 							canBuy={!isOwnProfile}
 							authenticated={isAuthenticated === true}
 							isOwner={isOwnProfile}
+							profileCreatorId={creatorStatus?.creatorId}
+							heldByPublisher={creatorStatus?.heldByPublisher}
 							onEdit={(badge) => setEditingBadgeId(badge.id)}
 							onAdd={() => setEditingBadgeId("new")}
 						/>

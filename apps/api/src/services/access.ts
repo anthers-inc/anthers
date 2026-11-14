@@ -44,7 +44,7 @@
 
 import { db } from "@anthers/db/client";
 import type { AccessRow } from "@anthers/db/schema";
-import { badges, purchases, userBadges } from "@anthers/db/schema";
+import { badgeCollaborators, badges, purchases, userBadges } from "@anthers/db/schema";
 import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { amountMeets, supportAmount } from "@anthers/shared/constants";
 import { isPreRelease } from "@anthers/shared/content";
@@ -54,7 +54,7 @@ import {
 	type ParentalPolicy,
 	parentalRefusal,
 } from "@anthers/shared/parental-controls";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 // The Anthers-ladder read lives with the badge seed it reads (`anthersUserId`);
 // re-exported so this module's callers keep the name they have always imported.
 import { heldAnthersBadgeAmount, heldAnthersBadgeAmountInCycle } from "./anthers-badges.js";
@@ -751,25 +751,22 @@ export async function buildAccessContext(
 	const cycle = currentBillingCycle();
 	const scoped = opts.workIds && opts.workIds.length > 0;
 
-	// What this user gives each creator this cycle: the threshold of the single Badge
-	// they hold from that creator. A holding is a discrete pick of a named Badge (one row
-	// per user, badge and cycle), and the model holds at most one badge per issuer per
-	// cycle — so "what this user gives this creator" is one threshold, 0/absent when
-	// nothing is held, rather than a sum of rows. The MAX is belt-and-braces: it enforces
-	// that shape in the query itself, so two holdings from one issuer in one cycle (which
-	// the unique index permits, being keyed on the badge) can never double-count — the
-	// higher threshold wins, which is the conservative reading for gating and can only
-	// under-grant rather than over-grant.
-	const [badgeRows, purchaseRows, adult, parental] = await Promise.all([
+	// What this user gives each creator this cycle: the threshold of the Badge they hold.
+	// A holding is a discrete pick of a named Badge (one row per user, badge and cycle),
+	// and a Badge can now have several owners, so the threshold counts against **every**
+	// owner — a shared Badge is one door into each owner's Works, not a fraction of one.
+	// The MAX keeps the historical one-rung-per-publisher reading if two holdings ever
+	// reach one owner; it can only under-grant, never over-grant.
+	const [heldBadges, purchaseRows, adult, parental] = await Promise.all([
 		db
 			.select({
-				creatorId: badges.creatorId,
-				given: sql<string>`MAX(${badges.threshold})`,
+				badgeId: userBadges.badgeId,
+				publisherId: badges.creatorId,
+				given: badges.threshold,
 			})
 			.from(userBadges)
 			.innerJoin(badges, eq(badges.id, userBadges.badgeId))
-			.where(and(eq(userBadges.userId, userId), eq(userBadges.billingCycle, cycle)))
-			.groupBy(badges.creatorId),
+			.where(and(eq(userBadges.userId, userId), eq(userBadges.billingCycle, cycle))),
 		db
 			.select({ workId: purchases.workId })
 			.from(purchases)
@@ -784,6 +781,29 @@ export async function buildAccessContext(
 		parentalPolicyFor(userId),
 	]);
 
+	// The collaborator rows for the held Badges, in one batch. The owner set is the
+	// publisher plus every accepted row; a solo holding has no rows here, which is why
+	// the map starts from the publisher rather than from a join.
+	const heldBadgeIds = heldBadges.map((row) => row.badgeId);
+	const collaboratorRows =
+		heldBadgeIds.length > 0
+			? await db
+					.select({
+						badgeId: badgeCollaborators.badgeId,
+						creatorId: badgeCollaborators.creatorId,
+					})
+					.from(badgeCollaborators)
+					.where(
+						and(
+							inArray(badgeCollaborators.badgeId, heldBadgeIds),
+							eq(badgeCollaborators.status, "accepted"),
+						),
+					)
+			: [];
+	const ownersByBadge = new Map<number, number[]>();
+	for (const row of heldBadges) ownersByBadge.set(row.badgeId, [row.publisherId]);
+	for (const row of collaboratorRows) ownersByBadge.get(row.badgeId)?.push(row.creatorId);
+
 	// The held Badge's threshold is **GROSS** — what the user chose to give, before any
 	// card fee — and is what gating reads (see the warning on `user_badges.badge_id`'s
 	// docblock in the schema). Paying the processor must never cost a supporter the
@@ -792,8 +812,11 @@ export async function buildAccessContext(
 	// pool actually pays out — lives on `pool_distributions.badge_amount` and is never
 	// read here.
 	const supportByCreator = new Map<number, number>();
-	for (const b of badgeRows) {
-		supportByCreator.set(b.creatorId, supportAmount(b.given));
+	for (const holding of heldBadges) {
+		const given = supportAmount(holding.given);
+		for (const ownerId of ownersByBadge.get(holding.badgeId) ?? [holding.publisherId]) {
+			supportByCreator.set(ownerId, Math.max(supportByCreator.get(ownerId) ?? 0, given));
+		}
 	}
 
 	return {
@@ -858,7 +881,12 @@ export async function normalizeAccessRows(
 	const rungs = await db
 		.select({ id: badges.id, threshold: badges.threshold })
 		.from(badges)
-		.where(eq(badges.creatorId, creatorId));
+		.where(
+			or(
+				eq(badges.creatorId, creatorId),
+				sql`EXISTS (SELECT 1 FROM ${badgeCollaborators} WHERE ${badgeCollaborators.badgeId} = ${badges.id} AND ${badgeCollaborators.creatorId} = ${creatorId} AND ${badgeCollaborators.status} = 'accepted')`,
+			),
+		);
 	const byId = new Map(rungs.map((r) => [r.id, Number(r.threshold)]));
 
 	const seen = new Set<number>();
