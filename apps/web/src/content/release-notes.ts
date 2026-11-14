@@ -71,6 +71,19 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.15",
+		date: "2026-11-13",
+		lede: "The signed-in app now tells a user plainly that Anthers is in alpha and where to write when something is rough, and the admin app now carries a directory of every account.",
+		entries: [
+			"The signed-in app carries a thin notice above its top bar that says Anthers is in alpha and gives the address to write to when something is rough. It stays until the user closes it, and that choice is kept in the browser. It does not appear signed out.",
+			"Dialog boxes in the signed-in app now paint above the top bar rather than under it, so a dialog's close button is not covered by the header.",
+			"The admin app has a Users directory: every account, newest first and fifty to a page, searchable by name, handle, email address, or account number. Each row carries the address and whether it is verified, creator standing, the join date, and the state (active, suspended, or deletion pending), with links to the account's moderation record and profile. The screen is read-only.",
+			"The admin Home now leads with the queues waiting on somebody and puts Deadlines and Dispute Standing at the bottom.",
+			"The four dark themes now sit on a darker, less saturated ground, with cards and the sidebar left as they were so they stand out more against it. The light themes are unchanged.",
+			"An email that Resend suppresses because the address is on its suppression list is now recorded as a final outcome rather than as still in flight. The admin app's Failed Mail list labels it Suppressed by Resend and stops waiting on it.",
+		],
+	},
+	{
 		version: "2026.11.14",
 		date: "2026-11-13",
 		lede: "A physical good's thumbnail now loads on the cards that show it, and the sidebar keeps its open or closed state across the signed-in areas.",
