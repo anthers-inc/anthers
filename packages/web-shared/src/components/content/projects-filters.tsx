@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The Studio's Projects page's sidebar filters — SEARCH over the title and description,
- * STATUS (published or draft), and WORK TYPE matching any Work the project holds. The
+ * STATUS (published or draft), and TYPES matching any Work the project holds. The
  * Works table's sections' twin (`works-filters.tsx`), with this page's vocabulary: a
  * Project has no visibility ladder of its own (a project publishes or is a draft — the
  * Works inside it carry the gates), and its type filter describes what it contains, the
@@ -11,7 +11,13 @@
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useMemo } from "react";
 import type { Project } from "../../lib/types";
-import { filterBtnClass, sectionTitleClass } from "./studio-filter-classes";
+import InfoTip from "../ui/InfoTip";
+import {
+	filterBtnClass,
+	sectionHeadingClass,
+	sectionTitleClass,
+	sectionTitleRowClass,
+} from "./studio-filter-classes";
 import { LIBRARY_TYPE_OPTIONS, TypeIcon, typeLabel } from "./works";
 
 const STATUSES = [
@@ -47,7 +53,13 @@ export default function ProjectsFilterSections({
 	return (
 		<div className="flex flex-col gap-5">
 			<section>
-				<h3 className={sectionTitleClass}>Search</h3>
+				<div className={sectionTitleRowClass}>
+					<h3 className={sectionHeadingClass}>Search</h3>
+					<InfoTip
+						unclipped
+						text="Search narrows the table to Projects whose title or description contains the text. It combines with the sections below it, and the address bar carries the result, so a filtered table can be bookmarked or sent."
+					/>
+				</div>
 				<label className="input input-bordered input-xs flex items-center gap-1.5 w-full">
 					<MagnifyingGlassIcon className="w-3 h-3 text-base-content/40" />
 					<input
@@ -83,10 +95,16 @@ export default function ProjectsFilterSections({
 				</div>
 			</section>
 
-			{/* WORK TYPE — the kinds these projects hold. A project matches on ANY work in
+			{/* TYPES — the kinds these projects hold. A project matches on ANY work in
 			    it, the rule its own public listing filters by. */}
 			<section>
-				<h3 className={sectionTitleClass}>Work Type</h3>
+				<div className={sectionTitleRowClass}>
+					<h3 className={sectionHeadingClass}>Types</h3>
+					<InfoTip
+						unclipped
+						text="Types narrow the table to Projects holding at least one Work of that kind. A Project matches on any Work in it, so a mixed Project appears under each of its kinds."
+					/>
+				</div>
 				<div className="flex flex-col gap-0.5">
 					<button
 						type="button"

@@ -3,10 +3,10 @@
  * The house sidebar structure (Parker, 2026-10-11): the nav tabs, a divider below
  * them that is PERSISTENT — it stands even where the page registers nothing — then
  * the tab-shared Lenses, a second divider, and the shared filters (Access where the
- * tab consumes it, Type, Tags).
+ * tab consumes it, Types, Tags).
  *
  * Pins in the shape of `sidebar-nav.authed.e2e.ts`: structure and order measured,
- * never a screenshot. Discovery also carries a consumer of the Type gray-out (its
+ * never a screenshot. Discovery also carries a consumer of the Types gray-out (its
  * lenses), which this spec exercises through the lens rows themselves; the Library's
  * own lens spec pins that tab's copy.
  */
@@ -44,9 +44,11 @@ const sidebarMap = (page: import("@playwright/test").Page) =>
 const typeSectionRows = (page: import("@playwright/test").Page) =>
 	page.evaluate(() => {
 		const sections = [...document.querySelectorAll("aside section")];
-		const typeSection = sections.find((s) => s.querySelector("h3")?.textContent === "Type");
+		const typeSection = sections.find((s) => s.querySelector("h3")?.textContent === "Types");
 		if (!typeSection) return null;
-		return [...typeSection.querySelectorAll("button")].map((b) => b.textContent?.trim());
+		return [...typeSection.querySelectorAll("button")]
+			.filter((b) => b.getAttribute("aria-label") !== "More Information")
+			.map((b) => b.textContent?.trim());
 	});
 
 test("the sidebar reads tabs, divider, lenses, divider, shared filters", async ({ page }) => {
@@ -58,18 +60,18 @@ test("the sidebar reads tabs, divider, lenses, divider, shared filters", async (
 
 	// The section order on the Feed: the tab-shared LENSES (the middles are lenses
 	// now), then the shared filters — Access, which the feed's stream consumes, then
-	// Type, then Tags.
+	// Types, then Tags.
 	expect(await page.getByRole("heading", { name: "Lenses", exact: true })).toBeVisible();
 	expect(await page.getByRole("heading", { name: "Access", exact: true })).toBeVisible();
-	expect(await page.getByRole("heading", { name: "Type", exact: true })).toBeVisible();
+	expect(await page.getByRole("heading", { name: "Types", exact: true })).toBeVisible();
 	expect(await page.getByRole("heading", { name: "Tags", exact: true })).toBeVisible();
 	const headingY = async (name: string) =>
 		await page
 			.getByRole("heading", { name, exact: true })
 			.evaluate((el) => el.getBoundingClientRect().y);
 	expect(await headingY("Lenses")).toBeLessThan(await headingY("Access"));
-	expect(await headingY("Access")).toBeLessThan(await headingY("Type"));
-	expect(await headingY("Type")).toBeLessThan(await headingY("Tags"));
+	expect(await headingY("Access")).toBeLessThan(await headingY("Types"));
+	expect(await headingY("Types")).toBeLessThan(await headingY("Tags"));
 
 	// The map carries the two dividers between the sections: one below the nav
 	// (persistent), one between the Lenses and the shared filters.
@@ -89,9 +91,14 @@ test("the sidebar reads tabs, divider, lenses, divider, shared filters", async (
 	const lensRows = await page.evaluate(() => {
 		const headings = [...document.querySelectorAll("aside section h3")];
 		const s = headings.find((h) => h.textContent === "Lenses")?.closest("section");
-		return [...(s?.querySelectorAll("button") ?? [])].map(
-			(b) =>
-				`${b.textContent?.trim()}${b.getAttribute("aria-disabled") === "true" ? " [grayed]" : ""}`,
+		return (
+			[...(s?.querySelectorAll("button") ?? [])]
+				// The heading's (i) explainer is its own control, not one of the lens rows.
+				.filter((b) => b.getAttribute("aria-label") !== "More Information")
+				.map(
+					(b) =>
+						`${b.textContent?.trim()}${b.getAttribute("aria-disabled") === "true" ? " [grayed]" : ""}`,
+				)
 		);
 	});
 	expect(lensRows).toEqual(["No Lens", "Music Player", "Channel Guide", "Bookshelf"]);
@@ -109,14 +116,14 @@ test("the sidebar reads tabs, divider, lenses, divider, shared filters", async (
 	await expect(page.getByRole("heading", { name: "Lenses", exact: true })).toBeVisible();
 	await expect(page.getByTestId("release-grid")).toHaveCount(0);
 
-	// The retired names are gone: the shared section's heading is Type, not Work Type
-	// — and Bookmarks, whose strip the Save unification retires, has no heading left
-	// on this sidebar.
+	// The retired names are gone: the shared section's heading is Types, not Type or
+	// Work Type — and Bookmarks, whose strip the Save unification retires, has no
+	// heading left on this sidebar.
 	expect(await page.getByText("Work Type").count()).toBe(0);
 	expect(await page.getByRole("heading", { name: "Bookmarks", exact: true }).count()).toBe(0);
 });
 
-test("the shared Type list is the unified vocabulary, grayed rows included", async ({ page }) => {
+test("the shared Types list is the unified vocabulary, grayed rows included", async ({ page }) => {
 	test.setTimeout(60_000);
 	await page.goto(DISCOVERY);
 	await expect(
@@ -124,7 +131,7 @@ test("the shared Type list is the unified vocabulary, grayed rows included", asy
 	).toBeVisible();
 	// The shared sections mount in an effect after first paint; wait for the
 	// vocabulary rather than racing it.
-	await expect(page.getByRole("heading", { name: "Type", exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Types", exact: true })).toBeVisible();
 	// All, then Posts below it, then every Work type in the shared order — the one
 	// list every tab's sidebar carries (grayed consumers assert this where they land).
 	expect(await typeSectionRows(page)).toEqual([
@@ -144,13 +151,13 @@ test("the shared Type list is the unified vocabulary, grayed rows included", asy
 	]);
 });
 
-test("a Type selection filters the feed through the page's own adapter", async ({ page }) => {
+test("a Types selection filters the feed through the page's own adapter", async ({ page }) => {
 	test.setTimeout(60_000);
 	await page.goto(DISCOVERY);
 	await expect(
 		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Discovery" }),
 	).toBeVisible();
-	await expect(page.getByRole("heading", { name: "Type", exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Types", exact: true })).toBeVisible();
 
 	// Posts is a KIND of feed entry, not a Work type: the shared row's selection
 	// translates to the feed route's `kind=posts`, not to `media_type=posts`. The

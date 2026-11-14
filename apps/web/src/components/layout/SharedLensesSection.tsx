@@ -16,6 +16,7 @@
  * this component does not have.
  */
 
+import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import {
 	MusicalNoteIcon,
 	Square3Stack3DIcon,
@@ -41,8 +42,9 @@ export const LENSES = [
  */
 export const ALL_LENS_IDS: ReadonlySet<string> = new Set(LENSES.map((lens) => lens.id));
 
-const sectionTitleClass =
-	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
+const sectionHeadingClass =
+	"text-xs font-semibold uppercase tracking-wider text-base-content/40 flex items-center gap-1.5";
+const sectionTitleRowClass = "flex items-center gap-1.5 mb-2";
 
 export default function SharedLensesSection({
 	lens,
@@ -57,7 +59,16 @@ export default function SharedLensesSection({
 }) {
 	return (
 		<section>
-			<h3 className={sectionTitleClass}>Lenses</h3>
+			{/* The (i) rides BESIDE the heading, never inside it: in the h3 its
+			    "More Information" joins the heading's accessible name, and every
+			    exact-match heading selector in the sidebar specs stops matching. */}
+			<div className={sectionTitleRowClass}>
+				<h3 className={sectionHeadingClass}>Lenses</h3>
+				<InfoTip
+					unclipped
+					text="A lens changes how the page is arranged rather than what it holds: Music Player gathers music into releases, Channel Guide lays videos out by creator, and Bookshelf stands written work on a shelf. No Lens is the plain grid."
+				/>
+			</div>
 			<div className="flex flex-col gap-0.5">
 				{LENSES.map((lensItem) => {
 					const built = live.has(lensItem.id);
