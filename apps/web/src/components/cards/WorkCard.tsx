@@ -8,6 +8,7 @@ import {
 	MaturityVeil,
 	useContentPreferences,
 } from "@anthers/web-shared/content-preferences";
+import ComboAvatar from "@anthers/web-shared/creator/ComboAvatar";
 import {
 	LockedCover,
 	lockedByBadge,
@@ -17,6 +18,7 @@ import {
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import { isAccessResult, type Work } from "@anthers/web-shared/types";
+import { hasSeveralOwners, ownerNames } from "@anthers/web-shared/work-owners";
 import { PlayIcon } from "@heroicons/react/24/solid";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
@@ -24,6 +26,7 @@ import CreatorLink from "./CreatorLink";
 
 /** Who the support would go to, for a card's unlock copy. */
 function cardCreatorName(work: WorkCardItem): string {
+	if (hasSeveralOwners(work.owners)) return ownerNames(work.owners);
 	return work.creator?.displayName || work.creator?.handle || "this creator";
 }
 
@@ -140,7 +143,9 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 				{/* Creator info — the name is the creator's way out of the card
 				    (CreatorLink rises past the card's stretched overlay to take its click). */}
 				<div className="flex items-center gap-2">
-					{post.creator?.avatar ? (
+					{hasSeveralOwners(post.owners) ? (
+						<ComboAvatar owners={post.owners ?? []} size={24} />
+					) : post.creator?.avatar ? (
 						<img
 							src={post.creator.avatar}
 							alt={post.creator.handle}
@@ -151,11 +156,15 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 							{(post.creator?.handle ?? "?").charAt(0).toUpperCase()}
 						</div>
 					)}
-					<CreatorLink
-						handle={post.creator?.handle}
-						name={post.creator?.handle ?? ""}
-						className="text-sm text-base-content/70 hover:underline"
-					/>
+					{hasSeveralOwners(post.owners) ? (
+						<span className="text-sm text-base-content/70 truncate">{ownerNames(post.owners)}</span>
+					) : (
+						<CreatorLink
+							handle={post.creator?.handle}
+							name={post.creator?.handle ?? ""}
+							className="text-sm text-base-content/70 hover:underline"
+						/>
+					)}
 					<span className="text-xs text-base-content/40 ml-auto">{date}</span>
 				</div>
 

@@ -51,6 +51,7 @@ import { markPurchaseDownloaded } from "../../services/refunds.js";
 import { storage } from "../../services/storage/index.js";
 import { isWorkMediaKey, urlToKey, type WorkStorageOwner } from "../../services/storage/keys.js";
 import { signWorkObject } from "../../services/storage/own.js";
+import { isWorkOwner } from "../../services/work-owners.js";
 import {
 	findWorkVersion,
 	listWorkVersions,
@@ -289,7 +290,8 @@ const workMediaRoutes = new Hono()
 		const work = await findWorkRow(c.req.param("id") ?? "");
 		if (!work) return c.json({ error: "Work not found" }, 404);
 		const userId = await getOptionalUserId(c);
-		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
+		if (userId == null || !(await isWorkOwner(work.id, userId)))
+			return c.json({ error: "Work not found" }, 404);
 
 		const rows = await listWorkVersions(work.id);
 		// Each archived version carries its own flag; the Work's current version carries
@@ -304,7 +306,8 @@ const workMediaRoutes = new Hono()
 		const work = await findWorkRow(c.req.param("id") ?? "");
 		if (!work) return c.json({ error: "Work not found" }, 404);
 		const userId = await getOptionalUserId(c);
-		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
+		if (userId == null || !(await isWorkOwner(work.id, userId)))
+			return c.json({ error: "Work not found" }, 404);
 
 		const versionId = parseNumericId(c.req.param("versionId") ?? "");
 		if (versionId == null) return c.json({ error: "Version not found" }, 404);
@@ -340,7 +343,8 @@ const workMediaRoutes = new Hono()
 		const work = await findWorkRow(c.req.param("id") ?? "");
 		if (!work) return c.json({ error: "Work not found" }, 404);
 		const userId = await getOptionalUserId(c);
-		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
+		if (userId == null || !(await isWorkOwner(work.id, userId)))
+			return c.json({ error: "Work not found" }, 404);
 
 		const versionRefusal = await mediaMutabilityRefusal(work);
 		if (versionRefusal) return c.json(versionRefusal.body, versionRefusal.status);
@@ -395,7 +399,8 @@ const workMediaRoutes = new Hono()
 	.delete("/works/:id/transcoding/:jobId", requireAuth, async (c) => {
 		const user = c.get("user");
 		const work = await findWorkRow(c.req.param("id"));
-		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!work || !(await isWorkOwner(work.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		const jobId = Number(c.req.param("jobId"));
 
 		// A quarantined, taken-down or held Work is untouchable at 404 or 409, on the same
@@ -457,7 +462,8 @@ const workMediaRoutes = new Hono()
 	.delete("/works/:id/media", requireAuth, async (c) => {
 		const user = c.get("user");
 		const work = await findWorkRow(c.req.param("id"));
-		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!work || !(await isWorkOwner(work.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		const removalRefusal = await mediaMutabilityRefusal(work);
 		if (removalRefusal) return c.json(removalRefusal.body, removalRefusal.status);
 		if (work.releasedAt) {
@@ -942,7 +948,7 @@ const workMediaRoutes = new Hono()
 		const limited = await parentalTimeGate(viewerId, work);
 		if (limited) return c.json(limited, 403);
 
-		const correcting = viewerId != null && viewerId === work.creatorId;
+		const correcting = viewerId != null && (await isWorkOwner(work.id, viewerId));
 		const pages = await db
 			.select({
 				pageNumber: workPages.pageNumber,
@@ -1007,7 +1013,8 @@ const workMediaRoutes = new Hono()
 			if (!work) return c.json({ error: "Work not found" }, 404);
 
 			const userId = await getOptionalUserId(c);
-			if (userId !== work.creatorId) return c.json({ error: "Forbidden" }, 403);
+			if (userId == null || !(await isWorkOwner(work.id, userId)))
+				return c.json({ error: "Forbidden" }, 403);
 			if (!isPaged(work.type)) return c.json({ error: "Not a paged Work" }, 400);
 
 			const { pageNumber, enabled, panels } = c.req.valid("json");

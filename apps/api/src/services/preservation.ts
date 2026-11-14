@@ -45,7 +45,8 @@
 
 import { db, workAssets, workBuildFiles, workBuilds, workMediaVersions, works } from "@anthers/db";
 import type { WorkVersionMedia } from "@anthers/db/schema";
-import { and, eq, exists, isNull, ne, or, type SQL, sql } from "drizzle-orm";
+import { and, eq, exists, isNull, not, or, type SQL, sql } from "drizzle-orm";
+import { workOwnedBy } from "./work-owners.js";
 
 /**
  * Mark the media version this Work currently serves as preserved, if somebody other than
@@ -73,7 +74,7 @@ export async function preserveCurrentVersion(workId: number, keeperId: number): 
 			and(
 				eq(works.id, workId),
 				eq(works.preserved, false),
-				or(isNull(works.creatorId), ne(works.creatorId, keeperId)),
+				or(isNull(works.creatorId), not(workOwnedBy(keeperId))),
 			),
 		);
 }

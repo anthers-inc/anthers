@@ -60,6 +60,7 @@ import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { heldAnthersBadgeAmount, heldAnthersBadgeAmountInCycle } from "./anthers-badges.js";
 import { adultAccessFor } from "./content-preferences.js";
 import { parentalPolicyFor } from "./parental-controls.js";
+import { workOwnerIdsForWorks } from "./work-owners.js";
 
 export { heldAnthersBadgeAmount, heldAnthersBadgeAmountInCycle };
 
@@ -134,6 +135,17 @@ export interface AccessContext {
 	supportByCreator: Map<number, number>;
 	/** Work ids the user has a completed purchase for */
 	purchasedWorkIds: Set<number>;
+	/**
+	 * Work ids this user owns — the publisher or an accepted collaborator.
+	 *
+	 * 🚨 **The owner check is a set in the context rather than a comparison against
+	 * `works.creatorId`, because the resolver is synchronous and runs in batches.** A
+	 * Collab Work has several owners, and resolving a page of them must not add a query per
+	 * Work. `buildAccessContext` loads the set for the Works it was scoped to; a context
+	 * built without work ids owns nothing it can prove, and the route's own reachability
+	 * check is what gates a private Work.
+	 */
+	ownedWorkIds?: Set<number>;
 	/**
 	 * May this user reach Works rated `adult`? The AND of the account-level opt-in and a
 	 * one-time adulthood verification — `services/content-preferences.ts` owns both.
@@ -231,6 +243,9 @@ export function buildPreviewContext(opts: {
 		// empty rather than being special-cased in the resolver.
 		supportByCreator: signedOut ? new Map() : new Map([[opts.creatorId, opts.given ?? 0]]),
 		purchasedWorkIds: !signedOut && opts.owned ? new Set(opts.workIds) : new Set(),
+		// A preview asks what a stranger sees; the imagined user owns nothing, so the
+		// owner branch cannot fire and the ladder is answered on its own terms.
+		ownedWorkIds: new Set(),
 		// The imagined signed-in user has opted in and verified; the signed-out one cannot
 		// have, because there is no account to hold the setting.
 		//
@@ -469,8 +484,15 @@ function resolveAccessBase(work: AccessibleWork, ctx: AccessContext): AccessResu
 		return { ...base, canAccess: false, reason: "takedown" };
 	}
 
-	// Creators always see their own content.
-	if (ctx.userId != null && ctx.userId === work.creatorId) {
+	// Creators always see their own content — the publisher and every accepted co-owner.
+	// A context built outside `buildAccessContext` (the resolver's own tests, mainly)
+	// carries no set, and falls back to the publisher comparison those contexts were
+	// written against.
+	const ownsWork =
+		ctx.ownedWorkIds != null
+			? ctx.ownedWorkIds.has(work.id)
+			: ctx.userId != null && ctx.userId === work.creatorId;
+	if (ctx.userId != null && ownsWork) {
 		return { ...base, canAccess: true, reason: "owner" };
 	}
 
@@ -732,6 +754,7 @@ export async function buildAccessContext(
 			userId: null,
 			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
+			ownedWorkIds: new Set(),
 			// A signed-out visitor has no account and therefore no opt-in to read. Stated
 			// here rather than left to a default so the closed answer is visible at the one
 			// place the logged-out context is built.
@@ -750,6 +773,13 @@ export async function buildAccessContext(
 
 	const cycle = currentBillingCycle();
 	const scoped = opts.workIds && opts.workIds.length > 0;
+	const ownedWorkIds = new Set<number>();
+	if (scoped) {
+		const owners = await workOwnerIdsForWorks(opts.workIds as number[]);
+		for (const [workId, ids] of owners) {
+			if (ids.includes(userId)) ownedWorkIds.add(workId);
+		}
+	}
 
 	// What this user gives each creator this cycle: the threshold of the Badge they hold.
 	// A holding is a discrete pick of a named Badge (one row per user, badge and cycle),
@@ -826,6 +856,7 @@ export async function buildAccessContext(
 		purchasedWorkIds: new Set(
 			purchaseRows.map((p) => p.workId).filter((id): id is number => id !== null),
 		),
+		ownedWorkIds,
 		adultAccess: adult.canReach,
 		parental,
 		// Deliberately null even if a share token rode along on this request. Somebody with

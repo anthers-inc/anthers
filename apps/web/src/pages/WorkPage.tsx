@@ -37,6 +37,7 @@ import {
 	type WorkVersionEntry,
 } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
+import { hasSeveralOwners, ownerNames } from "@anthers/web-shared/work-owners";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePreviewQuery } from "../components/creator/preview";
 import SaveButton from "../components/library/SaveButton";
@@ -175,7 +176,13 @@ export default function WorkPage() {
 	 * because the page renders the editor and the previewed user view as two branches of
 	 * one page, and the control has to stay put across the switch.
 	 */
-	const isOwner = !!work && isAuthenticated && user?.id === work.creatorId;
+	const isOwner =
+		!!work &&
+		isAuthenticated &&
+		user != null &&
+		(work.owners && work.owners.length > 0
+			? work.owners.some((owner) => owner.id === user.id)
+			: user.id === work.creatorId);
 	useTopBarViewAs("Work", isOwner);
 
 	/**
@@ -342,7 +349,9 @@ export default function WorkPage() {
 	 * creator spends in their own catalog draws nothing from the Time Pool (`distribute-pool`).
 	 */
 	const canAccess = access ? access.canAccess : isOwner;
-	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
+	const creatorName = hasSeveralOwners(work.owners)
+		? ownerNames(work.owners)
+		: work.creator?.displayName || work.creator?.handle || "this creator";
 	/**
 	 * A Work whose deliverable IS its files: a build kind with downloads on, no hosted build
 	 * and no embed. That Work gets the files in its media area, where a playable one gets

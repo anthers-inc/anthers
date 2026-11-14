@@ -50,6 +50,7 @@ import {
 } from "../../services/storage/keys.js";
 import { signWorkObject } from "../../services/storage/own.js";
 import { mediaUploadKeyFor } from "../../services/upload-sessions.js";
+import { isWorkOwner } from "../../services/work-owners.js";
 import {
 	attachPreviewMedia,
 	findPreviewMedia,
@@ -503,7 +504,8 @@ const uploadsRoutes = new Hono()
 		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
 		// A 404 rather than a 403, the way the works routes answer a non-owner — the
 		// existence of another creator's Work is not information to hand out.
-		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!item || !(await isWorkOwner(item.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		if (item.type !== "video") {
 			return c.json(
 				{ error: "Only a video carries caption tracks.", code: "captions_not_video" },
@@ -537,7 +539,8 @@ const uploadsRoutes = new Hono()
 		const id = Number(c.req.param("id"));
 		const trackId = Number(c.req.param("trackId"));
 		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!item || !(await isWorkOwner(item.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		if (!Number.isInteger(trackId) || trackId <= 0) return c.json({ error: "Not found" }, 404);
 		const [track] = await db
 			.select()
@@ -609,7 +612,8 @@ const uploadsRoutes = new Hono()
 		const work = await findWorkRow(c.req.param("id"));
 		// 404 rather than 403, the way every owner route answers a non-owner: the existence
 		// of another creator's Work is not information to hand out.
-		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!work || !(await isWorkOwner(work.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		const data = c.req.valid("json");
 		try {
 			await attachPreviewMedia({
@@ -638,7 +642,8 @@ const uploadsRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const work = await findWorkRow(c.req.param("id"));
-			if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			if (!work || !(await isWorkOwner(work.id, user.id)))
+				return c.json({ error: "Work not found" }, 404);
 			try {
 				await reorderPreviewMedia(work, c.req.valid("json").previewIds);
 				return c.json({
@@ -660,7 +665,8 @@ const uploadsRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const work = await findWorkRow(c.req.param("id"));
-			if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			if (!work || !(await isWorkOwner(work.id, user.id)))
+				return c.json({ error: "Work not found" }, 404);
 			const previewId = Number(c.req.param("previewId"));
 			if (!Number.isInteger(previewId) || previewId <= 0) {
 				return c.json({ error: "Not found" }, 404);
@@ -676,7 +682,8 @@ const uploadsRoutes = new Hono()
 	.delete("/works/:id/previews/:previewId", requireAuth, async (c) => {
 		const user = c.get("user");
 		const work = await findWorkRow(c.req.param("id"));
-		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!work || !(await isWorkOwner(work.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		const previewId = Number(c.req.param("previewId"));
 		if (!Number.isInteger(previewId) || previewId <= 0) {
 			return c.json({ error: "Not found" }, 404);
@@ -698,7 +705,8 @@ const uploadsRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const work = await findWorkRow(c.req.param("id"));
-			if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			if (!work || !(await isWorkOwner(work.id, user.id)))
+				return c.json({ error: "Work not found" }, 404);
 			const previewId = Number(c.req.param("previewId"));
 			if (!Number.isInteger(previewId) || previewId <= 0) {
 				return c.json({ error: "Not found" }, 404);
@@ -739,7 +747,8 @@ const uploadsRoutes = new Hono()
 	.delete("/works/:id/previews/:previewId/captions/:trackId", requireAuth, async (c) => {
 		const user = c.get("user");
 		const work = await findWorkRow(c.req.param("id"));
-		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!work || !(await isWorkOwner(work.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		const previewId = Number(c.req.param("previewId"));
 		const trackId = Number(c.req.param("trackId"));
 		if (

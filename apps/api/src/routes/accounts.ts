@@ -173,6 +173,7 @@ import { storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
 import { storageReadingFor } from "../services/storage-reading.js";
 import { resolveThumbnailUrl } from "../services/thumbnails.js";
+import { workOwnerProfiles } from "../services/work-owners.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1388,6 +1389,10 @@ const accountRoutes = new Hono()
 			feedWorks.length > 0
 				? await buildAccessContext(sessionUser.id, { workIds: feedWorks.map((r) => r.work.id) })
 				: null;
+		const ownersByWork = await workOwnerProfiles(
+			feedWorks.map((r) => r.work.id),
+			sessionUser.id,
+		);
 
 		// The Works each post embeds, for a card thumbnail and a count — a post
 		// in the grid has no artwork of its own, and announcing something while
@@ -1485,14 +1490,15 @@ const accountRoutes = new Hono()
 			}),
 			...feedWorks.map((row) => {
 				const w = row.work;
+				const owners = ownersByWork.get(w.id) ?? [];
 				// Same reason-saying as the posts half: own released work rides the
-				// account's own id in the feed's source list.
-				const source =
-					w.creatorId === sessionUser.id
-						? ("own" as const)
-						: scope === "global"
-							? ("discovery" as const)
-							: (sourceByCreator.get(w.creatorId ?? -1) ?? ("following" as const));
+				// account's own id in the feed's source list, and a co-owned Work is
+				// "own" for every one of its owners.
+				const source = owners.some((owner) => owner.id === sessionUser.id)
+					? ("own" as const)
+					: scope === "global"
+						? ("discovery" as const)
+						: (sourceByCreator.get(w.creatorId ?? -1) ?? ("following" as const));
 				return {
 					kind: "release" as const,
 					// A release sorts on when it went public, NOT on its Created date — the

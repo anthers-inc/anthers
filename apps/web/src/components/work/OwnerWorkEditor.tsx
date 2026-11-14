@@ -100,13 +100,14 @@ import {
 	keyToPreview,
 	uploadImageSource,
 } from "@anthers/web-shared/post/mediaUpload";
+import WorkCollaboratorsPanel from "@anthers/web-shared/post/WorkCollaboratorsPanel";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { publishingPermissionMissing, usePublishingState } from "@anthers/web-shared/publishing";
 import {
 	RATED_PUBLIC_ACCESS_HELP,
 	showsRatedPublicAccessNotice,
 } from "@anthers/web-shared/rated-public-access";
-import { Link } from "@anthers/web-shared/router";
+import { Link, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
 import {
@@ -219,6 +220,7 @@ export default function OwnerWorkEditor({
 	onRefetch: () => void;
 }) {
 	const { user } = useAuth();
+	const navigate = useNavigate();
 	/** Whether the persistent player bar owns the bottom edge, so the floating card clears it. */
 	const playerUp = useMediaPlayer().currentTrack !== null;
 	const [current, setCurrent] = useState<WorkDetail>(work);
@@ -984,14 +986,9 @@ export default function OwnerWorkEditor({
 				: current.sourceKey,
 		gallery: current.type === "image" ? (current.gallery ?? []).map(keyToPreview) : undefined,
 		thumbnail: thumbnailPreview ?? current.thumbnail,
-		creator: user?.handle
-			? {
-					handle: user.handle,
-					displayName: user.displayName ?? null,
-					avatar: user.avatar ?? null,
-					bio: user.bio ?? null,
-				}
-			: current.creator,
+		// The API's creator (the publisher) and owner set; the byline reads `owners`
+		// and never stamps the signed-in user onto a co-owned Work.
+		creator: current.creator,
 	};
 
 	const thumbnailField = (
@@ -1760,6 +1757,18 @@ export default function OwnerWorkEditor({
 			label: "Accessibility",
 			content: accessibilityContent,
 			action: accessibilityEditable ? accessibilityEdit.actions : undefined,
+		},
+		{
+			key: "collaborators",
+			label: "Collaborators",
+			content: (
+				<WorkCollaboratorsPanel
+					workId={current.id}
+					workTitle={current.title || "this Work"}
+					onChanged={() => void onRefetch?.()}
+					onLeft={() => navigate(studioUrl("/works"))}
+				/>
+			),
 		},
 	];
 

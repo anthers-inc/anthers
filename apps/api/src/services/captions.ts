@@ -32,6 +32,7 @@ import { workCaptionTracks, workPreviewMedia } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { storage } from "./storage/index.js";
 import { isWorkMediaKey, urlToKey, type WorkStorageOwner } from "./storage/keys.js";
+import { isWorkOwner } from "./work-owners.js";
 
 type WorkRow = typeof works.$inferSelect;
 type PreviewMediaRow = typeof workPreviewMedia.$inferSelect;
@@ -162,10 +163,10 @@ export interface AttachCaptionInput {
  */
 export async function attachCaptionTrack(input: AttachCaptionInput): Promise<CaptionTrackRow> {
 	const { work, requesterId } = input;
-	if (work.creatorId !== requesterId) {
+	if (!(await isWorkOwner(work.id, requesterId))) {
 		// The routes answer 404 for a non-owner before reaching here; this is the backstop
 		// for any future caller that forgets, stated as an error rather than a silent write.
-		throw new Error("Only the Work's creator may attach captions.");
+		throw new Error("Only a Work owner may attach captions.");
 	}
 	const validated = await validateVttUpload(input);
 
@@ -260,8 +261,8 @@ export async function attachPreviewCaptionTrack(input: {
 	kind?: CaptionKind;
 }): Promise<PreviewCaptionTrackRow> {
 	const { work, preview, requesterId } = input;
-	if (work.creatorId !== requesterId || preview.workId !== work.id) {
-		throw new Error("Only the Work's creator may attach captions to its trailer.");
+	if (!(await isWorkOwner(work.id, requesterId)) || preview.workId !== work.id) {
+		throw new Error("Only a Work owner may attach captions to its trailer.");
 	}
 	if (preview.kind !== "video") {
 		throw new VttRefusal("A screenshot takes alt text, not caption tracks.");

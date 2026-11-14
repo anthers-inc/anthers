@@ -33,7 +33,7 @@ import { POST_PREVIEW_EXCERPT_LIMIT, postPreviewFor } from "@anthers/shared/post
 import { normalizeTag } from "@anthers/shared/tags";
 import { workPreviewFor } from "@anthers/shared/work-preview";
 import { zValidator } from "@hono/zod-validator";
-import { and, asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { queueScansForWork } from "../../jobs/scan-media.js";
@@ -82,6 +82,11 @@ import {
 } from "../../services/share-links.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../../services/storage/keys.js";
 import { queueWorkListingSync } from "../../services/work-listing.js";
+import {
+	workOwnedBy,
+	workOwnerIdsForWorks,
+	workOwnerProfiles,
+} from "../../services/work-owners.js";
 import { listPreviewMedia } from "../../services/work-preview-media.js";
 import {
 	allowanceSpent,
@@ -315,7 +320,7 @@ const worksRoutes = new Hono()
 		const items = await db
 			.select()
 			.from(works)
-			.where(eq(works.creatorId, user.id))
+			.where(workOwnedBy(user.id))
 			.orderBy(desc(works.createdAt));
 		if (items.length === 0) return c.json({ works: [] });
 
@@ -451,6 +456,7 @@ const worksRoutes = new Hono()
 			);
 		});
 
+		const ownersByWork = await workOwnerIdsForWorks(gated.map((work) => work.id));
 		return c.json({
 			works: gated.map((work) => ({
 				id: work.id,
@@ -464,7 +470,7 @@ const worksRoutes = new Hono()
 				imageAlt: work.imageAlt ?? "",
 				// Only the Work's own creator can change its gate, even when the Badge is
 				// co-owned. The row is still listed so the group can see what it opens.
-				editable: work.creatorId === user.id,
+				editable: (ownersByWork.get(work.id) ?? []).includes(user.id),
 			})),
 		});
 	})
@@ -500,7 +506,7 @@ const worksRoutes = new Hono()
 			const [work] = await db
 				.select()
 				.from(works)
-				.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+				.where(and(eq(works.id, workId), workOwnedBy(user.id)))
 				.limit(1);
 			if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -564,7 +570,7 @@ const worksRoutes = new Hono()
 		const [work] = await db
 			.select()
 			.from(works)
-			.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+			.where(and(eq(works.id, workId), workOwnedBy(user.id)))
 			.limit(1);
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -722,6 +728,7 @@ const worksRoutes = new Hono()
 				.select({ count: sql<number>`count(*)::int` })
 				.from(workSections)
 				.where(eq(workSections.workId, work.id));
+			const owners = (await workOwnerProfiles([work.id], userId)).get(work.id) ?? [];
 			return c.json({
 				work: {
 					...(await serializeWork(
@@ -740,6 +747,7 @@ const worksRoutes = new Hono()
 					pageCount: pageRow?.count ?? 0,
 					sectionCount: sectionRow?.count ?? 0,
 					shownOn,
+					owners,
 				},
 			});
 		}
@@ -803,6 +811,7 @@ const worksRoutes = new Hono()
 			.from(workSections)
 			.where(eq(workSections.workId, work.id));
 
+		const owners = (await workOwnerProfiles([work.id], userId)).get(work.id) ?? [];
 		return c.json({
 			work: {
 				...(await serializeWorkForUser(
@@ -811,7 +820,7 @@ const worksRoutes = new Hono()
 					jobRows[0] ?? null,
 					resolveAccessSync(
 						work as AccessibleWork,
-						contextFor(work, userId, ctx, previewRequest(c)),
+						await contextFor(work, userId, ctx, previewRequest(c)),
 					),
 					deliveryCtx(c, sharedBy != null ? (c.req.query("share") ?? null) : null, userId),
 					await allowanceSpent(userId, sharedBy),
@@ -833,6 +842,7 @@ const worksRoutes = new Hono()
 					previewCaptionRows,
 				)),
 				creator,
+				owners,
 				creatorHasStripe,
 				// Who sent them, when they arrived by a share link — a display name and nothing
 				// else. The recipient is told whose link they followed because it is what makes
@@ -1018,6 +1028,10 @@ const worksRoutes = new Hono()
 			.limit(limit);
 
 		await Promise.all(rows.map((r) => resolveWorkThumbnail(r.work)));
+		const ownersByWork = await workOwnerProfiles(
+			rows.map((r) => r.work.id),
+			userId,
+		);
 
 		return c.json({
 			works: rows.map(({ work, handle, displayName }) => ({
@@ -1029,6 +1043,7 @@ const worksRoutes = new Hono()
 				durationSeconds: work.durationSeconds,
 				estimatedReadMinutes: work.estimatedReadMinutes,
 				creator: { handle, displayName },
+				owners: ownersByWork.get(work.id) ?? [],
 			})),
 		});
 	})
@@ -1066,9 +1081,11 @@ const worksRoutes = new Hono()
 			displayName: account.displayName,
 		};
 
-		const conditions: SQL[] = [eq(works.creatorId, creator.id)];
-		// A creator browsing their own Catalog sees drafts too; nobody else does.
-		if (userId !== creator.id) conditions.push(eq(works.visibility, "released"));
+		const conditions: SQL[] = [workOwnedBy(creator.id)];
+		// A creator browsing their own Catalog sees drafts too, and a co-owner sees the
+		// drafts of a Work they share; nobody else does.
+		if (userId == null) conditions.push(eq(works.visibility, "released"));
+		else conditions.push(or(eq(works.visibility, "released"), workOwnedBy(userId)) as SQL);
 		if (type) conditions.push(eq(works.type, type));
 		// 🚨 A creator profile is one of the non-feed surfaces the wiki's *Content Standards* left open, and it is
 		// settled: a user who has not opted in meets nothing at all rather than an
@@ -1104,6 +1121,10 @@ const worksRoutes = new Hono()
 			allowanceSpent(userId),
 		]);
 		await Promise.all(rows.map(resolveWorkThumbnail));
+		const ownersByWork = await workOwnerProfiles(
+			rows.map((w) => w.id),
+			userId,
+		);
 		return c.json({
 			creator,
 			works: await Promise.all(
@@ -1112,7 +1133,7 @@ const worksRoutes = new Hono()
 						w,
 						assetsByWork.get(w.id) ?? [],
 						jobByWork.get(w.id) ?? null,
-						resolveAccessSync(w as AccessibleWork, contextFor(w, userId, ctx, preview)),
+						resolveAccessSync(w as AccessibleWork, await contextFor(w, userId, ctx, preview)),
 						deliveryCtx(c, null, userId),
 						catalogSpent,
 						userId,
@@ -1121,6 +1142,7 @@ const worksRoutes = new Hono()
 						(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
 						(buildsByWork.get(w.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
 					)),
+					owners: ownersByWork.get(w.id) ?? [],
 				})),
 			),
 		});

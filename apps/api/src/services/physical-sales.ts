@@ -36,6 +36,7 @@ import type { SavedBillingAddress } from "./billing.js";
 import { type PhysicalPick, validatePhysicalPick } from "./physical-stock.js";
 import { clampHandlingDays } from "./shipments.js";
 import { resolveThumbnailUrl } from "./thumbnails.js";
+import { isWorkOwner } from "./work-owners.js";
 
 /** The listing as a buyer sees it: what is offered, what shipping costs, how long it takes. */
 export interface BuyerListing {
@@ -134,7 +135,7 @@ export async function resolvePhysicalSale(
 ): Promise<PhysicalSale> {
 	const [work] = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
 	if (work?.type !== "physical") return { ok: false, status: 404, error: "Work not found" };
-	if (work.visibility !== "released" && work.creatorId !== userId)
+	if (work.visibility !== "released" && (userId == null || !(await isWorkOwner(work.id, userId))))
 		return { ok: false, status: 404, error: "Work not found" };
 	if (work.creatorId == null)
 		return { ok: false, status: 409, error: "This work is no longer for sale." };
@@ -268,14 +269,17 @@ export async function physicalStorefront(
 	  }
 > {
 	const [row] = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
-	if (row?.type !== "physical" || (row.visibility !== "released" && row.creatorId !== userId))
+	if (
+		row?.type !== "physical" ||
+		(row.visibility !== "released" && (userId == null || !(await isWorkOwner(row.id, userId))))
+	)
 		return { ok: false, status: 404, error: "Work not found" };
 	// The same resolver every Work uses, at the viewer's own standing: a signed-out visitor
 	// qualifies for the Everyone row and a supporter for whichever rung they hold, so the
 	// headline and the quote cannot disagree about what this person pays.
 	const priced = await purchasePriceFor(row, userId);
 	const unitPrice = priced ? new Decimal(priced) : null;
-	const owner = row.creatorId === userId;
+	const owner = userId != null && (await isWorkOwner(row.id, userId));
 	// The creator's own unpriced draft still renders: the storefront is the surface they
 	// are setting up, and a 400 there hid the pictures and variants behind the price.
 	if ((!unitPrice || unitPrice.lte(0)) && !owner)

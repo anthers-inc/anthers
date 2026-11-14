@@ -18,11 +18,13 @@ import { isListened, isPaged, isPreRelease } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import HostedEmbed from "@anthers/web-shared/content/HostedEmbed";
 import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
+import ComboAvatar from "@anthers/web-shared/creator/ComboAvatar";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { apiBaseUrl } from "@anthers/web-shared/rpc";
 import type { AccessResult, Work, WorkCredit, WorkVersionEntry } from "@anthers/web-shared/types";
+import { hasSeveralOwners, ownerNames } from "@anthers/web-shared/work-owners";
 import {
 	BookOpenIcon,
 	CalendarIcon,
@@ -633,7 +635,9 @@ export function WorkByline({
 	dates,
 	versions = [],
 }: WorkBylineProps) {
-	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
+	const creatorName = hasSeveralOwners(work.owners)
+		? ownerNames(work.owners)
+		: work.creator?.displayName || work.creator?.handle || "this creator";
 	// The newest version added after release. History before the release is the creator's
 	// and the release build is the baseline, so an empty list means nothing has changed
 	// since the Work went public. The count is stated because one date on its own reads as
@@ -648,21 +652,31 @@ export function WorkByline({
 			? `Updated once since release, ${latestNamed}`
 			: `Updated ${versions.length} times since release, most recently ${latestNamed}`
 		: null;
-	const creatorEl = work.creator && (
-		<Link to={profileUrl(work.creator.handle)} className="flex items-center gap-2 hover:underline">
-			{work.creator.avatar ? (
-				<img
-					src={work.creator.avatar}
-					alt={work.creator.handle}
-					className="size-6 rounded-full object-cover"
-				/>
-			) : (
-				<div className="flex size-6 items-center justify-center rounded-full bg-base-300 text-xs font-bold">
-					{work.creator.handle.charAt(0).toUpperCase()}
-				</div>
-			)}
-			{creatorName}
-		</Link>
+	const creatorEl = hasSeveralOwners(work.owners) ? (
+		<span className="flex items-center gap-2">
+			<ComboAvatar owners={work.owners ?? []} size={24} />
+			<span className="text-sm font-medium">{ownerNames(work.owners)}</span>
+		</span>
+	) : (
+		work.creator && (
+			<Link
+				to={profileUrl(work.creator.handle)}
+				className="flex items-center gap-2 hover:underline"
+			>
+				{work.creator.avatar ? (
+					<img
+						src={work.creator.avatar}
+						alt={work.creator.handle}
+						className="size-6 rounded-full object-cover"
+					/>
+				) : (
+					<div className="flex size-6 items-center justify-center rounded-full bg-base-300 text-xs font-bold">
+						{work.creator.handle.charAt(0).toUpperCase()}
+					</div>
+				)}
+				{creatorName}
+			</Link>
+		)
 	);
 	return (
 		// Centered, fanning out symmetrically (Parker's fourth pass, 2026-10-13): the

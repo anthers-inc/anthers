@@ -36,6 +36,7 @@ import { parentalHiddenFrom, parentalVisibility } from "../../services/parental-
 import { publishRefusal } from "../../services/publish-refusal.js";
 import { queueRecordSync } from "../../services/record-sync.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../../services/storage/keys.js";
+import { workOwnedBy, workOwnerProfiles } from "../../services/work-owners.js";
 import {
 	allowanceSpent,
 	contextFor,
@@ -555,6 +556,10 @@ const projectsRoutes = new Hono()
 		 * order — while the array a reader receives is the reading order the creator
 		 * chose. Manual is the default and returns the stored order untouched.
 		 */
+		const ownersByWork = await workOwnerProfiles(
+			itemRows.map((m) => m.work.id),
+			userId,
+		);
 		const serializedWorks = await Promise.all(
 			itemRows.map(async (m) => ({
 				sortOrder: m.sortOrder,
@@ -564,7 +569,7 @@ const projectsRoutes = new Hono()
 					jobByWork.get(m.work.id) ?? null,
 					resolveAccessSync(
 						m.work as AccessibleWork,
-						contextFor(m.work, userId, workCtx, previewRequest(c)),
+						await contextFor(m.work, userId, workCtx, previewRequest(c)),
 					),
 					deliveryCtx(c, null, userId),
 					projectSpent,
@@ -574,6 +579,9 @@ const projectsRoutes = new Hono()
 					(buildsByWork.get(m.work.id) ?? []).some((b) => b.isPrimary),
 					(buildsByWork.get(m.work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
 				)),
+				// The owners ride the Work, so a Collab Work card in a Project names all of
+				// them rather than its publisher alone.
+				owners: ownersByWork.get(m.work.id) ?? [],
 			})),
 		);
 
@@ -680,7 +688,7 @@ const projectsRoutes = new Hono()
 					and(
 						eq(projectItems.projectId, existing.id),
 						eq(works.id, data.thumbnailWorkId),
-						eq(works.creatorId, user.id),
+						workOwnedBy(user.id),
 					),
 				)
 				.limit(1);
@@ -784,7 +792,7 @@ const projectsRoutes = new Hono()
 			const [work] = await db
 				.select({ id: works.id })
 				.from(works)
-				.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+				.where(and(eq(works.id, workId), workOwnedBy(user.id)))
 				.limit(1);
 			if (!work) return c.json({ error: "Work not found" }, 404);
 

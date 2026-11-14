@@ -289,7 +289,7 @@ describe("attaching a track", () => {
 		const key = await uploadCaptionVtt(creator[0].userId, ungatedWorkId, "en.vtt", VTT);
 		await expect(
 			attachCaptionTrack({ work, requesterId: stranger[0].userId, key, language: "en" }),
-		).rejects.toThrow("Only the Work's creator may attach captions.");
+		).rejects.toThrow("Only a Work owner may attach captions.");
 	});
 });
 

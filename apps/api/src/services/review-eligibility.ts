@@ -28,6 +28,7 @@ import { db } from "@anthers/db/client";
 import { attentionEvents, type works } from "@anthers/db/schema";
 import { isPreRelease } from "@anthers/shared/content";
 import { and, eq, gt } from "drizzle-orm";
+import { isWorkOwner } from "./work-owners.js";
 
 type WorkRow = typeof works.$inferSelect;
 
@@ -103,7 +104,7 @@ export async function reviewEligibilityFor(
 	work: WorkRow,
 	access: { canAccess: boolean },
 ): Promise<ReviewEligibility> {
-	if (work.creatorId === userId) return refusal("own_work");
+	if (await isWorkOwner(work.id, userId)) return refusal("own_work");
 	// The page can be public while the Work is not (pre-release). Reviews open only at the
 	// release, so this case is stated before the generic unreleased one.
 	if (isPreRelease(work)) return refusal("pre_release");

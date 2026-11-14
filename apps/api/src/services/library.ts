@@ -16,6 +16,7 @@
 import { db, posts, purchases, userLibraryItems, works } from "@anthers/db";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { preserveCurrentVersion } from "./preservation.js";
+import { isWorkOwner, workOwnedBy } from "./work-owners.js";
 
 /** Why a save was refused, when it was. */
 export type SaveRefusal = "not_found" | "not_released";
@@ -80,7 +81,7 @@ export async function saveWork(
 		.limit(1);
 	if (!work) return { ok: false, reason: "not_found" };
 	// A creator may keep their own unreleased Work; nobody else can see it to save it.
-	if (work.visibility === "private" && work.creatorId !== userId) {
+	if (work.visibility === "private" && !(await isWorkOwner(work.id, userId))) {
 		return { ok: false, reason: "not_released" };
 	}
 
@@ -146,7 +147,7 @@ export async function ensureOwnWorksInLibrary(userId: number): Promise<void> {
 			userLibraryItems,
 			and(eq(userLibraryItems.workId, works.id), eq(userLibraryItems.userId, userId)),
 		)
-		.where(and(eq(works.creatorId, userId), isNull(userLibraryItems.id)))
+		.where(and(workOwnedBy(userId), isNull(userLibraryItems.id)))
 		.orderBy(works.createdAt);
 	if (missing.length === 0) return;
 
@@ -268,11 +269,11 @@ export async function removeItem(
 			return { ok: false, reason: "purchased" };
 		}
 		const [work] = await db
-			.select({ creatorId: works.creatorId })
+			.select({ id: works.id, creatorId: works.creatorId })
 			.from(works)
 			.where(eq(works.id, item.workId))
 			.limit(1);
-		if (work?.creatorId === userId) return { ok: false, reason: "owned" };
+		if (work != null && (await isWorkOwner(work.id, userId))) return { ok: false, reason: "owned" };
 	}
 
 	const subject =

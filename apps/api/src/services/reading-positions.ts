@@ -29,6 +29,7 @@
 import { db, userReadingPositions, works } from "@anthers/db";
 import type { InferSelectModel } from "drizzle-orm";
 import { and, desc, eq } from "drizzle-orm";
+import { isWorkOwner } from "./work-owners.js";
 
 export type ReadingPosition = InferSelectModel<typeof userReadingPositions>;
 
@@ -70,7 +71,7 @@ export async function upsertPosition(
 	if (!work) return { ok: false, reason: "not_found" };
 	// A creator may keep their own unreleased Work; nobody else can see it to read it —
 	// the same rule `saveWork` applies to the Library.
-	if (work.visibility === "private" && work.creatorId !== userId) {
+	if (work.visibility === "private" && !(await isWorkOwner(work.id, userId))) {
 		return { ok: false, reason: "not_released" };
 	}
 

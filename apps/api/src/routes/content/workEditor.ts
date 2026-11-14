@@ -50,6 +50,7 @@ import { physicalListingFor, savePhysicalListing } from "../../services/physical
 import { sanitizePostHtml } from "../../services/sanitize.js";
 import { FOREIGN_FILE_REFUSAL, isOwnWorkStorageRef } from "../../services/storage/keys.js";
 import { queueWorkListingSync } from "../../services/work-listing.js";
+import { isWorkOwner } from "../../services/work-owners.js";
 import { preReleaseRefusal, releaseRefusal } from "../../services/work-release.js";
 import {
 	appendSourceFiles,
@@ -101,7 +102,7 @@ const workEditorRoutes = new Hono()
 		// Reassigned below when the rating service rewrites the row, so the rest of the
 		// handler edits what is actually stored rather than what was loaded first.
 		let [work] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-		if (!work || work.creatorId !== user.id) {
+		if (!work || !(await isWorkOwner(work.id, user.id))) {
 			return c.json({ error: "Work not found" }, 404);
 		}
 
@@ -716,7 +717,8 @@ const workEditorRoutes = new Hono()
 			const user = c.get("user");
 			const id = Number(c.req.param("id"));
 			const [work] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-			if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			if (!work || !(await isWorkOwner(work.id, user.id)))
+				return c.json({ error: "Work not found" }, 404);
 			if (work.type !== "video") {
 				return c.json(
 					{ error: "Only a video can give a frame.", code: "thumbnail_frame_not_video" },
@@ -803,11 +805,12 @@ const workEditorRoutes = new Hono()
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
 		const [work] = await db
-			.select({ creatorId: works.creatorId })
+			.select({ id: works.id, creatorId: works.creatorId })
 			.from(works)
 			.where(eq(works.id, id))
 			.limit(1);
-		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!work || !(await isWorkOwner(work.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		const [job] = await db
 			.select({
 				id: workThumbnailFrames.id,
@@ -929,7 +932,7 @@ const workEditorRoutes = new Hono()
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
 		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-		if (!item || item.creatorId !== user.id) {
+		if (!item || !(await isWorkOwner(item.id, user.id))) {
 			return c.json({ error: "Work not found" }, 404);
 		}
 
@@ -1126,7 +1129,8 @@ const workEditorRoutes = new Hono()
 		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
 		// A 404 rather than a 403, the way the works routes answer a non-owner — the
 		// existence of another creator's Work is not information to hand out.
-		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!item || !(await isWorkOwner(item.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		const files = await listSourceFiles(item);
 		return c.json({ files });
 	})
@@ -1141,7 +1145,8 @@ const workEditorRoutes = new Hono()
 			const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
 			// A 404 rather than a 403, the way the works routes answer a non-owner — the
 			// existence of another creator's Work is not information to hand out.
-			if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			if (!item || !(await isWorkOwner(item.id, user.id)))
+				return c.json({ error: "Work not found" }, 404);
 			if (!hasSourceSet(item.type)) {
 				return c.json(
 					{
@@ -1197,7 +1202,8 @@ const workEditorRoutes = new Hono()
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
 		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!item || !(await isWorkOwner(item.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		if (!hasSourceSet(item.type)) {
 			return c.json(
 				{
@@ -1233,7 +1239,8 @@ const workEditorRoutes = new Hono()
 			const user = c.get("user");
 			const id = Number(c.req.param("id"));
 			const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-			if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			if (!item || !(await isWorkOwner(item.id, user.id)))
+				return c.json({ error: "Work not found" }, 404);
 			if (item.visibility === "released") {
 				return c.json(
 					{
@@ -1254,7 +1261,8 @@ const workEditorRoutes = new Hono()
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
 		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!item || !(await isWorkOwner(item.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		if (item.visibility === "released") {
 			return c.json(
 				{
@@ -1285,7 +1293,8 @@ const workEditorRoutes = new Hono()
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
 		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!item || !(await isWorkOwner(item.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		if (item.type !== "physical") {
 			return c.json(
 				{ error: "Only a physical good carries a shipping listing.", code: "not_physical" },
@@ -1299,7 +1308,8 @@ const workEditorRoutes = new Hono()
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
 		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!item || !(await isWorkOwner(item.id, user.id)))
+			return c.json({ error: "Work not found" }, 404);
 		if (item.type !== "physical") {
 			return c.json(
 				{ error: "Only a physical good carries a shipping listing.", code: "not_physical" },

@@ -24,6 +24,7 @@ import { queueScansForWork } from "../jobs/scan-media.js";
 import { deletePreviewCaptionTracksForPreview } from "./captions.js";
 import { storage } from "./storage/index.js";
 import { isOwnWorkStorageRef, isWorkMediaKey, urlToKey } from "./storage/keys.js";
+import { isWorkOwner } from "./work-owners.js";
 
 type WorkRow = typeof works.$inferSelect;
 export type PreviewMediaRow = typeof workPreviewMedia.$inferSelect;
@@ -70,8 +71,8 @@ export interface AttachPreviewInput {
  */
 export async function attachPreviewMedia(input: AttachPreviewInput): Promise<PreviewMediaRow> {
 	const { work, requesterId, kind } = input;
-	if (work.creatorId !== requesterId) {
-		throw new Error("Only the Work's creator may attach preview media.");
+	if (!(await isWorkOwner(work.id, requesterId))) {
+		throw new Error("Only a Work owner may attach preview media.");
 	}
 	if (!supportsPreviewMedia(work.type)) {
 		throw new PreviewMediaRefusal("This kind of Work does not take preview media.");

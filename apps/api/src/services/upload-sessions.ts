@@ -21,6 +21,7 @@ import { mediaUploadSessions, works } from "@anthers/db/schema";
 import { and, desc, eq, lt } from "drizzle-orm";
 import { storage } from "./storage/index.js";
 import { workKeyPrefix } from "./storage/keys.js";
+import { isWorkOwner } from "./work-owners.js";
 
 /** How large a part the plan asks the client to send: R2's floor is 5 MiB; 64 MiB keeps
  * even a multi-gigabyte object a modest part count, small enough for a failed part's
@@ -118,7 +119,7 @@ export async function startUploadSession(
 		.from(works)
 		.where(eq(works.id, input.workId))
 		.limit(1);
-	if (!work || work.creatorId !== creatorId) {
+	if (!work || !(await isWorkOwner(input.workId, creatorId))) {
 		throw new SessionStartError("Work not found", 404);
 	}
 

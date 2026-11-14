@@ -356,10 +356,22 @@ export default function CreatorProfilePage() {
 				};
 				setPosts(postData.posts.map((p) => ({ ...p, creator: creatorOfPage })));
 				setWorks(
-					(((catalogData as { works?: CatalogWork[] }).works ?? []) as CatalogWork[]).map((w) => ({
-						...w,
-						creator: creatorOfPage,
-					})),
+					(((catalogData as { works?: CatalogWork[] }).works ?? []) as CatalogWork[]).map((w) => {
+						// The publisher is the card's `creator` fallback; `owners` is what the
+						// byline reads, so a co-owned Work names every owner rather than the
+						// profile it happens to sit on.
+						const publisher = w.owners?.[0];
+						return {
+							...w,
+							creator: publisher
+								? {
+										handle: publisher.handle,
+										displayName: publisher.displayName,
+										avatar: publisher.avatar,
+									}
+								: creatorOfPage,
+						};
+					}),
 				);
 				if (statusData) setCreatorStatus(statusData as CreatorStatus);
 			})

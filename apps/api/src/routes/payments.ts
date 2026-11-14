@@ -123,6 +123,7 @@ import {
 import { clampHandlingDays, createShipmentForPurchase } from "../services/shipments.js";
 import { addTopUpToInvoice } from "../services/storage-topup.js";
 import { applyReductionsToInvoice, recordReductions } from "../services/support-reductions.js";
+import { isWorkOwner } from "../services/work-owners.js";
 
 /**
  * Shared purchase resolution for checkout and quote: find the Work, confirm it's
@@ -139,7 +140,7 @@ async function resolvePurchase(slug: string, userId: number) {
 	if (!work) return { ok: false as const, status: 404 as const, error: "Work not found" };
 
 	// A private Work isn't on sale — it hasn't been released to anyone yet.
-	if (work.visibility !== "released" && work.creatorId !== userId)
+	if (work.visibility !== "released" && !(await isWorkOwner(work.id, userId)))
 		return { ok: false as const, status: 404 as const, error: "Work not found" };
 
 	// resolveAccess is the source of truth: owner / free / entitled / already-purchased

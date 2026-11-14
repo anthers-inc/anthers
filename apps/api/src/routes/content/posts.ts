@@ -93,6 +93,7 @@ import {
 import { publishRefusal } from "../../services/publish-refusal.js";
 import { queueRecordSync } from "../../services/record-sync.js";
 import { reviewEligibilityFor } from "../../services/review-eligibility.js";
+import { isWorkOwner, workOwnerProfiles } from "../../services/work-owners.js";
 import {
 	allowanceSpent,
 	authorUpvote,
@@ -886,12 +887,12 @@ const postsRoutes = new Hono()
 		// than the Work. Withdrawing a vote is never refused, above this branch.
 		if (subjectType === "review") {
 			const [reviewed] = await db
-				.select({ creatorId: works.creatorId })
+				.select({ id: works.id, creatorId: works.creatorId })
 				.from(reviews)
 				.innerJoin(works, eq(reviews.workId, works.id))
 				.where(eq(reviews.id, subjectId))
 				.limit(1);
-			if (reviewed?.creatorId != null && reviewed.creatorId === user.id) {
+			if (reviewed != null && (await isWorkOwner(reviewed.id, user.id))) {
 				return c.json(
 					{
 						error: "You can't vote on reviews of your own Work.",
@@ -1213,7 +1214,7 @@ const postsRoutes = new Hono()
 
 		// 🚨 **A creator never reviews their own Work.** Compared here rather than left to
 		// the access ladder, which answers `canAccess: true` for the owner.
-		if (work.creatorId === user.id) {
+		if (await isWorkOwner(work.id, user.id)) {
 			return c.json(
 				{
 					error: "You can't review your own Work.",
@@ -1685,9 +1686,13 @@ export async function loadPostWorksFromBody(
 
 	const { worksById, assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
 		await loadWorkBundles(rows.map((r) => r.id));
-	const [ctx, spent] = await Promise.all([
+	const [ctx, spent, ownersByWork] = await Promise.all([
 		buildAccessContext(userId, { workIds: rows.map((r) => r.id) }),
 		allowanceSpent(userId),
+		workOwnerProfiles(
+			rows.map((r) => r.id),
+			userId,
+		),
 	]);
 
 	const serialized = await Promise.all(
@@ -1697,19 +1702,22 @@ export async function loadPostWorksFromBody(
 			if (!work) return null;
 			return {
 				position,
-				work: await serializeWorkForUser(
-					work,
-					assetsByWork.get(work.id) ?? [],
-					jobByWork.get(work.id) ?? null,
-					resolveAccessSync(work as AccessibleWork, ctx),
-					delivery,
-					spent,
-					userId,
-					pagesByWork.get(work.id) ?? 0,
-					sectionsByWork.get(work.id) ?? 0,
-					(buildsByWork.get(work.id) ?? []).some((b) => b.isPrimary),
-					(buildsByWork.get(work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
-				),
+				work: {
+					...(await serializeWorkForUser(
+						work,
+						assetsByWork.get(work.id) ?? [],
+						jobByWork.get(work.id) ?? null,
+						resolveAccessSync(work as AccessibleWork, ctx),
+						delivery,
+						spent,
+						userId,
+						pagesByWork.get(work.id) ?? 0,
+						sectionsByWork.get(work.id) ?? 0,
+						(buildsByWork.get(work.id) ?? []).some((b) => b.isPrimary),
+						(buildsByWork.get(work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
+					)),
+					owners: ownersByWork.get(work.id) ?? [],
+				},
 			};
 		}),
 	);
