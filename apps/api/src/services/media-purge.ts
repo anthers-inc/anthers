@@ -25,6 +25,7 @@ import {
 	workBuilds,
 	workCaptionTracks,
 	workMediaVersions,
+	workPhysicalListings,
 	workPreviewMedia,
 	workSourceFiles,
 	works,
@@ -211,6 +212,7 @@ function keysForWork(
 	sourceFiles: SourceFileRow[],
 	previews: PreviewMediaRow[] = [],
 	previewCaptions: PreviewCaptionRow[] = [],
+	physicalImages: readonly string[] = [],
 ): { keys: Set<string>; prefixes: Set<string> } {
 	const all = collectRawKeysForWork(
 		item,
@@ -219,6 +221,7 @@ function keysForWork(
 		sourceFiles,
 		previews,
 		previewCaptions,
+		physicalImages,
 	);
 	const owner = item;
 	const mine = (key: string) => isWorkMediaKey(key, owner);
@@ -275,6 +278,7 @@ function collectRawKeysForWork(
 	sourceFiles: SourceFileRow[],
 	previews: PreviewMediaRow[] = [],
 	previewCaptions: PreviewCaptionRow[] = [],
+	physicalImages: readonly string[] = [],
 ): { keys: Set<string>; prefixes: Set<string> } {
 	const keys = new Set<string>();
 	const prefixes = new Set<string>();
@@ -299,6 +303,10 @@ function collectRawKeysForWork(
 	for (const preview of previews) keys.add(urlToKey(preview.file));
 	for (const caption of previewCaptions) keys.add(urlToKey(caption.storageKey));
 	for (const a of workAssets) if (a.file) keys.add(urlToKey(a.file));
+	// A physical good's storefront pictures live in the listing's JSON rather than a
+	// media table, so a Work delete that reads only the tables would strand them when the
+	// listing row cascades.
+	for (const image of physicalImages) keys.add(urlToKey(image));
 	for (const job of jobRows) {
 		if (job.hlsManifestUrl) {
 			const masterKey = urlToKey(job.hlsManifestUrl);
@@ -355,6 +363,11 @@ export async function purgeWorkMedia(
 		.select({ media: workMediaVersions.media })
 		.from(workMediaVersions)
 		.where(eq(workMediaVersions.workId, item.id));
+	const [listing] = await db
+		.select({ images: workPhysicalListings.images })
+		.from(workPhysicalListings)
+		.where(eq(workPhysicalListings.workId, item.id))
+		.limit(1);
 	const { keys, prefixes } = keysForWork(
 		item,
 		workAssets,
@@ -362,6 +375,7 @@ export async function purgeWorkMedia(
 		sourceFileRows,
 		previewRows,
 		previewCaptionRows,
+		(listing?.images ?? []).map((image) => image.key),
 	);
 	for (const key of versionKeysForWork(item, versionRows)) keys.add(key);
 	// A browser build is swept by prefix — one whole `web-builds/{buildId}/` prefix per
@@ -400,7 +414,7 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 	const prefixes = new Set<string>();
 	if (workIds.length === 0) return { keys, prefixes };
 
-	const [workRows, assetRows, jobRows, sourceFileRows, previewRows, versionRows] =
+	const [workRows, assetRows, jobRows, sourceFileRows, previewRows, versionRows, listingRows] =
 		await Promise.all([
 			db.select().from(works).where(inArray(works.id, workIds)),
 			db.select().from(workAssets).where(inArray(workAssets.workId, workIds)),
@@ -414,7 +428,12 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 				.select({ workId: workMediaVersions.workId, media: workMediaVersions.media })
 				.from(workMediaVersions)
 				.where(inArray(workMediaVersions.workId, workIds)),
+			db
+				.select({ workId: workPhysicalListings.workId, images: workPhysicalListings.images })
+				.from(workPhysicalListings)
+				.where(inArray(workPhysicalListings.workId, workIds)),
 		]);
+	const imagesByWork = new Map(listingRows.map((row) => [row.workId, row.images]));
 	const previewCaptionRows =
 		previewRows.length === 0
 			? []
@@ -440,6 +459,7 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 			previewCaptionRows.filter(
 				(c) => c.previewId != null && previewWorkId.get(c.previewId) === w.id,
 			),
+			(imagesByWork.get(w.id) ?? []).map((image) => image.key),
 		);
 		for (const k of forThis.keys) keys.add(k);
 		for (const p of forThis.prefixes) prefixes.add(p);

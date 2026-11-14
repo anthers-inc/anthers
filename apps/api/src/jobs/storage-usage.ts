@@ -60,6 +60,7 @@ import {
 	workBuildFiles,
 	workBuilds,
 	workMediaVersions,
+	workPhysicalListings,
 	workPreviewMedia,
 	workSaves,
 	workSourceFiles,
@@ -268,6 +269,24 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		if (row.creatorId == null) continue;
 		const size = await sizeOfKey(row.file);
 		if (size != null) add(account(row.creatorId).purposes, "catalog", size);
+	}
+
+	// ── A physical good's storefront gallery ────────────────────────────────────
+	// The listing's pictures are bare keys in a JSON column rather than a media table, and
+	// they are Work media like any other: the Work's own thumbnail is often one of them.
+	// A listing carries at most eight, so one size() per image is the same bounded read
+	// the source set above already pays.
+	const listingRows = await db
+		.select({ creatorId: works.creatorId, images: workPhysicalListings.images })
+		.from(workPhysicalListings)
+		.innerJoin(works, eq(workPhysicalListings.workId, works.id))
+		.where(eq(works.preserved, false));
+	for (const row of listingRows) {
+		if (row.creatorId == null) continue;
+		for (const image of row.images) {
+			const size = await sizeOfKey(image.key);
+			if (size != null) add(account(row.creatorId).purposes, "catalog", size);
+		}
 	}
 
 	// ── Archived media versions ──────────────────────────────────────────────────
