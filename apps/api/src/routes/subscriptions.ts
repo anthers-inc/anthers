@@ -143,6 +143,7 @@ import { resolveShareToken } from "../services/share-links.js";
 import { storage } from "../services/storage/index.js";
 import { recordReductions } from "../services/support-reductions.js";
 import { publishedFundLedger } from "../services/time-pool-fund.js";
+import { workOwnedBy } from "../services/work-owners.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -2588,13 +2589,14 @@ const subscriptionRoutes = new Hono()
 		}
 
 		// A leaver's Works cannot be left gated on a Badge they no longer own. The same
-		// refusal the delete route gives, scoped to this creator's Works.
+		// refusal the delete route gives, scoped to every Work this creator owns — a
+		// co-owned Work included, because the gate would outlive their share of the Badge.
 		const [gated] = await db
 			.select({ count: sql<number>`count(*)::int` })
 			.from(works)
 			.where(
 				and(
-					eq(works.creatorId, user.id),
+					workOwnedBy(user.id),
 					sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${works.access}) AS g WHERE (g->>'badgeId')::int = ${badgeId})`,
 				),
 			);

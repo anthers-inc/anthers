@@ -771,10 +771,11 @@ export const creatorCredits = pgTable(
 		index("idx_creator_credits_subscriber_cycle").on(table.subscriberId, table.billingCycle),
 		// A refund's read: the credit a physical sale left behind, by the purchase it is for.
 		index("idx_creator_credits_purchase").on(table.purchaseId),
-		// One credit per sale. Completion can be redelivered, and a second credit for the same
-		// order would pay the creator twice for one parcel.
+		// One credit per sale per owner. Completion can be redelivered, and a second credit
+		// for the same order would pay the creator twice for one parcel; a Collab Work's
+		// sale has one credit per owner, so the pair is the identity.
 		uniqueIndex("uq_creator_credits_purchase")
-			.on(table.purchaseId)
+			.on(table.purchaseId, table.creatorId)
 			.where(sql`${table.purchaseId} IS NOT NULL`),
 	],
 );

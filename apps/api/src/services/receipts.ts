@@ -54,6 +54,7 @@ import {
 	sendRefundReceiptEmail,
 	sendSupportReceiptEmail,
 } from "./email.js";
+import { purchaseShares } from "./purchase-splits.js";
 
 /** The transfer id prefix marking a zero-sum close — a movement of nothing, no email. */
 const ZERO_SUM_TRANSFER_PREFIX = "tr_local_zerosum_";
@@ -174,7 +175,7 @@ export async function sendPurchaseReceipts(rows: PurchaseRow[]): Promise<void> {
 	const intentId = rows[0].stripePaymentIntentId;
 	const date = rows[0].updatedAt;
 	const { tax, total } = sumsOf(rows);
-	const [buyerId, creatorId] = [rows[0].buyerId, rows[0].creatorId];
+	const buyerId = rows[0].buyerId;
 
 	const buyerEmail = await emailOf(buyerId);
 	if (buyerEmail) {
@@ -198,35 +199,42 @@ export async function sendPurchaseReceipts(rows: PurchaseRow[]): Promise<void> {
 		);
 	}
 
-	// The creator's copy: one receipt for the whole charge, the earnings figure being
-	// the sum the rows recorded — a cart's pro-rata fee split leaves them summing to
-	// the transfer pinned at session creation, which is the number Stripe moved.
-	if (creatorId != null && creatorId !== buyerId) {
-		const [creator] = await db
-			.select({ email: users.email })
-			.from(users)
-			.where(eq(users.id, creatorId))
-			.limit(1);
-		if (!creator) return;
-		if (!(await creatorWantsEmail(creatorId, "sale"))) return;
-		const earnings = rows
-			.reduce((acc, r) => acc.plus(new Decimal(r.creatorEarnings)), new Decimal(0))
-			.toFixed(2);
+	// The creator's copy, one per owner: the earnings figure is that owner's own slice —
+	// a solo purchase's whole record, or a Collab Work's frozen `purchase_splits` row. A
+	// co-owned sale therefore mails every owner their own figure rather than the publisher
+	// the whole charge, and a cart spanning owners gets one copy each.
+	const byCreator = new Map<number, { rows: PurchaseRow[]; earnings: Decimal }>();
+	for (const row of rows) {
+		for (const share of await purchaseShares(row)) {
+			if (share.creatorId === buyerId) continue;
+			const held = byCreator.get(share.creatorId) ?? {
+				rows: [],
+				earnings: new Decimal(0),
+			};
+			held.rows.push(row);
+			held.earnings = held.earnings.plus(share.amount);
+			byCreator.set(share.creatorId, held);
+		}
+	}
+	for (const [creatorId, held] of byCreator) {
+		const creatorEmail = await emailOf(creatorId);
+		if (!creatorEmail) continue;
+		if (!(await creatorWantsEmail(creatorId, "sale"))) continue;
 		await sendOnce(
 			{
 				dedupeKey: `purchase:${intentId}:creator:${creatorId}`,
 				kind: "purchase",
 				userId: creatorId,
 				role: "creator",
-				email: creator.email,
+				email: creatorEmail,
 			},
 			() =>
 				sendCreatorSaleReceiptEmail({
-					to: creator.email,
+					to: creatorEmail,
 					reference: intentId,
 					date,
-					lines: rows.map(lineOf),
-					earnings,
+					lines: held.rows.map(lineOf),
+					earnings: held.earnings.toFixed(2),
 				}),
 		);
 	}
@@ -287,32 +295,41 @@ export async function sendRefundReceipts(rows: PurchaseRow[]): Promise<void> {
 		);
 	}
 
-	if (row.creatorId != null && row.creatorId !== row.buyerId) {
-		const [creator] = await db
-			.select({ email: users.email })
-			.from(users)
-			.where(eq(users.id, row.creatorId))
-			.limit(1);
-		if (!creator) return;
-		if (!(await creatorWantsEmail(row.creatorId, "refund"))) return;
-		const earnings = negated(
-			rows.reduce((acc, r) => acc.plus(new Decimal(r.creatorEarnings)), new Decimal(0)).toFixed(2),
-		);
+	// The refund's creator copy, one per owner, each showing its own slice signed back —
+	// the same per-owner shape the sale receipt uses, so a co-owned Work's refund reaches
+	// every owner whose money came back.
+	const byCreator = new Map<number, { rows: PurchaseRow[]; earnings: Decimal }>();
+	for (const purchase of rows) {
+		for (const share of await purchaseShares(purchase)) {
+			if (share.creatorId === row.buyerId) continue;
+			const held = byCreator.get(share.creatorId) ?? {
+				rows: [],
+				earnings: new Decimal(0),
+			};
+			held.rows.push(purchase);
+			held.earnings = held.earnings.plus(share.amount);
+			byCreator.set(share.creatorId, held);
+		}
+	}
+	for (const [creatorId, held] of byCreator) {
+		const creatorEmail = await emailOf(creatorId);
+		if (!creatorEmail) continue;
+		if (!(await creatorWantsEmail(creatorId, "refund"))) continue;
 		await sendOnce(
 			{
-				dedupeKey: `refund:${refundRef}:creator:${row.creatorId}`,
+				dedupeKey: `refund:${refundRef}:creator:${creatorId}`,
 				kind: "refund",
-				userId: row.creatorId,
+				userId: creatorId,
 				role: "creator",
-				email: creator.email,
+				email: creatorEmail,
 			},
 			() =>
 				sendCreatorRefundReceiptEmail({
-					to: creator.email,
+					to: creatorEmail,
 					reference: refundRef,
 					date,
-					lines: rows.map(lineOf),
-					earnings,
+					lines: held.rows.map(lineOf),
+					earnings: negated(held.earnings.toFixed(2)),
 				}),
 		);
 	}

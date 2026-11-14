@@ -50,7 +50,7 @@ import { physicalListingFor, savePhysicalListing } from "../../services/physical
 import { sanitizePostHtml } from "../../services/sanitize.js";
 import { FOREIGN_FILE_REFUSAL, isOwnWorkStorageRef } from "../../services/storage/keys.js";
 import { queueWorkListingSync } from "../../services/work-listing.js";
-import { isWorkOwner } from "../../services/work-owners.js";
+import { isWorkOwner, workOwnedBy, workOwnerIds } from "../../services/work-owners.js";
 import { preReleaseRefusal, releaseRefusal } from "../../services/work-release.js";
 import {
 	appendSourceFiles,
@@ -442,7 +442,11 @@ const workEditorRoutes = new Hono()
 			if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
 		}
 		if (data.access !== undefined) {
-			const normalized = await normalizeAccessRows(user.id, data.access);
+			const ownerIds = await workOwnerIds(work.id);
+			const normalized = await normalizeAccessRows(user.id, data.access, {
+				collabWork: ownerIds.length > 1,
+				ownerIds,
+			});
 			if ("error" in normalized) return c.json({ error: normalized.error }, 400);
 			updates.access = normalized.rows;
 		}
@@ -838,7 +842,7 @@ const workEditorRoutes = new Hono()
 		const [item] = await db
 			.select({ id: works.id })
 			.from(works)
-			.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
+			.where(and(eq(works.id, id), workOwnedBy(user.id)))
 			.limit(1);
 		if (!item) return c.json({ error: "Work not found" }, 404);
 		return c.json({ appeals: await appealsForWork(id) });
@@ -865,7 +869,7 @@ const workEditorRoutes = new Hono()
 			const [work] = await db
 				.select()
 				.from(works)
-				.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
+				.where(and(eq(works.id, id), workOwnedBy(user.id)))
 				.limit(1);
 			if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -913,7 +917,7 @@ const workEditorRoutes = new Hono()
 		const [item] = await db
 			.select({ id: works.id })
 			.from(works)
-			.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
+			.where(and(eq(works.id, id), workOwnedBy(user.id)))
 			.limit(1);
 		if (!item) return c.json({ error: "Work not found" }, 404);
 
@@ -1041,7 +1045,7 @@ const workEditorRoutes = new Hono()
 		const [work] = await db
 			.select()
 			.from(works)
-			.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
+			.where(and(eq(works.id, id), workOwnedBy(user.id)))
 			.limit(1);
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -1102,7 +1106,7 @@ const workEditorRoutes = new Hono()
 		const [item] = await db
 			.select({ id: works.id })
 			.from(works)
-			.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
+			.where(and(eq(works.id, id), workOwnedBy(user.id)))
 			.limit(1);
 		if (!item) return c.json({ error: "Not found" }, 404);
 

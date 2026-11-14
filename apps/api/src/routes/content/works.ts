@@ -84,6 +84,7 @@ import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../../services/storage/ke
 import { queueWorkListingSync } from "../../services/work-listing.js";
 import {
 	workOwnedBy,
+	workOwnerIds,
 	workOwnerIdsForWorks,
 	workOwnerProfiles,
 } from "../../services/work-owners.js";
@@ -468,8 +469,8 @@ const worksRoutes = new Hono()
 				// Studio" button. An image Work with no separate thumbnail is its own.
 				thumbnail: work.thumbnail || (work.type === "image" ? work.sourceKey : ""),
 				imageAlt: work.imageAlt ?? "",
-				// Only the Work's own creator can change its gate, even when the Badge is
-				// co-owned. The row is still listed so the group can see what it opens.
+				// Any owner of the Work can change its gate; the row is listed for every
+				// owner of a co-owned Badge, whether or not they may edit it.
 				editable: (ownersByWork.get(work.id) ?? []).includes(user.id),
 			})),
 		});
@@ -535,7 +536,11 @@ const worksRoutes = new Hono()
 							price: "0",
 						},
 					];
-			const normalized = await normalizeAccessRows(user.id, next);
+			const ownerIds = await workOwnerIds(work.id);
+			const normalized = await normalizeAccessRows(user.id, next, {
+				collabWork: ownerIds.length > 1,
+				ownerIds,
+			});
 			if ("error" in normalized) return c.json({ error: normalized.error }, 400);
 
 			await db

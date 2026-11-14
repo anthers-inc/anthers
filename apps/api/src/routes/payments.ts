@@ -108,7 +108,7 @@ import {
 	resolvePhysicalSale,
 } from "../services/physical-sales.js";
 import { releaseStock, reserveStock } from "../services/physical-stock.js";
-import { splitChargeToCreators } from "../services/purchase-split.js";
+import { settleSaleCreditOnRefund, splitChargeToCreators } from "../services/purchase-split.js";
 import {
 	sendPurchaseReceipts,
 	sendRefundReceipts,
@@ -117,7 +117,7 @@ import {
 import {
 	refundPurchase,
 	refundsAfterDownloadInWindow,
-	reverseCreatorShare,
+	reverseCreatorShares,
 	settleRefundedPurchase,
 } from "../services/refunds.js";
 import { clampHandlingDays, createShipmentForPurchase } from "../services/shipments.js";
@@ -2955,16 +2955,18 @@ const paymentRoutes = new Hono()
 					// The dashboard refund reversed nothing on its own — a platform charge's
 					// per-creator transfers are Anthers' calls to make (`services/purchase-split.ts`)
 					// — so the clawback is attempted here, per row, through the same
-					// `reverseCreatorShare` the refund route uses, and the outcome feeds the
-					// settle: recovered needs nothing further; unrecovered-but-paid hands the
-					// share to the netting ledger; never-transferred owes nobody anything.
-					const clawback = await reverseCreatorShare(purchase);
+					// `reverseCreatorShares` the refund route uses. A Collab Work answers with
+					// one clawback per owner, and each feeds the settle: recovered needs nothing
+					// further; unrecovered-but-paid hands that share to the netting ledger;
+					// never-transferred owes nobody anything. A physical sale's credits are
+					// settled first, exactly as the route does.
+					const saleCredits = await settleSaleCreditOnRefund(purchase.id);
+					const clawbacks = await reverseCreatorShares(purchase, { saleCredits });
 					await settleRefundedPurchase(purchase, {
 						initiator: "platform",
 						reason: "Refunded at Stripe",
 						stripeRefundId: typeof firstRefund?.id === "string" ? firstRefund.id : null,
-						transferReversed: clawback.reversed,
-						creatorWasPaid: clawback.creatorWasPaid,
+						clawbacks,
 					});
 				}
 

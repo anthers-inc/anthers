@@ -62,9 +62,21 @@ import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { createTransferReversal, issueRefund, paymentsConfigured } from "../lib/processor.js";
 import { oweAccessReceipt } from "./access-receipts.js";
 import { recordNettingForRefund } from "./netting.js";
-import { settleSaleCreditOnRefund } from "./purchase-split.js";
+import { type SaleCreditRefundState, settleSaleCreditOnRefund } from "./purchase-split.js";
+import { purchaseShares } from "./purchase-splits.js";
 
 type Purchase = typeof purchases.$inferSelect;
+
+/** What one owner's share of a refunded sale did at Stripe, and whether they had it. */
+export interface ShareClawback {
+	creatorId: number;
+	/** The slice of the purchase that was this owner's. */
+	amount: Decimal;
+	/** Whether the reversal recovered the slice at Stripe. */
+	reversed: boolean;
+	/** Whether the slice ever reached them — false on a never-transferred share. */
+	creatorWasPaid: boolean;
+}
 
 /** Who asked. Only `buyer` refunds count against the cap. */
 export type RefundInitiator = "buyer" | "platform";
@@ -130,47 +142,71 @@ export function refundShortfall(purchase: Purchase): Decimal {
 }
 
 /**
- * Attempt the clawback of one purchase's creator share: reverse the row's recorded
- * earnings off the transfer that carried them. The one reversal mechanism, shared by
- * `refundPurchase` and the webhook's dashboard-refund branch, because the two doors must
- * leave the money in the same state — the single-writer rule the cart storage follows,
- * pointed at Stripe instead of a table.
+ * Attempt the clawback of every creator share a purchase paid: reverse each slice of the
+ * recorded earnings off the transfer that carried it. The one reversal mechanism, shared
+ * by `refundPurchase` and the webhook's dashboard-refund branch, because the two doors
+ * must leave the money in the same state — the single-writer rule the cart storage
+ * follows, pointed at Stripe instead of a table.
  *
- * Returns whether the share came back. `reversed: false` on a row WITH a transfer is the
- * paid-out creator (the connected balance cannot fund the reversal) and hands recovery to
- * the netting ledger; on a row with NO transfer the share never left, and the caller skips
- * netting for the same reason. The idempotency key is the purchase id, so a webhook
- * redelivery of a refund our own route already clawed back cannot reverse a second cent.
+ * 🚨 **A Collab Work has one share per owner, frozen at sale.** The shares come from
+ * `purchase_splits` when the sale had them and from the purchase row when it did not, so
+ * each owner is reversed to exactly their own slice — never the publisher's whole
+ * earnings and never a share recomputed from today's ownership.
+ *
+ * Each answer says whether the slice came back and whether it ever reached the creator.
+ * `reversed: false` on a share WITH a transfer is the paid-out creator (the connected
+ * balance cannot fund the reversal) and hands recovery to the netting ledger; a share
+ * with NO transfer never left, and the caller skips netting for the same reason. The
+ * idempotency key names the purchase (and the owner, on a split), so a webhook redelivery
+ * of a refund our own route already clawed back cannot reverse a second cent.
  */
-export async function reverseCreatorShare(
+export async function reverseCreatorShares(
 	purchase: Purchase,
-	opts: { saleCreditReleased?: boolean } = {},
-): Promise<{
-	/** Whether the reversal recovered the share at Stripe. */
-	reversed: boolean;
-	/** Whether the creator's share ever reached them — false on a never-transferred row. */
-	creatorWasPaid: boolean;
-}> {
-	// A physical sale's share never rides `purchases.stripe_transfer_id`: it is held in
-	// `creator_credits` and moved by the transfer job, whose coverage tables record it. A
-	// released credit therefore counts as paid — there is no transfer on this row to reverse,
-	// so recovery is the netting ledger's, exactly as for a support credit. A credit still
-	// held was removed by `settleSaleCreditOnRefund` before this ran, and owes nothing.
-	if (opts.saleCreditReleased) return { reversed: false, creatorWasPaid: true };
-	if (purchase.stripeTransferId == null) return { reversed: false, creatorWasPaid: false };
-	try {
-		const reversal = await createTransferReversal(
-			purchase.stripeTransferId,
-			{ amount: Math.round(new Decimal(purchase.creatorEarnings).toNumber() * 100) },
-			{ idempotencyKey: `refund_reversal_${purchase.id}` },
-		);
-		if (reversal == null) throw new Error("The transfer reversal could not be processed.");
-		return { reversed: true, creatorWasPaid: true };
-	} catch {
-		// The connected account's balance could not fund the reversal — the paid-out
-		// creator — so recovery moves to the netting ledger (`services/netting.ts`).
-		return { reversed: false, creatorWasPaid: true };
+	opts: { saleCredits?: Map<number, SaleCreditRefundState> } = {},
+): Promise<ShareClawback[]> {
+	const shares = await purchaseShares(purchase);
+	const out: ShareClawback[] = [];
+	for (const share of shares) {
+		// A physical sale's share never rides a transfer: it is held in `creator_credits`
+		// and moved by the transfer job, whose coverage tables record it. A released
+		// credit therefore counts as paid — there is no transfer to reverse, so recovery is
+		// the netting ledger's, exactly as for a support credit. A credit still held was
+		// removed by `settleSaleCreditOnRefund` before this ran, and owes nothing.
+		const credit = opts.saleCredits?.get(share.creatorId);
+		if (credit === "released") {
+			out.push({ ...share, reversed: false, creatorWasPaid: true });
+			continue;
+		}
+		if (credit === "held") {
+			out.push({ ...share, reversed: false, creatorWasPaid: false });
+			continue;
+		}
+		if (share.transferId == null) {
+			out.push({ ...share, reversed: false, creatorWasPaid: false });
+			continue;
+		}
+		try {
+			const reversal = await createTransferReversal(
+				share.transferId,
+				{ amount: Math.round(share.amount.times(100).toNumber()) },
+				{
+					// The solo key is the purchase id, unchanged, so a retry after a partial
+					// failure replays the reversal the historical path already made.
+					idempotencyKey:
+						share.splitId == null
+							? `refund_reversal_${purchase.id}`
+							: `refund_reversal_${purchase.id}_${share.creatorId}`,
+				},
+			);
+			if (reversal == null) throw new Error("The transfer reversal could not be processed.");
+			out.push({ ...share, reversed: true, creatorWasPaid: true });
+		} catch {
+			// The connected account's balance could not fund the reversal — the paid-out
+			// creator — so recovery moves to the netting ledger (`services/netting.ts`).
+			out.push({ ...share, reversed: false, creatorWasPaid: true });
+		}
 	}
+	return out;
 }
 
 /**
@@ -255,9 +291,8 @@ export async function refundPurchase(
 			: undefined;
 
 	let refundId: string;
-	let transferReversed = false;
-	/** Whether the creator's share ever reached them — a row with no transfer was never paid. */
-	let creatorWasPaid = true;
+	/** What each owner's slice did — empty until the clawback runs, and on a failure. */
+	let clawbacks: ShareClawback[] = [];
 	try {
 		const refund = await issueRefund(
 			{
@@ -289,12 +324,8 @@ export async function refundPurchase(
 		// The sale's hold is settled before the clawback: a held credit is taken away (the
 		// creator never received it), and a released one tells the reversal that the money
 		// has left and recovery is netting's. See `settleSaleCreditOnRefund`.
-		const saleCredit = await settleSaleCreditOnRefund(purchase.id);
-		const clawback = await reverseCreatorShare(purchase, {
-			saleCreditReleased: saleCredit === "released",
-		});
-		transferReversed = clawback.reversed;
-		creatorWasPaid = clawback.creatorWasPaid;
+		const saleCredits = await settleSaleCreditOnRefund(purchase.id);
+		clawbacks = await reverseCreatorShares(purchase, { saleCredits });
 	} catch (err) {
 		return {
 			ok: false,
@@ -323,8 +354,7 @@ export async function refundPurchase(
 		initiator: opts.initiator,
 		reason: opts.reason,
 		stripeRefundId: refundId,
-		transferReversed,
-		creatorWasPaid,
+		clawbacks,
 		now,
 	});
 }
@@ -337,7 +367,7 @@ export async function refundPurchase(
  * close the same way whichever door the refund came through.
  *
  * ⭐ **The netting write lives here, on the after-transfer case only** (Parker,
- * 2026-09-14, "Money That Came Back"). A purchase's creator's share reached them as the
+ * 2026-09-14, "Money That Came Back"). A creator's share reached them as the
  * completion-path transfer (`services/purchase-split.ts`), so whether Anthers clawed it
  * back is exactly one observable fact — did the refund's explicit transfer reversal
  * happen? `refundPurchase` makes the call and passes the outcome; the webhook makes the
@@ -345,11 +375,13 @@ export async function refundPurchase(
  * the share came back at Stripe, the before-transfer mechanism did its job. **Not
  * reversed: a netting row** (`recordNettingForRefund`) — the creator had already paid the
  * money out, nothing came back, and recovery moves to the creator's later earnings
- * instead. **Never paid — no transfer id on the row: nothing** — the share never left,
+ * instead. **Never paid — no transfer id on the share: nothing** — the share never left,
  * so there is nothing to recover and a netting row would bill the creator for money they
- * never received. `refunds.ts`'s module invariant holds in every case: the creator is
- * reversed to exactly their earnings and never below zero, because the netting amount is
- * the row's own earnings and the netting ledger itself never bills.
+ * never received. A Collab Work has one share per owner, and each gets its own answer:
+ * refunding a co-owned sale recovers every owner's slice, not the publisher's alone.
+ * `refunds.ts`'s module invariant holds in every case: the creator is reversed to
+ * exactly their earnings and never below zero, because the netting amount is the share's
+ * own earnings and the netting ledger itself never bills.
  *
  * The netting is written only when the flip succeeds (not on `alreadyRefunded`), so the
  * row's own status predicate is the netting's latch against a double webhook delivery —
@@ -361,18 +393,15 @@ export async function settleRefundedPurchase(
 		initiator: RefundInitiator;
 		reason?: string;
 		stripeRefundId?: string | null;
-		/** Whether the refund's transfer reversal actually recovered the creator's share at Stripe. */
-		transferReversed?: boolean;
 		/**
-		 * Whether the creator's share ever reached them at all. False on a row whose
-		 * transfer was never made (a completion-path failure the retry job owns) — the
-		 * share cannot be recovered because it never left, so it must not NET either:
-		 * the netting ledger recovers money the creator received, and this share never
-		 * was. Defaults true — the historical rows' transfers all happened, at the
-		 * moment of their charges, under the destination-charge shape this column never
-		 * knew about.
+		 * What each owner's slice did at Stripe — one entry per creator on the purchase,
+		 * from `reverseCreatorShares`. Empty means no share was found to reverse.
+		 *
+		 * A share that was never transferred never reached the creator, so it must not
+		 * NET: the netting ledger recovers money the creator received. A share the
+		 * reversal could not recover is the paid-out case and does net, at its own slice.
 		 */
-		creatorWasPaid?: boolean;
+		clawbacks?: ShareClawback[];
 		now?: Date;
 	},
 ): Promise<RefundResult> {
@@ -403,14 +432,20 @@ export async function settleRefundedPurchase(
 	}
 	await oweAccessReceipt(updated.id, "refund");
 
-	// The creator's share did not come back at Stripe — recover it from later earnings
-	// instead. The refund id is the netting row's own identity, so a replayed or
-	// redelivered anything finds the row and changes nothing. Skipped when the share
-	// never reached the creator at all (`creatorWasPaid` false): recovering money
-	// somebody never received is the one netting write that would bill the creator
-	// for a sale that paid them nothing.
-	if (!opts.transferReversed && (opts.creatorWasPaid ?? true)) {
-		await recordNettingForRefund(updated, opts.stripeRefundId ?? updated.stripeRefundId, now);
+	// Each owner's share that did not come back at Stripe is recovered from their later
+	// earnings instead, one netting row per owner so the ledger names who owes what. The
+	// refund id is the netting row's own identity, so a replayed or redelivered anything
+	// finds the row and changes nothing. Skipped for a share that never reached its owner
+	// (`creatorWasPaid` false): recovering money somebody never received is the one netting
+	// write that would bill the creator for a sale that paid them nothing.
+	for (const clawback of opts.clawbacks ?? []) {
+		if (clawback.reversed || !clawback.creatorWasPaid) continue;
+		await recordNettingForRefund(
+			updated,
+			opts.stripeRefundId ?? updated.stripeRefundId,
+			now,
+			clawback,
+		);
 	}
 
 	// The remainder absorbs what could not be recovered. Negative, because this is

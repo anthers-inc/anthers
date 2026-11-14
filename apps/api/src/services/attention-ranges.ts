@@ -24,6 +24,7 @@ import { and, eq, ne, type SQL, sql } from "drizzle-orm";
 interface RangeRow {
 	id: number;
 	creatorId: number;
+	workId: number | null;
 	durationSeconds: number | null;
 	createdAt: Date;
 	startedAt: Date | null;
@@ -58,6 +59,7 @@ async function rangesOverlapping(
 		.select({
 			id: attentionEvents.id,
 			creatorId: attentionEvents.creatorId,
+			workId: attentionEvents.workId,
 			durationSeconds: attentionEvents.durationSeconds,
 			createdAt: attentionEvents.createdAt,
 			startedAt: attentionEvents.startedAt,
@@ -113,16 +115,21 @@ export async function creditedSeconds(
 }
 
 /**
- * The same split, kept per creator and per share-link flag — distribution needs to
- * pay creators proportionally and to hold the share-link side to its fraction, so
- * the split result is grouped rather than summed.
+ * The same split, kept per creator, Work and share-link flag — distribution needs the
+ * Work as well as its publisher, because a Collab Work's seconds belong to every owner
+ * and not to the account the listing happens to name.
+ *
+ * `creatorId` is the account the event was attributed to (the publisher), exactly as
+ * stored; the caller that distributes money maps the Work to today's owner set.
  */
-export async function creditedSecondsByCreator(
+export async function creditedAttention(
 	userId: number,
 	windowStart: Date,
 	windowEnd: Date,
 	extra: SQL[] = [],
-): Promise<Array<{ creatorId: number; viaShareLink: boolean; totalSeconds: number }>> {
+): Promise<
+	Array<{ creatorId: number; workId: number | null; viaShareLink: boolean; totalSeconds: number }>
+> {
 	// 🚨 **A creator's own watching is not audience time.** The intake drops it now, but
 	// historic rows still carry it, and this is the read the Time Pool distributes from —
 	// so the exclusion is repeated here rather than waiting for the retention window to
@@ -132,21 +139,55 @@ export async function creditedSecondsByCreator(
 		...extra,
 	]);
 	const credited = splitRows(rows, windowStart, windowEnd);
+	const byRange = new Map<
+		string,
+		{ creatorId: number; workId: number | null; viaShareLink: boolean; totalSeconds: number }
+	>();
+	for (const row of rows) {
+		const seconds = credited.get(row.id) ?? 0;
+		if (seconds <= 0) continue;
+		const key = `${row.creatorId}:${row.workId ?? "none"}:${row.viaShareLink}`;
+		const held = byRange.get(key);
+		if (held) held.totalSeconds += seconds;
+		else
+			byRange.set(key, {
+				creatorId: row.creatorId,
+				workId: row.workId,
+				viaShareLink: row.viaShareLink,
+				totalSeconds: seconds,
+			});
+	}
+	return [...byRange.values()];
+}
+
+/**
+ * The same split, kept per creator and per share-link flag — distribution needs to
+ * pay creators proportionally and to hold the share-link side to its fraction, so
+ * the split result is grouped rather than summed.
+ *
+ * A Work's owners are not resolved here: this is the creator-attributed view the
+ * meter and analytics read. The Time Pool's owner split is `creditedAttention`'s.
+ */
+export async function creditedSecondsByCreator(
+	userId: number,
+	windowStart: Date,
+	windowEnd: Date,
+	extra: SQL[] = [],
+): Promise<Array<{ creatorId: number; viaShareLink: boolean; totalSeconds: number }>> {
+	const rows = await creditedAttention(userId, windowStart, windowEnd, extra);
 	const byPair = new Map<
 		string,
 		{ creatorId: number; viaShareLink: boolean; totalSeconds: number }
 	>();
 	for (const row of rows) {
-		const seconds = credited.get(row.id) ?? 0;
-		if (seconds <= 0) continue;
 		const key = `${row.creatorId}:${row.viaShareLink}`;
 		const held = byPair.get(key);
-		if (held) held.totalSeconds += seconds;
+		if (held) held.totalSeconds += row.totalSeconds;
 		else
 			byPair.set(key, {
 				creatorId: row.creatorId,
 				viaShareLink: row.viaShareLink,
-				totalSeconds: seconds,
+				totalSeconds: row.totalSeconds,
 			});
 	}
 	return [...byPair.values()];

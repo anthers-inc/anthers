@@ -50,7 +50,7 @@ import {
 } from "../../services/storage/keys.js";
 import { signWorkObject } from "../../services/storage/own.js";
 import { mediaUploadKeyFor } from "../../services/upload-sessions.js";
-import { isWorkOwner } from "../../services/work-owners.js";
+import { isWorkOwner, workOwnedBy } from "../../services/work-owners.js";
 import {
 	attachPreviewMedia,
 	findPreviewMedia,
@@ -173,7 +173,7 @@ const uploadsRoutes = new Hono()
 			const [work] = await db
 				.select({ id: works.id })
 				.from(works)
-				.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+				.where(and(eq(works.id, workId), workOwnedBy(user.id)))
 				.limit(1);
 			if (!work) return c.json({ error: "Work not found" }, 404);
 
@@ -250,7 +250,7 @@ const uploadsRoutes = new Hono()
 				const [row] = await db
 					.select({ id: works.id, creatorId: works.creatorId })
 					.from(works)
-					.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+					.where(and(eq(works.id, workId), workOwnedBy(user.id)))
 					.limit(1);
 				if (!row) return c.json({ error: "Work not found" }, 404);
 				work = row;
@@ -453,7 +453,7 @@ const uploadsRoutes = new Hono()
 				const [row] = await db
 					.select({ id: works.id, creatorId: works.creatorId })
 					.from(works)
-					.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+					.where(and(eq(works.id, workId), workOwnedBy(user.id)))
 					.limit(1);
 				if (!row) return c.json({ error: "Work not found" }, 404);
 				work = row;

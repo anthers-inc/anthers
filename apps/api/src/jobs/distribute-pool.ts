@@ -60,8 +60,9 @@ import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
 import Decimal from "decimal.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { anthersUserId } from "../services/anthers-badges.js";
-import { creditedSecondsByCreator } from "../services/attention-ranges.js";
+import { creditedAttention } from "../services/attention-ranges.js";
 import { activeFreeAccountIdsForCycle, freeSliceForCycle } from "../services/time-pool-fund.js";
+import { workOwnerIdsForWorks } from "../services/work-owners.js";
 
 export interface DistributePoolData {
 	/** If set, distribute for a single Stripe-customer account. Otherwise every active account and every eligible free one. */
@@ -198,9 +199,34 @@ export async function computeMonth(input: {
 	// every tab and device share each second evenly, so this month holds at most one
 	// second per second of the user's real elapsed time, however many clients
 	// reported (`services/attention-ranges.ts`).
-	const attentionRows = await creditedSecondsByCreator(input.userId, start, end, [
+	const attentionRows = await creditedAttention(input.userId, start, end, [
 		eq(attentionEvents.publicAccess, true),
 	]);
+
+	// 🚨 **A Collab Work's seconds belong to every owner, evenly, and the total is
+	// conserved.** The attention row names the Work and its publisher; the pool pays the
+	// owner set, so a two-owner Work's hour is half an hour each rather than an hour to the
+	// publisher. A solo Work (or a row with no Work at all) keeps the creator attribution
+	// it always had. The owner set is read once for the month's distinct Works; a later
+	// ownership change cannot rewrite a settled cycle, because settlement freezes the
+	// resulting credits and `pool_distributions` rows.
+	const workIds = [
+		...new Set(attentionRows.map((row) => row.workId).filter((id): id is number => id != null)),
+	];
+	const ownersByWork = await workOwnerIdsForWorks(workIds);
+
+	/** The owners one attention row credits, and each one's share of its seconds. */
+	const sharesOf = (row: (typeof attentionRows)[number]): Array<[number, number]> => {
+		const owners = row.workId != null ? (ownersByWork.get(row.workId) ?? []) : [];
+		if (owners.length <= 1) return [[owners[0] ?? row.creatorId, row.totalSeconds]];
+		// Even in exact arithmetic, with the last owner absorbing the remainder, so the
+		// shares sum to the row's credited seconds rather than drifting a fraction below.
+		const per = row.totalSeconds / owners.length;
+		return owners.map((creatorId, index) => [
+			creatorId,
+			index === owners.length - 1 ? row.totalSeconds - per * (owners.length - 1) : per,
+		]);
+	};
 
 	/** The user's own watching, and what their links funded — each split within itself. */
 	const own = new Map<number, number>();
@@ -208,12 +234,13 @@ export async function computeMonth(input: {
 	let totalOwn = 0;
 	let totalShared = 0;
 	for (const row of attentionRows) {
-		const seconds = row.totalSeconds;
-		if (seconds <= 0) continue;
+		if (row.totalSeconds <= 0) continue;
 		const bucket = row.viaShareLink ? shared : own;
-		bucket.set(row.creatorId, (bucket.get(row.creatorId) ?? 0) + seconds);
-		if (row.viaShareLink) totalShared += seconds;
-		else totalOwn += seconds;
+		for (const [creatorId, seconds] of sharesOf(row)) {
+			bucket.set(creatorId, (bucket.get(creatorId) ?? 0) + seconds);
+			if (row.viaShareLink) totalShared += seconds;
+			else totalOwn += seconds;
+		}
 	}
 
 	/** Everything this user's month credited, for the ledger's own `attentionSeconds`. */

@@ -38,6 +38,7 @@ import { db } from "@anthers/db/client";
 import {
 	creatorCredits,
 	creatorTransferCredits,
+	purchaseSplits,
 	purchases,
 	stripeConnectAccounts,
 } from "@anthers/db/schema";
@@ -45,6 +46,7 @@ import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import Decimal from "decimal.js";
 import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import { createTransfer, paymentsConfigured } from "../lib/processor.js";
+import { ensurePurchaseSplits, purchaseSplitsFor } from "./purchase-splits.js";
 
 type Purchase = typeof purchases.$inferSelect;
 
@@ -61,20 +63,66 @@ function transferKey(intentId: string, creatorId: number): string {
 }
 
 /**
+ * One creator's whole share of one charge, assembled from every row that carries it.
+ *
+ * A charge can name the same creator more than once — two solo purchases, a solo purchase
+ * beside a Collab Work's split, two Collab Works — and one transfer pays them all. The
+ * group is what the transfer is made from and what its stamping covers.
+ */
+interface CreatorChargeShare {
+	creatorId: number;
+	/** The share in integer cents; the transfer's amount and the sum of its parts. */
+	cents: number;
+	/** Solo purchase rows whose `stripe_transfer_id` this transfer stamps. */
+	purchaseIds: number[];
+	/** Split rows whose `stripe_transfer_id` this transfer stamps. */
+	splitIds: number[];
+}
+
+/** An empty group for one creator. */
+function newShare(creatorId: number): CreatorChargeShare {
+	return { creatorId, cents: 0, purchaseIds: [], splitIds: [] };
+}
+
+/** Add one slice to a group that already exists. */
+function addToShare(
+	group: CreatorChargeShare,
+	cents: number,
+	part: { purchaseId?: number; splitId?: number },
+): void {
+	group.cents += cents;
+	if (part.purchaseId != null) group.purchaseIds.push(part.purchaseId);
+	if (part.splitId != null) group.splitIds.push(part.splitId);
+}
+
+/** Add one slice to a creator's group, creating the group on first sight. */
+function addShare(
+	groups: Map<number, CreatorChargeShare>,
+	creatorId: number,
+	cents: number,
+	part: { purchaseId?: number; splitId?: number },
+): void {
+	const group = groups.get(creatorId) ?? newShare(creatorId);
+	addToShare(group, cents, part);
+	groups.set(creatorId, group);
+}
+
+/** A dollar figure as integer cents, the unit money moves in. */
+function centsOf(amount: string | Decimal): number {
+	return new Decimal(amount).times(100).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber();
+}
+
+/**
  * Create (or idempotently re-create) one creator's transfer for a charge, and stamp the
  * rows it covers. Returns the Transfer id, or null with the reason logged — a null that
  * leaves the rows unstamped is the retry job's worklist, never a silent loss.
  */
 async function transferCreatorShare(
 	charge: ChargeRef,
-	creatorId: number,
-	rows: Purchase[],
+	group: CreatorChargeShare,
 ): Promise<string | null> {
-	const earnings = rows.reduce(
-		(acc, r) => acc.plus(new Decimal(r.creatorEarnings)),
-		new Decimal(0),
-	);
-	if (earnings.lte(0)) return null;
+	const { creatorId, cents } = group;
+	if (cents <= 0) return null;
 
 	const [account] = await db
 		.select()
@@ -107,7 +155,7 @@ async function transferCreatorShare(
 	try {
 		const transfer = await createTransfer(
 			{
-				amount: Math.round(earnings.toNumber() * 100),
+				amount: cents,
 				currency: "usd",
 				destination: account.stripeAccountId,
 				source_transaction: charge.latestCharge,
@@ -120,15 +168,18 @@ async function transferCreatorShare(
 			{ idempotencyKey: transferKey(charge.id, creatorId) },
 		);
 		if (!transfer?.id) throw new Error("Stripe returned no transfer");
-		await db
-			.update(purchases)
-			.set({ stripeTransferId: transfer.id, updatedAt: new Date() })
-			.where(
-				inArray(
-					purchases.id,
-					rows.map((r) => r.id),
-				),
-			);
+		if (group.purchaseIds.length > 0) {
+			await db
+				.update(purchases)
+				.set({ stripeTransferId: transfer.id, updatedAt: new Date() })
+				.where(inArray(purchases.id, group.purchaseIds));
+		}
+		if (group.splitIds.length > 0) {
+			await db
+				.update(purchaseSplits)
+				.set({ stripeTransferId: transfer.id })
+				.where(inArray(purchaseSplits.id, group.splitIds));
+		}
 		return transfer.id;
 	} catch (err) {
 		console.error(
@@ -157,20 +208,33 @@ async function transferCreatorShare(
  */
 export async function splitChargeToCreators(charge: ChargeRef, rows: Purchase[]): Promise<void> {
 	if (!paymentsConfigured()) return;
-	const byCreator = new Map<number, Purchase[]>();
-	const goods: Purchase[] = [];
+	const byCreator = new Map<number, CreatorChargeShare>();
+	const goods: Array<{ creatorId: number; amount: string; purchase: Purchase }> = [];
 	for (const row of rows) {
-		if (row.creatorId == null) continue;
-		if (row.type === "physical") {
-			goods.push(row);
+		// A co-owned Work's shares were frozen at completion, so a sale always pays the
+		// owners it had then. A solo Work writes no split rows and keeps the purchase
+		// row as its whole record — the path every pre-Collab sale already took.
+		const splits = await ensurePurchaseSplits(row);
+		if (splits.length > 0) {
+			for (const split of splits) {
+				if (split.creatorId == null || split.stripeTransferId != null) continue;
+				if (row.type === "physical") {
+					goods.push({ creatorId: split.creatorId, amount: split.amount, purchase: row });
+				} else {
+					addShare(byCreator, split.creatorId, centsOf(split.amount), { splitId: split.id });
+				}
+			}
 			continue;
 		}
-		const group = byCreator.get(row.creatorId);
-		if (group) group.push(row);
-		else byCreator.set(row.creatorId, [row]);
+		if (row.creatorId == null) continue;
+		if (row.type === "physical") {
+			goods.push({ creatorId: row.creatorId, amount: row.creatorEarnings, purchase: row });
+			continue;
+		}
+		addShare(byCreator, row.creatorId, centsOf(row.creatorEarnings), { purchaseId: row.id });
 	}
-	for (const [creatorId, group] of byCreator) {
-		await transferCreatorShare(charge, creatorId, group);
+	for (const group of byCreator.values()) {
+		await transferCreatorShare(charge, group);
 	}
 	await creditGoodsSales(goods);
 }
@@ -186,22 +250,23 @@ export async function splitChargeToCreators(charge: ChargeRef, rows: Purchase[])
  * ⚠️ **Idempotent on the purchase**, because completion can be redelivered: a credit whose
  * `purchase_id` already exists is left alone, so a replay cannot double the money.
  */
-async function creditGoodsSales(rows: Purchase[]): Promise<void> {
-	for (const row of rows) {
-		if (row.creatorId == null) continue;
-		const amount = new Decimal(row.creatorEarnings);
+async function creditGoodsSales(
+	rows: Array<{ creatorId: number; amount: string; purchase: Purchase }>,
+): Promise<void> {
+	for (const { creatorId, amount: raw, purchase } of rows) {
+		const amount = new Decimal(raw);
 		if (amount.lte(0)) continue;
 		await db
 			.insert(creatorCredits)
 			.values({
-				creatorId: row.creatorId,
-				subscriberId: row.buyerId,
+				creatorId,
+				subscriberId: purchase.buyerId,
 				billingCycle: currentCycleKey(),
 				kind: "sale",
 				fundedBy: "buyer",
 				amount: amount.toFixed(2),
 				settledAt: new Date(),
-				purchaseId: row.id,
+				purchaseId: purchase.id,
 			})
 			.onConflictDoNothing();
 	}
@@ -240,19 +305,63 @@ export async function retryFailedTransfers(): Promise<number> {
 				ne(purchases.type, "physical"),
 			),
 		);
-	if (rows.length === 0) return 0;
+	// A co-owned Work's purchase row is never stamped by its own transfer — its shares are
+	// the split rows — so those rows are dropped from the solo worklist here rather than
+	// retried as if the whole `creatorEarnings` belonged to the publisher.
+	const splitsByPurchase = await purchaseSplitsFor(rows.map((row) => row.id));
+	const splitRows = await db
+		.select({ split: purchaseSplits, purchase: purchases })
+		.from(purchaseSplits)
+		.innerJoin(purchases, eq(purchaseSplits.purchaseId, purchases.id))
+		.where(
+			and(
+				eq(purchases.status, "completed"),
+				isNull(purchaseSplits.stripeTransferId),
+				// The same physical-good hold as above, now read off the purchase the split
+				// belongs to: the credit path owns it once the parcel lands.
+				ne(purchases.type, "physical"),
+				isNotNull(purchaseSplits.creatorId),
+			),
+		);
+
+	if (rows.length === 0 && splitRows.length === 0) return 0;
 
 	// One group per (intent, creator) — the transfer identity the key already names. The
 	// intent id is the row's charge key wherever the row has settled; a row still keyed by
 	// its session id (a completion that never landed) is not transferable at all and is
 	// skipped by the `cs_` prefix check below, because no charge exists to draw from.
-	const groups = new Map<string, Purchase[]>();
+	const groups = new Map<string, { intentId: string; group: CreatorChargeShare }>();
+	const add = (
+		intentId: string,
+		creatorId: number,
+		cents: number,
+		part: { purchaseId?: number; splitId?: number },
+	) => {
+		const key = `${intentId}:${creatorId}`;
+		const held = groups.get(key);
+		if (held) {
+			addToShare(held.group, cents, part);
+			return;
+		}
+		const group = newShare(creatorId);
+		addToShare(group, cents, part);
+		groups.set(key, { intentId, group });
+	};
+
 	for (const row of rows) {
+		if (row.creatorId == null) continue;
 		if (row.stripePaymentIntentId.startsWith("cs_")) continue;
-		const key = `${row.stripePaymentIntentId}:${row.creatorId}`;
-		const group = groups.get(key);
-		if (group) group.push(row);
-		else groups.set(key, [row]);
+		if ((splitsByPurchase.get(row.id) ?? []).length > 0) continue;
+		add(row.stripePaymentIntentId, row.creatorId, centsOf(row.creatorEarnings), {
+			purchaseId: row.id,
+		});
+	}
+	for (const { split, purchase } of splitRows) {
+		if (split.creatorId == null) continue;
+		if (purchase.stripePaymentIntentId.startsWith("cs_")) continue;
+		add(purchase.stripePaymentIntentId, split.creatorId, centsOf(split.amount), {
+			splitId: split.id,
+		});
 	}
 
 	// The charge id each group's transfer draws from. The rows carry the PaymentIntent;
@@ -261,9 +370,7 @@ export async function retryFailedTransfers(): Promise<number> {
 	const { retrievePaymentIntent } = await import("../lib/processor.js");
 	const chargeByIntent = new Map<string, string | null>();
 	let attempted = 0;
-	for (const [key, group] of groups) {
-		const [intentId, creatorIdRaw] = key.split(":");
-		const creatorId = Number(creatorIdRaw);
+	for (const { intentId, group } of groups.values()) {
 		let latestCharge = chargeByIntent.get(intentId);
 		if (latestCharge === undefined) {
 			const pi = await retrievePaymentIntent(intentId, {});
@@ -272,16 +379,16 @@ export async function retryFailedTransfers(): Promise<number> {
 			chargeByIntent.set(intentId, latestCharge);
 		}
 		attempted += 1;
-		await transferCreatorShare({ id: intentId, latestCharge }, creatorId, group);
+		await transferCreatorShare({ id: intentId, latestCharge }, group);
 	}
 	return attempted;
 }
 
-/** What happened to a physical sale's credit when its purchase was refunded. */
-export type SaleCreditRefundState = "none" | "held" | "released";
+/** What happened to one owner's physical-sale credit when its purchase was refunded. */
+export type SaleCreditRefundState = "held" | "released";
 
 /**
- * Settle a sale's hold at the moment its purchase is refunded.
+ * Settle the sale holds at the moment a purchase is refunded, one answer per owner.
  *
  * 🚨 **Two different facts, and the refund path needs both.** A sale credit that has not
  * been covered by a transfer is money the creator never received: the refund takes the
@@ -289,26 +396,35 @@ export type SaleCreditRefundState = "none" | "held" | "released";
  * that already reached them, so the refund has to recover it like any other paid-out share —
  * the netting ledger's job, exactly as it is for a support credit.
  *
- * Returns which of the three cases applied so the caller can pass `creatorWasPaid` honestly.
- * A purchase with no credit at all (`none`) is a row from before the hold existed, and the
- * caller's own transfer-id check still governs it.
+ * The answer is keyed by creator: a Collab Work's physical sale holds one credit per owner,
+ * and each is released on its own parcel's clock. A purchase with no credit at all is a row
+ * from before the hold existed (or a digital sale), and its absent entry leaves the
+ * caller's own transfer-id check to govern it.
  */
-export async function settleSaleCreditOnRefund(purchaseId: number): Promise<SaleCreditRefundState> {
-	const [credit] = await db
-		.select({ id: creatorCredits.id })
+export async function settleSaleCreditOnRefund(
+	purchaseId: number,
+): Promise<Map<number, SaleCreditRefundState>> {
+	const credits = await db
+		.select({ id: creatorCredits.id, creatorId: creatorCredits.creatorId })
 		.from(creatorCredits)
-		.where(eq(creatorCredits.purchaseId, purchaseId))
-		.limit(1);
-	if (!credit) return "none";
+		.where(eq(creatorCredits.purchaseId, purchaseId));
 
-	const [coverage] = await db
-		.select({ transferId: creatorTransferCredits.transferId })
-		.from(creatorTransferCredits)
-		.where(eq(creatorTransferCredits.creditId, credit.id))
-		.limit(1);
-	if (coverage) return "released";
-
-	// Never transferred: the credit goes, and the money that would have moved never does.
-	await db.delete(creatorCredits).where(eq(creatorCredits.id, credit.id));
-	return "held";
+	const states = new Map<number, SaleCreditRefundState>();
+	for (const credit of credits) {
+		const [coverage] = await db
+			.select({ transferId: creatorTransferCredits.transferId })
+			.from(creatorTransferCredits)
+			.where(eq(creatorTransferCredits.creditId, credit.id))
+			.limit(1);
+		if (coverage) {
+			if (credit.creatorId != null) states.set(credit.creatorId, "released");
+			continue;
+		}
+		// Never transferred: the credit goes, and the money that would have moved never
+		// does. A credit whose owner deleted their account goes the same way — there is
+		// nobody left to pay.
+		await db.delete(creatorCredits).where(eq(creatorCredits.id, credit.id));
+		if (credit.creatorId != null) states.set(credit.creatorId, "held");
+	}
+	return states;
 }

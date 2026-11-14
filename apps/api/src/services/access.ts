@@ -908,17 +908,46 @@ export function defaultSeedAccess(): AccessRow[] {
 export async function normalizeAccessRows(
 	creatorId: number,
 	rows: readonly AccessRow[],
+	opts: { collabWork?: boolean; ownerIds?: readonly number[] } = {},
 ): Promise<{ rows: AccessRow[] } | { error: string }> {
+	// Whose ladder this table may draw on. A solo Work is the caller's own; a co-owned
+	// Work's gate belongs to the Work, so any owner's rung is legal and an owner editing
+	// the table cannot silently drop the gate a co-owner set on their own Badge.
+	const ownerIds = [...new Set([creatorId, ...(opts.ownerIds ?? [])])];
 	const rungs = await db
 		.select({ id: badges.id, threshold: badges.threshold })
 		.from(badges)
 		.where(
 			or(
-				eq(badges.creatorId, creatorId),
-				sql`EXISTS (SELECT 1 FROM ${badgeCollaborators} WHERE ${badgeCollaborators.badgeId} = ${badges.id} AND ${badgeCollaborators.creatorId} = ${creatorId} AND ${badgeCollaborators.status} = 'accepted')`,
+				inArray(badges.creatorId, ownerIds),
+				sql`EXISTS (SELECT 1 FROM ${badgeCollaborators} WHERE ${badgeCollaborators.badgeId} = ${badges.id} AND ${badgeCollaborators.creatorId} IN (${sql.join(
+					ownerIds.map((id) => sql`${id}`),
+					sql`, `,
+				)}) AND ${badgeCollaborators.status} = 'accepted')`,
 			),
 		);
-	const byId = new Map(rungs.map((r) => [r.id, Number(r.threshold)]));
+	// Which rungs another creator also owns — the Badges that may gate a co-owned Work.
+	// Read as its own query rather than a correlated `EXISTS` in the select, because the
+	// correlated form is the kind of SQL that looks right and silently answers false.
+	const sharedIds = new Set<number>();
+	if (opts.collabWork && rungs.length > 0) {
+		const sharedRows = await db
+			.select({ badgeId: badgeCollaborators.badgeId })
+			.from(badgeCollaborators)
+			.where(
+				and(
+					inArray(
+						badgeCollaborators.badgeId,
+						rungs.map((rung) => rung.id),
+					),
+					eq(badgeCollaborators.status, "accepted"),
+				),
+			);
+		for (const row of sharedRows) sharedIds.add(row.badgeId);
+	}
+	const byId = new Map(
+		rungs.map((r) => [r.id, { threshold: Number(r.threshold), shared: sharedIds.has(r.id) }]),
+	);
 
 	const seen = new Set<number>();
 	const normalized: AccessRow[] = [];
@@ -928,16 +957,27 @@ export async function normalizeAccessRows(
 			continue;
 		}
 		const badgeId = row.badgeId ?? null;
-		if (badgeId === null || !byId.has(badgeId)) {
+		const rung = badgeId === null ? undefined : byId.get(badgeId);
+		if (badgeId === null || !rung) {
 			return {
 				error:
 					"A gate must sit on one of your Badge levels. Add the rung first, or leave the Work open to everyone.",
 			};
 		}
 		if (seen.has(badgeId)) return { error: "A Badge level can gate a Work only once." };
+		// 🚨 **A co-owned Work gates only on a shared Badge or on a direct purchase.** A
+		// solo Badge would let one owner's supporters take a Work whose earnings are split
+		// with people they never gave anything to; a priced row is a purchase door and pays
+		// the Work's owners through the ordinary split, so it stays allowed.
+		if (opts.collabWork && row.allow && Number(row.price) === 0 && !rung.shared) {
+			return {
+				error:
+					"A co-owned Work can only be gated on a Badge another creator owns too, so its support reaches every owner. Add a collaborator to this Badge, or sell the Work directly instead.",
+			};
+		}
 		seen.add(badgeId);
 		normalized.push({
-			threshold: byId.get(badgeId) as number,
+			threshold: rung.threshold,
 			badgeId,
 			allow: row.allow,
 			price: row.price,

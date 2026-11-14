@@ -224,3 +224,86 @@ describe("leaving and handover", () => {
 		expect(await db.select().from(works).where(eq(works.id, lonely.id))).toHaveLength(0);
 	});
 });
+
+/**
+ * A co-owned Work's gate.
+ *
+ * The money rule behind it: a solo Badge would let one owner's supporters take a Work
+ * whose earnings are split with people they never gave anything to. A Badge another
+ * creator also owns pays every owner through its own split, and a direct price pays them
+ * through the ordinary purchase split — so those two are allowed and the solo gate is not.
+ */
+describe("a co-owned Work's gate", () => {
+	it("refuses a solo Badge, and keeps a shared Badge and a direct price", async () => {
+		const work = await insertWork({
+			creatorId: collaborator.userId,
+			type: "video",
+			title: `Gate ${RUN}`,
+			visibility: "private",
+		});
+		await db.insert(workCollaborators).values({
+			workId: work.id,
+			creatorId: publisher.userId,
+			status: "accepted",
+			invitedById: collaborator.userId,
+		});
+
+		const created = async (label: string, threshold: string) => {
+			const res = await req(
+				"/api/subscriptions/badges",
+				json(collaborator.cookie, { threshold, label }),
+			);
+			expect(res.status).toBe(201);
+			return ((await res.json()) as { badge: { id: number } }).badge.id;
+		};
+		const soloBadgeId = await created(`Solo gate ${RUN}`, "6.00");
+		const sharedBadgeId = await created(`Shared gate ${RUN}`, "7.00");
+		expect(
+			(
+				await req(
+					`/api/subscriptions/badges/${sharedBadgeId}/collaborators`,
+					json(collaborator.cookie, { did: publisher.did }),
+				)
+			).status,
+		).toBe(201);
+		expect(
+			(
+				await req(
+					`/api/subscriptions/badges/${sharedBadgeId}/collaborators/accept`,
+					json(publisher.cookie, {}),
+				)
+			).status,
+		).toBe(200);
+
+		const rows = (badgeId: number, threshold: number, allow: boolean, price: string) => [
+			{ threshold: 0, allow: false, price: "0" },
+			{ threshold, badgeId, allow, price },
+		];
+
+		const refused = await req(
+			`/api/content/works/${work.id}`,
+			patch(publisher.cookie, { access: rows(soloBadgeId, 6, true, "0") }),
+		);
+		expect(refused.status).toBe(400);
+		const refusal = (await refused.json()) as { error: string };
+		expect(refusal.error).toContain("another creator owns too");
+
+		const sharedGate = await req(
+			`/api/content/works/${work.id}`,
+			patch(publisher.cookie, { access: rows(sharedBadgeId, 7, true, "0") }),
+		);
+		expect(sharedGate.status).toBe(200);
+
+		// The solo rung's PRICED row is a purchase door, not a gate: it pays the Work's
+		// owners through the ordinary split, so the same rung is allowed to sell.
+		const priced = await req(
+			`/api/content/works/${work.id}`,
+			patch(publisher.cookie, { access: rows(soloBadgeId, 6, false, "4.00") }),
+		);
+		expect(priced.status).toBe(200);
+		const [stored] = await db.select().from(works).where(eq(works.id, work.id));
+		expect(
+			(stored.access ?? []).some((row) => row.badgeId === soloBadgeId && row.price === "4.00"),
+		).toBe(true);
+	});
+});

@@ -18,6 +18,7 @@ import {
 	stickers,
 	stripeCustomers,
 	userBadges,
+	workCollaborators,
 } from "@anthers/db/schema";
 import { type CycleKey, currentCycleKey, cycleStart } from "@anthers/shared/billing-cycle";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
@@ -31,6 +32,7 @@ import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
+import { insertWork } from "./work-fixtures";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 await ensureAnthersLadder();
@@ -727,5 +729,84 @@ describe("distributePool — a Sticker overrides the Time Pool rather than addin
 		const byTime = [...pool.values()].reduce((s, d) => s.plus(d), new Decimal(0));
 		expect(byTime.toFixed(2)).toBe("0.00");
 		expect(pool.has(a)).toBe(false);
+	});
+});
+
+/**
+ * A Collab Work's Time Pool, and the settled cycle beside it.
+ *
+ * The pool's public math is unchanged — the same fixed share of what the supporter gives
+ * Anthers reaches creators — but a co-owned Work's seconds now credit its owners evenly
+ * instead of the publisher alone. The second half pins the freeze: once a cycle's rows are
+ * settled, a later ownership change cannot rewrite what that cycle paid.
+ */
+describe("a Collab Work's Time Pool", () => {
+	it("divides the Work's seconds across its owners, conserving the pool", async () => {
+		const [publisher, collaborator] = [await makeUser("co"), await makeUser("co")];
+		const { userId, accountId } = await seedCycle(PUBLIC_ACCESS_PRICE, []);
+		const work = await insertWork({
+			creatorId: publisher,
+			type: "game",
+			title: "A co-owned pool Work",
+			streamEnabled: true,
+		});
+		await db.insert(workCollaborators).values({
+			workId: work.id,
+			creatorId: collaborator,
+			status: "accepted",
+			invitedById: publisher,
+		});
+		// One hour of Public Access on the co-owned Work, attributed to its publisher the
+		// way attention stores it.
+		await insertAttentionRange({
+			userId,
+			creatorId: publisher,
+			workId: work.id,
+			eventType: "watch",
+			seconds: 3600,
+			publicAccess: true,
+			endsAt: new Date("2031-03-15T12:00:00Z"),
+		});
+
+		await distributePool({ accountId });
+
+		const rows = await ledger(userId);
+		// Both owners have a row, and nobody else does: the Work's hour is theirs.
+		expect([...rows.keys()].sort()).toEqual([publisher, collaborator].sort());
+		const whole = new Decimal(timePoolFor(PUBLIC_ACCESS_PRICE));
+		const publisherRow = rows.get(publisher)!;
+		const collaboratorRow = rows.get(collaborator)!;
+		expect(new Decimal(publisherRow.poolAmount).plus(collaboratorRow.poolAmount).toFixed(2)).toBe(
+			whole.toFixed(2),
+		);
+		expect(
+			Math.abs(new Decimal(publisherRow.poolAmount).minus(collaboratorRow.poolAmount).toNumber()),
+		).toBeLessThanOrEqual(0.01);
+		expect((publisherRow.attentionSeconds ?? 0) + (collaboratorRow.attentionSeconds ?? 0)).toBe(
+			3600,
+		);
+
+		// Settle the cycle, then change the Work's ownership. The estimate must not rewrite
+		// the settled rows — their amounts, seconds and owner set are the cycle's record.
+		await db
+			.update(poolDistributions)
+			.set({ settledAt: new Date("2031-04-01T00:00:00Z") })
+			.where(
+				and(eq(poolDistributions.subscriberId, userId), eq(poolDistributions.billingCycle, CYCLE)),
+			);
+		const before = new Map(
+			[...rows].map(([id, row]) => [id, { pool: row.poolAmount, seconds: row.attentionSeconds }]),
+		);
+		await db.delete(workCollaborators).where(eq(workCollaborators.workId, work.id));
+		await distributePool({ accountId });
+
+		const after = await ledger(userId);
+		expect([...after.keys()].sort()).toEqual([...before.keys()].sort());
+		for (const [id, value] of before) {
+			expect(after.get(id)?.poolAmount).toBe(value.pool);
+			expect(after.get(id)?.attentionSeconds).toBe(value.seconds);
+		}
+		expect(after.get(publisher)?.settledAt).not.toBeNull();
+		expect(after.get(collaborator)?.settledAt).not.toBeNull();
 	});
 });

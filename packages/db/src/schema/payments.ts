@@ -234,6 +234,53 @@ export const purchases = pgTable(
 );
 
 /**
+ * One owner's share of one Work purchase, frozen when the sale completes.
+ *
+ * 🚨 **This is the money record a Collab Work needs, and the purchase row stays the
+ * buyer's receipt.** A purchase is one charge and one entitlement; several creators can
+ * own the Work it buys, so the creator's share is split here, one row per owner, at the
+ * moment the sale completes. A later ownership change cannot rewrite an old sale because
+ * this table is written once and read by every transfer, refund and netting path.
+ *
+ * The splits are written only for a Work with more than one owner. A solo Work keeps the
+ * purchase row's own `creatorEarnings` and `stripeTransferId`, which is the shape every
+ * pre-Collab sale already has; adding a row for every solo sale would change a tested path
+ * for no money.
+ *
+ * ⚠️ **`amount` is the creator-side earnings share, not the buyer's price.** It is a slice
+ * of `purchases.creatorEarnings` (the price less the card processing that share bears), so
+ * the splits of one purchase sum to that column exactly, in cents.
+ */
+// org — the frozen split of a sale's creator earnings across the Work's owners.
+export const purchaseSplits = pgTable(
+	"purchase_splits",
+	{
+		id: serial("id").primaryKey(),
+		purchaseId: integer("purchase_id")
+			.notNull()
+			.references(() => purchases.id, { onDelete: "cascade" }),
+		/** The owner this share belongs to. Set null on delete; the money record outlives them. */
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
+		/** Dollars, the creator-side share. The rows of one purchase sum to `creator_earnings`. */
+		amount: numeric("amount").notNull(),
+		/**
+		 * The Stripe transfer that carried this share, or null until the completion path or
+		 * the retry job makes it. A physical good's share never rides a transfer: it is held
+		 * in `creator_credits` until the parcel lands, so this stays null for it.
+		 */
+		stripeTransferId: text("stripe_transfer_id"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// One share per owner per purchase. Completion can be redelivered; the unique is
+		// what makes the split's first write final.
+		uniqueIndex("uq_purchase_splits_purchase_creator").on(table.purchaseId, table.creatorId),
+		// The retry job's read: shares that have not moved yet, by owner.
+		index("idx_purchase_splits_creator_transfer").on(table.creatorId, table.stripeTransferId),
+	],
+);
+
+/**
  * org — a Stripe dispute (a chargeback) on a charge Anthers processed. Money; org-only by
  * the treasury rule, and the record exists at all because Anthers never contests one
  * (settled 2026-09-14): the money is treated as gone from the moment the dispute lands, so
@@ -772,8 +819,12 @@ export const creatorNettings = pgTable(
 		// refund settles several sibling purchases, and each sibling's earnings are its
 		// own netting under the same refund. The dispute source's identity is the dispute
 		// row, which is itself unique on the Stripe dispute id.
-		uniqueIndex("uq_creator_nettings_refund").on(table.stripeRefundId, table.purchaseId),
-		uniqueIndex("uq_creator_nettings_dispute").on(table.disputeId),
+		uniqueIndex("uq_creator_nettings_refund").on(
+			table.stripeRefundId,
+			table.purchaseId,
+			table.creatorId,
+		),
+		uniqueIndex("uq_creator_nettings_dispute").on(table.disputeId, table.creatorId),
 		// At most one source. Not "exactly one": the `set null` on both links is what lets
 		// the row outlive the purchase or dispute it names — the money-record rule — and a
 		// row surviving its source's deletion has zero links left, which is a fact about
