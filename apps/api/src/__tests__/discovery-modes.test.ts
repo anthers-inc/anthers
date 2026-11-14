@@ -4,7 +4,7 @@
  * Discovery became one stream on 2026-10-23).
  *
  * - `GET /me/graph` ranks creators by how many of the people the viewer follows also
- *   follow them, and carries the edge count plus the vocabulary the shared Type and
+ *   follow them, and carries the edge count plus the vocabulary the shared Types and
  *   Tags filters read. No page calls it today; the graph waits on a platform with
  *   enough content for the edges to say something, and the route keeps its own shape.
  *   A reader who follows nobody gets the stated follower-count fallback rather than an

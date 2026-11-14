@@ -9,8 +9,10 @@
  * what a selected row already reads as).
  */
 
-export const sectionTitleClass =
-	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
+export const sectionHeadingClass =
+	"text-xs font-semibold uppercase tracking-wider text-base-content/40 flex items-center gap-1.5";
+export const sectionTitleRowClass = "flex items-center gap-1.5 mb-2";
+export const sectionTitleClass = `${sectionHeadingClass} mb-2`;
 
 export const filterBtnClass = (isActive: boolean) =>
 	`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full ${

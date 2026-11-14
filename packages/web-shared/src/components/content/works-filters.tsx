@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The Studio's Works page's sidebar filters — SEARCH over the title and description,
- * VISIBILITY (what the creator set: released, private, withdrawn), and WORK TYPE —
+ * VISIBILITY (what the creator set: released, private, withdrawn), and TYPES —
  * registered below the Studio nav by the page that binds them.
  *
  * The layout's shape follows the signed-in feed's sidebar (`FeedFilterSections`, an
@@ -15,7 +15,7 @@ import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useMemo } from "react";
 import type { Work } from "../../lib/types";
 import InfoTip from "../ui/InfoTip";
-import { filterBtnClass, sectionTitleClass } from "./studio-filter-classes";
+import { filterBtnClass, sectionHeadingClass, sectionTitleRowClass } from "./studio-filter-classes";
 import { LIBRARY_TYPE_OPTIONS, TypeIcon, typeLabel } from "./works";
 
 /** The distinct kinds actually present in a list, in the Studio's own type order. */
@@ -54,7 +54,13 @@ export default function WorksFilterSections({
 		<div className="flex flex-col gap-5">
 			{/* SEARCH — the video-platform filter box, living here with the rest. */}
 			<section>
-				<h3 className={sectionTitleClass}>Search</h3>
+				<div className={sectionTitleRowClass}>
+					<h3 className={sectionHeadingClass}>Search</h3>
+					<InfoTip
+						unclipped
+						text="Search narrows the table to Works whose title or description contains the text. It combines with the sections below it, and the address bar carries the result, so a filtered table can be bookmarked or sent."
+					/>
+				</div>
 				<label className="input input-bordered input-xs flex items-center gap-1.5 w-full">
 					<MagnifyingGlassIcon className="w-3 h-3 text-base-content/40" />
 					<input
@@ -106,9 +112,15 @@ export default function WorksFilterSections({
 				</div>
 			</section>
 
-			{/* WORK TYPE — the kinds this Catalog holds, in the Studio's own type order. */}
+			{/* TYPES — the kinds this Catalog holds, in the Studio's own type order. */}
 			<section>
-				<h3 className={sectionTitleClass}>Work Type</h3>
+				<div className={sectionTitleRowClass}>
+					<h3 className={sectionHeadingClass}>Types</h3>
+					<InfoTip
+						unclipped
+						text="Types narrow the table to one kind of Work. Only the kinds this Catalog holds are listed, so a kind with nothing behind it has no row."
+					/>
+				</div>
 				<div className="flex flex-col gap-0.5">
 					<button
 						type="button"
