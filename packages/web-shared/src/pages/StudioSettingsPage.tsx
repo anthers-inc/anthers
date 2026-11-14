@@ -491,7 +491,14 @@ function isStudioSettingsTab(value: string | null): value is StudioSettingsTab {
 export default function StudioSettingsPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const tabParam = searchParams.get("tab");
-	const activeTab: StudioSettingsTab = isStudioSettingsTab(tabParam) ? tabParam : "general";
+	const publishingOutcome = searchParams.get("publishing");
+	// A return from the publishing-permission flow lands on the tab that carries its
+	// outcome, not on General. The outcome stays in the URL for the section to read.
+	const activeTab: StudioSettingsTab = publishingOutcome
+		? "atproto"
+		: isStudioSettingsTab(tabParam)
+			? tabParam
+			: "general";
 
 	// The same visited-tab rule the account settings page uses: a tab stays mounted so a
 	// switch does not re-run its loads and reflow the page.
@@ -508,6 +515,9 @@ export default function StudioSettingsPage() {
 				(prev) => {
 					const next = new URLSearchParams(prev);
 					next.set("tab", id);
+					// The publishing outcome is the return leg's message, not a permanent
+					// override of the tab bar.
+					next.delete("publishing");
 					return next;
 				},
 				{ replace: true },
