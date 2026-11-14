@@ -161,6 +161,14 @@
 	margin-bottom: 0;
 }
 
+/* The Spoiler mark in the editor, where the words stay readable so they can be edited: a
+   tinted background and a dashed underline mark the run, never a blur — an editor that
+   hides the text cannot edit it. The published view is the reveal component's job. */
+.tiptap span.spoiler {
+	background-color: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+	border-bottom: 1px dashed color-mix(in oklch, var(--color-base-content) 45%, transparent);
+}
+
 /* Lists - comfortable spacing */
 .prose ul,
 .prose ol {
