@@ -4,9 +4,12 @@
  *
  * This is the component that made per-Work link previews possible. The app itself is
  * still a client-rendered SPA: this server serves the built `dist/` exactly as the static
- * site did, and on a document request it swaps the shell's neutral share block for the
- * Work's own title, blurb and thumbnail (see `src/lib/share-head.ts`). Nothing else about
- * the page changes, so the SPA, its routes and its own data fetches are untouched.
+ * site did, and on a document request it does two things to the shell beside serving it —
+ * swaps the neutral share block for the Work's own title, blurb and thumbnail (see
+ * `src/lib/share-head.ts`), and puts the standing page's reader body before `</body>` (see
+ * `src/lib/reader-body.ts`), which is what a reader that runs no JavaScript gets. Nothing
+ * else about the page changes, so the SPA, its routes and its own data fetches are
+ * untouched.
  *
  * 🚨 **A Work's page, a post's permalink, a creator's profile and the share link that points
  * at a Work all carry that card.** A `/s/{token}` link is what the Share button hands a
@@ -41,6 +44,7 @@ import { robotsTxt, SITEMAP_PATH, sitemapXml } from "./src/lib/crawl.js";
 import { devBuildApiOrigin, devBuildPage, servesDevBuildPage } from "./src/lib/dev-build-page.js";
 import { pageMeta } from "./src/lib/page-meta.js";
 import { previewRoute } from "./src/lib/preview-route.js";
+import { injectReaderBody } from "./src/lib/reader-body.js";
 import { injectShareHead, type LinkCard } from "./src/lib/share-head.js";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -80,6 +84,26 @@ const API_ORIGIN =
 
 async function indexHtml(): Promise<string> {
 	return Bun.file(resolve(DIST, "index.html")).text();
+}
+
+/**
+ * The build's reader bodies, by page address, read once.
+ *
+ * `build.ts` writes `dist/prerender.json` from the standing pages; a server started
+ * against an older build simply has no file, and the document ships as the shell. That is
+ * the same fail-open rule the link card follows — a reader body must never be able to take
+ * a page down — and it is also what keeps this server usable in a checkout that has not
+ * been rebuilt since the feature landed.
+ */
+const PRERENDER_FILE = "prerender.json";
+let readerBodies: Promise<Record<string, string>> | null = null;
+
+async function readerBodyFor(pathname: string): Promise<string | null> {
+	readerBodies ??= Bun.file(resolve(DIST, PRERENDER_FILE))
+		.json()
+		.catch(() => ({}) as Record<string, string>);
+	const bodies = await readerBodies;
+	return bodies[pathname] ?? null;
 }
 
 /** The card a document is served with, and the address it canonically lives at. */
@@ -186,6 +210,9 @@ Bun.serve({
 			return devBuildPage(devBuildApiOrigin(req, API_PORT));
 		}
 		if (url.pathname === "/_health") return new Response("ok");
+		// Build metadata rather than an asset: the bodies are injected into documents, and
+		// the map itself is not something a visitor asks for.
+		if (url.pathname === `/${PRERENDER_FILE}`) return new Response("Not found", { status: 404 });
 		// The two documents a crawler asks for, ahead of the shell it would otherwise get.
 		if (url.pathname === "/robots.txt") {
 			return new Response(robotsTxt(SITE_ORIGIN), {
@@ -238,15 +265,28 @@ Bun.serve({
 				return url.pathname;
 			}
 		})();
-		const [html, served] = await Promise.all([indexHtml(), previewFor(documentPath)]);
+		const [html, served, readerBody] = await Promise.all([
+			indexHtml(),
+			previewFor(documentPath),
+			// `page-meta.ts` treats a trailing slash as the same page, and so does the body lookup.
+			readerBodyFor(
+				documentPath.length > 1 && documentPath.endsWith("/")
+					? documentPath.slice(0, -1)
+					: documentPath,
+			),
+		]);
 		const canonicalPath = served?.canonicalPath ?? documentPath;
 		const canonical = `${SITE_ORIGIN}${canonicalPath}`;
 		// A document that knows what it is comes first; a standing page comes second, and its
 		// own address is what the canonical tag names rather than the site's.
 		const card = served?.preview ?? pageCard(canonicalPath);
-		return new Response(withDevApiPort(injectShareHead(html, card, canonical)), {
-			headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },
-		});
+		const document = injectShareHead(html, card, canonical);
+		return new Response(
+			withDevApiPort(readerBody ? injectReaderBody(document, readerBody) : document),
+			{
+				headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },
+			},
+		);
 	},
 });
 
