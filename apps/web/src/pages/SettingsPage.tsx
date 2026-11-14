@@ -2149,6 +2149,10 @@ function NotificationsSection() {
 		reviews: { label: "Reviews", hint: "Somebody reviewed a Work of yours." },
 		followers: { label: "Followers", hint: "Somebody followed you." },
 		credits: { label: "Credits", hint: "You were credited on a Work." },
+		collaborations: {
+			label: "Collaborations",
+			hint: "Somebody invited you to co-own a Badge, or asked you to take its publisher role.",
+		},
 		reportAnswers: { label: "Report Answers", hint: "What we did about a report you filed." },
 	};
 

@@ -2,7 +2,7 @@
 
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import { client } from "@anthers/web-shared/rpc";
-import type { SavedBillingAddress } from "@anthers/web-shared/types";
+import type { BadgeOwner, SavedBillingAddress } from "@anthers/web-shared/types";
 import Modal from "@anthers/web-shared/ui/Modal";
 import {
 	AddressElement,
@@ -43,6 +43,8 @@ interface Props {
 	 */
 	directed?: { creatorId: number; amount: number }[];
 	badgeName: string;
+	/** The Badge's owners, publisher first; more than one adds the shared-support line. */
+	owners?: BadgeOwner[];
 	preview: SubscriptionPreview;
 	/** Called after the change is confirmed — the webhook then applies the new amount. */
 	onComplete: () => void;
@@ -116,6 +118,7 @@ function PaymentForm({
 	anthersSupport,
 	directed,
 	badgeName,
+	owners,
 	preview,
 	pending,
 	onPending,
@@ -306,6 +309,13 @@ function PaymentForm({
 			<Modal open={open}>
 				<div className="modal-box max-w-md">
 					<h3 className="font-bold text-lg mb-1">Confirm your card</h3>
+					{owners && owners.length > 1 && (
+						<p className="text-xs text-base-content/50 mb-2">
+							Shared with{" "}
+							{owners.map((owner) => owner.displayName || `@${owner.handle}`).join(", ")}. The
+							support is split evenly between them.
+						</p>
+					)}
 					<p className="text-xs text-base-content/50 mb-3">
 						Your billing address is saved. Nothing else is charged until you confirm.
 					</p>
@@ -349,6 +359,12 @@ function PaymentForm({
 				<h3 className="font-bold text-lg mb-1">
 					{isChange ? `Switch to ${badgeName}` : `Give ${badgeName}`}
 				</h3>
+				{owners && owners.length > 1 && (
+					<p className="text-xs text-base-content/50 mb-2">
+						Shared with {owners.map((owner) => owner.displayName || `@${owner.handle}`).join(", ")}.
+						The support is split evenly between them.
+					</p>
+				)}
 
 				{quoteBlock}
 				<p className="text-xs text-base-content/50 mb-3">

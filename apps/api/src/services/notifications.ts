@@ -101,6 +101,17 @@ export const DELIVERY_GROUPS = {
 	credits: {
 		kinds: ["credit_offered"],
 	},
+	/** Somebody invited you to co-own a Badge, or asked you to take its publisher role. */
+	collaborations: {
+		kinds: [
+			"collab_invite",
+			"collab_accepted",
+			"collab_declined",
+			"publisher_handover",
+			"publisher_handover_accepted",
+			"publisher_handover_declined",
+		],
+	},
 	/** What an operator did about your report. */
 	reportAnswers: {
 		kinds: ["report_routed_copyright"],

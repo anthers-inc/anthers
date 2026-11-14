@@ -29,6 +29,8 @@
 import { badgeEdgeColor } from "@anthers/shared/badge-art";
 import { useState } from "react";
 import { apiBaseUrl } from "../../lib/rpc";
+import type { BadgeOwner } from "../../lib/types";
+import ComboAvatar from "../creator/ComboAvatar";
 import { BadgeMark } from "./BadgeMark";
 
 /**
@@ -87,6 +89,7 @@ export function CreatorBadgeMark({
 	index,
 	label,
 	art,
+	owners,
 	dim = false,
 	size = "h-12 w-12",
 }: {
@@ -95,6 +98,8 @@ export function CreatorBadgeMark({
 	index: number;
 	label: string;
 	art: BadgeArtChoice;
+	/** Every owner, publisher first. More than one draws the collab mark. */
+	owners?: BadgeOwner[];
 	dim?: boolean;
 	size?: string;
 }) {
@@ -112,8 +117,8 @@ export function CreatorBadgeMark({
 
 	// A composed Badge already carries the field and the edging, so drawing it inside
 	// another `BadgeMark` produced a badge inside a badge. It is shown whole instead.
-	if (showUpload && art.hasComposedArt && imageSrc) {
-		return (
+	const mark =
+		showUpload && art.hasComposedArt && imageSrc ? (
 			<span
 				className={`relative flex ${size} shrink-0 items-center justify-center ${dim ? "opacity-45" : ""}`}
 				role="img"
@@ -127,26 +132,39 @@ export function CreatorBadgeMark({
 					className="h-full w-full object-contain"
 				/>
 			</span>
+		) : (
+			<BadgeMark
+				shape={art.artShape}
+				color={art.artColor ?? fallback.color}
+				edgeColor={badgeEdgeColor(art.artEdgeColor).fill}
+				label={label}
+				emblem={art.artEmblem ?? fallback.emblem}
+				// 🚨 `imageSrc` is rooted on `apiBaseUrl()` rather than written as `/api/...`. The
+				// web app and the API are not always the same origin — the Studio subdomain, the
+				// desktop shell, and the e2e preview all separate them — and a root-relative src
+				// asks the page's own host, gets HTML or a 404, and silently falls back to the
+				// emblem. Found in the browser; nothing else could have.
+				imageSrc={imageSrc}
+				onImageError={() => setFailed(true)}
+				clipId={`badge-mark-${badgeId}`}
+				dim={dim}
+				size={size}
+			/>
 		);
-	}
 
+	// A solo Badge is the ordinary patch. A shared one wears the combo avatar on its edge
+	// and a thin shared ring, so a wall of badges says which ones are co-owned without
+	// making the shared ones look like a different kind of object.
+	if ((owners?.length ?? 0) < 2) return mark;
+	const comboSize = size.includes("h-20") || size.includes("h-24") ? 24 : 18;
 	return (
-		<BadgeMark
-			shape={art.artShape}
-			color={art.artColor ?? fallback.color}
-			edgeColor={badgeEdgeColor(art.artEdgeColor).fill}
-			label={label}
-			emblem={art.artEmblem ?? fallback.emblem}
-			// 🚨 `imageSrc` is rooted on `apiBaseUrl()` rather than written as `/api/...`. The
-			// web app and the API are not always the same origin — the Studio subdomain, the
-			// desktop shell, and the e2e preview all separate them — and a root-relative src
-			// asks the page's own host, gets HTML or a 404, and silently falls back to the
-			// emblem. Found in the browser; nothing else could have.
-			imageSrc={imageSrc}
-			onImageError={() => setFailed(true)}
-			clipId={`badge-mark-${badgeId}`}
-			dim={dim}
-			size={size}
-		/>
+		<span
+			className={`relative inline-flex ${size} shrink-0 items-center justify-center rounded-full ring-2 ring-primary/30 ring-offset-2 ring-offset-base-100`}
+		>
+			{mark}
+			<span className="absolute -right-1 -bottom-1">
+				<ComboAvatar owners={owners ?? []} size={comboSize} />
+			</span>
+		</span>
 	);
 }

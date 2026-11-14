@@ -144,6 +144,8 @@ export async function ensureAnthersProduct(): Promise<string> {
 export interface SupportItem {
 	itemId: string;
 	creatorId: number;
+	/** The Badge this line buys, when the item was stamped with one. */
+	badgeId: number | null;
 	/** Monthly dollars on this line. */
 	amount: number;
 }
@@ -172,10 +174,16 @@ export function itemsFromSub(sub: Stripe.Subscription, anthersId: number): Suppo
 		// A blank stamp is UNSTAMPED, not account 0. `Number("")` is 0, which would credit
 		// a real supporter's money to whichever account happens to hold user id 0.
 		const parsed = !raw || raw === "anthers" ? anthersId : Number(raw);
+		const badgeRaw = item.metadata?.badgeId?.trim();
+		const badgeParsed = badgeRaw ? Number(badgeRaw) : null;
 		const unitCents = item.price?.unit_amount ?? 0;
 		return {
 			itemId: item.id,
 			creatorId: Number.isFinite(parsed) && parsed > 0 ? parsed : anthersId,
+			badgeId:
+				badgeParsed !== null && Number.isFinite(badgeParsed) && badgeParsed > 0
+					? badgeParsed
+					: null,
 			amount: (unitCents * Math.max(0, item.quantity ?? 1)) / 100,
 		};
 	});
@@ -229,10 +237,14 @@ export function directedSupportFromSub(sub: Stripe.Subscription, anthersId: numb
 export function directedPicksFromSub(
 	sub: Stripe.Subscription,
 	anthersId: number,
-): { creatorId: number; amount: number }[] {
+): { creatorId: number; amount: number; badgeId?: number | null }[] {
 	return itemsFromSub(sub, anthersId)
 		.filter((i) => i.amount > 0)
-		.map((i) => ({ creatorId: i.creatorId, amount: i.amount }));
+		.map((i) => ({
+			creatorId: i.creatorId,
+			amount: i.amount,
+			...(i.badgeId != null ? { badgeId: i.badgeId } : {}),
+		}));
 }
 
 /** The billing period end, read across items rather than from the first one. */
@@ -454,9 +466,19 @@ export function supportItems(
 	anthersProduct: string,
 	anthersId: number,
 	anthersDollars: number,
-	directed: { creatorId: number; product: string; amount: number }[],
+	directed: {
+		creatorId: number;
+		product: string;
+		amount: number;
+		badgeId?: number | null;
+	}[],
 ): Stripe.SubscriptionCreateParams.Item[] {
-	const monthly = (product: string, dollars: number, destination: string) => ({
+	const monthly = (
+		product: string,
+		dollars: number,
+		destination: string,
+		badgeId?: number | null,
+	) => ({
 		price_data: {
 			currency: "usd",
 			product,
@@ -465,12 +487,15 @@ export function supportItems(
 			tax_behavior: "exclusive" as const,
 		},
 		quantity: 1,
-		metadata: { destination },
+		metadata: {
+			destination,
+			...(badgeId ? { badgeId: String(badgeId) } : {}),
+		},
 	});
 	const items: Stripe.SubscriptionCreateParams.Item[] = [];
 	if (anthersDollars > 0) items.push(monthly(anthersProduct, anthersDollars, String(anthersId)));
 	for (const d of directed) {
-		if (d.amount > 0) items.push(monthly(d.product, d.amount, String(d.creatorId)));
+		if (d.amount > 0) items.push(monthly(d.product, d.amount, String(d.creatorId), d.badgeId));
 	}
 	return items;
 }
@@ -481,6 +506,8 @@ export interface DesiredLine {
 	creatorId: number;
 	product: string;
 	amount: number;
+	/** The Badge the line buys, when the pick names one. */
+	badgeId?: number | null;
 }
 
 /** What a change to an existing subscription splits into. */
@@ -512,7 +539,12 @@ export function planItemChange(
 	anthersProduct: string,
 	anthersId: number,
 	anthersDollars: number,
-	directed: { creatorId: number; product: string; amount: number }[],
+	directed: {
+		creatorId: number;
+		product: string;
+		amount: number;
+		badgeId?: number | null;
+	}[],
 ): ItemChange {
 	const key = (creatorId: number) => String(creatorId);
 
@@ -530,6 +562,7 @@ export function planItemChange(
 				creatorId: d.creatorId,
 				product: d.product,
 				amount: d.amount,
+				badgeId: d.badgeId,
 			});
 		}
 	}
@@ -557,7 +590,12 @@ export function planItemChange(
 		quantity: 1,
 		// 🚨 The stamp is what says whose money this line is — `itemsFromSub` reads it back,
 		// and an unstamped item is credited to Anthers. Never build an item without it.
-		metadata: { destination: key(d.creatorId) },
+		// `badgeId` is the second stamp: it is what lets a Collab Badge's invoice split
+		// across its owners instead of guessing from the amount.
+		metadata: {
+			destination: key(d.creatorId),
+			...(d.badgeId ? { badgeId: String(d.badgeId) } : {}),
+		},
 	});
 
 	const change: ItemChange = { raises: [], drops: [], started: [] };
@@ -1324,7 +1362,7 @@ async function lapseUnpaidMonth(userId: number): Promise<void> {
  */
 export async function applyDirectedSupport(
 	userId: number,
-	picks: { creatorId: number; amount: number }[],
+	picks: { creatorId: number; amount: number; badgeId?: number | null }[],
 ): Promise<void> {
 	if (picks.length === 0) return;
 
@@ -1335,14 +1373,24 @@ export async function applyDirectedSupport(
 		// The threshold as stored on every money column: a two-decimal string, so the
 		// lookup below matches the `numeric` column exactly rather than by float.
 		const threshold = new Decimal(pick.amount).toFixed(2);
-		// The issuer's Badge at this threshold — the rung the subscriber is paying for.
-		// Find-or-create rather than find-only, for the reason above: the item carries
-		// what was paid, and the holding must name a row that exists at that level.
-		let [badge] = await db
-			.select({ id: badges.id })
-			.from(badges)
-			.where(and(eq(badges.creatorId, pick.creatorId), eq(badges.threshold, threshold)))
-			.limit(1);
+		// A stamped Badge id is the exact row the supporter bought — the only way to keep
+		// a Collab Badge's holding on the shared row rather than resolving it into a solo
+		// rung at the publisher. The amount lookup remains for an older, unstamped item.
+		let badge: { id: number; creatorId: number } | undefined;
+		if (pick.badgeId != null) {
+			[badge] = await db
+				.select({ id: badges.id, creatorId: badges.creatorId })
+				.from(badges)
+				.where(eq(badges.id, pick.badgeId))
+				.limit(1);
+		}
+		if (!badge) {
+			[badge] = await db
+				.select({ id: badges.id, creatorId: badges.creatorId })
+				.from(badges)
+				.where(and(eq(badges.creatorId, pick.creatorId), eq(badges.threshold, threshold)))
+				.limit(1);
+		}
 		if (!badge) {
 			[badge] = await db
 				.insert(badges)
@@ -1352,9 +1400,10 @@ export async function applyDirectedSupport(
 					label: `$${threshold}`,
 					description: "A rung created by billing at a threshold a subscription pays for.",
 				})
-				.returning({ id: badges.id });
+				.returning({ id: badges.id, creatorId: badges.creatorId });
 		}
-		// 🚨 **One holding per issuer per cycle — the pick REPLACES the issuer's other
+		const publisherId = badge.creatorId;
+		// 🚨 **One holding per publisher per cycle — the pick REPLACES the publisher's other
 		// rungs rather than sitting beside them**, the rule the dissolved picker's POST
 		// carried and the one the dissolved Anthers special path carried. Without the
 		// delete, a webhook after a re-price stacks the new rung beside the old one and
@@ -1369,7 +1418,7 @@ export async function applyDirectedSupport(
 					eq(userBadges.userId, userId),
 					eq(userBadges.billingCycle, cycle),
 					ne(userBadges.badgeId, badge.id),
-					sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${pick.creatorId})`,
+					sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${publisherId})`,
 				),
 			);
 		await db
@@ -1402,9 +1451,9 @@ export async function applyDirectedSupport(
 		// `db:seed` and `db:media-fixture` outright. The lazy import keeps this module's
 		// evaluation free of the follow ceremony; by the time any pick is applied, the
 		// graph is fully loaded and the import resolves from cache.
-		if (pick.creatorId !== anthersId) {
+		if (publisherId !== anthersId) {
 			const { ensureFollow } = await import("./follows.js");
-			await ensureFollow(userId, pick.creatorId);
+			await ensureFollow(userId, publisherId);
 		}
 	}
 }
@@ -1447,14 +1496,24 @@ export async function applyDirectedSupport(
  */
 export async function applyBadgeRecurrence(
 	userId: number,
-	picks: { issuerId: number; product: string; threshold: number }[],
+	picks: {
+		issuerId: number;
+		product: string;
+		threshold: number;
+		badgeId?: number | null;
+	}[],
 	pmId: string | null,
 ): Promise<void> {
 	if (picks.length === 0) return;
 	if (!paymentsConfigured()) return;
 
 	const anthersId = await anthersUserId();
-	const lineOf = (pick: { issuerId: number; product: string; threshold: number }) => ({
+	const lineOf = (pick: {
+		issuerId: number;
+		product: string;
+		threshold: number;
+		badgeId?: number | null;
+	}) => ({
 		price_data: {
 			currency: "usd",
 			product: pick.product,
@@ -1465,7 +1524,12 @@ export async function applyBadgeRecurrence(
 		},
 		quantity: 1,
 		// 🚨 The destination stamp — the only thing that says whose money this line is.
-		metadata: { destination: String(pick.issuerId) },
+		// `badgeId` is the second stamp, so a Collab Badge's invoice splits by its owners
+		// rather than by its publisher alone.
+		metadata: {
+			destination: String(pick.issuerId),
+			...(pick.badgeId ? { badgeId: String(pick.badgeId) } : {}),
+		},
 	});
 
 	const [acct] = await db

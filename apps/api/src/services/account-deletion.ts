@@ -62,6 +62,8 @@
 import { db } from "@anthers/db/client";
 import {
 	atprotoSessions,
+	badgeCollaborators,
+	badges,
 	comments,
 	posts,
 	purchases,
@@ -472,6 +474,44 @@ export async function eraseAccount(
 			`account-deletion: Stripe would not delete user ${userId}'s customer — deletion deferred`,
 		);
 		return { erased: false };
+	}
+
+	// Hand every Badge this account publishes to another accepted owner before the account
+	// cascade reaches it. A Badge with no other accepted owner is a solo Badge and goes with
+	// the account, which is correct. The threshold check skips an owner who already has a
+	// rung at the same amount: `uq_badges_creator_threshold` would refuse the transfer, and a
+	// Badge that cannot move is better deleted with its publisher than left ownerless.
+	const publishedBadges = await db
+		.select({ id: badges.id, threshold: badges.threshold })
+		.from(badges)
+		.where(eq(badges.creatorId, userId));
+	for (const badge of publishedBadges) {
+		const candidates = await db
+			.select({ id: badgeCollaborators.id, creatorId: badgeCollaborators.creatorId })
+			.from(badgeCollaborators)
+			.where(
+				and(eq(badgeCollaborators.badgeId, badge.id), eq(badgeCollaborators.status, "accepted")),
+			)
+			.orderBy(badgeCollaborators.createdAt, badgeCollaborators.id);
+		for (const candidate of candidates) {
+			const [conflict] = await db
+				.select({ id: badges.id })
+				.from(badges)
+				.where(
+					and(eq(badges.creatorId, candidate.creatorId), eq(badges.threshold, badge.threshold)),
+				)
+				.limit(1);
+			if (conflict) continue;
+			await db.transaction(async (tx) => {
+				await tx
+					.update(badges)
+					.set({ creatorId: candidate.creatorId })
+					.where(eq(badges.id, badge.id));
+				// The new publisher is the anchor; their collaborator row would duplicate it.
+				await tx.delete(badgeCollaborators).where(eq(badgeCollaborators.id, candidate.id));
+			});
+			break;
+		}
 	}
 
 	const workIds = (

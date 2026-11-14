@@ -55,6 +55,7 @@ import type {
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useAnthersLadder } from "../../lib/anthers-ladder";
+import CollaborationInvites from "./CollaborationInvites";
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                 */
@@ -82,6 +83,13 @@ function shortYear(cycle: string): string {
 
 function nameOf(holding: BadgeHolding): string {
 	return holding.creator.displayName || holding.creator.handle || "A creator";
+}
+
+/** The tile's name: both creators for a shared Badge, the publisher alone otherwise. */
+function ownersOf(holding: BadgeHolding): string {
+	const owners = holding.owners ?? [];
+	if (owners.length < 2) return nameOf(holding);
+	return owners.map((owner) => owner.displayName || owner.handle).join(" & ");
 }
 
 /** Fetch a subscriptions GET endpoint that carries query params (raw, credentialed). */
@@ -469,6 +477,7 @@ export default function BadgesSection() {
 					Every Badge you carry, from Anthers and from the creators you back.
 				</p>
 			</div>
+			<CollaborationInvites onChanged={fetchHoldings} />
 			{error && (
 				<div className="alert alert-error mb-4">
 					<span>{error}</span>
@@ -515,7 +524,7 @@ export default function BadgesSection() {
 							key={holding.id}
 							selected={selected === holding.creator.handle}
 							onSelect={() => setSelected(holding.creator.handle)}
-							name={nameOf(holding)}
+							name={ownersOf(holding)}
 							handle={holding.creator.handle}
 							subline={`${holding.label} · ${fmt(holding.threshold)}/mo`}
 							mark={
@@ -524,6 +533,7 @@ export default function BadgesSection() {
 									index={index}
 									label={`${holding.label} badge`}
 									art={holding}
+									owners={holding.owners}
 									size="h-12 w-12"
 								/>
 							}
@@ -894,6 +904,7 @@ function CreatorBadgeDetails({
 								index={index}
 								label={`${rung.label} badge`}
 								art={rung}
+								owners={rung.owners}
 								size="h-16 w-16"
 							/>
 						}

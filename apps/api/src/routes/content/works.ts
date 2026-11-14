@@ -58,6 +58,7 @@ import {
 	notSuspendedAccount,
 	notTestAccount,
 } from "../../services/account-visibility.js";
+import { isBadgeOwner } from "../../services/badge-owners.js";
 import { notBlockedBy } from "../../services/blocks.js";
 import { listCaptionTracks, listPreviewCaptionTracksForWork } from "../../services/captions.js";
 import { adultVisibility, maturityHiddenFrom } from "../../services/content-preferences.js";
@@ -424,17 +425,19 @@ const worksRoutes = new Hono()
 		const user = c.get("user");
 		const badgeId = Number(c.req.param("badgeId"));
 
-		const [badge] = await db
-			.select({ id: badges.id })
-			.from(badges)
-			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
-			.limit(1);
-		if (!badge) return c.json({ error: "Badge not found" }, 404);
+		if (!(await isBadgeOwner(badgeId, user.id))) {
+			return c.json({ error: "Badge not found" }, 404);
+		}
 
+		// Every owner's Works, not only the caller's: a co-owned Badge gates the Works
+		// of every owner, and the Unlocks tab is where the group sees what it opens.
+		// `editable` marks the rows this caller may change.
 		const rows = await db
 			.select()
 			.from(works)
-			.where(eq(works.creatorId, user.id))
+			.where(
+				sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${works.access}) AS g WHERE (g->>'badgeId')::int = ${badgeId})`,
+			)
 			.orderBy(desc(works.updatedAt));
 
 		const gated = rows.filter((work) => {
@@ -459,6 +462,9 @@ const worksRoutes = new Hono()
 				// Studio" button. An image Work with no separate thumbnail is its own.
 				thumbnail: work.thumbnail || (work.type === "image" ? work.sourceKey : ""),
 				imageAlt: work.imageAlt ?? "",
+				// Only the Work's own creator can change its gate, even when the Badge is
+				// co-owned. The row is still listed so the group can see what it opens.
+				editable: work.creatorId === user.id,
 			})),
 		});
 	})
@@ -481,10 +487,13 @@ const worksRoutes = new Hono()
 			const badgeId = Number(c.req.param("badgeId"));
 			const workId = c.req.valid("json").workId;
 
+			if (!(await isBadgeOwner(badgeId, user.id))) {
+				return c.json({ error: "Badge not found" }, 404);
+			}
 			const [badge] = await db
 				.select({ id: badges.id, threshold: badges.threshold })
 				.from(badges)
-				.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+				.where(eq(badges.id, badgeId))
 				.limit(1);
 			if (!badge) return c.json({ error: "Badge not found" }, 404);
 
@@ -548,12 +557,9 @@ const worksRoutes = new Hono()
 		const badgeId = Number(c.req.param("badgeId"));
 		const workId = Number(c.req.param("workId"));
 
-		const [badge] = await db
-			.select({ id: badges.id })
-			.from(badges)
-			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
-			.limit(1);
-		if (!badge) return c.json({ error: "Badge not found" }, 404);
+		if (!(await isBadgeOwner(badgeId, user.id))) {
+			return c.json({ error: "Badge not found" }, 404);
+		}
 
 		const [work] = await db
 			.select()
