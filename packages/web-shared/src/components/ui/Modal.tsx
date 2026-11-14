@@ -8,12 +8,21 @@
  * could reach either end of that. `<Modal>` keeps the overlay mounted through its exit and
  * hands the enter and leave to `<Appear>`, which is the one primitive that can.
  *
+ * 🚨 **The overlay leaves the page tree for `document.body`, for the same reason the Lightbox
+ * does.** A dialog is `position: fixed` and `z-999`, but the shell's page column is its own
+ * stacking context (`relative isolate`, which scopes the meadow backdrop), and the header is a
+ * sibling at `z-40` — so a dialog rendered where a page happens to mount it paints *under* the
+ * header, and a tall one loses its close button behind it. Portal is what puts the dialog above
+ * the chrome it covers. This was latent until the alpha notice grew the chrome above the top
+ * bar (2026-11-13), which pushed the header down over the Work picker's close button.
+ *
  * The box keeps whatever `modal-box` markup the dialog already had. The shared rise is a
  * CSS animation on `.modal-box` in `theme.css`, so a dialog that has not adopted this
  * wrapper still arrives the same way; only the exit needs the wrapper.
  */
 
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { MOTION } from "../../lib/motion";
 import Appear from "./Appear";
 
@@ -30,7 +39,7 @@ export default function Modal({
 	/** Accessible name. Omit it when the dialog's own heading names it. */
 	label?: string;
 }) {
-	return (
+	const dialog = (
 		<Appear
 			show={open}
 			className={`modal modal-open ${className}`}
@@ -43,4 +52,7 @@ export default function Modal({
 			{children}
 		</Appear>
 	);
+	// A browser is the only place this app runs, so `document` is always here; the guard is
+	// the same one the other portals in the shared layer carry.
+	return typeof document === "undefined" ? dialog : createPortal(dialog, document.body);
 }
