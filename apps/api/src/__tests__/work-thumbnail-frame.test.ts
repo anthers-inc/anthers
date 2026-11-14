@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Taking a thumbnail from the video's paused moment — on the server.
+ * Taking a thumbnail from the video's paused moment — queued for the worker.
  *
- * The route answers the Studio's *Use This Frame*: the creator pauses their video somewhere
- * and the client sends that moment (`atSeconds`), and the server extracts one JPEG from the
- * stored original and stores it exactly as an uploaded thumbnail would be — the creator's
- * thumbnails prefix, the public chrome ACL, its own scan. The suite exercises REAL ffmpeg
- * against a real file in the session's storage, because the claims under test are the
+ * The route answers the picker's *Use This Frame* by writing the ask (`202` with the
+ * `work_thumbnail_frames` row) and the worker does the decode; the suite runs the job
+ * handler directly, because a test process hosts no worker. The claims under test are the
  * extraction's: the stored thumbnail is byte-for-byte what a direct extraction of the asked
  * moment produces (not frame zero, which is what the degraded browser path used to hand
- * back); a moment past the end is clamped inside the file; and the scan is owed, because the
- * result is new image bytes on the Work even though they derive from a cleaned source.
+ * back); a moment past the end is clamped inside the file; the scan is owed; and a second
+ * ask while one is in flight is refused rather than stacked.
  */
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
@@ -18,9 +16,10 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
-import { mediaScans, works } from "@anthers/db/schema";
+import { mediaScans, works, workThumbnailFrames } from "@anthers/db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
+import { extractFrame } from "../jobs/extract-frame";
 import { QUEUES, queue } from "../jobs/queue";
 import { ffmpegCommand } from "../lib/ffmpeg";
 import { storage } from "../services/storage";
@@ -170,34 +169,64 @@ describe("POST /works/:id/thumbnail-frame", () => {
 		const res = await call("POST", `/api/content/works/${workId}/thumbnail-frame`, {
 			atSeconds: 4.2,
 		});
-		expect(res.status).toBe(200);
-		const { work } = (await res.json()) as { work: { thumbnail: string } };
+		// The ask is answered before the decode: 202 and the row the page follows.
+		expect(res.status).toBe(202);
+		const { job } = (await res.json()) as { job: { id: number; status: string } };
+		expect(job.status).toBe("pending");
+		expect(sent.map((s) => s.name)).toContain(QUEUES.EXTRACT_FRAME);
+
+		// The worker's half, run here — the suite hosts no worker process.
+		await extractFrame({ jobId: job.id });
 
 		// Stored as the creator's own thumbnails object for this Work, addressable by URL.
-		expect(work.thumbnail).toContain(`/thumbnails/${workId}/`);
-		expect(work.thumbnail).toMatch(/^https?:\/\//);
+		const [stored] = await db.select().from(works).where(eq(works.id, workId));
+		const thumbnail = stored.thumbnail ?? "";
+		expect(thumbnail).toContain(`/thumbnails/${workId}/`);
+		expect(thumbnail).toMatch(/^https?:\/\//);
 		// Served bytes equal the reference extraction of the same moment — the honest
 		// version of "the frame AT the moment". The test session's own content storage is
 		// where the bytes are, but its URL is the test base's, so read through the
 		// interface rather than fetching the URL.
-		const servedBytes = await storage.read(work.thumbnail.replace(/^.*\/content\//, ""));
+		const servedBytes = await storage.read(thumbnail.replace(/^.*\/content\//, ""));
 		expect(servedBytes).not.toBeNull();
 		expect(
 			Buffer.from(servedBytes as Uint8Array).equals(await referenceFrame(sourceKey, "4.2")),
 		).toBe(true);
 
 		// The extraction is new image bytes on the Work, so its scan is owed.
-		expect(sent.map((s) => s.name)).toContain(QUEUES.SCAN_MEDIA);
 		expect(
 			sent
 				.filter((s) => s.name === QUEUES.SCAN_MEDIA)
 				.some((s) => String(s.data.storageKey).includes(String(workId))),
 		).toBe(true);
 
-		// The row is what the client was told, and it is settled: a repeat take is the
-		// creator's overwrite, not a race.
-		const [row] = await db.select().from(works).where(eq(works.id, workId));
-		expect(row.thumbnail).toBe(work.thumbnail);
+		// The row the page polls is settled, and the status read answers with it.
+		const [framed] = await db
+			.select()
+			.from(workThumbnailFrames)
+			.where(eq(workThumbnailFrames.id, job.id));
+		expect(framed.status).toBe("completed");
+		expect(framed.errorMessage).toBe("");
+		const status = await call("GET", `/api/content/works/${workId}/thumbnail-frame`);
+		expect(status.status).toBe(200);
+		const { job: read } = (await status.json()) as {
+			job: { id: number; status: string };
+		};
+		expect(read).toMatchObject({ id: job.id, status: "completed" });
+	});
+
+	it("refuses a second take while the first is in flight", async () => {
+		const workId = await videoWorkWithFile(3);
+		const [running] = await db
+			.insert(workThumbnailFrames)
+			.values({ workId, atSeconds: 1 })
+			.returning();
+		const refused = await call("POST", `/api/content/works/${workId}/thumbnail-frame`, {
+			atSeconds: 2,
+		});
+		expect(refused.status).toBe(409);
+		expect((await refused.json()).code).toBe("thumbnail_frame_busy");
+		await db.delete(workThumbnailFrames).where(eq(workThumbnailFrames.id, running.id));
 	});
 
 	it("clamps a moment past the end to the file's own duration", async () => {
@@ -205,9 +234,11 @@ describe("POST /works/:id/thumbnail-frame", () => {
 		const res = await call("POST", `/api/content/works/${workId}/thumbnail-frame`, {
 			atSeconds: 9999,
 		});
-		expect(res.status).toBe(200);
-		const { work } = (await res.json()) as { work: { thumbnail: string } };
-		expect(work.thumbnail).toContain(`/thumbnails/${workId}/`);
+		expect(res.status).toBe(202);
+		const { job } = (await res.json()) as { job: { id: number } };
+		await extractFrame({ jobId: job.id });
+		const [stored] = await db.select().from(works).where(eq(works.id, workId));
+		expect(stored.thumbnail).toContain(`/thumbnails/${workId}/`);
 	});
 
 	it("a mid-video moment skips the probe when the Work row carries its duration", async () => {
@@ -218,10 +249,12 @@ describe("POST /works/:id/thumbnail-frame", () => {
 			const res = await call("POST", `/api/content/works/${workId}/thumbnail-frame`, {
 				atSeconds: 2,
 			});
-			expect(res.status).toBe(200);
-			const { work } = (await res.json()) as { work: { thumbnail: string } };
-			expect(work.thumbnail).toContain(`/thumbnails/${workId}/`);
-			// The stored duration stood for the file: the route spawned no ffprobe — its
+			expect(res.status).toBe(202);
+			const { job } = (await res.json()) as { job: { id: number } };
+			await extractFrame({ jobId: job.id });
+			const [stored] = await db.select().from(works).where(eq(works.id, workId));
+			expect(stored.thumbnail).toContain(`/thumbnails/${workId}/`);
+			// The stored duration stood for the file: the job spawned no ffprobe — its
 			// only spawn is the extraction's ffmpeg. This is the save-speed take.
 			const spawned = spy.mock.calls.map((c) => (c[0] as string[])[0]);
 			expect(spawned).toEqual(["ffmpeg"]);
@@ -240,9 +273,11 @@ describe("POST /works/:id/thumbnail-frame", () => {
 			const res = await call("POST", `/api/content/works/${workId}/thumbnail-frame`, {
 				atSeconds: 9999,
 			});
-			expect(res.status).toBe(200);
-			const { work } = (await res.json()) as { work: { thumbnail: string } };
-			expect(work.thumbnail).toContain(`/thumbnails/${workId}/`);
+			expect(res.status).toBe(202);
+			const { job } = (await res.json()) as { job: { id: number } };
+			await extractFrame({ jobId: job.id });
+			const [stored] = await db.select().from(works).where(eq(works.id, workId));
+			expect(stored.thumbnail).toContain(`/thumbnails/${workId}/`);
 			const spawned = spy.mock.calls.map((c) => (c[0] as string[])[0]);
 			expect(spawned).toContain("ffprobe");
 			expect(spawned).toContain("ffmpeg");

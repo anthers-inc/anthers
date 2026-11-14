@@ -463,11 +463,6 @@ export async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJ
 	return null;
 }
 
-/** A single-frame extraction reads only up to the paused moment and encodes one frame —
- *  seconds, not minutes. The timeout exists so a wedged reader (an unreachable storage
- *  address) fails the request instead of hanging it. */
-export const FRAME_EXTRACT_TIMEOUT_MS = 20_000;
-
 /**
  * Thumbnails render directly as <img src>; older rows stored a bare storage key instead
  * of a URL — `resolveThumbnailUrl` turns those into public URLs in place (new uploads

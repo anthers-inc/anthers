@@ -5,8 +5,9 @@
  * A creator chooses a video's thumbnail, uploaded or picked from a frame, and nothing takes one on
  * their behalf (Parker, 2026-09-18). Picking a frame is drawn in the creator's own browser from the
  * picker's own player (`OwnerWorkEditor`'s ThumbFramePicker), which no API test can reach: what this
- * walk catches is the picker opening, the frame's moment reaching the route, and the route's answer
- * being the saved row. It also checks the section's shape — the (i) beside the heading, the blank
+ * walk catches is the picker opening, the frame's moment reaching the route, the taking state the
+ * section shows while the extraction is queued, and the new picture replacing the old one when the
+ * extraction lands. It also checks the section's shape — the (i) beside the heading, the blank
  * frame, the two buttons — the 2026-10-16 redesign.
  *
  * Runs on the media fixture's video, which is real HLS from a real ffmpeg run, so the picture
@@ -69,18 +70,49 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 			}),
 	);
 
-	const taken = page.waitForResponse((res) => res.url().includes("/thumbnail-frame") && res.ok());
-	await picker.getByRole("button", { name: "Use This Frame" }).click();
-	const { work } = (await (await taken).json()) as { work: { thumbnail: string } };
-	expect(work.thumbnail).toMatch(/\/thumbnails\/\d+\/\w+\.jpg$/);
+	const image = page.getByRole("img", { name: "The Work's thumbnail" });
+	const beforeSrc = await image.getAttribute("src");
 
-	// The section shows what the route answered, and the row is it — no save to press,
-	// and no save bar promising anything else anywhere on the page.
+	const taken = page.waitForResponse(
+		(res) => res.url().includes("/thumbnail-frame") && res.status() === 202,
+	);
+	await picker.getByRole("button", { name: "Use This Frame" }).click();
+	const answered = await taken;
+	const { job } = (await answered.json()) as { job: { id: number } };
+
+	// The section carries the taking state until the row settles.
+	await expect(page.getByText("Taking this moment…")).toBeVisible();
+
+	// This suite's servers are the two previews and the API — no worker — so the queued
+	// extraction is run here, the way the API suites run a handler. The page's own poll is
+	// what the rest of the walk exercises.
+	const { ensureQueueReady } = await import("../../../api/src/jobs/queue");
+	const { extractFrame } = await import("../../../api/src/jobs/extract-frame");
+	await ensureQueueReady();
+	await extractFrame({ jobId: job.id });
+
+	// The picture the page was showing is replaced by the frame that landed.
+	await expect
+		.poll(
+			async () => {
+				const [row] = await db
+					.select({ thumbnail: works.thumbnail })
+					.from(works)
+					.where(eq(works.publicId, CLIP.publicId));
+				return row.thumbnail ?? "";
+			},
+			{ timeout: 30_000, message: "the worker never landed a frame for the Work" },
+		)
+		.not.toBe(previous);
+	await expect.poll(() => image.getAttribute("src"), { timeout: 30_000 }).not.toBe(beforeSrc);
+
+	// The section shows what landed, and the row is it — no save to press, and no save bar
+	// promising anything else anywhere on the page.
 	await expect(page.getByRole("img", { name: "The Work's thumbnail" })).toBeVisible();
 	await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 	const [after] = await db
 		.select({ thumbnail: works.thumbnail })
 		.from(works)
 		.where(eq(works.publicId, CLIP.publicId));
-	expect(after.thumbnail).toBe(work.thumbnail);
+	expect(after.thumbnail).toMatch(/\/thumbnails\/\d+\/\w+\.jpg$/);
 });
