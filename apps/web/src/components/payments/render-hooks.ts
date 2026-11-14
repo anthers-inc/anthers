@@ -42,7 +42,16 @@ const BUN_GLOBALS = [
 	"Request",
 	"Headers",
 	"FormData",
+	// A multipart body is only accepted with Bun's own parts: a `File` or `Blob` built by
+	// happy-dom came back as a 400 rather than an upload.
+	"File",
+	"Blob",
 	"AbortController",
+	// `AbortSignal` is the one that bit: a fetch given happy-dom's signal is refused by Bun's
+	// own fetch, so any test that registered the DOM and then called an API route with
+	// `AbortSignal.timeout` failed as an unreachable server. The controller alone is not
+	// enough; the signal it hands out has to be Bun's too.
+	"AbortSignal",
 	"URL",
 	"URLSearchParams",
 	"crypto",

@@ -15,10 +15,18 @@
  * the same content store two identical strings (which `changedPostFields` relies on to keep
  * no-op edits out of the edit history).
  */
+import { SPOILER_DELIMITER, spoilerMarkedExtension } from "@anthers/shared/spoiler";
 import { marked } from "marked";
 import TurndownService from "turndown";
 import { gfm as turndownPluginGfm } from "turndown-plugin-gfm";
 import { sanitizePostHtml } from "./sanitize.js";
+
+// The spoiler convention is defined once, in `@anthers/shared/spoiler`, and registered here
+// so a stored `||…||` is parsed into the span the sanitizer admits on the way through the
+// round trip. Without it the pipes would survive as literal text (which is also stable), but
+// the write boundary could not tell a spoiler from prose and the excerpt below could not
+// withhold one.
+marked.use(spoilerMarkedExtension);
 
 // GFM tables and task lists are not in the editor's vocabulary, but they cost nothing to
 // accept and the renderer (react-markdown + remark-gfm) already knows them. `breaks` must
@@ -69,6 +77,20 @@ HTML_TO_MARKDOWN.use(turndownPluginGfm);
 	"highlightedCodeBlock",
 ]);
 
+/**
+ * The spoiler span back to the stored spelling.
+ *
+ * The sanitizer admits exactly `span.spoiler`, because that is what the editor's Spoiler
+ * mark emits; this rule is the other half of the round trip, so a body that came through the
+ * editor and a body sent as markdown store the identical `||…||`. The inner content comes
+ * back already converted, which is what keeps `**bold**` inside a spoiler a mark rather than
+ * a literal asterisk run.
+ */
+HTML_TO_MARKDOWN.addRule("spoiler", {
+	filter: (node) => node.nodeName === "SPAN" && node.classList.contains("spoiler"),
+	replacement: (content) => `${SPOILER_DELIMITER}${content}${SPOILER_DELIMITER}`,
+});
+
 /** Over a `posts.body`'s length. Far under the Lexicon's own ceiling (1M), deliberately. */
 export const POST_BODY_LIMIT = 100_000;
 
@@ -96,8 +118,10 @@ export const POST_CONTENT_EXCERPT_LIMIT = 600;
  *   means a literal `&amp;`, and a double decode would lie about it.
  *
  * ⚠️ **This is display text, not the sanitizer's boundary.** Security already happened at
- * the write (`normalizeStoredMarkdown`); images ship no text and drop entirely, and a code
- * block loses its formatting while keeping its words — the right trade for a preview band.
+ * the write (`normalizeStoredMarkdown`); images ship no text and drop entirely, a code
+ * block loses its formatting while keeping its words — the right trade for a preview band —
+ * and a spoiler's words drop entirely, because an excerpt is read out of context and a tile
+ * that prints the ending is the failure the spoiler exists to prevent.
  */
 export function postContentExcerpt(
 	md: string | null | undefined,
@@ -106,6 +130,9 @@ export function postContentExcerpt(
 	if (!md?.trim()) return "";
 	const html = String(marked.parse(md, { async: false }));
 	const text = html
+		// Before the tags come off: the words inside a spoiler go, not only its wrapper. The
+		// space keeps whatever sat on either side from jamming into one word.
+		.replace(/<span class="spoiler">[\s\S]*?<\/span>/gi, " ")
 		.replace(/<\/(p|h[1-6]|li|ul|ol|blockquote|pre|table|tr|hr|div)\s*>/gi, " ")
 		.replace(/<[^>]+>/g, "")
 		.replace(
