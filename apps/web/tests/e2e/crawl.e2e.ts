@@ -6,6 +6,11 @@
  * page and `/sitemap.xml` as HTML. These are the routes that must answer with their own
  * content, and the homepage is asserted beside them so a rule added here cannot shadow the
  * shell it sits in front of.
+ *
+ * The pages themselves are the third claim: a standing page's document carries its own words
+ * in a `<noscript>` block (`src/lib/reader-body.ts`), so a reader that runs no JavaScript gets
+ * more than an empty `#root`. The unit suite proves every address has a body; these tests
+ * prove the server puts one in the document it actually serves.
  */
 
 import { expect, test, WEB_ORIGIN } from "./fixtures";

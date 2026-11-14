@@ -84,4 +84,17 @@ if (existsSync(`${import.meta.dir}/public`)) {
 	await cp(`${import.meta.dir}/public`, `${import.meta.dir}/dist`, { recursive: true });
 }
 
+// The reader body: one static render per standing page, so a document answers with its own
+// words and not only the bundle. `serve.ts` reads this file and puts each page's block
+// before `</body>`, which is what a reader that runs no JavaScript gets.
+//
+// 🚨 **It belongs in this file rather than in a `postbuild` script, because this is the only
+// build entry point every consumer runs.** Playwright's `webServer` calls `bun run build.ts`
+// directly, so a step chained onto the `build` script in package.json would be missing from
+// the browser suite — which is exactly where the injection is asserted.
+const { renderStandingPages } = await import("./src/lib/render-standing-pages");
+const readerBodies = renderStandingPages();
+await Bun.write(`${outdir}/prerender.json`, JSON.stringify(readerBodies));
+
 console.log(`Build complete: ${result.outputs.length} files (+ public/ assets)`);
+console.log(`Reader bodies: ${Object.keys(readerBodies).length} standing pages`);

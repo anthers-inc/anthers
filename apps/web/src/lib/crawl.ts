@@ -38,8 +38,9 @@ export const SITEMAP_PATH = "/sitemap.xml";
  * shares it. What a crawler reaches at the bare path is a login prompt, which costs nothing.
  */
 export function robotsTxt(siteOrigin: string): string {
-	return `# Anthers answers every route with the same application shell, so a crawler that runs
-# no JavaScript sees the shell. The pages with their own words are in the sitemap.
+	return `# Every standing page carries its own words in the document, inside a noscript block
+# that a reader without JavaScript renders; the rest answer with the application shell.
+# The pages worth indexing are in the sitemap.
 User-agent: *
 Allow: /
 
