@@ -8,7 +8,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Work } from "@anthers/web-shared/types";
 import { type ServerPosition, writePage } from "../../lib/reading-positions";
-import { compareByTitle, continueReading, positionLine } from "./BookshelfLens";
+import {
+	compareByTitle,
+	continueReading,
+	positionLine,
+	shelfLabel,
+	shelvesOf,
+	spineWidth,
+} from "./BookshelfLens";
 import type { LensItem } from "./MusicLens";
 
 /** A localStorage-shaped store, as `reading-positions.test.ts` runs against. */
@@ -64,7 +71,7 @@ describe("compareByTitle", () => {
 // The continue-reading rail, in the pure form the component renders from. A Work is
 // one LensItem in these tests — the shape carries `kind: "work"` and a stub work; only
 // the fields the rail reads are real.
-function bookItem(id: number, title: string, pageCount?: number): LensItem {
+function bookItem(id: number, title: string | null, pageCount?: number): LensItem {
 	return {
 		id,
 		kind: "work",
@@ -150,5 +157,45 @@ describe("positionLine", () => {
 
 	test("a Work with no position gets no line", () => {
 		expect(positionLine({ pageCount: 100 } as unknown as Work, null)).toBe(null);
+	});
+});
+
+describe("shelvesOf", () => {
+	const books = [bookItem(1, "A"), bookItem(2, "B"), bookItem(3, "C")];
+
+	test("packs the books into rows that fit the measured shelf", () => {
+		const widths = books.map((item) => spineWidth(item.work!));
+		const total = widths.reduce((sum, width) => sum + width, 0) + 4 * (books.length - 1);
+
+		// A budget that exactly fits all three keeps them on one shelf.
+		expect(shelvesOf(books, total).map((shelf) => shelf.length)).toEqual([3]);
+		// A pixel short moves the last book onto its own row, and the row is not dropped.
+		expect(shelvesOf(books, total - 1).map((shelf) => shelf.length)).toEqual([2, 1]);
+	});
+
+	test("a book wider than the shelf still gets a shelf of its own", () => {
+		expect(shelvesOf(books, 0).map((shelf) => shelf.length)).toEqual([1, 1, 1]);
+	});
+
+	test("an empty shelf holds no rows", () => {
+		expect(shelvesOf([], 600)).toEqual([]);
+	});
+});
+
+describe("shelfLabel", () => {
+	test("names the span of titles standing on the shelf", () => {
+		expect(shelfLabel([bookItem(1, "Apple"), bookItem(2, "Ash")])).toBe("A");
+		expect(shelfLabel([bookItem(1, "Apple"), bookItem(2, "Cedar")])).toBe("A–C");
+	});
+
+	test("reads the books on the shelf rather than assuming an alphabetical order", () => {
+		// A draw ordered by a Discovery recipe could reach a shelf in any order; the
+		// label still describes the titles it actually holds.
+		expect(shelfLabel([bookItem(1, "Zebra"), bookItem(2, "Aster")])).toBe("A–Z");
+	});
+
+	test("a title with no initial still labels the shelf", () => {
+		expect(shelfLabel([bookItem(1, null)])).toBe("U");
+		expect(shelfLabel([bookItem(1, "9 Lives"), bookItem(2, "Zebra")])).toBe("9–Z");
 	});
 });
