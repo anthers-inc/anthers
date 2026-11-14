@@ -8,7 +8,13 @@
  */
 
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { filterBtnClass, sectionTitleClass } from "./studio-filter-classes";
+import InfoTip from "../ui/InfoTip";
+import {
+	filterBtnClass,
+	sectionHeadingClass,
+	sectionTitleClass,
+	sectionTitleRowClass,
+} from "./studio-filter-classes";
 
 const STATUSES = [
 	{ id: "", label: "All" },
@@ -31,7 +37,13 @@ export default function PostsFilterSections({
 	return (
 		<div className="flex flex-col gap-5">
 			<section>
-				<h3 className={sectionTitleClass}>Search</h3>
+				<div className={sectionTitleRowClass}>
+					<h3 className={sectionHeadingClass}>Search</h3>
+					<InfoTip
+						unclipped
+						text="Search narrows the table to posts whose title or tag contains the text. It combines with the section below it, and the address bar carries the result, so a filtered table can be bookmarked or sent."
+					/>
+				</div>
 				<label className="input input-bordered input-xs flex items-center gap-1.5 w-full">
 					<MagnifyingGlassIcon className="w-3 h-3 text-base-content/40" />
 					<input

@@ -945,8 +945,8 @@ const accountRoutes = new Hono()
 			sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${usersId})`.as(
 				"follower_count",
 			);
-		// What the graph's shared Type and Tags filters run on. A creator row carries
-		// the vocabulary of what they have actually released, so a Type row grays where
+		// What the graph's shared Types and Tags filters run on. A creator row carries
+		// the vocabulary of what they have actually released, so a Types row grays where
 		// nobody in the result holds it rather than promising a narrowing that yields
 		// nothing.
 		const releasedTypes = sql<

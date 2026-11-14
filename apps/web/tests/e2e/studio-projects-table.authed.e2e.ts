@@ -82,6 +82,7 @@ test("the sidebar carries the Projects filters below the Studio nav, and they mo
 	// Below the nav, in the same aside — positioned, not merely present.
 	await expect(aside.getByRole("heading", { name: "Search" })).toBeVisible();
 	await expect(aside.getByRole("heading", { name: "Status" })).toBeVisible();
+	await expect(aside.getByRole("heading", { name: "Types" })).toBeVisible();
 	const navBottom = await aside
 		.getByRole("navigation", { name: "Studio", exact: true })
 		.evaluate((el) => el.getBoundingClientRect().bottom);
