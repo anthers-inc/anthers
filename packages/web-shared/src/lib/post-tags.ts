@@ -11,6 +11,10 @@ export function htmlTextOf(html: string): string {
 	if (!html) return "";
 	const tmp = document.createElement("div");
 	tmp.innerHTML = html;
+	// 🚨 A tag is a public label, and a spoiler's words were withheld from the reader on
+	// purpose — a `#hashtag` typed inside one must not mint one. The element is removed
+	// rather than its text filtered, so the words are gone before parsing ever sees them.
+	for (const hidden of tmp.querySelectorAll(".spoiler")) hidden.remove();
 	return tmp.textContent || "";
 }
 

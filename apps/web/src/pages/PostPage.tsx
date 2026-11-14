@@ -35,11 +35,10 @@ import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import Modal from "@anthers/web-shared/ui/Modal";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import WorkCard from "../components/cards/WorkCard";
 import SaveButton from "../components/library/SaveButton";
 import CommentThread from "../components/post/CommentThread";
+import PostBody from "../components/post/PostBody";
 import PostTitle from "../components/post/PostTitle";
 import SharePostButton from "../components/post/SharePostButton";
 import StickerBar from "../components/post/StickerBar";
@@ -301,9 +300,7 @@ export default function PostPage() {
 			className="w-full"
 			renderRead={() =>
 				post.body ? (
-					<div className="prose prose-sm max-w-none flush post-body">
-						<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
-					</div>
+					<PostBody markdown={post.body} />
 				) : (
 					<p className="text-sm text-base-content/40">Nothing written yet.</p>
 				)
@@ -505,9 +502,7 @@ export default function PostPage() {
 				{isOwner ? (
 					bodyField
 				) : post.body ? (
-					<div className="prose prose-sm max-w-none flush post-body">
-						<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
-					</div>
+					<PostBody markdown={post.body} />
 				) : (
 					<p className="text-sm text-base-content/40">Nothing written yet.</p>
 				)}

@@ -6,7 +6,13 @@
  * to the identical markdown on save, which is why echoing a body back produces a no-op
  * edit and not a new history row.
  */
+import { spoilerMarkedExtension } from "@anthers/shared/spoiler";
 import { marked } from "marked";
+
+// The stored body's `||…||` is the same convention every other surface speaks, and this is
+// the load-time half: marked parses it into the span the editor's Spoiler mark reads, so a
+// post opened for editing shows the hidden text as hidden rather than as a run of pipes.
+marked.use(spoilerMarkedExtension);
 
 /** The stored body's markdown, as the HTML the rich-text editor opens with. */
 export function markdownToEditorHtml(markdown: string | null | undefined): string {

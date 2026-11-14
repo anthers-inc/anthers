@@ -2,6 +2,7 @@
 import {
 	BoldIcon,
 	CodeBracketIcon,
+	EyeSlashIcon,
 	ItalicIcon,
 	LinkIcon,
 	ListBulletIcon,
@@ -13,6 +14,14 @@ import { uploadInlineImage } from "./editorImages";
 
 interface EditorToolbarProps {
 	editor: Editor;
+	/**
+	 * Whether the toolbar carries the Spoiler mark. The post editor does; a text Work's
+	 * article editor does not, because the Work's read renders its stored HTML directly and
+	 * has no reveal to hide the words behind — a Spoiler button there would mark text the
+	 * reader still sees. The editor is shared, so the scope is a prop rather than a variant
+	 * check inside the toolbar.
+	 */
+	spoiler?: boolean;
 }
 
 function ToolbarButton({
@@ -41,7 +50,7 @@ function ToolbarButton({
 	);
 }
 
-export default function EditorToolbar({ editor }: EditorToolbarProps) {
+export default function EditorToolbar({ editor, spoiler = false }: EditorToolbarProps) {
 	// The insert-image flow's live state, shown in place — a multi-second upload with
 	// no "nothing happened" explanation is the failure mode an earlier shape of this
 	// button shipped (it logged to the console only), and it is Parker's own report.
@@ -108,6 +117,16 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 			>
 				<ItalicIcon className="w-4 h-4" />
 			</ToolbarButton>
+
+			{spoiler && (
+				<ToolbarButton
+					onClick={() => editor.chain().focus().toggleMark("spoiler").run()}
+					isActive={editor.isActive("spoiler")}
+					title="Spoiler"
+				>
+					<EyeSlashIcon className="w-4 h-4" />
+				</ToolbarButton>
+			)}
 
 			<div className="divider divider-horizontal mx-0 w-px" />
 
