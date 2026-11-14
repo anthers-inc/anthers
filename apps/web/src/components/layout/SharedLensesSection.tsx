@@ -16,6 +16,7 @@
  * this component does not have.
  */
 
+import { sidebarRowClass } from "@anthers/web-shared/sidebar-row-class";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import {
 	MusicalNoteIcon,
@@ -23,7 +24,6 @@ import {
 	Squares2X2Icon,
 	TvIcon,
 } from "@heroicons/react/24/outline";
-import { sidebarRowClass } from "./sidebar-row-class";
 
 /** Every lens row, in the shared order. ids are page words — each tab's state maps
  *  them to its own param through its adapter, and a row it has not built never enters
