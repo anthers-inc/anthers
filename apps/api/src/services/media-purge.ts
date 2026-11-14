@@ -33,7 +33,7 @@ import {
 import { isPaged } from "@anthers/shared/content";
 import { and, eq, inArray } from "drizzle-orm";
 import { storage } from "./storage/index.js";
-import { isKeyUnder, urlToKey } from "./storage/keys.js";
+import { isKeyUnder, isWorkMediaKey, urlToKey, type WorkStorageOwner } from "./storage/keys.js";
 import { keysInMedia } from "./work-versions.js";
 
 type WorkRow = typeof works.$inferSelect;
@@ -88,6 +88,39 @@ async function sweep(keys: Set<string>, prefixes: Set<string>, label: string): P
  */
 export async function sweepOrphanedVideoHlsPrefixes(): Promise<number> {
 	let deleted = 0;
+	// The new shape: one namespace per Work, so the live-write guard and the referenced
+	// rows are asked per Work rather than per creator.
+	for (const workRoot of await storage.listChildPrefixes("works/")) {
+		const workId = Number.parseInt(workRoot.replace("works/", ""), 10);
+		if (!Number.isInteger(workId)) continue;
+		const candidates = await storage.listChildPrefixes(`works/${workId}/videos/hls/`);
+		if (candidates.length === 0) continue;
+		const [live] = await db
+			.select({ id: workTranscodingJobs.id })
+			.from(workTranscodingJobs)
+			.where(
+				and(
+					eq(workTranscodingJobs.workId, workId),
+					eq(workTranscodingJobs.mediaType, "video"),
+					inArray(workTranscodingJobs.status, ["pending", "processing"]),
+				),
+			)
+			.limit(1);
+		if (live) continue;
+		const rows = await db
+			.select({ hlsManifestUrl: workTranscodingJobs.hlsManifestUrl })
+			.from(workTranscodingJobs)
+			.where(
+				and(eq(workTranscodingJobs.workId, workId), eq(workTranscodingJobs.mediaType, "video")),
+			);
+		deleted += await sweepHlsCandidates(
+			candidates,
+			rows.map((r) => r.hlsManifestUrl ?? ""),
+		);
+	}
+
+	// The legacy shape, kept until the migration has run everywhere: a run prefix under
+	// the creator who published the Work at the time it was encoded.
 	for (const creatorRoot of await storage.listChildPrefixes("creators/")) {
 		const creatorId = Number.parseInt(creatorRoot.replace("creators/", ""), 10);
 		if (!Number.isInteger(creatorId)) continue;
@@ -118,22 +151,30 @@ export async function sweepOrphanedVideoHlsPrefixes(): Promise<number> {
 			.from(workTranscodingJobs)
 			.innerJoin(works, eq(works.id, workTranscodingJobs.workId))
 			.where(and(eq(works.creatorId, creatorId), eq(workTranscodingJobs.mediaType, "video")));
-		const referenced = new Set(
-			rows
-				.map((r) => urlToKey(r.hlsManifestUrl ?? ""))
-				.filter(Boolean)
-				.map((key) => `${key.replace(/\/[^/]+$/, "")}/`),
+		deleted += await sweepHlsCandidates(
+			candidates,
+			rows.map((r) => r.hlsManifestUrl ?? ""),
 		);
+	}
+	return deleted;
+}
 
-		for (const candidate of candidates) {
-			const prefix = candidate;
-			if (referenced.has(prefix)) continue;
-			try {
-				await storage.deletePrefix(prefix);
-				deleted += 1;
-			} catch (err) {
-				console.error(`[media-purge] orphan sweep: deletePrefix failed for ${prefix}:`, err);
-			}
+/** Delete each candidate run prefix no live manifest points at, best-effort. */
+async function sweepHlsCandidates(candidates: string[], manifestUrls: string[]): Promise<number> {
+	const referenced = new Set(
+		manifestUrls
+			.map((url) => urlToKey(url))
+			.filter(Boolean)
+			.map((key) => `${key.replace(/\/[^/]+$/, "")}/`),
+	);
+	let deleted = 0;
+	for (const prefix of candidates) {
+		if (referenced.has(prefix)) continue;
+		try {
+			await storage.deletePrefix(prefix);
+			deleted += 1;
+		} catch (err) {
+			console.error(`[media-purge] orphan sweep: deletePrefix failed for ${prefix}:`, err);
 		}
 	}
 	return deleted;
@@ -151,13 +192,13 @@ export async function sweepOrphanedVideoHlsPrefixes(): Promise<number> {
  */
 /** The archived originals a Work's version manifests name, owner-filtered like the rest. */
 function versionKeysForWork(
-	creatorId: number | null,
+	work: WorkStorageOwner,
 	versions: { media: Parameters<typeof keysInMedia>[0] }[],
 ): Set<string> {
 	const keys = new Set<string>();
 	for (const version of versions) {
 		for (const key of keysInMedia(version.media)) {
-			if (creatorId != null && isKeyUnder(key, creatorId)) keys.add(key);
+			if (isWorkMediaKey(key, work)) keys.add(key);
 		}
 	}
 	return keys;
@@ -179,8 +220,8 @@ function keysForWork(
 		previews,
 		previewCaptions,
 	);
-	const owner = item.creatorId;
-	const mine = (key: string) => owner != null && isKeyUnder(key, owner);
+	const owner = item;
+	const mine = (key: string) => isWorkMediaKey(key, owner);
 	return {
 		keys: new Set([...all.keys].filter(mine)),
 		// A prefix is checked with its trailing slash, so `creators/5` cannot pass as `creators/5/`.
@@ -199,11 +240,10 @@ function keysForWork(
  */
 async function webBuildPrefixesForWorks(workIds: number[]): Promise<string[]> {
 	const rows = await db
-		.select({ id: workBuilds.id, creatorId: works.creatorId })
+		.select({ id: workBuilds.id, workId: workBuilds.workId })
 		.from(workBuilds)
-		.innerJoin(works, eq(workBuilds.workId, works.id))
 		.where(inArray(workBuilds.workId, workIds));
-	return rows.map((r) => `creators/${r.creatorId}/${webBuildPrefix(r.id)}`);
+	return rows.map((r) => `works/${r.workId}/${webBuildPrefix(r.id)}`);
 }
 
 /** Add many Works' browser-build prefixes to a collection (the account-erase shape). */
@@ -269,13 +309,13 @@ function collectRawKeysForWork(
 	}
 	// 🚨 **A paged Work's derived storage lives under one deterministic prefix** — its
 	// rendered pages (and a reflow ebook's ladder sections), all
-	// `creators/{id}/ebook/{workId}/`, one per-run sub-prefix per render or ingest. The
+	// `works/{workId}/ebook/{workId}/`, one per-run sub-prefix per render or ingest. The
 	// prefix IS the enumeration here rather than the rows: rows are deleted and rewritten
 	// mid-replace, and a prefix sweep takes everything every run wrote. Found during the
 	// replace work: a Work delete cascaded the page rows and stranded every page object
 	// in the creator's prefix forever.
-	if (isPaged(item.type) && item.creatorId != null) {
-		prefixes.add(`creators/${item.creatorId}/ebook/${item.id}/`);
+	if (isPaged(item.type)) {
+		prefixes.add(`works/${item.id}/ebook/${item.id}/`);
 	}
 
 	return { keys, prefixes };
@@ -323,7 +363,7 @@ export async function purgeWorkMedia(
 		previewRows,
 		previewCaptionRows,
 	);
-	for (const key of versionKeysForWork(item.creatorId, versionRows)) keys.add(key);
+	for (const key of versionKeysForWork(item, versionRows)) keys.add(key);
 	// A browser build is swept by prefix — one whole `web-builds/{buildId}/` prefix per
 	// build — rather than file by file, because the number of files a real engine export
 	// carries makes enumerating keys the wrong shape and a missed file an ungated copy of
@@ -404,7 +444,7 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 		for (const k of forThis.keys) keys.add(k);
 		for (const p of forThis.prefixes) prefixes.add(p);
 		for (const key of versionKeysForWork(
-			w.creatorId,
+			w,
 			versionRows.filter((v) => v.workId === w.id),
 		)) {
 			keys.add(key);
@@ -452,10 +492,10 @@ export async function sweepCollected(collected: CollectedMedia): Promise<void> {
  */
 export async function removeSourceFileStorage(
 	sourceFile: Pick<SourceFileRow, "file">,
-	creatorId: number | null,
+	work: WorkStorageOwner,
 ): Promise<void> {
 	const key = urlToKey(sourceFile.file);
-	if (creatorId == null || !isKeyUnder(key, creatorId)) return;
+	if (!isWorkMediaKey(key, work)) return;
 	await sweep(new Set([key]), new Set(), "work source remove");
 }
 
@@ -476,13 +516,13 @@ export async function removeSourceFileStorage(
  * `work-source-files.ts`.
  */
 export async function purgeReplacedWorkMedia(
-	prior: Pick<WorkRow, "sourceKey" | "sourceOriginalKey" | "creatorId">,
+	prior: Pick<WorkRow, "id" | "sourceKey" | "sourceOriginalKey" | "creatorId">,
 	priorJobs: Pick<TranscodingJobRow, "hlsManifestUrl" | "outputFileUrl">[],
 	opts: { keep?: Set<string> } = {},
 ): Promise<void> {
 	const keys = new Set<string>();
 	const prefixes = new Set<string>();
-	const mine = (key: string) => prior.creatorId != null && isKeyUnder(key, prior.creatorId);
+	const mine = (key: string) => isWorkMediaKey(key, prior);
 	// A version archives one of these two pointers as the original it keeps. Everything
 	// else a replacement retires — the other pointer and every derived output — still goes.
 	const keep = opts.keep ?? new Set<string>();

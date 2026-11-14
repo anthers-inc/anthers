@@ -157,7 +157,7 @@ export function scannedObjectKind(
 }
 
 /**
- * The key prefixes that hold display chrome, under `creators/{id}/`.
+ * The key prefixes that hold display chrome, under the creator or Work namespace.
  *
  * This is the same policy as `PUBLIC_MEDIA_TYPES` seen from the other end. The allowlist
  * above answers *"may this upload be world-readable?"* at write time, when the media type
@@ -172,8 +172,9 @@ export function scannedObjectKind(
  * everything inside it becomes readable by key. So the boundary has to be the bucket, and
  * this function is what decides which one an object belongs to.
  *
- * Fails closed, like the allowlist above: a key that does not match the expected shape, or
- * sits under a prefix nobody listed, is private.
+ * ⭐ **Work media belongs to the Work, so the prefix test has two roots.** Account chrome
+ * lives under `creators/{id}/`, a Work's display images under `works/{workId}/`; the
+ * display-chrome prefixes are the same set either way. Everything else fails closed.
  */
 export const PUBLIC_KEY_PREFIXES: readonly string[] = [
 	"avatars/",
@@ -186,9 +187,9 @@ export const PUBLIC_KEY_PREFIXES: readonly string[] = [
 
 /** Whether a storage key holds display chrome, and so belongs in the public bucket. */
 export function isPublicKey(key: string): boolean {
-	// Every key the application mints is `creators/{id}/…`; the media type is the segment
-	// (or two) that follows. Anything else is unrecognized and therefore private.
-	const match = /^creators\/\d+\/(.+)$/.exec(key);
+	// Every key the application mints is `creators/{id}/…` or `works/{id}/…`; the media
+	// type is the segment (or two) that follows. Anything else is unrecognized and private.
+	const match = /^(?:creators|works)\/\d+\/(.+)$/.exec(key);
 	if (!match) return false;
 	return PUBLIC_KEY_PREFIXES.some((prefix) => match[1].startsWith(prefix));
 }

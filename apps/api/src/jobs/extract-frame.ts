@@ -137,7 +137,7 @@ async function extract(workId: number, atSeconds: number): Promise<string | null
 	}
 
 	const uuid = crypto.randomUUID().replace(/-/g, "");
-	const key = `creators/${work.creatorId}/thumbnails/${work.id}/${uuid}.jpg`;
+	const key = `works/${work.id}/thumbnails/${work.id}/${uuid}.jpg`;
 	await storage.upload(key, Buffer.from(jpeg), "image/jpeg", "public");
 
 	const url = await storage.getUrl(key);

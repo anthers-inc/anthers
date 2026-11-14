@@ -466,6 +466,7 @@ export default function PhysicalStorePanel({
 			<div className="card-body flex flex-col gap-4 p-5 text-start">
 				{editingImages && owner && editorListing ? (
 					<PhysicalImagesEditor
+						workId={workId}
 						images={editorListing.images}
 						onChange={(images) => save({ images })}
 						onDone={() => setEditingImages(false)}

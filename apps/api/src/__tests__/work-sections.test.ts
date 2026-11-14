@@ -354,7 +354,7 @@ describe("the ingest job, end to end on a fixture book", () => {
 			expect(await storage.exists(section.file)).toBe(true);
 			// The reader reaches the component through the ladder, never the key — the
 			// private bucket is where these live, and a signed URL is the only way in.
-			expect(section.file).toContain(`creators/${creator.id}/ebook/${workId}/`);
+			expect(section.file).toContain(`works/${workId}/ebook/${workId}/`);
 		}
 
 		const assets = await db

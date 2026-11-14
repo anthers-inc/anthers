@@ -31,7 +31,7 @@ import type { works } from "@anthers/db/schema";
 import { workCaptionTracks, workPreviewMedia } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { storage } from "./storage/index.js";
-import { isKeyUnder, urlToKey } from "./storage/keys.js";
+import { isWorkMediaKey, urlToKey, type WorkStorageOwner } from "./storage/keys.js";
 
 type WorkRow = typeof works.$inferSelect;
 type PreviewMediaRow = typeof workPreviewMedia.$inferSelect;
@@ -182,7 +182,7 @@ export async function attachCaptionTrack(input: AttachCaptionInput): Promise<Cap
 			),
 		);
 	if (previous) {
-		await deleteCaptionTrack(previous, work.creatorId);
+		await deleteCaptionTrack(previous, work);
 	}
 
 	const [row] = await db
@@ -202,7 +202,7 @@ export async function attachCaptionTrack(input: AttachCaptionInput): Promise<Cap
 
 /** The shared ingest gate both caption tables pass: language shape, owned key, WebVTT parse. */
 async function validateVttUpload(input: {
-	requesterId: number;
+	work: WorkStorageOwner;
 	key: string;
 	language: string;
 	label?: string | null;
@@ -219,7 +219,7 @@ async function validateVttUpload(input: {
 	// 🚨 A caption key names an object the serving route reads bytes from, so a reference
 	// outside the writer's own prefix is the foreign-file door this codebase already
 	// closes everywhere else. See `storage/keys.ts`.
-	if (!isKeyUnder(key, input.requesterId)) {
+	if (!isWorkMediaKey(key, input.work)) {
 		throw new VttRefusal("That file does not belong to this account.");
 	}
 	const bytes = await storage.read(key);
@@ -278,7 +278,7 @@ export async function attachPreviewCaptionTrack(input: {
 				eq(workCaptionTracks.kind, validated.kind),
 			),
 		);
-	if (previous) await deletePreviewCaptionTrack(previous, work.creatorId);
+	if (previous) await deletePreviewCaptionTrack(previous, work);
 
 	const [row] = await db
 		.insert(workCaptionTracks)
@@ -302,9 +302,12 @@ export class VttRefusal extends Error {}
  * Delete one caption track, removing its object as well. Takes the Work's creator id so
  * the purge stays inside the owner's prefix — the same rule `media-purge.ts` holds.
  */
-export async function deleteCaptionTrack(track: CaptionTrackRow, creatorId: number): Promise<void> {
+export async function deleteCaptionTrack(
+	track: CaptionTrackRow,
+	work: WorkStorageOwner,
+): Promise<void> {
 	await db.delete(workCaptionTracks).where(eq(workCaptionTracks.id, track.id));
-	if (isKeyUnder(track.storageKey, creatorId)) {
+	if (isWorkMediaKey(track.storageKey, work)) {
 		await storage.delete(track.storageKey);
 	}
 }
@@ -354,10 +357,10 @@ export async function listPreviewCaptionTracksForWork(
 /** Delete one trailer caption track, removing its object inside the owner's prefix. */
 export async function deletePreviewCaptionTrack(
 	track: PreviewCaptionTrackRow,
-	creatorId: number,
+	work: WorkStorageOwner,
 ): Promise<void> {
 	await db.delete(workCaptionTracks).where(eq(workCaptionTracks.id, track.id));
-	if (isKeyUnder(track.storageKey, creatorId)) {
+	if (isWorkMediaKey(track.storageKey, work)) {
 		await storage.delete(track.storageKey);
 	}
 }
@@ -365,12 +368,12 @@ export async function deletePreviewCaptionTrack(
 /** Delete every caption track on a trailer — the preview-removal half of the same rule. */
 export async function deletePreviewCaptionTracksForPreview(
 	previewId: number,
-	creatorId: number,
+	work: WorkStorageOwner,
 ): Promise<void> {
 	const tracks = await listPreviewCaptionTracks(previewId);
 	if (tracks.length === 0) return;
 	await db.delete(workCaptionTracks).where(eq(workCaptionTracks.previewId, previewId));
 	for (const track of tracks) {
-		if (isKeyUnder(track.storageKey, creatorId)) await storage.delete(track.storageKey);
+		if (isWorkMediaKey(track.storageKey, work)) await storage.delete(track.storageKey);
 	}
 }

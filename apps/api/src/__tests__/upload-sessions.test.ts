@@ -26,8 +26,22 @@ import {
 } from "../services/upload-sessions.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { insertWork } from "./work-fixtures";
 
 purgeAccountsCreatedHere();
+
+/**
+ * One Work per creator, created once — a session's destination is the Work's namespace
+ * now, so every start has to name one.
+ */
+const workIdsByCreator = new Map<number, number>();
+async function workFor(creatorId: number): Promise<number> {
+	const existing = workIdsByCreator.get(creatorId);
+	if (existing) return existing;
+	const work = await insertWork({ creatorId, type: "video", title: "Upload session" });
+	workIdsByCreator.set(creatorId, work.id);
+	return work.id;
+}
 
 /** The backend the suite spies into: real multipart semantics as a tiny map. */
 const heldParts = new Map<string, Map<number, string>>();
@@ -92,6 +106,7 @@ async function openSession(creatorId: number, size = UPLOAD_PART_SIZE * 3) {
 		filename: "take.mp4",
 		contentType: "video/mp4",
 		mediaType: "video",
+		workId: await workFor(creatorId),
 		size,
 	});
 	const [row] = await db
@@ -110,14 +125,16 @@ describe("an upload session's plan", () => {
 		creatorIdB = (await createAccount(`upsess_b_${Date.now().toString(36)}`)).userId;
 	});
 
-	it("splits size into parts at the declared part size, in the creator's prefix", async () => {
+	it("splits size into parts at the declared part size, in the Work's prefix", async () => {
+		const workId = await workFor(creatorId);
 		const { sessionId, key } = await startUploadSession(creatorId, {
 			filename: "a-film.mp4",
 			contentType: "video/mp4",
 			mediaType: "video",
+			workId,
 			size: UPLOAD_PART_SIZE * 2 + 1024,
 		});
-		expect(key).toMatch(new RegExp(`^creators/${creatorId}/videos/originals/.*\\.mp4$`));
+		expect(key).toMatch(new RegExp(`^works/${workId}/videos/originals/.*\\.mp4$`));
 		expect(spy.partUrl).toHaveBeenCalled();
 		const [row] = await db
 			.select()
@@ -203,6 +220,7 @@ describe("an upload session's plan", () => {
 			filename: "x.mp4",
 			contentType: "video/mp4",
 			mediaType: "video",
+			workId: await workFor(creatorId),
 			size: UPLOAD_PART_SIZE,
 		});
 		const [row] = await db
@@ -220,6 +238,7 @@ describe("an upload session's plan", () => {
 			filename: "y.mp4",
 			contentType: "video/mp4",
 			mediaType: "video",
+			workId: await workFor(creatorId),
 			size: UPLOAD_PART_SIZE,
 		});
 		await abortUploadSession(creatorId, second.sessionId);
@@ -237,11 +256,12 @@ describe("resume by digest — the byte-level leg", () => {
 	const DIGEST = `sha-${"c".repeat(64)}`;
 	const SIZE = UPLOAD_PART_SIZE * 2 + 1024;
 
-	function open(creatorId: number, digest: string | null, size = SIZE) {
+	async function open(creatorId: number, digest: string | null, size = SIZE) {
 		return startUploadSession(creatorId, {
 			filename: "take.mp4",
 			contentType: "video/mp4",
 			mediaType: "video",
+			workId: await workFor(creatorId),
 			size,
 			...(digest ? { clientSha256: digest } : {}),
 		});
@@ -283,10 +303,11 @@ describe("resume by digest — the byte-level leg", () => {
 		expect(fresh.key).not.toBe(settled.key);
 
 		// A foreign creator naming c1's digest starts their own session, and their keys
-		// never meet: the resume lookup is the creator's own rows, and so is the key.
+		// never meet: the resume lookup is the creator's own rows, and so is the Work.
+		const c2WorkId = await workFor(c2);
 		const foreign = await open(c2, DIGEST);
 		expect(foreign.sessionId).not.toBe(settled.sessionId);
-		expect(foreign.key).toMatch(new RegExp(`^creators/${c2}/`));
+		expect(foreign.key).toMatch(new RegExp(`^works/${c2WorkId}/`));
 	});
 
 	it("a digest whose session's plan cannot hold the named size starts fresh rather than hijacking parts", async () => {
@@ -345,6 +366,7 @@ describe("the abandonment sweeper", () => {
 			filename: "old.mp4",
 			contentType: "video/mp4",
 			mediaType: "video",
+			workId: await workFor(sweepCreatorId),
 			size: UPLOAD_PART_SIZE,
 		});
 		await db
@@ -356,12 +378,14 @@ describe("the abandonment sweeper", () => {
 			filename: "fresh.mp4",
 			contentType: "video/mp4",
 			mediaType: "video",
+			workId: await workFor(sweepCreatorId),
 			size: UPLOAD_PART_SIZE,
 		});
 		const completed = await startUploadSession(sweepCreatorId, {
 			filename: "done.mp4",
 			contentType: "video/mp4",
 			mediaType: "video",
+			workId: await workFor(sweepCreatorId),
 			size: UPLOAD_PART_SIZE,
 		});
 		const [doneRow] = await db

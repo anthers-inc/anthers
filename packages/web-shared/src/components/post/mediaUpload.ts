@@ -27,11 +27,15 @@ export async function uploadImageFile(
 	mediaType: ImageMediaType = "image",
 	signal?: AbortSignal,
 	purpose?: "source",
+	/** The Work the image belongs to. Present for Work media, absent for account chrome and
+	 *  Project images, whose keys stay under the creator's prefix. */
+	workId?: number,
 ): Promise<{ key: string; url: string }> {
 	const formData = new FormData();
 	formData.append("file", file);
 	formData.append("mediaType", mediaType);
 	if (purpose) formData.append("purpose", purpose);
+	if (workId != null) formData.append("workId", String(workId));
 	const res = await apiFetch("/api/content/media-upload/direct", {
 		method: "POST",
 		body: formData,
@@ -59,8 +63,10 @@ export async function uploadImageSource(
 	file: File,
 	mediaType: ImageMediaType,
 	signal?: AbortSignal,
+	/** The Work the source belongs to, when it is a Work's thumbnail rather than a profile's. */
+	workId?: number,
 ): Promise<{ key: string; url: string }> {
-	return uploadImageFile(file, mediaType, signal, "source");
+	return uploadImageFile(file, mediaType, signal, "source", workId);
 }
 
 /**
@@ -77,11 +83,13 @@ export async function frameImageFile(
 	mediaType: ImageFrameType,
 	crop: ImageCrop,
 	signal?: AbortSignal,
+	/** The Work the framed image belongs to, when the source is a Work's thumbnail. */
+	workId?: number,
 ): Promise<{ key: string; url: string }> {
 	const res = await apiFetch("/api/content/media-upload/frame", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ source, mediaType, crop }),
+		body: JSON.stringify({ source, mediaType, crop, ...(workId != null ? { workId } : {}) }),
 		signal,
 	});
 	if (!res.ok) {

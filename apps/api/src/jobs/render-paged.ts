@@ -403,7 +403,7 @@ async function runPagedRender(jobId: number) {
 		await db.delete(workPages).where(eq(workPages.workId, work.id));
 		for (const page of priorPages) await storage.delete(page.file).catch(() => {});
 
-		const prefix = `creators/${work.creatorId}/ebook/${work.id}/${randomUUID().replace(/-/g, "")}`;
+		const prefix = `works/${work.id}/ebook/${work.id}/${randomUUID().replace(/-/g, "")}`;
 		const flat = rendered.flat();
 		for (const [i, page_] of flat.entries()) {
 			const bytes = new Uint8Array(await readFile(page_.file));

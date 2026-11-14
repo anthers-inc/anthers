@@ -53,6 +53,7 @@ export async function wholeFileSha256Hex(file: File, signal?: AbortSignal): Prom
 export async function uploadMediaFile(
 	file: File,
 	mediaType: "video" | "audio" | "asset" | "preview-video",
+	workId: number,
 	onProgress?: (percent: number | null) => void,
 	signal?: AbortSignal,
 ): Promise<string> {
@@ -68,6 +69,7 @@ export async function uploadMediaFile(
 			contentType: file.type,
 			mediaType,
 			size: file.size,
+			workId,
 			clientSha256: digest,
 		},
 	});
@@ -86,6 +88,7 @@ export async function uploadMediaFile(
 		const formData = new FormData();
 		formData.append("file", file);
 		formData.append("mediaType", mediaType);
+		formData.append("workId", String(workId));
 		const result = await xhrUploadFormData<{ key: string }>(
 			"/api/content/media-upload/direct",
 			formData,

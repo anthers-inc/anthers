@@ -437,7 +437,7 @@ export async function removeSourceFile(
 	if (!deleted) return null;
 	// The object leaves with the row: this mutation is the enumeration the sweep follows,
 	// because the Work delete path reads only keys the Work still names.
-	await removeSourceFileStorage(deleted, work.creatorId);
+	await removeSourceFileStorage(deleted, work);
 	const remaining = await db
 		.select({ id: workSourceFiles.id })
 		.from(workSourceFiles)

@@ -77,10 +77,15 @@ describe("frameImage", () => {
 });
 
 describe("framedImageKey", () => {
-	it("sits under the creator's own prefix and the surface's public folder", () => {
-		const key = framedImageKey(42, "thumbnail");
+	it("sits under the creator's own prefix, or the Work's, in the surface's public folder", () => {
+		const key = framedImageKey({ userId: 42 }, "thumbnail");
 		expect(key.startsWith("creators/42/thumbnails/framed/")).toBe(true);
 		expect(key.endsWith(".webp")).toBe(true);
-		expect(framedImageKey(42, "avatar").startsWith("creators/42/avatars/framed/")).toBe(true);
+		expect(framedImageKey({ userId: 42 }, "avatar").startsWith("creators/42/avatars/framed/")).toBe(
+			true,
+		);
+		expect(
+			framedImageKey({ workId: 7 }, "thumbnail").startsWith("works/7/thumbnails/framed/"),
+		).toBe(true);
 	});
 });

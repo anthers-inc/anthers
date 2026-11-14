@@ -592,14 +592,14 @@ async function manifestFilesFor(work: {
 	}
 
 	const build = buildRows.find((row) => row.isPrimary) ?? buildRows[0];
-	if (build && work.creatorId !== null) {
+	if (build) {
 		const buildFiles = await db
 			.select({ fileSize: workBuildFiles.fileSize })
 			.from(workBuildFiles)
 			.where(eq(workBuildFiles.buildId, build.id));
 		files.push({
 			name: build.entryPath,
-			key: `creators/${work.creatorId}/web-builds/${build.id}/`,
+			key: `works/${work.id}/web-builds/${build.id}/`,
 			bytes: buildFiles.reduce((total, file) => total + (file.fileSize ?? 0), 0),
 			role: "build",
 			...(build.label ? { version: build.label } : {}),

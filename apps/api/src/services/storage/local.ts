@@ -7,6 +7,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import type { Dirent } from "node:fs";
 import { existsSync } from "node:fs";
 import { access, copyFile, mkdir, readdir, rename, rm, stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -113,6 +114,26 @@ export class LocalStorageService implements StorageService {
 		}
 	}
 
+	/** Every file under the prefix, walked recursively. Directories yield nothing on their own. */
+	async listKeys(prefix: string): Promise<string[]> {
+		const out: string[] = [];
+		const walk = async (relative: string) => {
+			let entries: Dirent[];
+			try {
+				entries = await readdir(join(localContentRoot(), relative), { withFileTypes: true });
+			} catch {
+				return;
+			}
+			for (const entry of entries) {
+				const child = `${relative}${entry.name}`;
+				if (entry.isDirectory()) await walk(`${child}/`);
+				else if (entry.isFile()) out.push(child);
+			}
+		};
+		await walk(prefix.endsWith("/") ? prefix : `${prefix}/`);
+		return out;
+	}
+
 	/**
 	 * Local mode runs no multipart sessions — its uploads are small and go over the
 	 * direct endpoint whole. The session route decides by backend before reaching any
@@ -132,6 +153,21 @@ export class LocalStorageService implements StorageService {
 	}
 	async abortMultipartUpload(): Promise<void> {
 		throw new Error("multipart sessions are not available in local mode");
+	}
+
+	/** Copy on disk, creating the destination directory. False when the source is absent. */
+	async copy(fromKey: string, toKey: string): Promise<boolean> {
+		if (fromKey === toKey) return true;
+		const from = join(localContentRoot(), fromKey);
+		const to = join(localContentRoot(), toKey);
+		try {
+			await access(from);
+		} catch {
+			return false;
+		}
+		await mkdir(dirname(to), { recursive: true });
+		await copyFile(from, to);
+		return true;
 	}
 
 	/** Rename on disk, creating the destination directory. False when the source is absent. */

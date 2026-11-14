@@ -198,7 +198,7 @@ describe("remove an unpublished Work's media", () => {
 				);
 				// The panels cascade off their page; the sweep's ebook prefix covers the page
 				// objects and everything else that run wrote.
-				expect(sweptPrefixes).toContain(`creators/${creatorId}/ebook/${work.id}/`);
+				expect(sweptPrefixes).toContain(`works/${work.id}/ebook/${work.id}/`);
 				expect(deleted).toContain(pdf);
 			} finally {
 				restoreStorage();
