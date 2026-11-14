@@ -392,6 +392,34 @@ export class S3StorageService implements StorageService {
 	 * Copy then delete. `CopyObject` takes the source as `{bucket}/{key}`, so a move that
 	 * crosses buckets — the thumbnail case — is the same call with a different source.
 	 */
+	/**
+	 * Copy one object, leaving the source in place, across buckets where the two keys
+	 * belong to different ones. False when the source is absent.
+	 *
+	 * The single caller is the Work-media migration, which rewrites a database row only
+	 * after its object exists at the new key and deletes the old object after the Work's
+	 * whole column set has committed. `move` cannot serve that order.
+	 */
+	async copy(fromKey: string, toKey: string): Promise<boolean> {
+		if (fromKey === toKey) return true;
+		const sourceBucket = this.bucketForKey(fromKey);
+		const targetBucket = this.bucketForKey(toKey);
+		try {
+			await this.s3.send(
+				new CopyObjectCommand({
+					Bucket: targetBucket,
+					Key: toKey,
+					CopySource: `${sourceBucket}/${fromKey}`,
+				}),
+			);
+			return true;
+		} catch {
+			// A Work whose media never uploaded is ordinary, and a migration reports it
+			// rather than aborting the whole run.
+			return false;
+		}
+	}
+
 	async move(fromKey: string, toKey: string): Promise<boolean> {
 		if (fromKey === toKey) return true;
 		const sourceBucket = this.bucketForKey(fromKey);
@@ -515,6 +543,37 @@ export class S3StorageService implements StorageService {
 			}
 			continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
 		} while (continuationToken);
+		return out;
+	}
+
+	/**
+	 * Every object key under the prefix, recursively, across both buckets.
+	 *
+	 * The media-key migration's one need is a directory whose file names only the
+	 * transcoder knows — an HLS rendition's segments — so this walks without a delimiter.
+	 */
+	async listKeys(prefix: string): Promise<string[]> {
+		const buckets =
+			this.config.publicBucket === this.config.bucket
+				? [this.config.bucket]
+				: [this.config.bucket, this.config.publicBucket];
+		const out: string[] = [];
+		for (const target of buckets) {
+			let continuationToken: string | undefined;
+			do {
+				const listed = await this.s3.send(
+					new ListObjectsV2Command({
+						Bucket: target,
+						Prefix: prefix,
+						ContinuationToken: continuationToken,
+					}),
+				);
+				for (const object of listed.Contents ?? []) {
+					if (object.Key) out.push(object.Key);
+				}
+				continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+			} while (continuationToken);
+		}
 		return out;
 	}
 

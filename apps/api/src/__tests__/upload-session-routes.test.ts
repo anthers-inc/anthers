@@ -30,10 +30,20 @@ if (process.env[MODE_ENV] === "1") {
 
 	describe("the local-mode session surface (driving alongside the child)", () => {
 		it("runs the s3-mode suite in a child process, so its storage environment cannot reach a sibling file", async () => {
+			// A child inherits the parent's session: `ANTHERS_SESSION` and `DATABASE_URL`
+			// are how CI's service-container session and a local Docker session are reused
+			// instead of started again. Only the mode flag is added.
+			const childEnv: Record<string, string | undefined> = {
+				...process.env,
+				[MODE_ENV]: "1",
+			};
 			const proc = Bun.spawn(["bun", "test", import.meta.path], {
-				// The api workspace's own bunfig, whose preload brings the child its session.
-				cwd: join(import.meta.dir, "../.."),
-				env: { ...process.env, [MODE_ENV]: "1" },
+				// The REPOSITORY root, not `apps/api`: Bun loads the bunfig of the directory
+				// it starts in, and starting inside `apps/api` loaded the root preload and
+				// the api preload in one process — two sessions, two database clients, and a
+				// Work inserted on one side invisible to the other.
+				cwd: join(import.meta.dir, "../../../.."),
+				env: childEnv,
 				stdout: "pipe",
 				stderr: "pipe",
 			});
@@ -69,12 +79,15 @@ if (process.env[MODE_ENV] === "1") {
 			);
 			expect(unauth.status).toBe(401);
 
-			const { cookie } = await createAccount(`upsessLocal_${Date.now().toString(36)}`);
+			const { cookie, userId } = await createAccount(`upsessLocal_${Date.now().toString(36)}`);
+			const { insertWork } = await import("./work-fixtures");
+			const work = await insertWork({ creatorId: userId, type: "video", title: "Local upload" });
+			const localBody = { ...body, workId: work.id };
 			const local = await app.fetch(
 				new Request(`http://localhost${start}`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
-					body: JSON.stringify(body),
+					body: JSON.stringify(localBody),
 				}),
 			);
 			expect(local.status).toBe(200);
@@ -87,7 +100,7 @@ if (process.env[MODE_ENV] === "1") {
 				new Request(`http://localhost${start}`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
-					body: JSON.stringify({ ...body, size: 0 }),
+					body: JSON.stringify({ ...localBody, size: 0 }),
 				}),
 			);
 			expect(invalid.status).toBe(400);
@@ -178,7 +191,7 @@ async function runSessionModeSuite(): Promise<void> {
 	process.env.STORAGE_FORCE_PATH_STYLE = "true";
 
 	const { db } = await import("@anthers/db/client");
-	const { mediaUploadSessions } = await import("@anthers/db/schema");
+	const { mediaUploadSessions, works: worksTable } = await import("@anthers/db/schema");
 	const { eq } = await import("drizzle-orm");
 	const { createAccount } = await import("./account-fixture");
 	const { purgeAccountsCreatedHere } = await import("./cleanup");
@@ -202,7 +215,7 @@ async function runSessionModeSuite(): Promise<void> {
 					Origin: ORIGIN,
 					...(options?.auth ? { Cookie: options.auth } : {}),
 				},
-				body: JSON.stringify(options?.body ?? BODY),
+				body: JSON.stringify(options?.body ?? { ...BODY, workId }),
 			}),
 		);
 	}
@@ -213,6 +226,7 @@ async function runSessionModeSuite(): Promise<void> {
 	let creatorCookie = "";
 	let creatorId = 0;
 	let otherCreatorCookie = "";
+	let workId = 0;
 
 	beforeAll(async () => {
 		const creator = await createAccount(`upsessR_c_${Date.now().toString(36)}`);
@@ -220,10 +234,21 @@ async function runSessionModeSuite(): Promise<void> {
 		creatorCookie = creator.cookie;
 		const other = await createAccount(`upsessR_b_${Date.now().toString(36)}`);
 		otherCreatorCookie = other.cookie;
+		const [routeWork] = await db
+			.insert(worksTable)
+			.values({
+				creatorId,
+				publicId: Date.now(),
+				slug: `route-upload-${Date.now()}`,
+				type: "video",
+				title: "Route upload session",
+			})
+			.returning();
+		workId = routeWork.id;
 	}, DB_SETUP_TIMEOUT);
 
 	describe("opening a session", () => {
-		it("answers a session whose plan is the part split, under the creator's own prefix", async () => {
+		it("answers a session whose plan is the part split, under the Work's prefix", async () => {
 			const res = await req("/session/start", { auth: creatorCookie });
 			expect(res.status).toBe(201);
 			const plan = (await res.json()) as {
@@ -235,7 +260,7 @@ async function runSessionModeSuite(): Promise<void> {
 			};
 			expect(plan.method).toBe("session");
 			expect(plan.sessionId).toMatch(/^[0-9a-f-]{36}$/);
-			expect(plan.key).toMatch(new RegExp(`^creators/${creatorId}/videos/originals/.*\\.mp4$`));
+			expect(plan.key).toMatch(new RegExp(`^works/${workId}/videos/originals/.*\\.mp4$`));
 			expect(plan.partSize).toBe(UPLOAD_PART_SIZE);
 			expect(plan.parts).toHaveLength(3);
 			for (const [i, part] of plan.parts.entries()) {
@@ -372,7 +397,7 @@ async function runSessionModeSuite(): Promise<void> {
 			const digest = `sha-${"b".repeat(64)}`;
 			const first = await req("/session/start", {
 				auth: creatorCookie,
-				body: { ...BODY, clientSha256: digest },
+				body: { ...BODY, workId, clientSha256: digest },
 			});
 			expect(first.status).toBe(201);
 			const plan1 = (await first.json()) as {
@@ -386,7 +411,7 @@ async function runSessionModeSuite(): Promise<void> {
 			await fetch(plan1.parts[0].url, { method: "PUT", body: "bytes" });
 			const second = await req("/session/start", {
 				auth: creatorCookie,
-				body: { ...BODY, clientSha256: digest },
+				body: { ...BODY, workId, clientSha256: digest },
 			});
 			expect(second.status).toBe(201);
 			const plan2 = (await second.json()) as {
@@ -418,7 +443,7 @@ async function runSessionModeSuite(): Promise<void> {
 			const digest = `sha-${"e".repeat(64)}`;
 			const res = await req("/session/start", {
 				auth: creatorCookie,
-				body: { ...BODY, clientSha256: digest },
+				body: { ...BODY, workId, clientSha256: digest },
 			});
 			const plan = (await res.json()) as {
 				sessionId: string;

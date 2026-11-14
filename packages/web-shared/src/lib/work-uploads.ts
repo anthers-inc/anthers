@@ -138,6 +138,7 @@ export interface WorkUploadTransport {
 	 * send — a canceled upload stops spending the wire, and may leave its session open
 	 * for the sweeper, exactly as a tab close would. */
 	put(
+		workId: number,
 		file: File,
 		target: WorkUploadTarget,
 		onProgress: (percent: number | null) => void,
@@ -199,21 +200,21 @@ async function postSourceFiles(
 }
 
 const defaultTransport: WorkUploadTransport = {
-	async put(file, target, onProgress, signal) {
+	async put(workId, file, target, onProgress, signal) {
 		if (target.kind === "preview-image") {
 			// The direct image route stores the key; the attach route is what names it on
 			// the Work, and its inline scan has already answered before the row exists.
-			return (await uploadImageFile(file, "preview-image", signal)).url;
+			return (await uploadImageFile(file, "preview-image", signal, undefined, workId)).url;
 		}
 		if (target.kind === "preview-video") {
-			return uploadMediaFile(file, "preview-video", onProgress, signal);
+			return uploadMediaFile(file, "preview-video", workId, onProgress, signal);
 		}
 		if ("type" in target && target.type === "image") {
-			return (await uploadImageFile(file, "image", signal)).url;
+			return (await uploadImageFile(file, "image", signal, undefined, workId)).url;
 		}
 		const processing = target.kind === "source" ? processingFor(target.type) : null;
 		const mediaType = processing === "video" || processing === "audio" ? processing : "asset";
-		return uploadMediaFile(file, mediaType, onProgress, signal);
+		return uploadMediaFile(file, mediaType, workId, onProgress, signal);
 	},
 	async attachMany(workId, target, items, _signal) {
 		if (items.length === 0) return;
@@ -518,6 +519,7 @@ export function createWorkUploadStore(transport: WorkUploadTransport): WorkUploa
 			update(id, { status: "uploading", error: null });
 			try {
 				entry.key = await transport.put(
+					state.workId,
 					file,
 					state.target,
 					(percent) => update(id, { progress: percent }),

@@ -135,10 +135,11 @@ test("a music Work plays its original while processing runs", async ({ page, con
 	// visible half is asserted on the button and the playing half on the element.
 	const audio = page.locator("audio");
 	await expect(audio).toBeAttached();
-	// The player plays the Work's own original: local storage names the stored key;
-	// delivery mode names the access-checked route. Both are "the original".
+	// The player plays the Work's own original: local storage names the stored key under
+	// the Work's namespace; delivery mode names the access-checked route under it. Both
+	// are "the original", and both now carry the Work id.
 	const src = await audio.getAttribute("src");
-	expect(src ?? "").toMatch(new RegExp(`works/${landedWork.id}/original|creators/`));
+	expect(src ?? "").toMatch(new RegExp(`works/${landedWork.id}/`));
 	await expect(
 		audio.locator("xpath=ancestor::*[1]").getByRole("button", { name: "Play" }),
 	).toBeVisible();
@@ -166,6 +167,6 @@ test("a music Work plays its original while processing runs", async ({ page, con
 	await page.getByRole("button", { name: "User (Locked)" }).click();
 	await expect(page.locator("audio")).toBeAttached();
 	const userSrc = await page.locator("audio").getAttribute("src");
-	expect(userSrc ?? "").toMatch(new RegExp(`works/${landedWork.id}/original|creators/`));
+	expect(userSrc ?? "").toMatch(new RegExp(`works/${landedWork.id}/`));
 	await expect(page.getByRole("button", { name: "Edit Details" })).toHaveCount(0);
 });

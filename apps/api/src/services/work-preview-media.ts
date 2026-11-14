@@ -23,7 +23,7 @@ import { and, asc, eq, max, sql } from "drizzle-orm";
 import { queueScansForWork } from "../jobs/scan-media.js";
 import { deletePreviewCaptionTracksForPreview } from "./captions.js";
 import { storage } from "./storage/index.js";
-import { isKeyUnder, isOwnStorageRef, urlToKey } from "./storage/keys.js";
+import { isOwnWorkStorageRef, isWorkMediaKey, urlToKey } from "./storage/keys.js";
 
 type WorkRow = typeof works.$inferSelect;
 export type PreviewMediaRow = typeof workPreviewMedia.$inferSelect;
@@ -79,7 +79,7 @@ export async function attachPreviewMedia(input: AttachPreviewInput): Promise<Pre
 	const key = urlToKey(input.key);
 	// 🚨 A preview key names an object the delivery route signs, so a reference outside the
 	// writer's own prefix is the foreign-file door this codebase closes everywhere else.
-	if (!(await isOwnStorageRef(key, requesterId))) {
+	if (!(await isOwnWorkStorageRef(key, work))) {
 		throw new PreviewMediaRefusal("That file does not belong to this account.");
 	}
 
@@ -185,8 +185,8 @@ export async function removePreviewMedia(
 		.returning();
 	if (!deleted) return listPreviewMedia(work.id);
 
-	await deletePreviewCaptionTracksForPreview(deleted.id, work.creatorId ?? -1);
-	if (work.creatorId != null && isKeyUnder(deleted.file, work.creatorId)) {
+	await deletePreviewCaptionTracksForPreview(deleted.id, work);
+	if (isWorkMediaKey(deleted.file, work)) {
 		await storage.delete(deleted.file);
 	}
 

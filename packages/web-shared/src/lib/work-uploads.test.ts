@@ -28,7 +28,7 @@ function controlledTransport() {
 	let progress: ((percent: number) => void) | null = null;
 
 	const transport: WorkUploadTransport = {
-		put(_file, _target, onProgress, signal) {
+		put(_workId, _file, _target, onProgress, signal) {
 			calls.push("put");
 			signals.push(signal);
 			progress = onProgress;

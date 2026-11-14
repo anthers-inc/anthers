@@ -297,7 +297,7 @@ export async function ingestEbook(data: IngestEbookData) {
 			await storage.delete(row.file).catch(() => {});
 		}
 
-		const prefix = `creators/${work.creatorId}/ebook/${work.id}/${randomUUID().replace(/-/g, "")}`;
+		const prefix = `works/${work.id}/ebook/${work.id}/${randomUUID().replace(/-/g, "")}`;
 		const totalUnits = allSections.length + assets.size;
 		let unitsDone = 0;
 		// 🚨 Every progress write is awaited: a straggler un-awaited write would land after

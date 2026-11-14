@@ -36,7 +36,11 @@ import { requireAuth, requireCreator } from "../middleware/auth.js";
 import { webBuildPrefix } from "../services/media-purge.js";
 import { aclForMediaType } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
-import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
+import {
+	FOREIGN_FILE_REFUSAL,
+	isOwnWorkStorageRef,
+	workKeyPrefix,
+} from "../services/storage/keys.js";
 import { archiveCurrentMedia } from "../services/work-versions.js";
 
 /** The endpoint the local-dev direct upload POSTs to. */
@@ -135,7 +139,7 @@ const webBuildRoutes = new Hono()
 		for (const f of files) {
 			// The reference a client hands us names an object that will be served as part
 			// of this build, so it takes the same check every file reference takes.
-			if (!(await isOwnStorageRef(f.storageRef, user.id))) {
+			if (!(await isOwnWorkStorageRef(f.storageRef, work))) {
 				return c.json(FOREIGN_FILE_REFUSAL, 400);
 			}
 			// The declared size is a hint; storage is the authority. Both are checked so a
@@ -310,9 +314,9 @@ const webBuildRoutes = new Hono()
 			const problem = buildPathProblem(path);
 			if (problem) return c.json({ error: problem }, 400);
 
-			// webBuildPrefix carries the shape; the creator prefix wraps it. No `uuid.ext`
+			// webBuildPrefix carries the shape; the Work prefix wraps it. No `uuid.ext`
 			// renaming: the build's own path IS the storage path under this prefix.
-			const key = `creators/${user.id}/${webBuildPrefix(buildId)}${path}`;
+			const key = `${workKeyPrefix(workId)}${webBuildPrefix(buildId)}${path}`;
 			if (isLocalStorage) {
 				// Local dev: the browser cannot PUT to a filesystem path, so the client POSTs
 				// the bytes to the sibling upload route, which writes them. Same key shape.
@@ -362,7 +366,7 @@ const webBuildRoutes = new Hono()
 			return c.json({ error: "That file is too large for a build file." }, 413);
 		}
 
-		const key = `creators/${user.id}/${webBuildPrefix(buildId)}${path}`;
+		const key = `works/${workId}/${webBuildPrefix(buildId)}${path}`;
 		const buffer = Buffer.from(await file.arrayBuffer());
 		await storage.upload(key, buffer, file.type || "application/octet-stream", "private");
 		return c.json({ key }, 201);
@@ -384,10 +388,10 @@ const webBuildRoutes = new Hono()
 		if (!build) return c.json({ error: "Build not found" }, 404);
 
 		// Storage first (best-effort, it swallows failures), then the rows cascade. The
-		// prefix sits under the creator's own, exactly as every upload key was minted;
+		// prefix sits under the Work's own, exactly as every upload key was minted;
 		// deleting the bare `web-builds/{id}/` would sweep the wrong tree.
 		try {
-			await storage.deletePrefix(`creators/${user.id}/${webBuildPrefix(buildId)}`);
+			await storage.deletePrefix(`${workKeyPrefix(workId)}${webBuildPrefix(buildId)}`);
 		} catch (err) {
 			console.error(`[web-build] deletePrefix failed for build ${buildId}:`, err);
 		}

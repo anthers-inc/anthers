@@ -67,7 +67,7 @@ import { collectWorkMedia } from "./media-purge.js";
 import { restoreStickersOnSubject, voidStickersOnSubject } from "./sticker-void.js";
 import { originalKeyFor, quarantineKeyFor } from "./storage/acl.js";
 import { storage } from "./storage/index.js";
-import { isKeyUnder, urlToKey } from "./storage/keys.js";
+import { isWorkMediaKey, urlToKey } from "./storage/keys.js";
 import { queueWorkListingSync } from "./work-listing.js";
 
 /** How a finding arrived. A hash match and a classifier hunch may never collapse into one. */
@@ -315,7 +315,7 @@ async function objectsFor(workId: number): Promise<WorkObject[]> {
 		if (!key || seen.has(key)) return;
 		// A row written before the ownership check existed may name somebody else's
 		// object; moving it would be moving another creator's file.
-		if (work.creatorId == null || !isKeyUnder(key, work.creatorId)) return;
+		if (!isWorkMediaKey(key, work)) return;
 		seen.add(key);
 		out.push({ key, kind });
 	};

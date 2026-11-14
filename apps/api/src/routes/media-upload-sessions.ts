@@ -27,6 +27,7 @@ import {
 	abortUploadSession,
 	completeUploadSession,
 	SessionCompleteError,
+	SessionStartError,
 	startUploadSession,
 } from "../services/upload-sessions.js";
 
@@ -42,6 +43,11 @@ export const mediaUploadSessionRoutes = new Hono()
 				mediaType: z.enum(["video", "audio", "asset", "preview-video"]),
 				/** The file's full size — what the part plan is built from. */
 				size: z.number().int().min(1),
+				/**
+				 * The Work the media belongs to. Its id is the destination key's namespace,
+				 * so a session cannot exist without one.
+				 */
+				workId: z.number().int().positive(),
 				/**
 				 * The whole file's digest, read before anything is sent. A digest this
 				 * creator still holds an open session for is the RESUME key: the answer is
@@ -62,18 +68,25 @@ export const mediaUploadSessionRoutes = new Hono()
 			if (isLocalStorage) {
 				return c.json({ method: "direct" as const, sessionId: null });
 			}
-			const session = await startUploadSession(user.id, input);
-			return c.json(
-				{
-					method: "session" as const,
-					sessionId: session.sessionId,
-					key: session.key,
-					partSize: session.partSize,
-					parts: session.parts,
-					held: session.held,
-				},
-				201,
-			);
+			try {
+				const session = await startUploadSession(user.id, input);
+				return c.json(
+					{
+						method: "session" as const,
+						sessionId: session.sessionId,
+						key: session.key,
+						partSize: session.partSize,
+						parts: session.parts,
+						held: session.held,
+					},
+					201,
+				);
+			} catch (err) {
+				if (err instanceof SessionStartError) {
+					return c.json({ error: err.message }, err.status as ContentfulStatusCode);
+				}
+				throw err;
+			}
 		},
 	)
 

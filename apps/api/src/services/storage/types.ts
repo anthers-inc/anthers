@@ -138,6 +138,19 @@ export interface StorageService {
 	): Promise<{ url: string; headers: Record<string, string> }>;
 
 	/**
+	 * Copy an object to another key, leaving the source in place. Returns false when the
+	 * source does not exist.
+	 *
+	 * ⚠️ **The copy half of {@link move}, and separate from it for the one migration that
+	 * needs both halves at different moments.** Moving a Work's media from its publisher's
+	 * prefix into the Work's own rewrites every row that names a key; the object has to be
+	 * at the new key before the row points there, and the old object must stay reachable
+	 * until the whole Work's columns have committed. A single `move` per object would leave
+	 * a failed transaction pointing rows at keys that no longer exist.
+	 */
+	copy(fromKey: string, toKey: string): Promise<boolean>;
+
+	/**
 	 * Move an object from one key to another, across buckets where the two keys belong to
 	 * different ones. Returns false when the source does not exist.
 	 *
@@ -184,6 +197,17 @@ export interface StorageService {
 	 * the *sweep's rules* that decide what is then deleted — not this method's.
 	 */
 	listChildPrefixes(prefix: string): Promise<string[]>;
+
+	/**
+	 * Every object key under `prefix`, recursively, across both buckets when they differ.
+	 *
+	 * ⚠️ **The recursive counterpart to {@link listChildPrefixes}, and it exists for the
+	 * one caller that has to move a directory whose file names are not in the database**:
+	 * an HLS rendition's segment names are written by the transcoder and only the master
+	 * playlist is stored, so the media-key migration has to ask storage what is there.
+	 * Like `listChildPrefixes` it is a sweep primitive, never a delivery surface.
+	 */
+	listKeys(prefix: string): Promise<string[]>;
 
 	/**
 	 * Multipart upload primitives — the resumable-upload session's floor. ⚠️

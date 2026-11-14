@@ -48,7 +48,7 @@ import { purgeReplacedWorkMedia, purgeWorkMedia } from "../../services/media-pur
 import { notifyMany } from "../../services/notifications.js";
 import { physicalListingFor, savePhysicalListing } from "../../services/physical-listings.js";
 import { sanitizePostHtml } from "../../services/sanitize.js";
-import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../../services/storage/keys.js";
+import { FOREIGN_FILE_REFUSAL, isOwnWorkStorageRef } from "../../services/storage/keys.js";
 import { queueWorkListingSync } from "../../services/work-listing.js";
 import { preReleaseRefusal, releaseRefusal } from "../../services/work-release.js";
 import {
@@ -172,7 +172,7 @@ const workEditorRoutes = new Hono()
 			if (
 				sent !== undefined &&
 				sent !== (stored ?? "") &&
-				!(await isOwnStorageRef(sent, user.id))
+				!(await isOwnWorkStorageRef(sent, work))
 			) {
 				return c.json(FOREIGN_FILE_REFUSAL, 400);
 			}
@@ -1045,7 +1045,7 @@ const workEditorRoutes = new Hono()
 		const data = c.req.valid("json");
 		// The asset route signs this key for the Work's owner, so an asset naming another
 		// creator's private original would hand it over. See `storage/keys.ts`.
-		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
+		if (!(await isOwnWorkStorageRef(data.file, work))) return c.json(FOREIGN_FILE_REFUSAL, 400);
 
 		const [existingAssets, existingPrimaryWeb] = await Promise.all([
 			db.select().from(workAssets).where(eq(workAssets.workId, id)),
@@ -1165,7 +1165,7 @@ const workEditorRoutes = new Hono()
 			// The set route signs these keys for the Work's owner, so a file naming another
 			// creator's private original would hand it over. See `storage/keys.ts`. A whole pick
 			// is refused on its first foreign reference, before anything is written.
-			const owned = await Promise.all(files.map((file) => isOwnStorageRef(file.file, user.id)));
+			const owned = await Promise.all(files.map((file) => isOwnWorkStorageRef(file.file, item)));
 			if (owned.some((own) => !own)) return c.json(FOREIGN_FILE_REFUSAL, 400);
 			const { rows, job, error, code } = await appendSourceFiles(item, files);
 			if (error) {
@@ -1209,7 +1209,7 @@ const workEditorRoutes = new Hono()
 		}
 		const data = c.req.valid("json");
 		const files = "files" in data ? data.files : [data];
-		const owned = await Promise.all(files.map((file) => isOwnStorageRef(file.file, user.id)));
+		const owned = await Promise.all(files.map((file) => isOwnWorkStorageRef(file.file, item)));
 		if (owned.some((own) => !own)) return c.json(FOREIGN_FILE_REFUSAL, 400);
 		const { rows, job, error, code } = await replaceSourceSet(item, files);
 		if (error) {
@@ -1313,7 +1313,9 @@ const workEditorRoutes = new Hono()
 		// A gallery key is a file reference the client sent. It must be the creator's own
 		// upload before the listing stores it, exactly as a Work's thumbnail must be.
 		const sentImages = body.images ?? [];
-		const owned = await Promise.all(sentImages.map((image) => isOwnStorageRef(image.key, user.id)));
+		const owned = await Promise.all(
+			sentImages.map((image) => isOwnWorkStorageRef(image.key, item)),
+		);
 		if (!owned.every(Boolean)) return c.json(FOREIGN_FILE_REFUSAL, 400);
 
 		const saved = await savePhysicalListing(id, body);

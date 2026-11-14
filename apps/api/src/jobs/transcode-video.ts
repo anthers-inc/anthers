@@ -680,7 +680,7 @@ async function runTranscode(
 	// throughout the job, one variant at a time (creator-first layout — see media-upload
 	// route). Every run of the job gets its own prefix, so a retry never merges with a
 	// partial prior attempt.
-	const storagePrefix = `creators/${item.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;
+	const storagePrefix = `works/${item.id}/videos/hls/${randomUUID().replace(/-/g, "")}`;
 
 	/**
 	 * ⭐ **The re-check a handler that has outlived its own delivery owes the row.** A

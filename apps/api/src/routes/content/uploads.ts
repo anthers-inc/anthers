@@ -41,8 +41,14 @@ import {
 	scannedObjectKind,
 } from "../../services/storage/acl.js";
 import { isLocalStorage, storage } from "../../services/storage/index.js";
-import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../../services/storage/keys.js";
-import { signOwnWorkObject } from "../../services/storage/own.js";
+import {
+	FOREIGN_FILE_REFUSAL,
+	isOwnStorageRef,
+	isOwnWorkStorageRef,
+	urlToKey,
+	workKeyPrefix,
+} from "../../services/storage/keys.js";
+import { signWorkObject } from "../../services/storage/own.js";
 import { mediaUploadKeyFor } from "../../services/upload-sessions.js";
 import {
 	attachPreviewMedia,
@@ -111,6 +117,28 @@ async function uploadLengthGuard(
 const DIRECT_UPLOAD_MAX = isLocalStorage ? 500 * 1024 * 1024 : 10 * 1024 * 1024;
 const IMAGE_UPLOAD_MAX = 10 * 1024 * 1024;
 
+/**
+ * The media types whose object belongs to a Work rather than to an account or a Project.
+ *
+ * A `workId` on the form is honored only for these; the rest — an avatar, a banner, an
+ * inline post image, a Project's cover — stay under the uploader's creator prefix even if
+ * a client sends one, because moving them into a Work's namespace would give the Work a
+ * key it does not own and the purge a file it must not take.
+ */
+const WORK_MEDIA_TYPES: ReadonlySet<string> = new Set([
+	"video",
+	"audio",
+	"asset",
+	"preview-video",
+	"preview-image",
+	"preview-caption",
+	"caption",
+	"thumbnail",
+	"gallery",
+	"image",
+	"screenshot",
+]);
+
 /** Multipart framing around one file: boundaries, part headers, and the form's other fields. */
 const MULTIPART_SLACK = 64 * 1024;
 
@@ -133,16 +161,25 @@ const uploadsRoutes = new Hono()
 				filename: z.string().min(1).max(255),
 				contentType: z.string().min(1).max(100),
 				mediaType: z.enum(["video", "audio", "asset", "preview-video"]),
+				/** The Work the media belongs to; its id is the destination key's namespace. */
+				workId: z.number().int().positive(),
 			}),
 		),
 		async (c) => {
-			const { filename, contentType, mediaType } = c.req.valid("json");
+			const { filename, contentType, mediaType, workId } = c.req.valid("json");
 			const user = c.get("user");
+
+			const [work] = await db
+				.select({ id: works.id })
+				.from(works)
+				.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+				.limit(1);
+			if (!work) return c.json({ error: "Work not found" }, 404);
 
 			// The key naming is the session service's one naming — a session's destination
 			// and a presign's destination are the same layout by construction now, not by
 			// two kept-in-step literals.
-			const key = mediaUploadKeyFor(user.id, mediaType, filename);
+			const key = mediaUploadKeyFor(work.id, mediaType, filename);
 
 			if (isLocalStorage) {
 				return c.json({
@@ -190,12 +227,33 @@ const uploadsRoutes = new Hono()
 			const file = formData.get("file");
 			const mediaType = formData.get("mediaType") as string | null;
 			const entityId = formData.get("entityId") as string | null;
+			const workIdRaw = formData.get("workId");
 			// `purpose=source` names the whole picture a framing surface keeps in its `*Source`
 			// column. The source is owner-only, so it is stored private under `sources/`; the
 			// derivative the frame route writes is the public display image.
 			const purpose = formData.get("purpose") as string | null;
 
 			if (!(file instanceof File)) return c.json({ error: "No file provided" }, 400);
+
+			// A Work-media upload names its Work, and the caller must own it. An account or
+			// Project image sends no workId and keeps the creator prefix.
+			let work: { id: number; creatorId: number | null } | null = null;
+			if (workIdRaw != null && workIdRaw !== "") {
+				if (!WORK_MEDIA_TYPES.has(mediaType ?? "")) {
+					return c.json({ error: "That media type does not belong to a Work." }, 400);
+				}
+				const workId = Number(workIdRaw);
+				if (!Number.isInteger(workId) || workId <= 0) {
+					return c.json({ error: "Work not found" }, 404);
+				}
+				const [row] = await db
+					.select({ id: works.id, creatorId: works.creatorId })
+					.from(works)
+					.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+					.limit(1);
+				if (!row) return c.json({ error: "Work not found" }, 404);
+				work = row;
+			}
 
 			const isMedia =
 				mediaType === "video" ||
@@ -235,7 +293,10 @@ const uploadsRoutes = new Hono()
 
 			const ext = isImage ? "webp" : file.name.includes(".") ? file.name.split(".").pop() : "";
 			const uuid = crypto.randomUUID().replace(/-/g, "");
-			const prefix = `creators/${user.id}`;
+			const prefix = work
+				? // The switch below joins with its own `/`, so the helper's trailing slash comes off.
+					workKeyPrefix(work.id).replace(/\/$/, "")
+				: `creators/${user.id}`;
 			let key: string;
 			// Which quarantine subject a match on this object would name. `null` means the
 			// object is not scanned here at all — see `scannedObjectKind`.
@@ -372,11 +433,13 @@ const uploadsRoutes = new Hono()
 				source: z.string().min(1).max(500),
 				mediaType: z.string(),
 				crop: z.unknown(),
+				/** The Work the source belongs to, when the surface is a Work's thumbnail. */
+				workId: z.number().int().positive().optional(),
 			}),
 		),
 		async (c) => {
 			const user = c.get("user");
-			const { source, mediaType, crop: rawCrop } = c.req.valid("json");
+			const { source, mediaType, crop: rawCrop, workId } = c.req.valid("json");
 			if (!isImageFrameType(mediaType)) {
 				return c.json({ error: "That image surface can't be framed.", code: "frame_type" }, 400);
 			}
@@ -384,7 +447,20 @@ const uploadsRoutes = new Hono()
 			if (!crop) {
 				return c.json({ error: "That frame isn't a valid window.", code: "frame_crop" }, 400);
 			}
-			if (!(await isOwnStorageRef(source, user.id))) {
+			let work: { id: number; creatorId: number | null } | null = null;
+			if (workId != null) {
+				const [row] = await db
+					.select({ id: works.id, creatorId: works.creatorId })
+					.from(works)
+					.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+					.limit(1);
+				if (!row) return c.json({ error: "Work not found" }, 404);
+				work = row;
+			}
+			const owned = work
+				? await isOwnWorkStorageRef(source, work)
+				: await isOwnStorageRef(source, user.id);
+			if (!owned) {
 				return c.json(FOREIGN_FILE_REFUSAL, 403);
 			}
 			const sourceKey = urlToKey(source);
@@ -404,7 +480,7 @@ const uploadsRoutes = new Hono()
 				}
 				throw err;
 			}
-			const key = framedImageKey(user.id, mediaType);
+			const key = framedImageKey(work ? { workId: work.id } : { userId: user.id }, mediaType);
 			await storage.upload(key, framed, "image/webp", "public");
 			const objectKind = scannedObjectKind(mediaType);
 			if (objectKind) {
@@ -468,7 +544,7 @@ const uploadsRoutes = new Hono()
 			.from(workCaptionTracks)
 			.where(and(eq(workCaptionTracks.workId, item.id), eq(workCaptionTracks.id, trackId)));
 		if (!track) return c.json({ error: "Not found" }, 404);
-		await deleteCaptionTrack(track, item.creatorId);
+		await deleteCaptionTrack(track, item);
 		const remaining = await listCaptionTracks(item.id);
 		return c.json({
 			captions: remaining.map((t) =>
@@ -681,7 +757,7 @@ const uploadsRoutes = new Hono()
 		if (!track) return c.json({ error: "Not found" }, 404);
 		const captionRefusal = await mediaMutabilityRefusal(work);
 		if (captionRefusal) return c.json(captionRefusal.body, captionRefusal.status);
-		await deletePreviewCaptionTrack(track, work.creatorId ?? -1);
+		await deletePreviewCaptionTrack(track, work);
 		const remaining = await listPreviewCaptionTracks(previewId);
 		const ctx = deliveryCtx(c) ?? localDelivery;
 		return c.json({
@@ -706,7 +782,7 @@ const uploadsRoutes = new Hono()
 		}
 		const preview = await findPreviewMedia(work.id, previewId);
 		if (!preview) return c.json({ error: "Not found" }, 404);
-		const url = await signOwnWorkObject(preview.file, work.creatorId, {
+		const url = await signWorkObject(preview.file, work, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});

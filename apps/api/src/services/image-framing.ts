@@ -22,6 +22,7 @@ import {
 	type ImageFrameType,
 } from "@anthers/shared/image-frame";
 import sharp from "sharp";
+import { creatorKeyPrefix, workKeyPrefix } from "./storage/keys.js";
 
 /** A refusal the route can say in the creator's own words, rather than a 500. */
 export class ImageFrameRefusal extends Error {}
@@ -34,10 +35,22 @@ const FRAMED_PREFIX: Record<ImageFrameType, string> = {
 };
 
 /**
- * The key a framed derivative is written to. It sits under the creator's own prefix so
- * `isOwnStorageRef` covers it like every other upload, and under the surface's existing
- * public-chrome prefix so the bucket policy needs no new case.
+ * The key a framed derivative is written to.
+ *
+ * Under the Work's namespace when the surface is a Work's thumbnail, and under the
+ * uploader's creator prefix for the profile surfaces — so `isOwnWorkStorageRef` and
+ * `isOwnStorageRef` each cover the shape they own, and the bucket policy needs no new
+ * public prefix.
  */
+export function framedImageKey(
+	owner: { userId: number } | { workId: number },
+	mediaType: ImageFrameType,
+): string {
+	const uuid = crypto.randomUUID().replace(/-/g, "");
+	const prefix = "workId" in owner ? workKeyPrefix(owner.workId) : creatorKeyPrefix(owner.userId);
+	return `${prefix}${FRAMED_PREFIX[mediaType]}/framed/${uuid}.webp`;
+}
+
 /**
  * Re-encode an uploaded display image before it is stored.
  *
@@ -53,11 +66,6 @@ export async function normalizeDisplayImage(source: Buffer): Promise<Buffer> {
 		.resize(2048, 2048, { fit: "inside", withoutEnlargement: true })
 		.webp({ quality: 90 })
 		.toBuffer();
-}
-
-export function framedImageKey(userId: number, mediaType: ImageFrameType): string {
-	const uuid = crypto.randomUUID().replace(/-/g, "");
-	return `creators/${userId}/${FRAMED_PREFIX[mediaType]}/framed/${uuid}.webp`;
 }
 
 /**

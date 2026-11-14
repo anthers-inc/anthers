@@ -34,7 +34,7 @@ import {
 import { hasSourceSet } from "@anthers/shared/content";
 import { and, desc, eq, gte, ne } from "drizzle-orm";
 import { storage } from "./storage/index.js";
-import { isKeyUnder, urlToKey } from "./storage/keys.js";
+import { isWorkMediaKey, urlToKey } from "./storage/keys.js";
 
 type WorkRow = typeof works.$inferSelect;
 type SourceFileRow = typeof workSourceFiles.$inferSelect;
@@ -454,9 +454,8 @@ export async function removeWorkVersion(work: WorkRow, versionId: number): Promi
 		.limit(1);
 	if (!version) return false;
 	const inUse = await keysInUse(work, version.id);
-	const owner = work.creatorId;
 	const keys = [...keysInMedia(version.media)].filter(
-		(key) => !inUse.has(key) && owner != null && isKeyUnder(key, owner),
+		(key) => !inUse.has(key) && isWorkMediaKey(key, work),
 	);
 	await db.delete(workMediaVersions).where(eq(workMediaVersions.id, version.id));
 	for (const key of keys) {

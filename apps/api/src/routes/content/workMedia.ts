@@ -48,8 +48,8 @@ import { collectWorkMedia, sweepCollected } from "../../services/media-purge.js"
 import { queueWorkSave, queueWorkSaveRemoval } from "../../services/reader-state-migration.js";
 import { markPurchaseDownloaded } from "../../services/refunds.js";
 import { storage } from "../../services/storage/index.js";
-import { isKeyUnder, urlToKey } from "../../services/storage/keys.js";
-import { signOwnWorkObject } from "../../services/storage/own.js";
+import { isWorkMediaKey, urlToKey, type WorkStorageOwner } from "../../services/storage/keys.js";
+import { signWorkObject } from "../../services/storage/own.js";
 import {
 	findWorkVersion,
 	listWorkVersions,
@@ -254,7 +254,7 @@ const workMediaRoutes = new Hono()
 
 		// Assets are stored private; hand back a short-lived signed URL (local mode
 		// ignores signing and serves via /content).
-		const url = await signOwnWorkObject(asset.file, work.creatorId, {
+		const url = await signWorkObject(asset.file, work, {
 			signed: true,
 			expiresIn: 300,
 		});
@@ -315,7 +315,7 @@ const workMediaRoutes = new Hono()
 		if (files.length === 1) {
 			// A single original is one attachment URL; the browser saves it without this
 			// process touching the bytes.
-			const url = await signOwnWorkObject(files[0].file, work.creatorId, {
+			const url = await signWorkObject(files[0].file, work, {
 				signed: true,
 				expiresIn: 300,
 				download: files[0].filename,
@@ -530,7 +530,7 @@ const workMediaRoutes = new Hono()
 			.limit(1);
 		if (!job?.outputFileUrl) return c.json({ error: "Not found" }, 404);
 
-		const url = await signOwnWorkObject(job.outputFileUrl, work.creatorId, {
+		const url = await signWorkObject(job.outputFileUrl, work, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
@@ -570,7 +570,7 @@ const workMediaRoutes = new Hono()
 		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
 		if (limited) return c.json(limited, 403);
 
-		const url = await signOwnWorkObject(work.sourceKey, work.creatorId, {
+		const url = await signWorkObject(work.sourceKey, work, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
@@ -613,7 +613,7 @@ const workMediaRoutes = new Hono()
 			.limit(1);
 		if (!page) return c.json({ error: "Not found" }, 404);
 
-		const url = await signOwnWorkObject(page.file, work.creatorId, {
+		const url = await signWorkObject(page.file, work, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
@@ -708,7 +708,7 @@ const workMediaRoutes = new Hono()
 			.limit(1);
 		if (!section) return c.json({ error: "Not found" }, 404);
 
-		const url = await signOwnWorkObject(section.file, work.creatorId, {
+		const url = await signWorkObject(section.file, work, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
@@ -744,7 +744,7 @@ const workMediaRoutes = new Hono()
 			.limit(1);
 		if (!asset) return c.json({ error: "Not found" }, 404);
 
-		const url = await signOwnWorkObject(asset.file, work.creatorId, {
+		const url = await signWorkObject(asset.file, work, {
 			signed: true,
 			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 		});
@@ -1098,7 +1098,7 @@ const workMediaRoutes = new Hono()
 		// HLS request 404. The audio endpoint above already used the helper, so the two
 		// delivery routes disagreed about how to read the same kind of URL.
 		const masterKey = urlToKey(manifestUrl);
-		if (work.creatorId == null || !isKeyUnder(masterKey, work.creatorId)) {
+		if (!isWorkMediaKey(masterKey, work)) {
 			return c.json({ error: "Not found" }, 404);
 		}
 		const prefixKey = masterKey.replace(/\/[^/]+$/, "");
@@ -1129,7 +1129,7 @@ const workMediaRoutes = new Hono()
 				mediaToken: c.req.query("media") ?? null,
 			},
 			workId,
-			creatorId: work.creatorId,
+			work,
 		});
 		return c.body(rewritten, 200, {
 			"Content-Type": "application/vnd.apple.mpegurl",
@@ -1149,7 +1149,7 @@ export async function rewriteHlsPlaylist(
 		prefixKey: string;
 		ctx: DeliveryCtx;
 		workId: number;
-		creatorId: number | null;
+		work: WorkStorageOwner;
 	},
 ): Promise<string> {
 	const out: string[] = [];
@@ -1164,7 +1164,7 @@ export async function rewriteHlsPlaylist(
 			out.push(buildHlsManifestUrl(opts.ctx, opts.workId, encodeURIComponent(line)));
 		} else {
 			// A segment (e.g. "720p_000.ts") → a short-lived signed CDN URL.
-			const segment = await signOwnWorkObject(`${opts.prefixKey}/${line}`, opts.creatorId, {
+			const segment = await signWorkObject(`${opts.prefixKey}/${line}`, opts.work, {
 				signed: true,
 				expiresIn: SIGNED_MEDIA_TTL_SECONDS,
 			});

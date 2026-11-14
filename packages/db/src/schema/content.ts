@@ -1823,7 +1823,13 @@ export const mediaUploadSessions = pgTable(
 		creatorId: integer("creator_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		/** The destination key, in the creator's own prefix — the session completes into it. */
+		/**
+		 * The Work this upload is destined for. Every media type a session carries is Work
+		 * media, so the destination key lives under `works/{workId}/`; the column is
+		 * nullable only because rows written before Work-scoped keys exist.
+		 */
+		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
+		/** The destination key, in the Work's own prefix — the session completes into it. */
 		key: text("key").notNull(),
 		/** The storage backend's own multipart handle; opaque outside the storage module. */
 		uploadId: text("upload_id").notNull(),
@@ -1848,7 +1854,7 @@ export const mediaUploadSessions = pgTable(
 	(table) => [
 		index("idx_upload_sessions_open_age").on(table.status, table.createdAt),
 		// The resume lookup: a start naming a digest finds its creator's open session
-		// by it, on a table every upload ever completed accumulates.
-		index("idx_upload_sessions_resume").on(table.creatorId, table.clientSha256),
+		// for that Work by it, on a table every upload ever completed accumulates.
+		index("idx_upload_sessions_resume").on(table.creatorId, table.workId, table.clientSha256),
 	],
 );

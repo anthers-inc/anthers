@@ -364,9 +364,9 @@ describe("web build upload surface", () => {
 		expect(build.isPrimary).toBe(true);
 		const files = await db.select().from(workBuildFiles).where(eq(workBuildFiles.buildId, buildId));
 		expect(files).toHaveLength(5);
-		// Every key sits under the build's prefix — the property the delivery route resolves against.
+		// Every key sits under the Work's build prefix — the property the delivery route resolves against.
 		for (const f of files) {
-			expect(f.storageKey.startsWith(`creators/${creator.id}/web-builds/${buildId}/`)).toBe(true);
+			expect(f.storageKey.startsWith(`works/${workId}/web-builds/${buildId}/`)).toBe(true);
 		}
 		// Re-registering the same path updates in place rather than duplicating.
 		const again = await call(

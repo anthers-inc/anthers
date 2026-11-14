@@ -29,10 +29,12 @@ import type { PhysicalImage } from "./physical-listing";
 const MAX_IMAGES = 8;
 
 export function PhysicalImagesEditor({
+	workId,
 	images,
 	onChange,
 	onDone,
 }: {
+	workId: number;
 	images: PhysicalImage[];
 	onChange: (images: PhysicalImage[]) => Promise<void>;
 	onDone: () => void;
@@ -56,7 +58,7 @@ export function PhysicalImagesEditor({
 			const uploaded: PhysicalImage[] = [];
 			for (const file of picked) {
 				// The upload's own address stands in until the save hands back the read's.
-				const { key, url } = await uploadImageFile(file, "thumbnail");
+				const { key, url } = await uploadImageFile(file, "thumbnail", undefined, undefined, workId);
 				uploaded.push({
 					key,
 					alt: "",

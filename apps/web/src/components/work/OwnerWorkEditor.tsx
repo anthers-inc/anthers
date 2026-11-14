@@ -530,10 +530,10 @@ export default function OwnerWorkEditor({
 		setThumbError(null);
 		try {
 			const source = thumbFrame.file
-				? (await uploadImageSource(thumbFrame.file, "thumbnail")).url
+				? (await uploadImageSource(thumbFrame.file, "thumbnail", undefined, work.id)).url
 				: thumbFrame.source;
 			if (!source) throw new Error("That image isn't available any more. Upload it again.");
-			const { url } = await frameImageFile(source, "thumbnail", crop);
+			const { url } = await frameImageFile(source, "thumbnail", crop, undefined, work.id);
 			setThumbnailUrl(url);
 			setThumbnailPreview(url);
 			await saveFields({ thumbnail: url, thumbnailSource: source, thumbnailCrop: crop });
@@ -2834,7 +2834,7 @@ function BuildsEditor({
 		onAdded?.(null);
 		setProgress(null);
 		try {
-			const fileKey = await uploadMediaFile(file, "asset", setProgress);
+			const fileKey = await uploadMediaFile(file, "asset", work.id, setProgress);
 			const res = await client.api.content.works[":id"].assets.$post({
 				param: { id: String(work.id) },
 				json: {

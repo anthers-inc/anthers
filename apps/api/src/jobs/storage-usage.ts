@@ -290,7 +290,22 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		}
 	}
 
-	// ── A paged Work's derived storage, one prefix read per creator ─────────────
+	// ── A paged Work's derived storage, one prefix read per Work ─────────────────
+	// ⭐ **A Work's namespace makes the prefix per-Work, so a preserved Work's bytes
+	// are excluded by the query rather than subtracted afterwards.** The legacy
+	// creator-wide block below stays until the migration has moved every Work, because
+	// until then a Work's objects may still sit under its publisher's prefix.
+	const pagedWorkPrefixes = await db
+		.selectDistinct({ id: works.id, creatorId: works.creatorId, type: works.type })
+		.from(works)
+		.where(and(isNotNull(works.creatorId), eq(works.preserved, false)));
+	for (const row of pagedWorkPrefixes) {
+		if (row.creatorId == null || !isPaged(row.type)) continue;
+		const bytes = await prefixBytes(`works/${row.id}/ebook/`);
+		if (bytes > 0) add(account(row.creatorId).purposes, "catalog", bytes);
+	}
+
+	// ── A paged Work's derived storage, one prefix read per creator (legacy) ─────
 	// The rendered pages (and a reflow ebook's ladder sections) live entirely under
 	// `creators/{id}/ebook/`, one per-run sub-prefix per render or ingest — the same
 	// deterministic prefix `media-purge.ts` sweeps. No table carries these sizes, so
@@ -320,14 +335,22 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		purposes.catalog = Math.max(0, purposes.catalog - bytes);
 	}
 
-	// ── Preview media, one prefix read per creator, less what the program holds ──
-	// A Work's storefront screenshots, trailer and trailer captions all live under
-	// `creators/{id}/previews/` by construction, and no row carries the images' byte
-	// sizes — the inline-images bend again, bounded to creators who have previews.
-	// ⚠️ **The prefix is creator-wide and its keys carry no Work id**, so a preserved
-	// Work's previews cannot be excluded from the walk. They are subtracted instead, one
-	// preserved row at a time: a `size()` per object, which is the same bounded read the
-	// Work record's own media already pays, and only for Works the program holds.
+	// ── Preview media, one prefix read per Work ─────────────────────────────────
+	// ⭐ **The Work's own prefix ends the subtraction the legacy walk needed.** A
+	// preserved Work is excluded by the query, so its screenshots and trailers are never
+	// counted and never have to be taken back out.
+	const previewWorkPrefixes = await db
+		.selectDistinct({ id: works.id, creatorId: works.creatorId })
+		.from(workPreviewMedia)
+		.innerJoin(works, eq(workPreviewMedia.workId, works.id))
+		.where(and(isNotNull(works.creatorId), eq(works.preserved, false)));
+	for (const row of previewWorkPrefixes) {
+		if (row.creatorId == null) continue;
+		const bytes = await prefixBytes(`works/${row.id}/previews/`);
+		if (bytes > 0) add(account(row.creatorId).purposes, "catalog", bytes);
+	}
+
+	// ── Preview media, one prefix read per creator (legacy) ─────────────────────
 	const previewCreators = await db
 		.selectDistinct({ creatorId: works.creatorId })
 		.from(workPreviewMedia)

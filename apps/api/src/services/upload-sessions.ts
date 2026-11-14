@@ -17,9 +17,10 @@
  */
 
 import { db } from "@anthers/db/client";
-import { mediaUploadSessions } from "@anthers/db/schema";
+import { mediaUploadSessions, works } from "@anthers/db/schema";
 import { and, desc, eq, lt } from "drizzle-orm";
 import { storage } from "./storage/index.js";
+import { workKeyPrefix } from "./storage/keys.js";
 
 /** How large a part the plan asks the client to send: R2's floor is 5 MiB; 64 MiB keeps
  * even a multi-gigabyte object a modest part count, small enough for a failed part's
@@ -42,26 +43,40 @@ export const MAX_SESSION_BYTES = UPLOAD_PART_SIZE * MAX_PARTS;
 export type UploadMediaType = "video" | "audio" | "asset" | "preview-video";
 
 /**
- * The destination key for a session — one key naming for every media upload: this
- * function is what the presign route calls too, so a session's destination and a
+ * The destination key for a Work-media upload — one key naming for every media upload:
+ * this function is what the presign route calls too, so a session's destination and a
  * presign's destination are the same layout by construction.
+ *
+ * ⭐ **Work-scoped, never creator-scoped.** The object belongs to the Work, so it survives
+ * its uploader leaving the collaboration and a publisher handover moves no bytes.
  */
 export function mediaUploadKeyFor(
-	creatorId: number,
+	workId: number,
 	mediaType: UploadMediaType,
 	filename: string,
 ): string {
 	const ext = filename.includes(".") ? filename.split(".").pop() : "";
 	const uuid = crypto.randomUUID().replace(/-/g, "");
+	const prefix = workKeyPrefix(workId);
 	const map = {
-		video: `creators/${creatorId}/videos/originals/${uuid}.${ext}`,
-		audio: `creators/${creatorId}/audio/originals/${uuid}.${ext}`,
-		asset: `creators/${creatorId}/assets/${uuid}.${ext}`,
+		video: `${prefix}videos/originals/${uuid}.${ext}`,
+		audio: `${prefix}audio/originals/${uuid}.${ext}`,
+		asset: `${prefix}assets/${uuid}.${ext}`,
 		// One `previews/` prefix covers every preview object — screenshots, trailers and
 		// their caption files — so the storage sweep and the usage counter see them together.
-		"preview-video": `creators/${creatorId}/previews/videos/${uuid}.${ext}`,
+		"preview-video": `${prefix}previews/videos/${uuid}.${ext}`,
 	} as const;
 	return map[mediaType];
+}
+
+/** A session start that cannot proceed, with the status the route should answer. */
+export class SessionStartError extends Error {
+	constructor(
+		message: string,
+		readonly status: number,
+	) {
+		super(message);
+	}
 }
 
 export interface MultipartSession {
@@ -88,9 +103,25 @@ export async function startUploadSession(
 		contentType: string;
 		mediaType: UploadMediaType;
 		size: number;
+		/**
+		 * The Work the media belongs to. Required, because every media kind a session
+		 * carries is Work media and the destination key is the Work's to own.
+		 */
+		workId: number;
 		clientSha256?: string | null;
 	},
 ): Promise<MultipartSession> {
+	// The route has already refused a stranger's Work, but the service is the door every
+	// caller reaches; a session minted against somebody else's Work would write into it.
+	const [work] = await db
+		.select({ id: works.id, creatorId: works.creatorId })
+		.from(works)
+		.where(eq(works.id, input.workId))
+		.limit(1);
+	if (!work || work.creatorId !== creatorId) {
+		throw new SessionStartError("Work not found", 404);
+	}
+
 	const partCount = Math.max(1, Math.ceil(input.size / UPLOAD_PART_SIZE));
 	if (partCount > MAX_PARTS) {
 		throw new Error(
@@ -105,6 +136,7 @@ export async function startUploadSession(
 			.where(
 				and(
 					eq(mediaUploadSessions.creatorId, creatorId),
+					eq(mediaUploadSessions.workId, input.workId),
 					eq(mediaUploadSessions.clientSha256, input.clientSha256),
 					eq(mediaUploadSessions.status, "open"),
 				),
@@ -137,12 +169,13 @@ export async function startUploadSession(
 		}
 	}
 
-	const key = mediaUploadKeyFor(creatorId, input.mediaType, input.filename);
+	const key = mediaUploadKeyFor(input.workId, input.mediaType, input.filename);
 	const { uploadId } = await storage.createMultipartUpload(key, input.contentType, "private");
 	const [row] = await db
 		.insert(mediaUploadSessions)
 		.values({
 			creatorId,
+			workId: input.workId,
 			key,
 			uploadId,
 			contentType: input.contentType,
