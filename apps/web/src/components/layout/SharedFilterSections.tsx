@@ -30,6 +30,7 @@
  * outlived Browse's retired filter machinery.
  */
 
+import { sidebarRowClass } from "@anthers/web-shared/sidebar-row-class";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import {
 	CubeTransparentIcon,
@@ -40,7 +41,6 @@ import {
 import { useMemo, useState } from "react";
 import AccessFilterSection from "./AccessFilterSection";
 import { CONTENT_TYPES, TAGS_BY_TYPE } from "./content-vocabulary";
-import { sidebarRowClass } from "./sidebar-row-class";
 
 /**
  * The unified type vocabulary every tab's sidebar shows. `CONTENT_TYPES`' All stays
