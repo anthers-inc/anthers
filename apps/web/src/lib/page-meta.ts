@@ -159,6 +159,10 @@ export function pageMeta(pathname: string): PageMeta | null {
  *
  * The homepage is included here though `pageMeta` answers null for it, because it is the one
  * route that needs no card of its own and is still the page a sitemap exists to name.
+ *
+ * 🚨 **This list is also the prerender list.** `pages/standing-pages.tsx` renders one reader
+ * body per address here, so a page added to the sitemap without a body — or rendered without
+ * a sitemap entry — is a failing test rather than a quiet gap between two lists.
  */
 export function indexablePaths(): string[] {
 	return ["/", ...Object.keys(PAGES), ...Object.keys(LEGAL_PATHS)];
