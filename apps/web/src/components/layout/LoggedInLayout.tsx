@@ -322,6 +322,19 @@ export default function LoggedInLayout() {
 					phoneTabbed ? "phone-tabbed" : ""
 				}`}
 			>
+				{/* The phone's status bar and camera cutout, claimed once at the top of the shell
+				    rather than inside the header. The alpha notice sits above the top bar now, so
+				    the inset has to sit above that too, while the notice's ground is what the
+				    strip paints — the inset never shows the page behind it. It stays mounted
+				    whether or not the reader has closed the notice, so the header below is
+				    unchanged in either state. */}
+				<div className="safe-top bg-base-200" aria-hidden="true" />
+
+				{/* The shell's topmost strip, above the top bar rather than in the stack of status
+				    banners below it: this one is the standing announcement, not a condition of the
+				    account. */}
+				<AlphaNotice />
+
 				{/* Top bar: brand and the mode switch on the left, search in the middle, the
 		    reader's own controls on the right. It is the one header in both modes; studio
 		    mode leaves out search, the notifications and the cart, which belong to user mode,
@@ -330,12 +343,10 @@ export default function LoggedInLayout() {
 		    and the account menu left on 2026-10-26 — the sidebar is the door to Settings and
 		    Badges and Purchases live in the account pages' sidebar rows.
 
-		    ⚠️ **The safe-area strip is INSIDE the header, not padding on it.** The bar is a
-		    fixed `h-14` and the page's background sits behind it, so padding on the header
-		    would eat into the bar's own height; a strip above the navbar grows the header by
-		    the inset and paints the same backdrop under the status bar and camera cutout. */}
+		    ⚠️ **The safe-area strip is no longer this header's.** It moved to the top of the
+		    shell when the alpha notice was placed above the bar (2026-11-13): an inset inside
+		    the header would leave the notice under the status bar. */}
 				<header className="nav-edge bg-base-200/50 backdrop-blur-md sticky top-0 z-40">
-					<div className="safe-top" aria-hidden="true" />
 					<div className="navbar px-4 h-14 min-h-0">
 						<div className="navbar-start gap-3">
 							{/* A plain flex link rather than a `btn`, for the same reason as the brand link in
@@ -402,10 +413,6 @@ export default function LoggedInLayout() {
 
 				<PublishingPermissionBanner />
 				<IdentityServerBanner />
-				{/* The alpha notice comes last of the three strips: it is the calmest of them, and a
-				    real permission problem belongs above a standing announcement rather than under
-				    it. It is also the only one that stays until the reader closes it. */}
-				<AlphaNotice />
 
 				{/* Body: sidebar + main content */}
 				<div className="relative flex flex-1 overflow-hidden">
