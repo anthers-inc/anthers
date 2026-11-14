@@ -60,6 +60,7 @@ import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { heldAnthersBadgeAmount, heldAnthersBadgeAmountInCycle } from "./anthers-badges.js";
 import { adultAccessFor } from "./content-preferences.js";
 import { parentalPolicyFor } from "./parental-controls.js";
+import { workOwnerIdsForWorks } from "./work-owners.js";
 
 export { heldAnthersBadgeAmount, heldAnthersBadgeAmountInCycle };
 
@@ -134,6 +135,17 @@ export interface AccessContext {
 	supportByCreator: Map<number, number>;
 	/** Work ids the user has a completed purchase for */
 	purchasedWorkIds: Set<number>;
+	/**
+	 * Work ids this user owns — the publisher or an accepted collaborator.
+	 *
+	 * 🚨 **The owner check is a set in the context rather than a comparison against
+	 * `works.creatorId`, because the resolver is synchronous and runs in batches.** A
+	 * Collab Work has several owners, and resolving a page of them must not add a query per
+	 * Work. `buildAccessContext` loads the set for the Works it was scoped to; a context
+	 * built without work ids owns nothing it can prove, and the route's own reachability
+	 * check is what gates a private Work.
+	 */
+	ownedWorkIds?: Set<number>;
 	/**
 	 * May this user reach Works rated `adult`? The AND of the account-level opt-in and a
 	 * one-time adulthood verification — `services/content-preferences.ts` owns both.
@@ -231,6 +243,9 @@ export function buildPreviewContext(opts: {
 		// empty rather than being special-cased in the resolver.
 		supportByCreator: signedOut ? new Map() : new Map([[opts.creatorId, opts.given ?? 0]]),
 		purchasedWorkIds: !signedOut && opts.owned ? new Set(opts.workIds) : new Set(),
+		// A preview asks what a stranger sees; the imagined user owns nothing, so the
+		// owner branch cannot fire and the ladder is answered on its own terms.
+		ownedWorkIds: new Set(),
 		// The imagined signed-in user has opted in and verified; the signed-out one cannot
 		// have, because there is no account to hold the setting.
 		//
@@ -469,8 +484,15 @@ function resolveAccessBase(work: AccessibleWork, ctx: AccessContext): AccessResu
 		return { ...base, canAccess: false, reason: "takedown" };
 	}
 
-	// Creators always see their own content.
-	if (ctx.userId != null && ctx.userId === work.creatorId) {
+	// Creators always see their own content — the publisher and every accepted co-owner.
+	// A context built outside `buildAccessContext` (the resolver's own tests, mainly)
+	// carries no set, and falls back to the publisher comparison those contexts were
+	// written against.
+	const ownsWork =
+		ctx.ownedWorkIds != null
+			? ctx.ownedWorkIds.has(work.id)
+			: ctx.userId != null && ctx.userId === work.creatorId;
+	if (ctx.userId != null && ownsWork) {
 		return { ...base, canAccess: true, reason: "owner" };
 	}
 
@@ -732,6 +754,7 @@ export async function buildAccessContext(
 			userId: null,
 			supportByCreator: new Map(),
 			purchasedWorkIds: new Set(),
+			ownedWorkIds: new Set(),
 			// A signed-out visitor has no account and therefore no opt-in to read. Stated
 			// here rather than left to a default so the closed answer is visible at the one
 			// place the logged-out context is built.
@@ -750,6 +773,13 @@ export async function buildAccessContext(
 
 	const cycle = currentBillingCycle();
 	const scoped = opts.workIds && opts.workIds.length > 0;
+	const ownedWorkIds = new Set<number>();
+	if (scoped) {
+		const owners = await workOwnerIdsForWorks(opts.workIds as number[]);
+		for (const [workId, ids] of owners) {
+			if (ids.includes(userId)) ownedWorkIds.add(workId);
+		}
+	}
 
 	// What this user gives each creator this cycle: the threshold of the Badge they hold.
 	// A holding is a discrete pick of a named Badge (one row per user, badge and cycle),
@@ -826,6 +856,7 @@ export async function buildAccessContext(
 		purchasedWorkIds: new Set(
 			purchaseRows.map((p) => p.workId).filter((id): id is number => id !== null),
 		),
+		ownedWorkIds,
 		adultAccess: adult.canReach,
 		parental,
 		// Deliberately null even if a share token rode along on this request. Somebody with
@@ -877,17 +908,46 @@ export function defaultSeedAccess(): AccessRow[] {
 export async function normalizeAccessRows(
 	creatorId: number,
 	rows: readonly AccessRow[],
+	opts: { collabWork?: boolean; ownerIds?: readonly number[] } = {},
 ): Promise<{ rows: AccessRow[] } | { error: string }> {
+	// Whose ladder this table may draw on. A solo Work is the caller's own; a co-owned
+	// Work's gate belongs to the Work, so any owner's rung is legal and an owner editing
+	// the table cannot silently drop the gate a co-owner set on their own Badge.
+	const ownerIds = [...new Set([creatorId, ...(opts.ownerIds ?? [])])];
 	const rungs = await db
 		.select({ id: badges.id, threshold: badges.threshold })
 		.from(badges)
 		.where(
 			or(
-				eq(badges.creatorId, creatorId),
-				sql`EXISTS (SELECT 1 FROM ${badgeCollaborators} WHERE ${badgeCollaborators.badgeId} = ${badges.id} AND ${badgeCollaborators.creatorId} = ${creatorId} AND ${badgeCollaborators.status} = 'accepted')`,
+				inArray(badges.creatorId, ownerIds),
+				sql`EXISTS (SELECT 1 FROM ${badgeCollaborators} WHERE ${badgeCollaborators.badgeId} = ${badges.id} AND ${badgeCollaborators.creatorId} IN (${sql.join(
+					ownerIds.map((id) => sql`${id}`),
+					sql`, `,
+				)}) AND ${badgeCollaborators.status} = 'accepted')`,
 			),
 		);
-	const byId = new Map(rungs.map((r) => [r.id, Number(r.threshold)]));
+	// Which rungs another creator also owns — the Badges that may gate a co-owned Work.
+	// Read as its own query rather than a correlated `EXISTS` in the select, because the
+	// correlated form is the kind of SQL that looks right and silently answers false.
+	const sharedIds = new Set<number>();
+	if (opts.collabWork && rungs.length > 0) {
+		const sharedRows = await db
+			.select({ badgeId: badgeCollaborators.badgeId })
+			.from(badgeCollaborators)
+			.where(
+				and(
+					inArray(
+						badgeCollaborators.badgeId,
+						rungs.map((rung) => rung.id),
+					),
+					eq(badgeCollaborators.status, "accepted"),
+				),
+			);
+		for (const row of sharedRows) sharedIds.add(row.badgeId);
+	}
+	const byId = new Map(
+		rungs.map((r) => [r.id, { threshold: Number(r.threshold), shared: sharedIds.has(r.id) }]),
+	);
 
 	const seen = new Set<number>();
 	const normalized: AccessRow[] = [];
@@ -897,16 +957,27 @@ export async function normalizeAccessRows(
 			continue;
 		}
 		const badgeId = row.badgeId ?? null;
-		if (badgeId === null || !byId.has(badgeId)) {
+		const rung = badgeId === null ? undefined : byId.get(badgeId);
+		if (badgeId === null || !rung) {
 			return {
 				error:
 					"A gate must sit on one of your Badge levels. Add the rung first, or leave the Work open to everyone.",
 			};
 		}
 		if (seen.has(badgeId)) return { error: "A Badge level can gate a Work only once." };
+		// 🚨 **A co-owned Work gates only on a shared Badge or on a direct purchase.** A
+		// solo Badge would let one owner's supporters take a Work whose earnings are split
+		// with people they never gave anything to; a priced row is a purchase door and pays
+		// the Work's owners through the ordinary split, so it stays allowed.
+		if (opts.collabWork && row.allow && Number(row.price) === 0 && !rung.shared) {
+			return {
+				error:
+					"A co-owned Work can only be gated on a Badge another creator owns too, so its support reaches every owner. Add a collaborator to this Badge, or sell the Work directly instead.",
+			};
+		}
 		seen.add(badgeId);
 		normalized.push({
-			threshold: byId.get(badgeId) as number,
+			threshold: rung.threshold,
 			badgeId,
 			allow: row.allow,
 			price: row.price,

@@ -28,7 +28,15 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
-import { comments, posts, purchases, reviews, users, works } from "@anthers/db/schema";
+import {
+	comments,
+	posts,
+	purchases,
+	reviews,
+	users,
+	workCollaborators,
+	works,
+} from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import {
@@ -418,4 +426,55 @@ it("deletes the Stripe Customer before the account wipe", () => {
 	const source = readFileSync(join(import.meta.dir, "../services/account-deletion.ts"), "utf8");
 	expect(source).toContain("deleteBillingCustomer(userId)");
 	expect(source).not.toContain("clearSavedBillingAddress(userId)");
+});
+
+/**
+ * A co-owned Work is not the publisher's to destroy.
+ *
+ * Account deletion already hands a published Badge to another accepted owner; a Collab
+ * Work needs the same handover before the row cascade, or erasing one creator would take
+ * a Work its co-owner still edits and whose buyers still own. The Work moves to the
+ * oldest accepted co-owner, keeps its visibility, and loses the collaborator row that the
+ * anchor now carries.
+ */
+describe("a co-owned Work outlives its publisher's deletion", () => {
+	it("hands the Work to the co-owner instead of deleting or withdrawing it", async () => {
+		const run = crypto.randomUUID().slice(0, 8);
+		const publisherName = `del_copub_${run}`;
+		const coName = `del_cocol_${run}`;
+		await signUp(publisherName);
+		await signUp(coName);
+		const publisherId = (await idOf(publisherName))!;
+		const coId = (await idOf(coName))!;
+		const work = await insertWork({
+			creatorId: publisherId,
+			type: "game",
+			title: `Co-owned ${run}`,
+		});
+		await db.insert(workCollaborators).values({
+			workId: work.id,
+			creatorId: coId,
+			status: "accepted",
+			invitedById: publisherId,
+		});
+
+		const preview = await deletionPreview(publisherId);
+		expect(preview.worksHandedOver).toBe(1);
+		expect(preview.worksDeleted).toBe(0);
+		expect(preview.worksWithdrawn).toBe(0);
+
+		const result = await eraseAccount(publisherId);
+		expect(result.erased).toBe(true);
+
+		const [after] = await db.select().from(works).where(eq(works.id, work.id));
+		expect(after.creatorId).toBe(coId);
+		// The Work was neither destroyed nor withdrawn: its co-owner still publishes it.
+		expect(after.visibility).toBe("released");
+		const collaborators = await db
+			.select()
+			.from(workCollaborators)
+			.where(eq(workCollaborators.workId, work.id));
+		expect(collaborators).toHaveLength(0);
+		expect(await idOf(publisherName)).toBeNull();
+	});
 });

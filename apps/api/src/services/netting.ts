@@ -95,6 +95,7 @@ import {
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import Decimal from "decimal.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
+import { purchaseShares } from "./purchase-splits.js";
 
 const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
@@ -138,50 +139,52 @@ export async function openNettingFor(creatorId: number) {
  * Write a netting row for a purchase dispute — the chargeback path.
  *
  * Called by the webhook's `charge.dispute.created` branch after `recordDisputeCreated`,
- * with the dispute row and the purchase row it landed on. The netting amount is the
- * purchase row's own `creatorEarnings`: the earnings the creator received for a sale that
- * has now been undone — never the buyer's full charge, never the tax, never the
- * platform's share.
+ * with the dispute row and the purchase row it landed on. The netting amount is each
+ * owner's share of the sale that has now been undone — the purchase row's own
+ * `creatorEarnings` on a solo Work, or the frozen `purchase_splits` slice on a Collab
+ * Work — never the buyer's full charge, never the tax, never the platform's share.
  *
- * Idempotent on the dispute: the `uq_creator_nettings_dispute` unique is the mechanism, so
- * a redelivered event finds the row and changes nothing — the same shape as the dispute
- * insert itself. A dispute with no purchase behind it has no share to net, and a purchase
- * with no creator has nobody to recover from: both no-op, because a netting row with no
- * creator would be a receivable nobody can ever read.
+ * Idempotent on (dispute, creator): the `uq_creator_nettings_dispute` unique is the
+ * mechanism, so a redelivered event finds the row and changes nothing — the same shape as
+ * the dispute insert itself, and the grain a co-owned Work needs. A dispute with no
+ * purchase behind it has no share to net, and a share whose owner deleted their account
+ * has nobody to recover from: both no-op, because a netting row with no creator would be
+ * a receivable nobody can ever read.
  */
 export async function recordNettingForDispute(
 	dispute: Dispute,
 	purchase: Purchase | null,
 	now: Date,
 ): Promise<void> {
-	if (!purchase || purchase.creatorId == null) return;
-	const amount = new Decimal(purchase.creatorEarnings);
-	if (!amount.greaterThan(0)) return;
-
-	await db
-		.insert(creatorNettings)
-		.values({
-			creatorId: purchase.creatorId,
-			disputeId: dispute.id,
-			amount: amount.toFixed(2),
-			openedAt: now,
-		})
-		.onConflictDoNothing({ target: creatorNettings.disputeId });
+	if (!purchase) return;
+	const shares = await purchaseShares(purchase);
+	for (const share of shares) {
+		if (!share.amount.greaterThan(0)) continue;
+		await db
+			.insert(creatorNettings)
+			.values({
+				creatorId: share.creatorId,
+				disputeId: dispute.id,
+				amount: share.amount.toFixed(2),
+				openedAt: now,
+			})
+			.onConflictDoNothing({ target: [creatorNettings.disputeId, creatorNettings.creatorId] });
+	}
 }
 
 /**
  * Write a netting row for a purchase refund whose transfer reversal did not recover the
  * creator's share — the paid-out case.
  *
- * Called from `settleRefundedPurchase` with the outcome of `reverseCreatorShare`'s clawback
- * (and only when the share reached the creator at all — a never-transferred row nets
- * nothing): a reversal that could not be funded is money Anthers could not claw back at
- * Stripe, so it becomes a netting row instead. The amount is the row's `creatorEarnings`
- * — the same share the reversal would have clawed back, by `refunds.ts`'s settled
- * arithmetic.
+ * Called from `settleRefundedPurchase` with each owner's clawback outcome (and only when
+ * the share reached the creator at all — a never-transferred share nets nothing): a
+ * reversal that could not be funded is money Anthers could not claw back at Stripe, so it
+ * becomes a netting row instead. The amount is the share's own slice of the sale — the
+ * same money the reversal would have clawed back, by `refunds.ts`'s settled arithmetic —
+ * so a co-owned Work nets every owner that was paid, one row each.
  *
- * Idempotent on the refund's Stripe id: a redelivered `charge.refunded` finds the row and
- * changes nothing. A refund with no Stripe id (a legacy row) has no identity to be
+ * Idempotent on (refund, purchase, creator): a redelivered `charge.refunded` finds the
+ * row and changes nothing. A refund with no Stripe id (a legacy row) has no identity to be
  * idempotent on and is skipped rather than guessed at — writing an unidentifiable netting
  * row is worse than missing one, because the row's recovery has no bound.
  */
@@ -189,23 +192,30 @@ export async function recordNettingForRefund(
 	purchase: Purchase,
 	stripeRefundId: string | null | undefined,
 	now: Date,
+	share: { creatorId: number; amount: Decimal },
 ): Promise<void> {
-	if (!stripeRefundId || purchase.creatorId == null) return;
-	const amount = new Decimal(purchase.creatorEarnings);
-	if (!amount.greaterThan(0)) return;
+	if (!stripeRefundId) return;
+	if (!share.amount.greaterThan(0)) return;
 
 	await db
 		.insert(creatorNettings)
 		.values({
-			creatorId: purchase.creatorId,
+			creatorId: share.creatorId,
 			purchaseId: purchase.id,
 			stripeRefundId,
-			amount: amount.toFixed(2),
+			amount: share.amount.toFixed(2),
 			openedAt: now,
 		})
-		// The (refund, purchase) pair — a cart refunds as a cart, so one refund
-		// settles several siblings and each sibling's netting is its own row under it.
-		.onConflictDoNothing({ target: [creatorNettings.stripeRefundId, creatorNettings.purchaseId] });
+		// The (refund, purchase, creator) triple — a cart refunds as a cart, so one refund
+		// settles several siblings, and a co-owned Work puts several owners under one
+		// sibling. Each share is its own row.
+		.onConflictDoNothing({
+			target: [
+				creatorNettings.stripeRefundId,
+				creatorNettings.purchaseId,
+				creatorNettings.creatorId,
+			],
+		});
 }
 
 /**

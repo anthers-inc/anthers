@@ -2052,6 +2052,7 @@ interface DeletionPreview {
 	posts: number;
 	worksDeleted: number;
 	worksWithdrawn: number;
+	worksHandedOver: number;
 	purchases: number;
 	hostedHandles: string[];
 	exportedAt: string | null;
@@ -2461,6 +2462,13 @@ function DataSection() {
 													, and {p.worksWithdrawn} withdrawn rather than destroyed because somebody
 													has {p.worksWithdrawn === 1 ? "it" : "them"} in their Library; a saved
 													Work outlives the account that made it
+												</>
+											) : null}
+											{p.worksHandedOver > 0 ? (
+												<>
+													, and {p.worksHandedOver} handed to{" "}
+													{p.worksHandedOver === 1 ? "a co-owner" : "co-owners"} so{" "}
+													{p.worksHandedOver === 1 ? "it stays" : "they stay"} published
 												</>
 											) : null}
 											.

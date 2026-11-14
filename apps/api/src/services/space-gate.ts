@@ -25,6 +25,7 @@ import { users, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { type AccessibleWork, resolveAccess } from "./access.js";
 import { CREATOR_SPACE_TYPE } from "./creator-space-records.js";
+import { isWorkOwner } from "./work-owners.js";
 
 /** Why the gate answered the way it did. Reported to logs, never to the caller. */
 export type SpaceAccessReason =
@@ -127,7 +128,7 @@ export async function authorizeSpaceAccess(query: {
 		return { authorized: false, reason: "unknown-space" };
 	}
 
-	if (work.creatorId === reader.id) return { authorized: true, reason: "owner" };
+	if (await isWorkOwner(work.id, reader.id)) return { authorized: true, reason: "owner" };
 
 	// The creator's own writes to their space are protected by repo ownership rather than by
 	// this gate; nobody else may write into it.

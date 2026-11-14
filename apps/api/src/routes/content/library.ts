@@ -45,6 +45,7 @@ import {
 	queuePosition,
 } from "../../services/reader-state-migration.js";
 import { findPosition, listPositions, upsertPosition } from "../../services/reading-positions.js";
+import { workOwnerProfiles } from "../../services/work-owners.js";
 import {
 	allowanceSpent,
 	deliveryCtx,
@@ -201,6 +202,10 @@ const libraryRoutes = new Hono()
 		const creatorIds = [
 			...new Set(workRows.map((w) => w.creatorId).filter((id): id is number => id != null)),
 		];
+		const ownersByWork = await workOwnerProfiles(
+			workRows.map((w) => w.id),
+			user.id,
+		);
 		const creatorRows = creatorIds.length
 			? await db
 					.select({
@@ -236,7 +241,7 @@ const libraryRoutes = new Hono()
 								purchased: permanent.has(w.id),
 								// The caller made this Work, so the entry is membership rather
 								// than a save: it can be hidden but not removed.
-								owned: w.creatorId === user.id,
+								owned: (ownersByWork.get(w.id) ?? []).some((owner) => owner.id === user.id),
 								work: {
 									...(await serializeWorkForUser(
 										w,
@@ -255,6 +260,7 @@ const libraryRoutes = new Hono()
 									creatorHandle: creator?.creatorHandle ?? null,
 									creatorDisplayName: creator?.creatorDisplayName ?? null,
 									creatorAvatar: creator?.creatorAvatar ?? null,
+									owners: ownersByWork.get(w.id) ?? [],
 									// The published Projects this Work belongs to, for a lens that
 									// groups saved tracks into the release they came from. Empty
 									// for a Work that stands on its own.

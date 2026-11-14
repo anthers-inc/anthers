@@ -36,6 +36,7 @@ import { isBlocked } from "./blocks.js";
 import { notify } from "./notifications.js";
 import { writerForAccount } from "./repo-writer.js";
 import { queueWorkListingSync } from "./work-listing.js";
+import { isWorkOwner } from "./work-owners.js";
 
 /** What happened when a contributor accepted credit. */
 export type AcceptCreditResult =
@@ -502,7 +503,7 @@ export async function creditsForUser(
 		]),
 	);
 	const userDid = userRows[0]?.atprotoDid ?? null;
-	const isWorkOwner = userId != null && userId === work.creatorId;
+	const viewerOwnsWork = userId != null && (await isWorkOwner(work.id, userId));
 
 	const visible: UserWorkCredit[] = [];
 	for (const credit of credits) {
@@ -521,7 +522,7 @@ export async function creditsForUser(
 					contributor: name,
 					contributorProfile: profileForDid.get(credit.contributor),
 				});
-			else if (isWorkOwner || userDid === credit.contributor) visible.push(credit);
+			else if (viewerOwnsWork || userDid === credit.contributor) visible.push(credit);
 			continue;
 		}
 		if (userDid === credit.contributor) {
@@ -532,7 +533,7 @@ export async function creditsForUser(
 			});
 			continue;
 		}
-		if (isWorkOwner) {
+		if (viewerOwnsWork) {
 			visible.push({
 				...credit,
 				awaitingContributorConfirmation: true,

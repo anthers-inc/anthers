@@ -70,11 +70,13 @@ import {
 	reviews,
 	userSessions,
 	users,
+	workCollaborators,
 	works,
 } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { revokeAtprotoGrant } from "./atproto-client.js";
 import { cancelSubscriptionForUser, deleteBillingCustomer } from "./billing.js";
+import { removeCreatorSpace } from "./creator-space.js";
 import { unlinkAccount } from "./discord.js";
 import { escapeHtml, sendOperationalAlert } from "./email.js";
 import { hostedHandlesFor, isHostedIdentity, releaseHostedIdentities } from "./hosted-accounts.js";
@@ -83,6 +85,7 @@ import { addUserImages, collectWorkMedia, sweepCollected } from "./media-purge.j
 import { notifyMany } from "./notifications.js";
 import { hasPreservedVersion } from "./preservation.js";
 import { queueWorkListingSync, takeDownCreatorRecords } from "./work-listing.js";
+import { removeWorkListing } from "./work-publisher.js";
 
 /**
  * How long a user has to change their mind.
@@ -125,6 +128,8 @@ export interface DeletionPreview {
 	/** Works split by whether anybody kept them — saved to a Library, or bought. */
 	worksDeleted: number;
 	worksWithdrawn: number;
+	/** Co-owned Works whose publisher role moves to another owner instead. */
+	worksHandedOver: number;
 	/** Kept with the buyer detached, for tax records. */
 	purchases: number;
 	/**
@@ -151,6 +156,44 @@ export interface DeletionPreview {
 }
 
 /**
+ * The co-owned Works this account publishes, and the owner each would move to.
+ *
+ * A Work with an accepted co-owner survives its publisher's account deletion: the
+ * publisher role moves to the oldest accepted owner, the same target the leave route's
+ * fallback picks, so the Work stays one object with one listing home and its co-owner
+ * keeps editing it. A Work with no other owner is the solo case and follows the ordinary
+ * delete/withdraw classification.
+ *
+ * Read before the transaction and applied inside it, for the same reason the Badge
+ * handover is: a row move that committed while the deletion rolled back would take the
+ * Work away from a creator who is still here.
+ */
+async function workHandoversFor<T extends { id: number }>(
+	published: T[],
+): Promise<Array<{ work: T; newPublisherId: number }>> {
+	if (published.length === 0) return [];
+	const rows = await db
+		.select({ workId: workCollaborators.workId, creatorId: workCollaborators.creatorId })
+		.from(workCollaborators)
+		.where(
+			and(
+				inArray(
+					workCollaborators.workId,
+					published.map((work) => work.id),
+				),
+				eq(workCollaborators.status, "accepted"),
+			),
+		)
+		.orderBy(workCollaborators.createdAt, workCollaborators.id);
+	const out: Array<{ work: T; newPublisherId: number }> = [];
+	for (const work of published) {
+		const next = rows.find((row) => row.workId === work.id);
+		if (next) out.push({ work, newPublisherId: next.creatorId });
+	}
+	return out;
+}
+
+/**
  * Real counts from this account, for the confirmation screen.
  *
  * The point of consent being *informed* is that the numbers are theirs. "Your content
@@ -167,9 +210,12 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		return Number((list[0] as { n: number } | undefined)?.n ?? 0);
 	};
 
-	const workIds = (
+	const publishedWorkIds = (
 		await db.select({ id: works.id }).from(works).where(eq(works.creatorId, userId))
 	).map((w) => w.id);
+	const handovers = await workHandoversFor(publishedWorkIds.map((id) => ({ id })));
+	const handedOver = new Set(handovers.map((handover) => handover.work.id));
+	const workIds = publishedWorkIds.filter((id) => !handedOver.has(id));
 
 	const keptWorkIds = await keptAmong(workIds);
 
@@ -218,6 +264,7 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		posts: posts_,
 		worksDeleted: workIds.length - keptWorkIds.length,
 		worksWithdrawn: keptWorkIds.length,
+		worksHandedOver: handovers.length,
 		purchases: purchases_,
 		hostedHandles: handles,
 		spaces: spaces_,
@@ -519,9 +566,24 @@ export async function eraseAccount(
 		}
 	}
 
-	const workIds = (
-		await db.select({ id: works.id }).from(works).where(eq(works.creatorId, userId))
-	).map((w) => w.id);
+	const publishedWorks = await db.select().from(works).where(eq(works.creatorId, userId));
+	const workHandovers = await workHandoversFor(publishedWorks);
+	// The co-owned Works survive their publisher: the role moves to another owner rather
+	// than the Work being withdrawn or destroyed with the account. The old listing goes
+	// with the old publisher's identity, best-effort — a network failure leaves a stale
+	// public listing, which the new publisher's sync repairs, never a Work trapped on an
+	// account that is being erased.
+	for (const handover of workHandovers) {
+		await removeWorkListing(handover.work);
+		await removeCreatorSpace(handover.work).catch((error) => {
+			console.error(
+				`account-deletion: could not remove the old creator space for Work ${handover.work.id}:`,
+				error,
+			);
+		});
+	}
+	const handedOver = new Set(workHandovers.map((handover) => handover.work.id));
+	const workIds = publishedWorks.filter((work) => !handedOver.has(work.id)).map((work) => work.id);
 
 	const keptWorkIds = await keptAmong(workIds);
 	const unkept = workIds.filter((id) => !keptWorkIds.includes(id));
@@ -623,11 +685,42 @@ export async function eraseAccount(
 				.where(eq(badgeCollaborators.id, transfer.collaboratorRowId));
 		}
 
+		// And the Work half, planned the same way. The listing URIs are cleared with the
+		// move because the old publisher's repository no longer holds the record; the sync
+		// after this transaction creates it again as the new publisher. The new publisher's
+		// collaborator row goes for the same reason the Badge's did — the anchor carries it.
+		for (const handover of workHandovers) {
+			await tx
+				.update(works)
+				.set({
+					creatorId: handover.newPublisherId,
+					atprotoUri: null,
+					draftUri: null,
+					gatedSpaceUri: null,
+					manifestUri: null,
+					updatedAt: new Date(),
+				})
+				.where(eq(works.id, handover.work.id));
+			await tx
+				.delete(workCollaborators)
+				.where(
+					and(
+						eq(workCollaborators.workId, handover.work.id),
+						eq(workCollaborators.creatorId, handover.newPublisherId),
+					),
+				);
+		}
+
 		// And the account. Sessions, ATProto tokens, follows, saved items, blocks,
 		// attention rows, accounts/cycles and seed allocations all cascade from here;
 		// moderation reports and actions do not, by design.
 		await tx.delete(users).where(eq(users.id, userId));
 	});
+
+	// The new publisher's listing is written after the commit, for the same reason the
+	// buyer notices are: the sync is a network side effect, and an unfinishable write
+	// against a rolled-back move would advertise a Work that still belongs to the leaver.
+	for (const handover of workHandovers) queueWorkListingSync(handover.work.id);
 
 	// Told AFTER the transaction commits, never inside it. A notification is an
 	// unsendable-back side effect: emailing "your purchase was withdrawn" and then

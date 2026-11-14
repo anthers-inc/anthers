@@ -228,7 +228,7 @@ describe("the transfer step with goods held", () => {
 describe("a refund against a held sale", () => {
 	it("takes a credit that was never transferred", async () => {
 		const { purchaseId, creditId } = await makeHeldOrder({ delivered: false });
-		expect(await settleSaleCreditOnRefund(purchaseId)).toBe("held");
+		expect((await settleSaleCreditOnRefund(purchaseId)).get(creator.userId)).toBe("held");
 		const rows = await db.select().from(creatorCredits).where(eq(creatorCredits.id, creditId));
 		expect(rows).toHaveLength(0);
 	});
@@ -247,7 +247,7 @@ describe("a refund against a held sale", () => {
 		transferIds.push(transfer.id);
 		await db.insert(creatorTransferCredits).values({ transferId: transfer.id, creditId });
 
-		expect(await settleSaleCreditOnRefund(purchaseId)).toBe("released");
+		expect((await settleSaleCreditOnRefund(purchaseId)).get(creator.userId)).toBe("released");
 		// The credit stays: the money moved, and the books say so.
 		const rows = await db.select().from(creatorCredits).where(eq(creatorCredits.id, creditId));
 		expect(rows).toHaveLength(1);
@@ -272,7 +272,7 @@ describe("a refund against a held sale", () => {
 			})
 			.returning();
 		purchaseIds.push(purchase.id);
-		expect(await settleSaleCreditOnRefund(purchase.id)).toBe("none");
+		expect((await settleSaleCreditOnRefund(purchase.id)).size).toBe(0);
 	});
 });
 

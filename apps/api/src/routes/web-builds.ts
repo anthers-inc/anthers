@@ -41,6 +41,7 @@ import {
 	isOwnWorkStorageRef,
 	workKeyPrefix,
 } from "../services/storage/keys.js";
+import { workOwnedBy } from "../services/work-owners.js";
 import { archiveCurrentMedia } from "../services/work-versions.js";
 
 /** The endpoint the local-dev direct upload POSTs to. */
@@ -91,7 +92,7 @@ async function findOwnedBuildWork(workId: number, userId: number) {
 	const [work] = await db
 		.select()
 		.from(works)
-		.where(and(eq(works.id, workId), eq(works.creatorId, userId)))
+		.where(and(eq(works.id, workId), workOwnedBy(userId)))
 		.limit(1);
 	if (!work) return null;
 	return work.type === "game" || work.type === "software" ? work : "wrong-type";

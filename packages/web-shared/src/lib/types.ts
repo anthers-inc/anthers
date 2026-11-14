@@ -459,6 +459,11 @@ export interface Work {
 	creatorDisplayName?: string | null;
 	creatorAvatar?: string | null;
 	/**
+	 * A Collab Work's owners, publisher first; more than one is a Collab Work. Absent on
+	 * the serializations that do not attach it, where `creator` remains the publisher.
+	 */
+	owners?: BadgeOwner[];
+	/**
 	 * The published Projects this Work belongs to, carried only by the Library
 	 * response. A lens that groups saved tracks into releases reads this to find the
 	 * Project a track came from without a request per Work; empty when the Work stands

@@ -53,6 +53,7 @@ import {
 	MaturityVeil,
 	useContentPreferences,
 } from "@anthers/web-shared/content-preferences";
+import ComboAvatar from "@anthers/web-shared/creator/ComboAvatar";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-shared/post/unlock";
 import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
@@ -65,6 +66,7 @@ import {
 	type Project,
 	type Work,
 } from "@anthers/web-shared/types";
+import { hasSeveralOwners, ownerNames } from "@anthers/web-shared/work-owners";
 import {
 	DocumentTextIcon,
 	LinkIcon,
@@ -420,6 +422,7 @@ function MetaRow({
 	avatar,
 	handle,
 	name,
+	owners,
 	own,
 	badge,
 	date,
@@ -428,6 +431,7 @@ function MetaRow({
 	avatar: string | null | undefined;
 	handle: string | null | undefined;
 	name: string;
+	owners?: Work["owners"];
 	date: string;
 	/** The kind's own chip — a Work's type, "Post", "Project". */
 	badge: ReactNode;
@@ -438,7 +442,9 @@ function MetaRow({
 }) {
 	return (
 		<div className="flex items-center gap-1.5 min-w-0">
-			{avatar ? (
+			{hasSeveralOwners(owners) ? (
+				<ComboAvatar owners={owners ?? []} size={24} />
+			) : avatar ? (
 				<img src={avatar} alt={name} className="w-6 h-6 rounded-full object-cover shrink-0" />
 			) : handle ? (
 				<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold shrink-0">
@@ -457,11 +463,17 @@ function MetaRow({
 			    An own entry reads "You": the tile says why it is there (the viewer made it)
 			    while the link still leads to the viewer's own page. A long name truncates
 			    rather than pushing the kind chip off the row. */}
-			<CreatorLink
-				handle={handle}
-				name={own ? "You" : name}
-				className="min-w-0 truncate text-xs text-base-content/70 hover:underline"
-			/>
+			{hasSeveralOwners(owners) ? (
+				<span className="min-w-0 truncate text-xs text-base-content/70">
+					{own ? "You" : ownerNames(owners)}
+				</span>
+			) : (
+				<CreatorLink
+					handle={handle}
+					name={own ? "You" : name}
+					className="min-w-0 truncate text-xs text-base-content/70 hover:underline"
+				/>
+			)}
 			<span className="shrink-0">{badge}</span>
 			{date && <span className="shrink-0 text-[11px] text-base-content/40">{date}</span>}
 			{trailing}
@@ -635,6 +647,7 @@ function ReleaseTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtr
 						avatar={work.creator?.avatar}
 						handle={work.creator?.handle}
 						name={creatorLabel(work.creator ?? {})}
+						owners={work.owners}
 						own={entryIsOwn(entry)}
 						badge={
 							<span className="badge badge-sm gap-1">

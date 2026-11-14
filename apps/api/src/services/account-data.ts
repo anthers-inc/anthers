@@ -66,6 +66,7 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import { workOwnedBy } from "./work-owners.js";
 
 /** Bump when the shape changes in a way a consumer would notice. */
 export const EXPORT_FORMAT_VERSION = 5;
@@ -125,7 +126,7 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 		db.select().from(comments).where(eq(comments.userId, userId)),
 		db.select().from(reviews).where(eq(reviews.userId, userId)),
 		db.select().from(posts).where(eq(posts.creatorId, userId)),
-		db.select().from(works).where(eq(works.creatorId, userId)),
+		db.select().from(works).where(workOwnedBy(userId)),
 		db.select().from(projects).where(eq(projects.creatorId, userId)),
 		db.select().from(purchases).where(eq(purchases.buyerId, userId)),
 		db.select().from(stripeCustomers).where(eq(stripeCustomers.userId, userId)),

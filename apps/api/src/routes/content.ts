@@ -89,6 +89,7 @@ import { resolveShareToken } from "../services/share-links.js";
 import { isLocalStorage } from "../services/storage/index.js";
 import { urlToKey } from "../services/storage/keys.js";
 import { resolveThumbnailUrl } from "../services/thumbnails.js";
+import { isWorkOwner, workOwnedBy } from "../services/work-owners.js";
 import type { PreviewMediaRow } from "../services/work-preview-media.js";
 import { listSourceFiles } from "../services/work-source-files.js";
 
@@ -513,7 +514,7 @@ export async function resolveProjectThumbnails(
 		]);
 		conditions.push(
 			options.userId != null
-				? (or(eq(works.visibility, "released"), eq(works.creatorId, options.userId)) as SQL)
+				? (or(eq(works.visibility, "released"), workOwnedBy(options.userId)) as SQL)
 				: eq(works.visibility, "released"),
 		);
 		conditions.push(
@@ -1058,13 +1059,13 @@ export function previewRequest(c: {
  * a future collab — silently resolves normally instead of resolving as somebody with a
  * different amount of access.
  */
-export function contextFor(
+export async function contextFor(
 	work: { id: number; creatorId: number | null },
 	userId: number | null,
 	real: AccessContext,
 	preview: { given: number | null; owned: boolean } | null,
-): AccessContext {
-	if (!preview || userId == null || work.creatorId !== userId) return real;
+): Promise<AccessContext> {
+	if (!preview || userId == null || !(await isWorkOwner(work.id, userId))) return real;
 	return buildPreviewContext({
 		creatorId: userId,
 		given: preview.given,
@@ -1784,7 +1785,7 @@ export async function workReachability(
 	opts: { skipAdult?: boolean } = {},
 ): Promise<WorkReachability> {
 	const userId = await getOptionalUserId(c);
-	const isOwner = userId != null && userId === work.creatorId;
+	const isOwner = userId != null && (await isWorkOwner(work.id, userId));
 
 	const stillOwed = async (buyerId: number | null) =>
 		buyerId != null &&
@@ -1855,6 +1856,7 @@ import { libraryRoutes } from "./content/library.js";
 import { postsRoutes } from "./content/posts.js";
 import { projectsRoutes } from "./content/projects.js";
 import { uploadsRoutes } from "./content/uploads.js";
+import { workCollaboratorRoutes } from "./content/work-collaborators.js";
 import { workEditorRoutes } from "./content/workEditor.js";
 import { workMediaRoutes } from "./content/workMedia.js";
 import { worksRoutes } from "./content/works.js";
@@ -1863,6 +1865,7 @@ const contentRoutes = new Hono()
 	.route("/", postsRoutes)
 	.route("/", workMediaRoutes)
 	.route("/", worksRoutes)
+	.route("/", workCollaboratorRoutes)
 	.route("/", workEditorRoutes)
 	.route("/", projectsRoutes)
 	.route("/", uploadsRoutes)

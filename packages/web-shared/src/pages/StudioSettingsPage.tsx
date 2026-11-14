@@ -33,6 +33,7 @@ import { useSearchParams } from "react-router-dom";
 import CollaborationInvites from "../components/account/CollaborationInvites";
 import DiscordCard from "../components/account/DiscordCard";
 import SignedInAccountCard from "../components/account/SignedInAccountCard";
+import WorkCollaborationInvites from "../components/account/WorkCollaborationInvites";
 import { EarningsBasis } from "../components/economics/EarningsBasis";
 import { useAuth } from "../lib/auth";
 import type { PublishingState } from "../lib/publishing";
@@ -608,15 +609,7 @@ export default function StudioSettingsPage() {
 			{visitedTabs.has("collabs") && (
 				<div hidden={activeTab !== "collabs"} className="flex flex-col gap-6">
 					<CollaborationInvites />
-					<div className="card bg-base-200">
-						<div className="card-body">
-							<h3 className="card-title text-lg">Work Collaborations</h3>
-							<p className="text-sm text-base-content/60">
-								Collab Works are not built yet. When they ship, the Works you co-own and the
-								invitations waiting on you will appear here beside your Badge collaborations.
-							</p>
-						</div>
-					</div>
+					<WorkCollaborationInvites />
 				</div>
 			)}
 		</div>

@@ -100,14 +100,15 @@ import {
 	keyToPreview,
 	uploadImageSource,
 } from "@anthers/web-shared/post/mediaUpload";
+import WorkCollaboratorsPanel from "@anthers/web-shared/post/WorkCollaboratorsPanel";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { publishingPermissionMissing, usePublishingState } from "@anthers/web-shared/publishing";
 import {
 	RATED_PUBLIC_ACCESS_HELP,
 	showsRatedPublicAccessNotice,
 } from "@anthers/web-shared/rated-public-access";
-import { Link } from "@anthers/web-shared/router";
-import { client } from "@anthers/web-shared/rpc";
+import { Link, useNavigate } from "@anthers/web-shared/router";
+import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
 import {
 	accessRowsOf,
@@ -125,6 +126,7 @@ import Modal from "@anthers/web-shared/ui/Modal";
 import SetupChecklist, { type SetupChecklistItem } from "@anthers/web-shared/ui/SetupChecklist";
 import { uploadMediaFile } from "@anthers/web-shared/upload";
 import { useWebBuildUploads } from "@anthers/web-shared/web-build-uploads";
+import { hasSeveralOwners } from "@anthers/web-shared/work-owners";
 import {
 	isUploading,
 	useSourceUpload,
@@ -219,6 +221,7 @@ export default function OwnerWorkEditor({
 	onRefetch: () => void;
 }) {
 	const { user } = useAuth();
+	const navigate = useNavigate();
 	/** Whether the persistent player bar owns the bottom edge, so the floating card clears it. */
 	const playerUp = useMediaPlayer().currentTrack !== null;
 	const [current, setCurrent] = useState<WorkDetail>(work);
@@ -304,6 +307,18 @@ export default function OwnerWorkEditor({
 	const [accessRows, setAccessRows] = useState<AccessRowDraft[]>(() =>
 		buildAccessRows([], accessRowsOf(work.access)),
 	);
+	// A co-owned Work gates only on a Badge another creator owns too, so the support it
+	// clears reaches every owner. Solo rungs are not offered in the access table; a direct
+	// price still is, because that money takes the ordinary purchase split.
+	const collabWork = hasSeveralOwners(current.owners);
+	/** The other owners' handles, so their shared Badges can be offered as gates below. */
+	const coOwnerHandles = collabWork
+		? (current.owners ?? [])
+				.map((owner) => owner.handle)
+				.filter((handle) => handle !== user?.handle)
+				.sort()
+		: [];
+	const coOwnerKey = coOwnerHandles.join(",");
 
 	// The credits — the Work's liner notes, who or what made which part. Rows are drafts of
 	// the stored table; the same validation the server enforces (a Created credit names its
@@ -478,19 +493,40 @@ export default function OwnerWorkEditor({
 	// row without them. See the batch editor; the merge-through-state is the same.
 	useEffect(() => {
 		let live = true;
-		client.api.subscriptions.badges
-			.$get()
-			.then(async (res) => {
+		async function load() {
+			try {
+				const res = await client.api.subscriptions.badges.$get();
 				if (!res.ok) return;
 				const data = (await res.json()) as { badges: CreatorBadge[] };
+				const merged = new Map((data.badges ?? []).map((badge) => [badge.id, badge]));
+				// A co-owned Work gates on a Badge another owner also holds, so the ladder
+				// this table offers is every owner's, not only the signed-in one's. The
+				// public ladder read is the same one a supporter's Badge page uses.
+				if (collabWork) {
+					for (const handle of coOwnerKey.split(",").filter(Boolean)) {
+						const other = await fetch(
+							`${apiBaseUrl()}/api/subscriptions/badges?creator=${encodeURIComponent(handle)}`,
+						);
+						if (!other.ok) continue;
+						const ladder = (await other.json()) as { badges: CreatorBadge[] };
+						for (const badge of ladder.badges ?? []) merged.set(badge.id, badge);
+					}
+				}
 				if (!live) return;
-				setAccessRows((prev) => buildAccessRows(data.badges ?? [], serializeAccessRows(prev)));
-			})
-			.catch(() => {});
+				const offered = collabWork
+					? [...merged.values()].filter((badge) => (badge.owners?.length ?? 1) > 1)
+					: [...merged.values()];
+				setAccessRows((prev) => buildAccessRows(offered, serializeAccessRows(prev)));
+			} catch {
+				// The baseline row is enough to edit with; a ladder read that fails leaves the
+				// existing gates in place rather than blanking them.
+			}
+		}
+		void load();
 		return () => {
 			live = false;
 		};
-	}, []);
+	}, [collabWork, coOwnerKey]);
 
 	// ── The thumbnail itself ──
 	/**
@@ -984,14 +1020,9 @@ export default function OwnerWorkEditor({
 				: current.sourceKey,
 		gallery: current.type === "image" ? (current.gallery ?? []).map(keyToPreview) : undefined,
 		thumbnail: thumbnailPreview ?? current.thumbnail,
-		creator: user?.handle
-			? {
-					handle: user.handle,
-					displayName: user.displayName ?? null,
-					avatar: user.avatar ?? null,
-					bio: user.bio ?? null,
-				}
-			: current.creator,
+		// The API's creator (the publisher) and owner set; the byline reads `owners`
+		// and never stamps the signed-in user onto a co-owned Work.
+		creator: current.creator,
 	};
 
 	const thumbnailField = (
@@ -1606,6 +1637,7 @@ export default function OwnerWorkEditor({
 		<OwnerAccessChipEditor
 			rows={accessRows}
 			publicAccess={publicAccessNow}
+			collabWork={collabWork}
 			onSave={async (draft) => {
 				await saveFields({
 					streamEnabled,
@@ -1760,6 +1792,18 @@ export default function OwnerWorkEditor({
 			label: "Accessibility",
 			content: accessibilityContent,
 			action: accessibilityEditable ? accessibilityEdit.actions : undefined,
+		},
+		{
+			key: "collaborators",
+			label: "Collaborators",
+			content: (
+				<WorkCollaboratorsPanel
+					workId={current.id}
+					workTitle={current.title || "this Work"}
+					onChanged={() => void onRefetch?.()}
+					onLeft={() => navigate(studioUrl("/works"))}
+				/>
+			),
 		},
 	];
 
@@ -2594,10 +2638,12 @@ function OwnerKindChipEditor({
 function OwnerAccessChipEditor({
 	rows,
 	publicAccess,
+	collabWork,
 	onSave,
 }: {
 	rows: AccessRowDraft[];
 	publicAccess: boolean;
+	collabWork: boolean;
 	onSave: (rows: AccessRowDraft[]) => Promise<void>;
 }) {
 	const [open, setOpen] = useState(false);
@@ -2664,6 +2710,13 @@ function OwnerAccessChipEditor({
 								add a value to the Price column. You can set different prices for different Badge
 								levels to offer discounts to users with those Badges.
 							</p>
+							{collabWork && (
+								<p>
+									This Work has more than one owner, so only Badges with more than one owner are
+									offered as gates — that is what makes the support reach everyone. Add a
+									collaborator to a solo Badge, or set a direct price instead.
+								</p>
+							)}
 						</div>
 						<div className="mt-4 flex flex-col gap-4">
 							<AccessTables rows={draft} onRowsChange={setDraft} />

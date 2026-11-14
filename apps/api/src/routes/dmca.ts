@@ -33,6 +33,7 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
+import { isWorkOwner } from "../services/work-owners.js";
 
 /**
  * The DMCA designated agent details, served to the `/copyright` page.
@@ -267,12 +268,12 @@ const dmcaRoutes = new Hono()
 		if (!notice.workId) return c.json({ error: "This notice has no target Work." }, 400);
 
 		const [work] = await db
-			.select({ creatorId: works.creatorId })
+			.select({ id: works.id, creatorId: works.creatorId })
 			.from(works)
 			.where(eq(works.id, notice.workId))
 			.limit(1);
 		if (!work) return c.json({ error: "Work not found." }, 404);
-		if (work.creatorId !== user.id) {
+		if (!(await isWorkOwner(work.id, user.id))) {
 			return c.json({ error: "Only the Work's creator can file a counter-notice." }, 403);
 		}
 
@@ -315,12 +316,12 @@ const dmcaRoutes = new Hono()
 		// Same ownership rule as the counter-notice: only the subscriber whose
 		// material came down can answer for it, in either direction.
 		const [work] = await db
-			.select({ creatorId: works.creatorId })
+			.select({ id: works.id, creatorId: works.creatorId })
 			.from(works)
 			.where(eq(works.id, notice.workId))
 			.limit(1);
 		if (!work) return c.json({ error: "Work not found." }, 404);
-		if (work.creatorId !== user.id) {
+		if (!(await isWorkOwner(work.id, user.id))) {
 			return c.json({ error: "Only the Work's creator can concede a notice." }, 403);
 		}
 

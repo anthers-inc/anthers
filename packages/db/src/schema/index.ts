@@ -14,3 +14,4 @@ export * from "./relations.js";
 export * from "./shipments.js";
 export * from "./spaces.js";
 export * from "./subscriptions.js";
+export * from "./work-collaboration.js";
