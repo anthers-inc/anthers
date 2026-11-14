@@ -76,7 +76,7 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 		lede: "A Badge can now be owned by several creators, and a post, comment, or reply can carry a spoiler that stays hidden until a reader opens it.",
 		entries: [
 			"A Badge can now be co-owned by several creators. One creator publishes it and the others accept an invitation; the Badge stays on the publisher's page until an invitation is accepted, and a pending invitation gives the invitee nothing until then. Every owner edits the Badge.",
-			"A supporter's held Collab Badge opens every owner's gated Works. The first month and each renewal split evenly across the owners in whole cents, and the checkout line names every owner.",
+			"A supporter's held Collab Badge clears every owner's gates. The first month and each renewal split evenly across the owners in whole cents, and the checkout line names every owner.",
 			"The publisher role is not a rank: an owner can leave once none of their Works still gates on the Badge, and a two-step handover moves the role when the current publisher asks and the target accepts.",
 			"The Badges surfaces carry the shared ownership: a combo avatar and collaborators list on the Badge, a Collab Badges section on each co-owner's profile, a Collaborators tab in the Badge Maker, a shared-support line in checkout, and invitations and handover requests in Creator Settings' Collabs tab.",
 			"Posts, comments, and replies can hide a run of words as a spoiler with double pipes around it. The words are blurred behind a control labeled Spoiler until a reader opens it. A post's feed excerpt and link preview leave the hidden words out, and a hashtag inside one does not become a tag. This is a reading convention, not access control; the words remain in the served text.",
