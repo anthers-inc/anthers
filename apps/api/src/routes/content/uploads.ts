@@ -120,7 +120,7 @@ const IMAGE_UPLOAD_MAX = 10 * 1024 * 1024;
 /**
  * The media types whose object belongs to a Work rather than to an account or a Project.
  *
- * A `workId` on the form is honoured only for these; the rest — an avatar, a banner, an
+ * A `workId` on the form is honored only for these; the rest — an avatar, a banner, an
  * inline post image, a Project's cover — stay under the uploader's creator prefix even if
  * a client sends one, because moving them into a Work's namespace would give the Work a
  * key it does not own and the purge a file it must not take.

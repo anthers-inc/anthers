@@ -8,7 +8,7 @@
  * database client and the storage backend from the environment, and a `bun run` child of
  * the test session inherits both without starting a session of its own.
  */
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
@@ -110,11 +110,6 @@ describe("the Work-media migration", () => {
 
 		reportPath = join(REPO, "cache", `migration-test-${Date.now()}.json`);
 		await mkdir(join(REPO, "cache"), { recursive: true });
-	});
-
-	afterAll(async () => {
-		// The account purge cascades the Work and its rows; the objects are the session's
-		// directory, which the session removes as a whole.
 	});
 
 	it("moves every object and every reference, then finds nothing left on a second run", async () => {
