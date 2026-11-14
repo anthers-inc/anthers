@@ -5,12 +5,21 @@
  * 🚨 **This is not a filter, and the difference is the whole idea** — the same invariant
  * the music and video lenses carry: a lens is a different *organizing metaphor* over the
  * same `LensItem[]` the shelf already holds, never its own fetch and never a narrowing of
- * the grid. Here that metaphor is a bookshelf: tall spines standing in packed rows instead
- * of tiles, every book-like written Work on one shelf, end to end, alphabetically by
- * title (Parker, 2026-10-11 — "organized to whatever organization method the user
- * prefers, starting with an alphabetical-by-title sort"; the framing names how the shelf
- * is kept, not a widening of what sits on it, so the shelf draws `text`, `ebook` and
- * `comic` only — {@link BOOKSHELF_WORK_TYPES}, the 2026-09-20 scoping intact).
+ * the grid. Here that metaphor is a bookshelf: titled spines standing in rows on shelf
+ * boards, every book-like written Work on one shelf, end to end, alphabetically by title
+ * (Parker, 2026-10-11 — "organized to whatever organization method the user prefers,
+ * starting with an alphabetical-by-title sort"; the framing names how the shelf is kept,
+ * not a widening of what sits on it, so the shelf draws `text`, `ebook` and `comic` only —
+ * {@link BOOKSHELF_WORK_TYPES}, the 2026-09-20 scoping intact).
+ *
+ * **A spine is read by its title, not by a face-out cover.** A shelf shows bindings, and
+ * a cover squeezed into a spine's width loses the one thing the shelf is for; so every
+ * book stands as a titled spine, the continue-reading rail included. Its thickness,
+ * height and shade come from a stable hash of the Work, so a shelf keeps its shape
+ * between visits. Rows are explicit shelves rather than a CSS wrap, because each one
+ * carries a board and a label; the label names the books actually standing there — their
+ * letter range under the alphabetical sort, and whatever range the active draw produced
+ * anywhere else, never an assumed alphabetical order.
  *
  * The **continue-reading rail** stands above the shelf rows: a spine for each Work with
  * an *unfinished* position, ordered by when it was last touched. Its rule is Parker's
@@ -39,7 +48,8 @@ import { BOOKSHELF_WORK_TYPES } from "@anthers/shared/content";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import { isAccessResult, type Work } from "@anthers/web-shared/types";
-import { BookOpenIcon, LockClosedIcon } from "@heroicons/react/24/solid";
+import { BookOpenIcon, CheckCircleIcon, LockClosedIcon } from "@heroicons/react/24/solid";
+import { useId, useLayoutEffect, useState } from "react";
 import {
 	readPageFraction,
 	readReflowFraction,
@@ -128,7 +138,120 @@ export function positionLine(work: Work, fraction: number | null): string | null
 	return `On page ${page} of ${work.pageCount}`;
 }
 
-/** One spine, face-out with cover art or as a dust jacket without it — the rail's and the shelf's shared atom. */
+/** The gap between two spines on a shelf, in pixels — the unit the packing budget counts in. */
+export const SPINE_GAP = 4;
+
+/** The inset the shelf rows leave on each side, in pixels, matching the row's `px-2`. */
+const SHELF_INSET = 8;
+
+const SPINE_TONES = ["primary", "secondary", "accent", "info", "success", "neutral"] as const;
+
+/**
+ * A stable hash of the Work's identity and title. A book's binding is a fact about the
+ * book, so a shelf that reassigned thicknesses and shades on every render would read as
+ * a loading state rather than a shelf.
+ */
+function spineSeed(work: Work): number {
+	const text = `${work.id}:${work.title ?? ""}`;
+	let hash = 2166136261;
+	for (let i = 0; i < text.length; i++) {
+		hash ^= text.charCodeAt(i);
+		hash = Math.imul(hash, 16777619);
+	}
+	return hash >>> 0;
+}
+
+/** A book's thickness in pixels, 30–38, so a row reads as bindings rather than equal strips. */
+export function spineWidth(work: Work): number {
+	return 30 + (spineSeed(work) % 5) * 2;
+}
+
+/** A book's height in pixels, 158–182, so the row's top edge is uneven the way a shelf's is. */
+export function spineHeight(work: Work): number {
+	return 158 + ((spineSeed(work) >>> 4) % 4) * 8;
+}
+
+/** The shade a spine wears, mixed from the active theme's own palette. */
+export function spineBackground(work: Work): string {
+	const tone = SPINE_TONES[(spineSeed(work) >>> 8) % SPINE_TONES.length];
+	return `color-mix(in oklch, var(--color-${tone}) 42%, var(--color-base-300))`;
+}
+
+/**
+ * Pack the sorted books into shelf rows no wider than `budgetPx`. Shelves are explicit
+ * rows rather than a CSS wrap because each one carries a label, and a label on a wrapped
+ * row would name books that are no longer on it. A book wider than the budget still gets
+ * a shelf of its own rather than being dropped.
+ */
+export function shelvesOf(books: LensItem[], budgetPx: number): LensItem[][] {
+	const shelves: LensItem[][] = [];
+	let shelf: LensItem[] = [];
+	let used = 0;
+	for (const item of books) {
+		const width = spineWidth(item.work!);
+		const next = shelf.length === 0 ? width : used + SPINE_GAP + width;
+		if (shelf.length > 0 && next > budgetPx) {
+			shelves.push(shelf);
+			shelf = [item];
+			used = width;
+		} else {
+			shelf.push(item);
+			used = next;
+		}
+	}
+	if (shelf.length > 0) shelves.push(shelf);
+	return shelves;
+}
+
+/** The character a book shelves under; anything that is not a letter or digit is "#". */
+function shelfInitial(title: string | null): string {
+	const first = (title ?? "Untitled").trim().charAt(0).toUpperCase();
+	return /[A-Z0-9]/.test(first) ? first : "#";
+}
+
+/**
+ * A shelf's label, read from the books actually standing on it: the span between its
+ * first and last title's initial. In the Library that is the letter range the shelf
+ * covers. A draw ordered another way — a Discovery recipe — still labels the shelf it
+ * actually drew rather than assuming an alphabetical order that is not on screen.
+ */
+export function shelfLabel(books: LensItem[]): string {
+	if (books.length === 0) return "";
+	const first = shelfInitial(books[0].work?.title ?? null);
+	const last = shelfInitial(books[books.length - 1].work?.title ?? null);
+	if (first === last) return first;
+	return first < last ? `${first}–${last}` : `${last}–${first}`;
+}
+
+/**
+ * How much horizontal room a shelf row has, in pixels, following the container's own
+ * width. The ref is a callback so the observer attaches when the shelf container actually
+ * mounts — the lens draws its empty state before any books exist. The measurement runs in
+ * a layout effect so the first paint already has shelves rather than one long row that
+ * reflows a frame later.
+ */
+function useShelfBudget(): [(node: HTMLDivElement | null) => void, number] {
+	const [element, setElement] = useState<HTMLDivElement | null>(null);
+	const [budget, setBudget] = useState(0);
+	useLayoutEffect(() => {
+		if (!element) return;
+		const measure = () => {
+			const width = Math.max(0, element.clientWidth - SHELF_INSET * 2);
+			setBudget((current) => (current === width ? current : width));
+		};
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [element]);
+	return [setElement, budget];
+}
+
+/**
+ * One book, standing: its title down the spine, its thickness, height and shade fixed by
+ * its own identity, with the reading ribbon, the lock and the purchased mark as overlays.
+ * The rail and the shelf share it, so both read the same way.
+ */
 function Spine({
 	work,
 	fraction,
@@ -142,21 +265,32 @@ function Spine({
 }) {
 	return (
 		<span
-			className={`relative block h-44 overflow-hidden bg-base-200 shadow-[2px_3px_6px_rgb(0_0_0_/_0.25)] border-b-4 border-base-300 ${
-				work.thumbnail ? "w-14" : "w-9 rounded-r-sm"
-			}`}
+			className="relative block overflow-hidden rounded-[2px] shadow-[1px_2px_4px_rgb(0_0_0_/_0.3)]"
+			style={{
+				width: spineWidth(work),
+				height: spineHeight(work),
+				backgroundColor: spineBackground(work),
+			}}
 		>
-			{work.thumbnail ? (
-				<img src={work.thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
-			) : (
-				// No cover: a dust-jacket spine, the title set along it the way
-				// a real book's spine reads.
-				<span className="flex h-full w-full items-center justify-center bg-gradient-to-r from-base-200 to-base-100 px-0.5">
-					<span className="truncate whitespace-nowrap font-serif text-xs tracking-wide [writing-mode:vertical-rl]">
-						{work.title || "Untitled"}
-					</span>
+			{/* The rounded edge of a binding: a highlight down one side, shade down the other. */}
+			<span
+				aria-hidden="true"
+				className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-black/15"
+			/>
+			{/* The head and tail bands a bound book carries. */}
+			<span
+				aria-hidden="true"
+				className="pointer-events-none absolute inset-x-1 top-2 border-t border-base-content/20"
+			/>
+			<span
+				aria-hidden="true"
+				className="pointer-events-none absolute inset-x-1 bottom-2 border-t border-base-content/20"
+			/>
+			<span className="absolute inset-x-0 bottom-4 top-4 flex items-center justify-center overflow-hidden px-0.5">
+				<span className="truncate whitespace-nowrap font-serif text-[11px] leading-none tracking-wide [writing-mode:vertical-rl]">
+					{work.title || "Untitled"}
 				</span>
-			)}
+			</span>
 			{fraction != null && (
 				// The progress marker the shelf metaphor promises: a ribbon hanging from
 				// the top of the spine, however deep into the book the reader got. The
@@ -171,11 +305,13 @@ function Spine({
 			{locked && (
 				<span className="absolute left-1 top-1 rounded-full bg-black/60 p-1 text-white">
 					<LockClosedIcon className="size-2.5" />
+					<span className="sr-only">Gated</span>
 				</span>
 			)}
 			{purchased && (
-				<span className="absolute bottom-0 left-0 right-0 bg-black/60 py-0.5 text-center text-[8px] uppercase tracking-wide text-white">
-					Purchased
+				<span className="absolute bottom-1 left-1 rounded-full bg-black/60 p-0.5 text-white">
+					<CheckCircleIcon className="size-2.5" />
+					<span className="sr-only">Purchased</span>
 				</span>
 			)}
 			{/* The affordance a spine offers: not a tile zoom, an opening. */}
@@ -183,6 +319,60 @@ function Spine({
 				<BookOpenIcon className="size-6 text-base-100 drop-shadow" />
 			</span>
 		</span>
+	);
+}
+
+/**
+ * One entry on the rail or a shelf: the spine, linked to its reader when the Work has an
+ * address, with the tooltip the lens's own words carry.
+ */
+function BookStand({
+	item,
+	fraction,
+	locked,
+	title,
+}: {
+	item: LensItem;
+	fraction: number | null;
+	locked: boolean;
+	title: string;
+}) {
+	const work = item.work!;
+	const to =
+		work.publicId != null && work.slug
+			? workUrl({ slug: work.slug, publicId: work.publicId })
+			: null;
+	const spine = (
+		<Spine work={work} fraction={fraction} purchased={!!item.purchased} locked={locked} />
+	);
+	return (
+		<li className="group shrink-0" title={title}>
+			{to ? (
+				<Link
+					to={to}
+					className="block focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+				>
+					{spine}
+				</Link>
+			) : (
+				<span className="block cursor-default">{spine}</span>
+			)}
+		</li>
+	);
+}
+
+/** The board a shelf row stands on, and the label plate on its front edge. */
+function ShelfBoard({ label, labelId }: { label: string; labelId: string }) {
+	return (
+		<div className="relative h-3.5 rounded-[3px] border-b border-black/20 bg-gradient-to-b from-base-200 to-base-300 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.12),0_3px_4px_rgb(0_0_0_/_0.22)]">
+			<span
+				id={labelId}
+				data-testid="shelf-label"
+				className="absolute left-3 top-1/2 -translate-y-1/2 rounded-[2px] border border-base-content/15 bg-base-100 px-2 text-[10px] font-semibold uppercase leading-5 tracking-[0.12em] text-base-content/65 shadow-sm"
+			>
+				{label}
+			</span>
+		</div>
 	);
 }
 
@@ -208,6 +398,8 @@ export default function BookshelfLens({
 		)
 		.sort((a, b) => compareByTitle(a.work!.title, b.work!.title));
 	const positions = useReadingPositions();
+	const [shelfRef, budget] = useShelfBudget();
+	const labelBase = useId();
 
 	if (books.length === 0) {
 		if (source === "discovery") {
@@ -247,6 +439,7 @@ export default function BookshelfLens({
 	// Reading the hook's store keeps the rail live across the refreshes a reader's
 	// pushes trigger elsewhere.
 	const rail = continueReading(books, positions);
+	const shelves = budget > 0 ? shelvesOf(books, budget) : [books];
 
 	return (
 		<section aria-label="Bookshelf">
@@ -257,42 +450,22 @@ export default function BookshelfLens({
 					</h2>
 					<ol
 						data-testid="continue-reading"
-						className="mb-10 flex flex-nowrap items-end gap-x-1 overflow-x-auto pb-2"
+						aria-label="Continue reading"
+						className="mb-10 flex flex-nowrap items-end gap-x-1 overflow-x-auto px-2 pb-2"
 					>
 						{rail.map(({ item, fraction }) => {
 							const work = item.work!;
-							const to =
-								work.publicId != null && work.slug
-									? workUrl({ slug: work.slug, publicId: work.publicId })
-									: null;
 							const locked = isAccessResult(work.access) && work.access.canAccess === false;
-							const spine = (
-								<Spine
-									work={work}
-									fraction={fraction}
-									purchased={!!item.purchased}
-									locked={locked}
-								/>
-							);
 							return (
-								<li
+								<BookStand
 									key={item.id}
-									className="group shrink-0"
+									item={item}
+									fraction={fraction}
+									locked={locked}
 									title={[work.title || "Untitled", "Continue", positionLine(work, fraction)]
 										.filter(Boolean)
 										.join(" — ")}
-								>
-									{to ? (
-										<Link
-											to={to}
-											className="block focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-										>
-											{spine}
-										</Link>
-									) : (
-										<span className="block cursor-default">{spine}</span>
-									)}
-								</li>
+								/>
 							);
 						})}
 					</ol>
@@ -301,48 +474,42 @@ export default function BookshelfLens({
 			<h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-base-content/50">
 				Bookshelf
 			</h2>
-			<ol data-testid="bookshelf-shelf" className="flex flex-wrap items-end gap-x-1 gap-y-10">
-				{books.map((item) => {
-					const work = item.work!;
-					const to =
-						work.publicId != null && work.slug
-							? workUrl({ slug: work.slug, publicId: work.publicId })
-							: null;
-					const locked = isAccessResult(work.access) && work.access.canAccess === false;
-					// The user's position when the store has it — the same on every device —
-					// and this device's keys otherwise, each spine showing the further-along
-					// of the two, never a backwards step.
-					const fraction = spineFraction(work, positions.get(work.id) ?? null);
-					const spine = (
-						<Spine work={work} fraction={fraction} purchased={!!item.purchased} locked={locked} />
-					);
+			<div ref={shelfRef} data-testid="bookshelf-shelf" className="space-y-8">
+				{shelves.map((shelf, index) => {
+					const labelId = `${labelBase}-shelf-${index}`;
 					return (
-						<li
-							key={item.id}
-							className="group"
-							title={[
-								work.title || "Untitled",
-								item.purchased ? "Purchased" : null,
-								locked ? "Gated" : null,
-								positionLine(work, fraction),
-							]
-								.filter(Boolean)
-								.join(" — ")}
-						>
-							{to ? (
-								<Link
-									to={to}
-									className="block focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-								>
-									{spine}
-								</Link>
-							) : (
-								<span className="block cursor-default">{spine}</span>
-							)}
-						</li>
+						<div key={shelf[0]?.id ?? "shelf"}>
+							<ol aria-labelledby={labelId} className="flex items-end gap-x-1 px-2">
+								{shelf.map((item) => {
+									const work = item.work!;
+									const locked = isAccessResult(work.access) && work.access.canAccess === false;
+									// The user's position when the store has it — the same on every
+									// device — and this device's keys otherwise, each spine showing
+									// the further-along of the two, never a backwards step.
+									const fraction = spineFraction(work, positions.get(work.id) ?? null);
+									return (
+										<BookStand
+											key={item.id}
+											item={item}
+											fraction={fraction}
+											locked={locked}
+											title={[
+												work.title || "Untitled",
+												item.purchased ? "Purchased" : null,
+												locked ? "Gated" : null,
+												positionLine(work, fraction),
+											]
+												.filter(Boolean)
+												.join(" — ")}
+										/>
+									);
+								})}
+							</ol>
+							<ShelfBoard label={shelfLabel(shelf)} labelId={labelId} />
+						</div>
 					);
 				})}
-			</ol>
+			</div>
 		</section>
 	);
 }
