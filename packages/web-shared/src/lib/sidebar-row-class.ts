@@ -10,8 +10,9 @@
  * what it is in the Meadow palette, a fill behind dark content (`badge-secondary`'s
  * tag chips and the like) — a selected row names itself in colored text, so the
  * color carrying it has to be readable as text. The Studio's listing filters use
- * `@anthers/web-shared/studio`'s `filterBtnClass`, which cannot import an apps/web
- * module — that copy carries the same active treatment by hand.
+ * `@anthers/web-shared/studio`'s `filterBtnClass`, which carries the same active treatment
+ * by hand; folding it onto this helper is a later cleanup, not a second definition this one
+ * should follow.
  */
 
 export const sidebarRowClass = (isActive: boolean) =>

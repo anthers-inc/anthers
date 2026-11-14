@@ -30,6 +30,7 @@
 		"./web-build-uploads": "./src/lib/web-build-uploads.ts",
 		"./fonts": "./src/styles/fonts.ts",
 		"./sidebar": "./src/lib/sidebar.tsx",
+		"./sidebar-row-class": "./src/lib/sidebar-row-class.ts",
 		"./motion": "./src/lib/motion.ts",
 		"./flip": "./src/lib/flip.ts",
 		"./drag-reorder": "./src/lib/drag-reorder.ts",

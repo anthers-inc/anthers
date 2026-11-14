@@ -37,6 +37,8 @@ import { EarningsBasis } from "../components/economics/EarningsBasis";
 import { useAuth } from "../lib/auth";
 import type { PublishingState } from "../lib/publishing";
 import { apiFetch, client } from "../lib/rpc";
+import { useSidebar } from "../lib/sidebar";
+import { sidebarRowClass } from "../lib/sidebar-row-class";
 import type { CreatorEarnings } from "../lib/types";
 
 /** The order and copy of the Studio's Communications table. */
@@ -488,7 +490,43 @@ function isStudioSettingsTab(value: string | null): value is StudioSettingsTab {
 	return STUDIO_TABS.some((tab) => tab.id === value);
 }
 
+/**
+ * The Creator Settings section list, registered in the sidebar rather than drawn as a
+ * second horizontal nav over the page — the same rule the account settings page follows.
+ * The Studio layout owns the divider and the scroll region; this page owns only the rows.
+ */
+function StudioSettingsSidebar({
+	active,
+	onSelect,
+}: {
+	active: StudioSettingsTab;
+	onSelect: (id: StudioSettingsTab) => void;
+}) {
+	return (
+		<div
+			role="tablist"
+			aria-label="Creator settings sections"
+			aria-orientation="vertical"
+			className="flex flex-col gap-0.5"
+		>
+			{STUDIO_TABS.map((tab) => (
+				<button
+					key={tab.id}
+					type="button"
+					role="tab"
+					aria-selected={active === tab.id}
+					className={sidebarRowClass(active === tab.id)}
+					onClick={() => onSelect(tab.id)}
+				>
+					{tab.label}
+				</button>
+			))}
+		</div>
+	);
+}
+
 export default function StudioSettingsPage() {
+	const { setPageContent } = useSidebar();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const tabParam = searchParams.get("tab");
 	const publishingOutcome = searchParams.get("publishing");
@@ -516,7 +554,7 @@ export default function StudioSettingsPage() {
 					const next = new URLSearchParams(prev);
 					next.set("tab", id);
 					// The publishing outcome is the return leg's message, not a permanent
-					// override of the tab bar.
+					// override of the tab list.
 					next.delete("publishing");
 					return next;
 				},
@@ -526,6 +564,13 @@ export default function StudioSettingsPage() {
 		[setSearchParams],
 	);
 
+	// The section list is the sidebar's middle content, the same slot the account settings
+	// page uses. The layout owns the divider and the scroll region.
+	useEffect(() => {
+		setPageContent(<StudioSettingsSidebar active={activeTab} onSelect={selectTab} />);
+		return () => setPageContent(null);
+	}, [activeTab, selectTab, setPageContent]);
+
 	return (
 		<div className="max-w-3xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">Creator Settings</h1>
@@ -534,29 +579,6 @@ export default function StudioSettingsPage() {
 				collaborations you share. Account settings (profile, email, identity) live on your Anthers
 				account, and the Badge ladder is on your profile.
 			</p>
-
-			<div
-				role="tablist"
-				aria-label="Creator settings sections"
-				className="mb-6 flex flex-wrap gap-1 border-b border-base-300"
-			>
-				{STUDIO_TABS.map((tab) => (
-					<button
-						key={tab.id}
-						type="button"
-						role="tab"
-						aria-selected={activeTab === tab.id}
-						className={`-mb-px border-b-2 px-3 py-2 text-sm ${
-							activeTab === tab.id
-								? "border-primary font-medium text-primary"
-								: "border-transparent text-base-content/60 hover:text-base-content"
-						}`}
-						onClick={() => selectTab(tab.id)}
-					>
-						{tab.label}
-					</button>
-				))}
-			</div>
 
 			{visitedTabs.has("general") && (
 				<div hidden={activeTab !== "general"} className="flex flex-col gap-6">
