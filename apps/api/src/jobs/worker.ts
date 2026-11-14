@@ -43,6 +43,7 @@ import { type AccessReceiptsJobData, accessReceiptsJob } from "./access-receipts
 import { runConnectionCensus } from "./connection-census.js";
 import { runDeadlineReminderSweep } from "./deadline-reminders.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
+import { type ExtractFrameData, extractFrame } from "./extract-frame.js";
 import { runHlsOrphanSweep } from "./hls-orphan-sweep.js";
 import { type IngestEbookData, ingestEbook } from "./ingest-ebook.js";
 import { runMediaJob } from "./media-lane.js";
@@ -154,6 +155,20 @@ async function start() {
 			await ingestEbook(job.data);
 		}
 	});
+
+	// A creator's *Use This Frame*. One at a time: the extraction pins two threads for its
+	// ffmpeg, and two of those on the worker's two vCPUs would only fight an encode already
+	// in flight. `extract-frame.ts` carries why the act is queued at all.
+	await queue.work<ExtractFrameData>(
+		QUEUES.EXTRACT_FRAME,
+		{ localConcurrency: 1 },
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[extract-frame] Processing row ${job.data.jobId}`);
+				await extractFrame(job.data);
+			}
+		},
+	);
 
 	await queue.work<SyncWorkListingData>(
 		QUEUES.SYNC_WORK_LISTING,
