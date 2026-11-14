@@ -259,8 +259,7 @@ export default function BadgeCollaboratorsPanel({
 		}
 	};
 
-	const search = async (event: React.FormEvent) => {
-		event.preventDefault();
+	const search = async () => {
 		const q = query.trim();
 		if (q.length < 2) {
 			setSearchNote("Type at least two characters.");
@@ -420,18 +419,29 @@ export default function BadgeCollaboratorsPanel({
 					They will see the invitation on their own account and can accept or decline. The Badge
 					stays yours until they accept.
 				</p>
-				<form className="flex gap-2" onSubmit={(event) => void search(event)}>
+				<div className="flex gap-2">
 					<input
 						type="search"
 						className="input input-bordered input-sm min-w-0 flex-1"
 						placeholder="Search by name or handle"
 						value={query}
 						onChange={(event) => setQuery(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") {
+								event.preventDefault();
+								void search();
+							}
+						}}
 					/>
-					<button type="submit" className="btn btn-sm btn-outline" disabled={searching}>
+					<button
+						type="button"
+						className="btn btn-sm btn-outline"
+						disabled={searching}
+						onClick={() => void search()}
+					>
 						{searching ? "Searching…" : "Search"}
 					</button>
-				</form>
+				</div>
 				{searchNote && <p className="text-xs text-base-content/50">{searchNote}</p>}
 				{searchable.map((identity) => (
 					<div
