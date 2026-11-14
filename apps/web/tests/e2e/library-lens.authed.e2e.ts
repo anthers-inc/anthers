@@ -443,13 +443,18 @@ test("the Bookshelf lens stands the saved comic up as a spine", async ({ page })
 
 		await page.goto("/library?lens=bookshelf");
 		await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
-		await expect(page.getByText("A comic that really turns").first()).toBeVisible();
+
+		// The comic stands as a spine titled on the binding, on a board that labels the
+		// range of titles the row holds.
+		const shelf = page.getByTestId("bookshelf-shelf");
+		await expect(shelf.getByText("A comic that really turns")).toBeVisible();
+		await expect(shelf.getByTestId("shelf-label").first()).toBeVisible();
 
 		// The ribbon, at the depth the device got to: round(2 / pageCount) percent.
 		// Scoped to the shelf's own rows — an unfinished position rides the rail above
 		// too, so its spine carries a second, equal marker this walk is not about.
 		const expected = `${Math.round((2 / pageCount) * 100)}%`;
-		await expect(page.getByTestId("bookshelf-shelf").getByTestId("spine-marker")).toHaveAttribute(
+		await expect(shelf.getByTestId("spine-marker")).toHaveAttribute(
 			"style",
 			new RegExp(`height:\\s*${expected.replace("%", "")}%`),
 		);
