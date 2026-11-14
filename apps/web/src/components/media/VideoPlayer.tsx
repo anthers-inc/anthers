@@ -159,6 +159,15 @@ export default function VideoPlayer({
 	/** The native-file branch's error listener, so its cleanup stays inside the source effect. */
 	const nativeErrorHandler = useRef<(() => void) | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
+	/**
+	 * The element is waiting on data — after a play request and on every later stall.
+	 *
+	 * Kept apart from `isPlaying` because the two answer different questions and the
+	 * player needs both: attention is credited on `isPlaying` (a stalled element has
+	 * not played the seconds it is parked on), while the button reads this to show a
+	 * spinner instead of falling back to the play glyph the instant a play starts.
+	 */
+	const [buffering, setBuffering] = useState(false);
 	const [position, setPosition] = useState(0);
 	const [duration, setDuration] = useState(0);
 	const [buffered, setBuffered] = useState(0);
@@ -307,13 +316,26 @@ export default function VideoPlayer({
 		if (!video) return;
 
 		const onPlay = () => setIsPlaying(true);
-		const onPause = () => setIsPlaying(false);
+		const onPause = () => {
+			setIsPlaying(false);
+			setBuffering(false);
+		};
 		const onEnded = () => {
 			setIsPlaying(false);
+			setBuffering(false);
 			onEndedRef.current?.();
 		};
-		const onWaiting = () => setIsPlaying(false);
-		const onPlaying = () => setIsPlaying(true);
+		const onWaiting = () => {
+			setIsPlaying(false);
+			setBuffering(true);
+		};
+		const onPlaying = () => {
+			setIsPlaying(true);
+			setBuffering(false);
+		};
+		// A source that errors after `waiting` never reaches `playing` or `pause`, so
+		// nothing else would take the spinner down.
+		const onError = () => setBuffering(false);
 		const onTimeUpdate = () => {
 			setPosition(video.currentTime);
 			// Buffered ahead of the playhead, which is the only part a user can see the
@@ -335,6 +357,7 @@ export default function VideoPlayer({
 		video.addEventListener("ended", onEnded);
 		video.addEventListener("waiting", onWaiting);
 		video.addEventListener("playing", onPlaying);
+		video.addEventListener("error", onError);
 		video.addEventListener("timeupdate", onTimeUpdate);
 		video.addEventListener("durationchange", onDurationChange);
 		video.addEventListener("ratechange", onRateChange);
@@ -345,10 +368,12 @@ export default function VideoPlayer({
 			video.removeEventListener("ended", onEnded);
 			video.removeEventListener("waiting", onWaiting);
 			video.removeEventListener("playing", onPlaying);
+			video.removeEventListener("error", onError);
 			video.removeEventListener("timeupdate", onTimeUpdate);
 			video.removeEventListener("durationchange", onDurationChange);
 			video.removeEventListener("ratechange", onRateChange);
 			setIsPlaying(false);
+			setBuffering(false);
 		};
 	}, []);
 
@@ -505,8 +530,13 @@ export default function VideoPlayer({
 	const togglePlay = useCallback(() => {
 		const video = videoRef.current;
 		if (!video) return;
-		if (video.paused) video.play().catch(() => {});
-		else video.pause();
+		if (video.paused) {
+			// The press's own acknowledgment. `waiting` is the element's later, honest
+			// word on the same fact, but the gap before it is exactly the moment the
+			// user is watching the button to see whether the click landed.
+			setBuffering(true);
+			video.play().catch(() => setBuffering(false));
+		} else video.pause();
 	}, []);
 
 	const seekTo = useCallback((seconds: number) => {
@@ -728,8 +758,9 @@ export default function VideoPlayer({
 					</video>
 
 					{/* The big idle affordance. Only while paused, and it never eats the click —
-					    the picture underneath is the button. */}
-					{!isPlaying && (
+					    the picture underneath is the button. A buffering element is not paused,
+					    so the play glyph stays away until there is something to play. */}
+					{!isPlaying && !buffering && (
 						<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
 							<span className="flex h-16 w-24 items-center justify-center rounded-2xl bg-primary/90 text-primary-content shadow-lg transition-transform duration-200 group-hover/player:scale-105">
 								<PlayIcon className="ml-1 size-8" />
@@ -739,6 +770,7 @@ export default function VideoPlayer({
 
 					<VideoControls
 						playing={isPlaying}
+						buffering={buffering}
 						position={position}
 						duration={duration}
 						buffered={buffered}

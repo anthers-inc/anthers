@@ -30,6 +30,20 @@ export const TRANSPORT_ICON_CLASS: Record<Size, string> = {
 	lg: "w-5 h-5 sm:w-6 sm:h-6",
 };
 
+/**
+ * Spinner sizing per button size, matched to the icon it stands in for. The ring is
+ * drawn rather than delegated to daisyUI's `.loading-spinner`: that mask animates its
+ * arc in from zero over the first several hundred milliseconds, which is exactly the
+ * window a short buffer occupies — the user would see a dot at the moment the spinner
+ * exists to say the click landed.
+ */
+const TRANSPORT_SPINNER_CLASS: Record<Size, string> = {
+	xs: "size-3.5 border-2",
+	sm: "size-4 border-2",
+	md: "size-4 border-2 sm:size-5",
+	lg: "size-5 border-2 sm:size-6",
+};
+
 export default function TransportButton({
 	label,
 	icon: Icon,
@@ -38,6 +52,7 @@ export default function TransportButton({
 	size = "sm",
 	active = false,
 	disabled = false,
+	busy = false,
 	badge,
 	className = "",
 }: {
@@ -56,6 +71,16 @@ export default function TransportButton({
 	 */
 	active?: boolean;
 	disabled?: boolean;
+	/**
+	 * The control accepted the press and is waiting on something before its effect
+	 * shows — the video player's play button while the element buffers.
+	 *
+	 * The spinner stands in for the icon rather than sitting beside it, because the
+	 * icon is a claim about the present that is not yet true. The button stays
+	 * enabled and keeps its action label: a slow load is still something a person
+	 * can cancel.
+	 */
+	busy?: boolean;
 	/** A tiny overlay glyph, e.g. the `1` on repeat-one. */
 	badge?: ReactNode;
 	className?: string;
@@ -71,12 +96,21 @@ export default function TransportButton({
 			disabled={disabled}
 			aria-label={label}
 			aria-pressed={active || undefined}
+			aria-busy={busy || undefined}
 			title={label}
 			className={`btn ${shapeClass} relative ${SIZE_CLASS[size]} ${toneClass} ${
 				active && tone === "ghost" ? "text-primary" : ""
 			} transition-[transform,color,background-color,border-color,box-shadow] duration-fast ease-settle active:scale-95 ${className}`}
 		>
-			<Icon className={TRANSPORT_ICON_CLASS[size]} />
+			{busy ? (
+				<span
+					data-testid="transport-spinner"
+					className={`inline-block rounded-full border-current border-t-transparent motion-safe:animate-spin ${TRANSPORT_SPINNER_CLASS[size]}`}
+					aria-hidden
+				/>
+			) : (
+				<Icon className={TRANSPORT_ICON_CLASS[size]} />
+			)}
 			{badge}
 		</button>
 	);
