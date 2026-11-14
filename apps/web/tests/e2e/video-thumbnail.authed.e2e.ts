@@ -13,15 +13,57 @@
  * Runs on the media fixture's video, which is real HLS from a real ffmpeg run, so the picture
  * genuinely decodes. Its thumbnail is put back afterward, since other walks open the same Work.
  */
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
 import { works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { expect, signInAsMediaFixture, test } from "./fixtures";
+import { expect, leashedExecFileSync, signInAsMediaFixture, test } from "./fixtures";
 
 const CLIP = mediaFixtureWork("video");
+// No trailing slash: a `//apps/…` import resolves as its own module instance to Bun, and
+// the child then starts one queue while the handler sends on another (found by its
+// "Database not opened" failure the first time this ran).
+const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url)).replace(/\/$/, "");
 
 let previous: string | null | undefined;
+
+/**
+ * Run the queued extraction the way the worker would, for the one take this walk makes.
+ *
+ * 🚨 **No worker runs in a browser session**, so the row the page polls would stay pending
+ * for ever and the walk could only prove the ask. This calls `extractFrame` directly — the
+ * same handler the worker registers — in a child `bun` process, because importing the API's
+ * job into a web spec would couple the suites and the Playwright worker runs under Node in
+ * CI, where `Bun` (which the handler spawns with) does not exist.
+ *
+ * The queue is started first so the handler's scan enqueue succeeds; nothing drains the scan,
+ * which is this process's only job. The child exits explicitly because the database pool and
+ * pg-boss hold handles open, the same reason the seed scripts do.
+ */
+function extractFrame(jobId: number): void {
+	const dir = mkdtempSync(join(tmpdir(), "anthers-thumb-walk-"));
+	const script = `const { ensureQueueReady } = await import(${JSON.stringify(
+		`${REPO_ROOT}/apps/api/src/jobs/queue.js`,
+	)});
+await ensureQueueReady();
+const { extractFrame } = await import(${JSON.stringify(
+		`${REPO_ROOT}/apps/api/src/jobs/extract-frame.js`,
+	)});
+await extractFrame({ jobId: ${jobId} });
+process.exit(0);
+`;
+	const file = join(dir, "extract.ts");
+	writeFileSync(file, script);
+	try {
+		leashedExecFileSync("bun", [file], { cwd: REPO_ROOT, stdio: "ignore" });
+	} finally {
+		rmSync(dir, { force: true, recursive: true });
+	}
+}
 
 test.afterAll(async () => {
 	if (previous === undefined) return;
@@ -86,10 +128,7 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 	// This suite's servers are the two previews and the API — no worker — so the queued
 	// extraction is run here, the way the API suites run a handler. The page's own poll is
 	// what the rest of the walk exercises.
-	const { ensureQueueReady } = await import("../../../api/src/jobs/queue");
-	const { extractFrame } = await import("../../../api/src/jobs/extract-frame");
-	await ensureQueueReady();
-	await extractFrame({ jobId: job.id });
+	extractFrame(job.id);
 
 	// The picture the page was showing is replaced by the frame that landed.
 	await expect
