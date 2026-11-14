@@ -55,7 +55,6 @@ import type {
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useAnthersLadder } from "../../lib/anthers-ladder";
-import CollaborationInvites from "./CollaborationInvites";
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                 */
@@ -477,7 +476,6 @@ export default function BadgesSection() {
 					Every Badge you carry, from Anthers and from the creators you back.
 				</p>
 			</div>
-			<CollaborationInvites onChanged={fetchHoldings} />
 			{error && (
 				<div className="alert alert-error mb-4">
 					<span>{error}</span>

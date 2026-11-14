@@ -2351,7 +2351,7 @@ const subscriptionRoutes = new Hono()
 				kind: "collab_invite",
 				title: `${user.displayName || user.handle} invited you to co-own ${badge.label}`,
 				body: "Both of you can edit it, each of you can leave, and its support is split evenly.",
-				linkPath: "/settings?tab=badges",
+				linkPath: "/studio/settings?tab=collabs",
 				dedupeKey: `collab-invite:${badgeId}:${target.id}:${row.createdAt.getTime()}`,
 			});
 
@@ -2533,7 +2533,7 @@ const subscriptionRoutes = new Hono()
 				kind: "collab_declined",
 				title: `${user.displayName || user.handle} declined the ${badge.label} collaboration`,
 				body: "The Badge stays with its current owners. You can send another invitation later.",
-				linkPath: "/settings?tab=badges",
+				linkPath: "/studio/settings?tab=collabs",
 				dedupeKey: `collab-declined:${row.id}:${Date.now()}`,
 			});
 		}
@@ -2746,7 +2746,7 @@ const subscriptionRoutes = new Hono()
 				kind: "publisher_handover",
 				title: `${user.displayName || user.handle} wants to make you the publisher of ${badge.label}`,
 				body: "The publisher holds the Badge's billing and art home. Your share, editing rights and the split do not change.",
-				linkPath: "/settings?tab=badges",
+				linkPath: "/studio/settings?tab=collabs",
 				dedupeKey: `publisher-handover:${handover.id}`,
 			});
 
@@ -2853,7 +2853,7 @@ const subscriptionRoutes = new Hono()
 			kind: "publisher_handover_accepted",
 			title: `${user.displayName || user.handle} accepted the publisher role for ${badge.label}`,
 			body: "The Badge's billing and art home has moved. Ownership, editing and the split are unchanged.",
-			linkPath: "/settings?tab=badges",
+			linkPath: "/studio/settings?tab=collabs",
 			dedupeKey: `publisher-handover-accepted:${handover.id}`,
 		});
 
@@ -2893,7 +2893,7 @@ const subscriptionRoutes = new Hono()
 			kind: "publisher_handover_declined",
 			title: `${user.displayName || user.handle} declined the publisher role for ${badge?.label ?? "your Badge"}`,
 			body: "The Badge stays as it is. You can ask another owner later.",
-			linkPath: "/settings?tab=badges",
+			linkPath: "/studio/settings?tab=collabs",
 			dedupeKey: `publisher-handover-declined:${handover.id}`,
 		});
 
