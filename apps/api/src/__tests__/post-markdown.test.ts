@@ -136,6 +136,37 @@ describe("isEmptyPostMarkdown", () => {
 	});
 });
 
+describe("spoiler text", () => {
+	it("stores the editor's spoiler span as the delimiter spelling", () => {
+		expect(postHtmlToMarkdown('<p>before <span class="spoiler">hidden</span> after</p>')).toBe(
+			"before ||hidden|| after",
+		);
+	});
+
+	it("keeps the stored delimiter spelling through normalization, marks included", () => {
+		const md = "before ||a **b** and [c](https://e.example)|| after";
+		expect(normalizeStoredMarkdown(md)).toBe(md);
+	});
+
+	it("keeps a spoiler wrapping a link as one pair", () => {
+		expect(
+			postHtmlToMarkdown(
+				'<p><span class="spoiler"><a href="https://e.example">the ending</a></span></p>',
+			),
+		).toBe("||[the ending](https://e.example)||");
+	});
+
+	it("does not print a spoiler in an excerpt", () => {
+		expect(postContentExcerpt("before ||hidden|| after")).toBe("before after");
+		expect(postContentExcerpt("a ||one|| b ||two|| c")).toBe("a b c");
+	});
+
+	it("leaves a code span's pipes alone and keeps an unpaired pair literal", () => {
+		expect(postContentExcerpt("`||x||`")).toBe("||x||");
+		expect(postContentExcerpt("a || b")).toBe("a || b");
+	});
+});
+
 describe("postContentExcerpt", () => {
 	// The one consumer is the feed tile, which renders a post's stored markdown
 	// as plain text in the artwork's place — the same conversion every later
