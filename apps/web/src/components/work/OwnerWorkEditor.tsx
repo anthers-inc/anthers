@@ -138,6 +138,7 @@ import {
 	TrashIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { PauseIcon, PlayIcon } from "@heroicons/react/24/solid";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useMediaPlayer } from "../../lib/media-player";
 import { useExclusivePlayback } from "../../lib/playback";
@@ -145,6 +146,9 @@ import CreditsSection from "../../studio/CreditsSection";
 import PanelEditor from "../../studio/PanelEditor";
 import RatingMatrix, { RatingMatrixReadOnly } from "../../studio/RatingMatrix";
 import WorkCaptionsEditor from "../../studio/WorkCaptionsEditor";
+import { formatTime } from "../media/transport/format";
+import SeekBar from "../media/transport/SeekBar";
+import TransportButton from "../media/transport/TransportButton";
 import ProjectPricing from "../project/ProjectPricing";
 import WorkReviews from "../project/WorkReviews";
 import { contentTypeMeta } from "../ui/ContentTypeBadge";
@@ -2138,6 +2142,12 @@ export default function OwnerWorkEditor({
  * to any moment, with the act that hands the paused second to the server. The route
  * extracts the frame and saves the field itself, so a settled `Use This Frame` IS the
  * save, and the picker's close rides the act's own success.
+ *
+ * ⚠️ **The scrubber is ours, not the element's native controls.** Dragging the native
+ * scrubber while the video is paused can leave the old picture on screen until playback
+ * resumes (Parker's report, 2026-10-19 — the ordinary player never does it). Assigning
+ * `currentTime` ourselves repaints on the same path that player takes, and it gives the
+ * control a name and keyboard behavior rather than whatever the browser drew.
  */
 function ThumbFramePicker({
 	open,
@@ -2163,6 +2173,51 @@ function ThumbFramePicker({
 	const videoRef = useRef<HTMLVideoElement | null>(null);
 	useExclusivePlayback(videoRef);
 
+	/** The element's own state, mirrored for the transport — it is the one source of truth.
+	 *  The listeners are React's props on the element rather than an effect: the modal's
+	 *  `Appear` mounts its children only once the picker opens, so a ref-and-effect pair
+	 *  attaches to an element that does not exist yet. */
+	const [playing, setPlaying] = useState(false);
+	const [position, setPosition] = useState(0);
+	const [duration, setDuration] = useState(0);
+	const [buffered, setBuffered] = useState<number | undefined>(undefined);
+	/**
+	 * Paint the transport from what the element reports rather than tracking a position of
+	 * its own. `seeked` is heard as well as `timeupdate` because a paused seek settles
+	 * without one, which is the exact window this control exists to make visible.
+	 */
+	const paint = (el: HTMLVideoElement) => {
+		setPosition(el.currentTime);
+		setDuration(Number.isFinite(el.duration) ? el.duration : 0);
+	};
+	const noteBuffered = (el: HTMLVideoElement) => {
+		if (el.buffered.length > 0) setBuffered(el.buffered.end(el.buffered.length - 1));
+	};
+
+	/**
+	 * The picker's one act of positioning: a programmatic seek, which is the path that
+	 * repaints a paused video. The element clamps and fires `seeked`, which paints the
+	 * transport from what actually landed.
+	 */
+	const seekTo = (seconds: number) => {
+		const el = videoRef.current;
+		if (!el) return;
+		el.currentTime = seconds;
+		setPosition(seconds);
+	};
+
+	const togglePlay = () => {
+		const el = videoRef.current;
+		if (!el) return;
+		if (el.paused) {
+			// A refused play (a browser policy, a decode error) must not leave a lit
+			// pause icon over a stopped video.
+			void el.play().catch(() => setPlaying(false));
+		} else {
+			el.pause();
+		}
+	};
+
 	// Escape closes, for the keyboard half of the door (the pattern ReportDialog set);
 	// the pointer half is the ✕.
 	useEffect(() => {
@@ -2187,11 +2242,23 @@ function ThumbFramePicker({
 				</button>
 				<h3 className="text-lg font-semibold">Thumbnail from this Work</h3>
 				<p className="mt-1 text-xs text-base-content/60">
-					Play or drag the video to the moment you want, then take that frame.
+					Play or drag to the moment you want, then take that frame.
 				</p>
 				{/* biome-ignore lint/a11y/useMediaCaption: the caption tracks render from the
 				    Work's own captions below; a video without any has none to provide. */}
-				<video ref={videoRef} src={src} controls className="mt-3 w-full rounded-lg bg-black">
+				<video
+					ref={videoRef}
+					src={src}
+					className="mt-3 w-full rounded-lg bg-black"
+					onPlay={() => setPlaying(true)}
+					onPause={() => setPlaying(false)}
+					onTimeUpdate={(e) => paint(e.currentTarget)}
+					onSeeked={(e) => paint(e.currentTarget)}
+					onLoadedMetadata={(e) => paint(e.currentTarget)}
+					onDurationChange={(e) => paint(e.currentTarget)}
+					onEmptied={(e) => paint(e.currentTarget)}
+					onProgress={(e) => noteBuffered(e.currentTarget)}
+				>
 					{(captions ?? []).map((track) => (
 						<track
 							key={track.id}
@@ -2202,6 +2269,24 @@ function ThumbFramePicker({
 						/>
 					))}
 				</video>
+				<div className="mt-2 flex items-center gap-3">
+					<TransportButton
+						label={playing ? "Pause" : "Play"}
+						icon={playing ? PauseIcon : PlayIcon}
+						onClick={togglePlay}
+						tone="primary"
+					/>
+					<span className="text-xs tabular-nums text-base-content/70">{formatTime(position)}</span>
+					<SeekBar
+						position={position}
+						duration={duration}
+						buffered={buffered}
+						onSeek={seekTo}
+						label="Seek to the frame's moment"
+						className="flex-1"
+					/>
+					<span className="text-xs tabular-nums text-base-content/70">{formatTime(duration)}</span>
+				</div>
 				<div className="mt-4 flex items-center justify-end gap-3">
 					{(busy || inFlight) && (
 						<span className="text-xs text-base-content/60">Taking this moment…</span>

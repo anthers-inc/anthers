@@ -48,26 +48,50 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 		page.getByText("shows a placeholder drawn for its kind", { exact: false }).first(),
 	).toBeAttached();
 
-	// Open the picker, wait for its player to report a real picture, then take a moment
-	// in. The extraction is the SERVER's doing — the route saves the field itself, so
-	// the answered request IS the save.
+	// Open the picker, wait for its player to report a real picture, then drag the picker's
+	// own scrubber: the control a creator actually drags, and the one whose paused seek is
+	// this walk's subject. The two screenshots are the proof that the picture followed —
+	// a scrub that left the old frame would leave them byte-identical.
 	await page.getByRole("button", { name: "Edit Thumbnail" }).click();
 	await page.getByRole("button", { name: "Choose from Work" }).click();
 	const picker = page.getByRole("dialog", { name: "Thumbnail from this Work" });
+	const video = picker.locator("video");
 	await expect
-		.poll(() => picker.locator("video").evaluate((v) => (v as HTMLVideoElement).duration ?? 0), {
+		.poll(() => video.evaluate((v) => (v as HTMLVideoElement).duration ?? 0), {
 			timeout: 15_000,
 			message: "the picker's video never reported a duration — the original did not attach",
 		})
 		.toBeGreaterThan(0);
-	await picker.locator("video").evaluate(
-		(video) =>
+	await video.evaluate(
+		(v) =>
 			new Promise<void>((resolve) => {
-				const el = video as HTMLVideoElement;
-				el.addEventListener("seeked", () => resolve(), { once: true });
-				el.currentTime = 1;
+				const el = v as HTMLVideoElement;
+				if (el.readyState >= 2) return resolve();
+				el.addEventListener("loadeddata", () => resolve(), { once: true });
 			}),
 	);
+	const atStart = await video.screenshot();
+
+	const seek = picker.getByRole("slider", { name: "Seek to the frame's moment" });
+	const bar = await seek.boundingBox();
+	if (!bar) throw new Error("the picker's scrubber has no box");
+	await seek.hover();
+	await page.mouse.down();
+	await page.mouse.move(bar.x + bar.width * 0.6, bar.y + bar.height / 2, { steps: 6 });
+	await page.mouse.up();
+
+	await expect
+		.poll(() => video.evaluate((v) => (v as HTMLVideoElement).currentTime), {
+			timeout: 5_000,
+			message: "the scrubber never moved the picker's video",
+		})
+		.toBeGreaterThan(1);
+	await expect
+		.poll(async () => Buffer.compare(atStart, await video.screenshot()), {
+			timeout: 5_000,
+			message: "the paused scrub landed but the picture never changed",
+		})
+		.not.toBe(0);
 
 	const taken = page.waitForResponse((res) => res.url().includes("/thumbnail-frame") && res.ok());
 	await picker.getByRole("button", { name: "Use This Frame" }).click();
