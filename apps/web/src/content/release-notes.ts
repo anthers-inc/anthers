@@ -71,6 +71,25 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.16",
+		date: "2026-11-14",
+		lede: "A Badge can now be owned by several creators, and a post, comment, or reply can carry a spoiler that stays hidden until a reader opens it.",
+		entries: [
+			"A Badge can now be co-owned by several creators. One creator publishes it and the others accept an invitation; the Badge stays on the publisher's page until an invitation is accepted, and a pending invitation gives the invitee nothing until then. Every owner edits the Badge.",
+			"A supporter's held Collab Badge clears every owner's gates. The first month and each renewal split evenly across the owners in whole cents, and the checkout line names every owner.",
+			"The publisher role is not a rank: an owner can leave once none of their Works still gates on the Badge, and a two-step handover moves the role when the current publisher asks and the target accepts.",
+			"The Badges surfaces carry the shared ownership: a combo avatar and collaborators list on the Badge, a Collab Badges section on each co-owner's profile, a Collaborators tab in the Badge Maker, a shared-support line in checkout, and invitations and handover requests in Creator Settings' Collabs tab.",
+			"Posts, comments, and replies can hide a run of words as a spoiler with double pipes around it. The words are blurred behind a control labeled Spoiler until a reader opens it. A post's feed excerpt and link preview leave the hidden words out, and a hashtag inside one does not become a tag. This is a reading convention, not access control; the words remain in the served text.",
+			"The Bookshelf draws every book as a titled spine with its title running down the binding, and packs the spines onto shelf boards whose labels come from the books on that row. A book's thickness, height, and shade come from a stable hash, so a shelf keeps its shape between visits.",
+			"The video player's play button shows a spinner while it waits for a picture, its controls sit twelve pixels above the bottom edge, and the settings menu opens at full height rather than scrolling inside a one-line box.",
+			"The nineteen standing pages now carry their words in the served document as well as in the bundle, so a reader service, an archiver, or an agent that does not run JavaScript gets the prose instead of an empty shell. Work pages, posts, and creator profiles still answer with the app shell, because their words come from an API read.",
+			"The thumbnail frame picker has its own play control, time readout, and scrubber, so dragging it while the video is paused repaints the frame the creator lands on rather than leaving the previous picture on screen.",
+			"Choosing Use This Frame no longer holds the request open while the frame is decoded. The page follows the extraction and shows the frame, or the failure, when it settles.",
+			"Creator Settings now lists its sections in the sidebar below the Studio navigation instead of in a row of tabs across the page, and the Collabs tab sits there with the others.",
+			"The sidebar filters explain themselves: Lenses, Types, and Tags on the user side and Search and Types on the creator side carry the same hoverable tips Access already had, and Work Type is now Types on both sides.",
+		],
+	},
+	{
 		version: "2026.11.15",
 		date: "2026-11-13",
 		lede: "The signed-in app now tells a user plainly that Anthers is in alpha and where to write when something is rough, and the admin app now carries a directory of every account.",
