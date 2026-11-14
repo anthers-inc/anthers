@@ -34,8 +34,19 @@ import { eq, sql } from "drizzle-orm";
  * recognize is still evidence of *something*, and storing its name costs nothing while
  * discarding it means a future question has no data behind it. What the set decides is
  * only which events are worth *overwriting* a terminal one with — see `recordDeliveryEvent`.
+ *
+ * `suppressed` is terminal and NOT delivered: Resend skipped the message because the
+ * address is on the team's suppression list, so it never left and no later event can
+ * improve on that answer. It is a pre-send refusal, not an in-flight state.
  */
-const TERMINAL_EVENTS = new Set(["delivered", "bounced", "complained", "failed", "canceled"]);
+const TERMINAL_EVENTS = new Set([
+	"delivered",
+	"bounced",
+	"complained",
+	"failed",
+	"canceled",
+	"suppressed",
+]);
 
 /** Strip Resend's `email.` prefix. `email.delivered` is stored as `delivered`. */
 export function normalizeEventName(type: string): string {
@@ -84,8 +95,11 @@ export async function recordDeliveryEvent(input: DeliveryEvent): Promise<{ match
 	// (A terminal event has the same guard: a terminal over a terminal is not an upgrade,
 	// so it does not rewrite — the first terminal answer stands, which is what makes the
 	// column readable.)
+	// Keep this literal list in step with TERMINAL_EVENTS above. The guard is SQL, so it
+	// cannot read the Set; a terminal name missing here can be overwritten by a later
+	// non-terminal event.
 	const mailGuard = sql`(${outboundEmails.deliveryEvent} IS NULL
-		OR ${outboundEmails.deliveryEvent} NOT IN ('delivered','bounced','complained','failed','canceled'))`;
+		OR ${outboundEmails.deliveryEvent} NOT IN ('delivered','bounced','complained','failed','canceled','suppressed'))`;
 	const mailUpdates = await db
 		.update(outboundEmails)
 		.set({ deliveryEvent: input.event, deliveryEventAt: input.occurredAt })
@@ -110,6 +124,10 @@ const DELIVERED_EVENTS = new Set(["delivered", "opened", "clicked"]);
  * ⚠️ **`opened` and `clicked` count as delivered**, because they are later events than
  * delivery — a message somebody has read has necessarily been delivered, and reading them
  * as anything else would turn the best possible outcome into an unresolved one.
+ *
+ * **`suppressed` is terminal and not delivered.** It is a pre-send refusal from Resend
+ * (the address is on the team's suppression list), so it will never arrive and there is
+ * no later event to wait for.
  *
  * **An unrecognized event is neither delivered nor terminal**, which fails toward
  * keep-asking rather than toward declaring success — the safe direction when the provider

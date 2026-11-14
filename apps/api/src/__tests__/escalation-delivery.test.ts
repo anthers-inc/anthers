@@ -30,7 +30,7 @@ import { SKIP_ABUSE_TESTS } from "./abuse-optin.js";
 import { markEscalated } from "./escalation-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
-describe.skipIf(SKIP_ABUSE_TESTS)("Reading a stored event", () => {
+describe("Reading a stored event", () => {
 	it("treats a delivered message as delivered and finished", () => {
 		const s = classifyStoredEvent("delivered", null);
 		expect(s.delivered).toBe(true);
@@ -55,6 +55,14 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Reading a stored event", () => {
 			expect(s.delivered).toBe(false);
 			expect(s.terminal).toBe(true);
 		}
+	});
+
+	it("treats a provider suppression as finished and NOT delivered", () => {
+		// Pre-send: Resend skipped the message because the address is on the team's
+		// suppression list. There is no later event to wait for.
+		const s = classifyStoredEvent("suppressed", null);
+		expect(s.delivered).toBe(false);
+		expect(s.terminal).toBe(true);
 	});
 
 	it("leaves an in-flight message unfinished, so a caller keeps asking", () => {
