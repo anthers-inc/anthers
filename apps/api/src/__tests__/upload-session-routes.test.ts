@@ -30,16 +30,13 @@ if (process.env[MODE_ENV] === "1") {
 
 	describe("the local-mode session surface (driving alongside the child)", () => {
 		it("runs the s3-mode suite in a child process, so its storage environment cannot reach a sibling file", async () => {
-			// A child inherits the parent's session unless both names are stripped: the
-			// database URL would point at the parent's session while the child's preload
-			// starts its own, and two module instances then read two databases in one
-			// process. A clean environment is what makes the child's session the only one.
-			const childEnv: Record<string, string> = {};
-			for (const [key, value] of Object.entries(process.env)) {
-				if (key === "DATABASE_URL" || key === "ANTHERS_SESSION" || value == null) continue;
-				childEnv[key] = value;
-			}
-			childEnv[MODE_ENV] = "1";
+			// A child inherits the parent's session: `ANTHERS_SESSION` and `DATABASE_URL`
+			// are how CI's service-container session and a local Docker session are reused
+			// instead of started again. Only the mode flag is added.
+			const childEnv: Record<string, string | undefined> = {
+				...process.env,
+				[MODE_ENV]: "1",
+			};
 			const proc = Bun.spawn(["bun", "test", import.meta.path], {
 				// The REPOSITORY root, not `apps/api`: Bun loads the bunfig of the directory
 				// it starts in, and starting inside `apps/api` loaded the root preload and
