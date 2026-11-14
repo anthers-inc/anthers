@@ -71,6 +71,21 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.17",
+		date: "2026-11-14",
+		lede: "A Work can now be owned by several creators, and a sale of a co-owned Work is divided evenly among its owners.",
+		entries: [
+			"A Work can now be owned by several creators. One creator holds the publisher role and the others accept an invitation; the Work stays with the publisher and appears on an invitee's profile and in their Studio only once the invitation is accepted. Every owner edits the Work, and each can remove only themselves.",
+			"A completed sale of a co-owned Work is divided evenly across its owners. Each owner is paid, credited on a physical sale, reversed on a refund, and netted in a dispute on their own slice, and sale and refund receipts are per owner. A later ownership change does not rewrite a sale that already completed.",
+			"The Time Pool divides a co-owned Work's credited time evenly across its owners, so the pool's total is unchanged and each owner is credited their share. A settled cycle keeps its rows when ownership changes later.",
+			"The publisher role is not a rank: a two-step handover moves it when the current publisher asks and the target accepts.",
+			"The owners appear wherever the Work names a creator: cards, feed tiles, the Work's byline, the profile grid, and the Library carry a combo avatar of every owner, and the Studio editor carries a Collaborators panel with the publisher chip and Make publisher. Work invitations sit in Creator Settings' Collabs tab beside Badge invitations.",
+			"A co-owned Work can only be gated on a Badge that another creator also owns. The server refuses a gate on a Badge only the publisher owns, and a direct price remains available and splits across the owners like any other sale.",
+			"Deleting an account hands a co-owned Work to its oldest accepted co-owner rather than deleting or withdrawing it, and the deletion preview names that outcome.",
+			"A physical good's gallery images are part of the Work's media now, so they follow the Work's media wherever it is moved or removed, and they count against the publisher's storage; a storefront's pictures are no longer left behind pointing at a file that is gone.",
+		],
+	},
+	{
 		version: "2026.11.16",
 		date: "2026-11-14",
 		lede: "A Badge can now be owned by several creators, and a post, comment, or reply can carry a spoiler that stays hidden until a reader opens it.",
