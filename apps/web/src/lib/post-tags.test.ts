@@ -5,20 +5,20 @@
  */
 import { describe, expect, it } from "bun:test";
 import { tagsFromBodyHtml } from "@anthers/web-shared/post-tags";
-import { render } from "../components/payments/render-hooks";
+import { Window } from "happy-dom";
 
-// The parse reads through a DOM; the shared test helper registers it and restores Bun's own
-// globals around it.
-render(null).unmount();
+// A detached window rather than a registered global one: the parse needs a document, and a
+// global DOM in this process would put libraries that sniff for a browser into browser mode.
+const document = new Window().document as unknown as Document;
 
 describe("tagsFromBodyHtml", () => {
 	it("reads hashtags from the body's text", () => {
-		expect(tagsFromBodyHtml("<p>#one and #two</p>")).toEqual(["one", "two"]);
+		expect(tagsFromBodyHtml("<p>#one and #two</p>", document)).toEqual(["one", "two"]);
 	});
 
 	it("does not mint a tag from inside a spoiler", () => {
-		expect(tagsFromBodyHtml('<p>visible #one <span class="spoiler">#secret</span></p>')).toEqual([
-			"one",
-		]);
+		expect(
+			tagsFromBodyHtml('<p>visible #one <span class="spoiler">#secret</span></p>', document),
+		).toEqual(["one"]);
 	});
 });
