@@ -28,8 +28,8 @@
  *
  * The save routes are held to the same rewrite (Parker, 2026-10-16 — the Studio's video
  * player flipped to the raw URL the moment a thumbnail save adopted the response, and the
- * console filled with 404s): the work edit (`PATCH /works/:id`) and the frame-thumbnail
- * (`POST /works/:id/thumbnail-frame`) responses answer a creator with a rewritten row too.
+ * console filled with 404s): the work edit (`PATCH /works/:id`), and the read a frame take
+ * leaves the creator's page on once the queued extraction lands.
  */
 
 import { describe, expect, it } from "bun:test";
@@ -282,15 +282,27 @@ async function runDeliveryModeSuite(): Promise<void> {
 			expect(JSON.stringify(work.transcoding)).not.toContain("cdn.");
 		});
 
-		it("taking a frame answers with the rewritten row too", async () => {
+		it("taking a frame queues the extraction, and the row it lands on is rewritten too", async () => {
 			const res = await req(`/api/content/works/${frameId}/thumbnail-frame`, {
 				method: "POST",
 				headers: { Cookie: creatorCookie, "Content-Type": "application/json", Origin: ORIGIN },
 				body: JSON.stringify({ atSeconds: 0.5 }),
 			});
-			expect(res.status).toBe(200);
-			const { work } = await res.json();
-			// The frame itself was stored and set, and the row's URLs were rewritten.
+			// The ask, not the row: the worker extracts, so the route answers the row it
+			// wrote. Run the handler here — this suite hosts no worker.
+			expect(res.status).toBe(202);
+			const { job } = await res.json();
+			const { extractFrame } = await import("../jobs/extract-frame.js");
+			await extractFrame({ jobId: job.id });
+
+			// The read the creator's page makes once the frame lands carries the rewritten
+			// row: the frame itself was stored and set, and the URLs reach a browser only
+			// through the access-checked routes.
+			const read = await req(`/api/content/works/${frameId}`, {
+				headers: { Cookie: creatorCookie },
+			});
+			expect(read.status).toBe(200);
+			const { work } = await read.json();
 			expect(work.thumbnail).toContain("/thumbnails/");
 			expect(work.transcoding.hlsManifestUrl).toBe(
 				`${ORIGIN}/api/content/works/${frameId}/hls/master.m3u8`,

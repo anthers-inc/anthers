@@ -297,6 +297,11 @@ export const QUEUES = {
 	// shapes apart (the reader picks by what the ingest produced) and because a job that
 	// unzips is not a job that rasterizes. See ingest-ebook.ts.
 	INGEST_EBOOK: "ingest-ebook",
+	// Take a video Work's thumbnail from one frame of its stored original. Its own queue
+	// rather than a ride on the transcode lane: it is a creator's click, seconds of decode,
+	// and it must not wait behind a long encode's position in the media lane. See
+	// extract-frame.ts.
+	EXTRACT_FRAME: "extract-frame",
 	DISTRIBUTE_POOL: "distribute-pool",
 	SETTLE_CYCLE: "settle-cycle", // Credit each ended month from its paid invoices; see settle-cycle.ts
 	// Publish the Time Pool Fund's ledger: restate actuals, commit the next month from
@@ -515,6 +520,15 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 2,
 		retryDelay: 60,
 		expireInMinutes: 30,
+	},
+	// A single frame is seconds of decode, and the handler's own ffmpeg timeout is the real
+	// bound. **No retry**: the creator's page shows the failure and pressing the button again
+	// is theirs, so a retry would only overwrite a message they are reading with a silent
+	// second attempt. The window is for a crash mid-job, not for the extraction itself.
+	[QUEUES.EXTRACT_FRAME]: {
+		retryLimit: 0,
+		expireInMinutes: 5,
+		heartbeatSeconds: 30,
 	},
 	// A sweep over every registered space, one at a time, each with a STAR and its blobs. The
 	// cap is generous because a hundred spaces with media is minutes of network and storage

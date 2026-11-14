@@ -1259,6 +1259,38 @@ export const workTranscodingJobs = pgTable(
 	(table) => [index("idx_transcoding_work").on(table.workId)],
 );
 
+/**
+ * One ask to take a video's thumbnail from a frame — the row the client watches while the
+ * worker does the decode.
+ *
+ * **The act is queued rather than answered in the request.** It used to spawn ffprobe and
+ * ffmpeg inside the api component's handler, which made the creator's click wait on the
+ * whole decode and ran two threads on the api's single core. The row is the state the
+ * creator's page polls: `pending` while it waits on the queue, `processing` while ffmpeg
+ * runs, then `completed` or `failed` with the message the page shows.
+ *
+ * The row cascades with its Work. `at_seconds` is the moment the creator paused on, kept
+ * so a retried delivery extracts the same frame rather than whatever the player last said.
+ */
+// node — a creator's own choice about their own Work's media. Cascades with the creator's Work.
+export const workThumbnailFrames = pgTable(
+	"work_thumbnail_frames",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		atSeconds: real("at_seconds").notNull(),
+		// pending | processing | completed | failed
+		status: text("status").notNull().default("pending"),
+		/** What the creator is told when the take failed; empty on every other status. */
+		errorMessage: text("error_message").notNull().default(""),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("idx_thumbnail_frames_work").on(table.workId, table.createdAt)],
+);
+
 // node — images a creator embedded in their own post/work bodies. Cascades with the
 // creator. The org serves them but does not own them.
 export const inlineImages = pgTable(

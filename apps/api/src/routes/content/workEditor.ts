@@ -14,17 +14,17 @@ import {
 	workBuildFiles,
 	workBuilds,
 	works,
+	workThumbnailFrames,
 	workTranscodingJobs,
 } from "@anthers/db/schema";
 import { hasSourceSet, isGoodsType, isOwnThumbnail } from "@anthers/shared/content";
 import { gridFor, maturityLabel, releaseRatingRefusal } from "@anthers/shared/content-rating";
 import { zValidator } from "@hono/zod-validator";
-import { and, countDistinct, desc, eq } from "drizzle-orm";
+import { and, countDistinct, desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
+import { JOB_OPTIONS, QUEUES, queue } from "../../jobs/queue.js";
 import { queueScansForWork } from "../../jobs/scan-media.js";
-import { ffmpegCommand } from "../../lib/ffmpeg.js";
-import { probeVideo } from "../../lib/video-frames.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { invalidBody } from "../../middleware/validate.js";
 import { normalizeAccessRows } from "../../services/access.js";
@@ -48,7 +48,6 @@ import { purgeReplacedWorkMedia, purgeWorkMedia } from "../../services/media-pur
 import { notifyMany } from "../../services/notifications.js";
 import { physicalListingFor, savePhysicalListing } from "../../services/physical-listings.js";
 import { sanitizePostHtml } from "../../services/sanitize.js";
-import { storage } from "../../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../../services/storage/keys.js";
 import { queueWorkListingSync } from "../../services/work-listing.js";
 import { preReleaseRefusal, releaseRefusal } from "../../services/work-release.js";
@@ -65,7 +64,6 @@ import { archiveCurrentMedia } from "../../services/work-versions.js";
 import {
 	deliveryCtx,
 	estimateReadMinutes,
-	FRAME_EXTRACT_TIMEOUT_MS,
 	makeUniqueSlug,
 	namesARating,
 	postsUsingWork,
@@ -88,6 +86,13 @@ import {
 	updateWorkBody,
 	type WebBuildFileRow,
 } from "./schemas.js";
+
+/** One entry per Work whose frame ask this process is writing. The
+ *  `work_thumbnail_frames` row is the durable half of the one-at-a-time rule — a reload or
+ *  another process meets it there — while two clicks inside one tick can both pass their
+ *  own check before either insert commits, and this Set is what one process can do about
+ *  that. */
+const frameAsksInFlight = new Set<number>();
 
 const workEditorRoutes = new Hono()
 	.patch("/works/:id", requireAuth, updateWorkBody, async (c) => {
@@ -691,13 +696,17 @@ const workEditorRoutes = new Hono()
 	 *
 	 * The result is stored exactly as an uploaded thumbnail: the creator's own prefix, the
 	 * public ACL the thumbnail media type earns, and its own scan (`queueScansForWork`),
-	 * because it is new image bytes even though they derive from a cleaned source. The
-	 * creator's own save flow never carries this value — the route stores and answers with
-	 * the saved row, so the interaction is one act with no raced client state behind it
-	 * (see the save-race this closes, the batch edit page's touched-flag bug).
+	 * because it is new image bytes even though they derive from a cleaned source.
 	 *
-	 * One extract at a time per Work: rapid clicks stack requests on ffmpeg else, and two
-	 * racing extracts writing the same row would be a last-write race over one choice.
+	 * **The decode itself is the worker's, and this route only starts it.** The answer is
+	 * the ask — a `work_thumbnail_frames` row and `202` — and the client polls the GET below
+	 * while `jobs/extract-frame.ts` runs the probe, the extraction and the store on the box
+	 * ffmpeg's pin was sized for. That keeps the creator's click off ffmpeg, and it is where
+	 * the two pinned threads actually get two cores. A failure has no response left to
+	 * arrive in, so the job writes the sentence into the row the page is already polling.
+	 *
+	 * One extract at a time per Work: rapid clicks would stack rows on the queue, and two
+	 * racing extracts writing the same field would be a last-write race over one choice.
 	 */
 	.post(
 		"/works/:id/thumbnail-frame",
@@ -724,8 +733,20 @@ const workEditorRoutes = new Hono()
 				);
 			}
 
-			const busy = frameExtractionsBusy.has(id);
-			if (busy) {
+			// One take at a time per Work. The Set is the same-tick guard a request cannot
+			// give itself — two clicks can both pass their own check before either insert
+			// commits — and the row is the durable half a reload or another process meets.
+			const [running] = await db
+				.select({ id: workThumbnailFrames.id })
+				.from(workThumbnailFrames)
+				.where(
+					and(
+						eq(workThumbnailFrames.workId, id),
+						inArray(workThumbnailFrames.status, ["pending", "processing"]),
+					),
+				)
+				.limit(1);
+			if (running || frameAsksInFlight.has(id)) {
 				return c.json(
 					{
 						error: "A frame from this video is already being taken — one moment.",
@@ -736,135 +757,69 @@ const workEditorRoutes = new Hono()
 			}
 
 			const { atSeconds } = c.req.valid("json");
-			frameExtractionsBusy.add(id);
+			frameAsksInFlight.add(id);
 			try {
-				// The extraction reads the stored original in place — a fresh signed address;
-				// `SOURCE_URL_TTL_SECONDS` above carries the reasoning.
-				const input = await storage.readableInput(work.sourceKey);
-				let at = atSeconds;
-				// The stored duration the transcode wrote stands for the file's length, at
-				// whole-second precision. **Inside that duration, no probe runs**: the
-				// creator's player bounds `at` to its own playback, so a mid-video moment is
-				// inside the file by construction, and asking ffprobe over the stored
-				// original (two-plus ranged reads this request waits behind) buys nothing.
-				// The probe still runs — with the exact duration and fps the last-frame clamp
-				// needs — when the row carries no duration yet, and when the asked moment
-				// reaches the stored rounding's last half second, where the difference
-				// between the stored and exact bounds is what the clamp exists to hold.
-				const storedDuration = work.durationSeconds ?? 0;
-				if (!(storedDuration > 1) || atSeconds > storedDuration - 0.5) {
-					// Read the duration straight from the stored original, so a paused moment
-					// past the end (or a client claiming one) still lands inside the file —
-					// and past the last DECODED frame, not merely inside the container: an
-					// input seek asks for frames from the moment onward, so a moment past the
-					// last frame's own timestamp (an ended video's pause is exactly its
-					// duration) yields nothing. One frame earlier is the last displayable
-					// picture the file holds.
-					const probe = await probeVideo(input);
-					if (!probe) {
-						return c.json(
-							{
-								error: "This file has no readable video to take a frame from.",
-								code: "thumbnail_frame_unreadable",
-							},
-							409,
-						);
-					}
-					const lastFrame =
-						probe.durationSeconds - (probe.framesPerSecond > 0 ? 1 / probe.framesPerSecond : 0.5);
-					at = Math.max(0, Math.min(at, Math.max(lastFrame, 0)));
-				}
-
-				// One frame into the pipe: input seeking (`-ss` before `-i`) stops ffmpeg
-				// reading past the moment, and `image2pipe` keeps the JPEG on stdout rather
-				// than on this process's disk. `ffmpegCommand` pins the threads the plan
-				// is sized to (`lib/ffmpeg.ts`).
-				const proc = Bun.spawn(
-					ffmpegCommand(
-						input,
-						["-frames:v", "1", "-q:v", "2", "-f", "image2pipe", "-c:v", "mjpeg", "-"],
-						["-v", "error", "-ss", at.toFixed(3)],
-					),
-					{ stdout: "pipe", stderr: "pipe", stdin: "ignore" },
-				);
-				const withTimeout = Promise.resolve(new Response(proc.stdout).arrayBuffer());
-				let jpeg: ArrayBuffer;
-				try {
-					jpeg = await Promise.race([
-						withTimeout,
-						new Promise<never>((_, reject) =>
-							setTimeout(() => {
-								proc.kill();
-								reject(new Error("extraction timed out"));
-							}, FRAME_EXTRACT_TIMEOUT_MS).unref(),
-						),
-					]);
-				} finally {
-					await proc.exited;
-				}
-				if (jpeg.byteLength === 0) {
-					return c.json(
-						{
-							error:
-								"No frame came out of that moment — try pausing somewhere a picture is showing.",
-							code: "thumbnail_frame_empty",
-						},
-						409,
-					);
-				}
-
-				const uuid = crypto.randomUUID().replace(/-/g, "");
-				const key = `creators/${user.id}/thumbnails/${id}/${uuid}.jpg`;
-				await storage.upload(key, Buffer.from(jpeg), "image/jpeg", "public");
-
-				const url = await storage.getUrl(key);
-				const [updated] = await db
-					.update(works)
-					// The extracted frame is a full image, so it is its own framing source.
-					.set({ thumbnail: url, thumbnailSource: url, thumbnailCrop: null, updatedAt: new Date() })
-					.where(eq(works.id, id))
+				const [job] = await db
+					.insert(workThumbnailFrames)
+					.values({ workId: id, atSeconds })
 					.returning();
-				await queueScansForWork(updated);
-
-				const [assetRows, jobRows] = await Promise.all([
-					db.select().from(workAssets).where(eq(workAssets.workId, id)),
-					db
-						.select()
-						.from(workTranscodingJobs)
-						.where(eq(workTranscodingJobs.workId, id))
-						.orderBy(desc(workTranscodingJobs.createdAt)),
-				]);
-				const [buildRows, buildFileRows] = await Promise.all([
-					db.select().from(workBuilds).where(eq(workBuilds.workId, id)),
-					db
-						.select({ file: workBuildFiles })
-						.from(workBuildFiles)
-						.innerJoin(workBuilds, eq(workBuildFiles.buildId, workBuilds.id))
-						.where(eq(workBuilds.workId, id)),
-				]);
-				const filesByBuild = new Map<number, WebBuildFileRow[]>();
-				for (const { file } of buildFileRows) {
-					const list = filesByBuild.get(file.buildId) ?? [];
-					list.push(file);
-					filesByBuild.set(file.buildId, list);
+				try {
+					await queue.send(
+						QUEUES.EXTRACT_FRAME,
+						{ jobId: job.id },
+						JOB_OPTIONS[QUEUES.EXTRACT_FRAME],
+					);
+				} catch (error) {
+					// A queue that refused the send would leave a pending row and a page polling
+					// it for ever, so the row settles here with the sentence the page can show.
+					const message = error instanceof Error ? error.message : String(error);
+					console.error(`[thumbnail-frame] queueing job ${job.id} failed:`, message);
+					await db
+						.update(workThumbnailFrames)
+						.set({
+							status: "failed",
+							errorMessage: "The frame could not be queued. Try again.",
+							updatedAt: new Date(),
+						})
+						.where(eq(workThumbnailFrames.id, job.id));
+					return c.json({ error: "The frame could not be queued. Try again." }, 503);
 				}
-				// Same delivery rewrite the edit route answers with — the Studio's editor
-				// adopts this response while its player is showing `transcoding.hlsManifestUrl`.
-				const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx(c));
-				return c.json({
-					work: await serializeWork(
-						updated,
-						assetRows,
-						playableJob,
-						buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
-						deliveryCtx(c),
-					),
-				});
+
+				// The ask, not the answer: this row is what the client polls while the worker
+				// extracts, so 202 — the act has been accepted and not yet done.
+				return c.json({ job: { id: job.id, status: job.status } }, 202);
 			} finally {
-				frameExtractionsBusy.delete(id);
+				frameAsksInFlight.delete(id);
 			}
 		},
 	)
+
+	/**
+	 * The newest frame take's state for this Work — what the creator's page polls after the
+	 * POST answers. `completed` means the Work's next read carries the frame; `failed`
+	 * carries the sentence the page shows; null means this Work has never had a take.
+	 */
+	.get("/works/:id/thumbnail-frame", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [work] = await db
+			.select({ creatorId: works.creatorId })
+			.from(works)
+			.where(eq(works.id, id))
+			.limit(1);
+		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		const [job] = await db
+			.select({
+				id: workThumbnailFrames.id,
+				status: workThumbnailFrames.status,
+				errorMessage: workThumbnailFrames.errorMessage,
+			})
+			.from(workThumbnailFrames)
+			.where(eq(workThumbnailFrames.workId, id))
+			.orderBy(desc(workThumbnailFrames.createdAt))
+			.limit(1);
+		return c.json({ job: job ?? null });
+	})
 
 	/**
 	 * A Work's rating appeals — the creator's own record of what they contested and how it
@@ -1391,18 +1346,6 @@ const workEditorRoutes = new Hono()
 			.where(eq(works.id, id));
 		return c.json({ listing: saved.listing });
 	});
-
-/** The creator's live frame extractions, one per Work — the request-scoped busy guard
- *  `POST thumbnail-frame` promises. A Set because one Work's extract is one at a time;
- *  two different Works extracting at once is fine (they are the creator's own requests,
- *  each bounded by `FRAME_EXTRACT_TIMEOUT_MS`).
- *
- *  ⚠️ This is process state, and the api component runs one instance today — the honest
- *  shape of a guard that protects one CPU rather than a distributed resource. If the api
- *  component ever runs more, the guard still protects each process's ffmpeg from stacking,
- *  and two extracts racing would need a shared lock — a deliberate step up, not assumed.
- */
-export const frameExtractionsBusy = new Set<number>();
 
 /**
  * Tell everyone who bought a Work that the creator has withdrawn it.

@@ -255,6 +255,8 @@ export default function OwnerWorkEditor({
 	const thumbnailInFlight = useRef(0);
 	/** Why taking a frame did not work, said beside the button. */
 	const [frameError, setFrameError] = useState<string | null>(null);
+	/** The queued take the page is following, if any — the worker extracts it. */
+	const [frameJobId, setFrameJobId] = useState<number | null>(null);
 	const [frameBusy, setFrameBusy] = useState(false);
 
 	// Original release date — the creator's claim about when the work FIRST came out,
@@ -548,10 +550,10 @@ export default function OwnerWorkEditor({
 	};
 
 	/**
-	 * Store the frame the picker's player is paused on as the thumbnail — the SERVER
-	 * extracts it, so the answering route is the save (one act, no client upload in
-	 * flight). The picker carries its own player: any moment of the original, seekable
-	 * in the modal, is what the route saves.
+	 * Ask for the frame the picker's player is paused on as the thumbnail. **The worker
+	 * extracts it**, so this answers `202` with the row the page then follows; the modal
+	 * closes on that answer and the thumbnail section carries the taking state until the
+	 * frame lands.
 	 */
 	const takeCurrentFrame = async (video: HTMLVideoElement | null): Promise<boolean> => {
 		setFrameError(null);
@@ -566,20 +568,14 @@ export default function OwnerWorkEditor({
 				param: { id: String(current.id) },
 				json: { atSeconds: video.currentTime },
 			});
-			if (!res.ok) {
-				const body = (await res.json().catch(() => null)) as { error?: string } | null;
-				setFrameError(body?.error || "Taking the frame didn't work. Upload an image instead.");
-				return false;
+			if (res.status === 202) {
+				const { job } = (await res.json()) as { job: { id: number } };
+				setFrameJobId(job.id);
+				return true;
 			}
-			const { work: updated } = (await res.json()) as { work: Work };
-			adopt(updated);
-			thumbnailTouched.current = false;
-			thumbnailInFlight.current = 0;
-			if (updated.thumbnail) {
-				setThumbnailUrl(updated.thumbnail);
-				setThumbnailPreview(keyToPreview(updated.thumbnail));
-			}
-			return true;
+			const body = (await res.json().catch(() => null)) as { error?: string } | null;
+			setFrameError(body?.error || "Taking the frame didn't work. Upload an image instead.");
+			return false;
 		} catch {
 			setFrameError("Taking the frame didn't work. Upload an image instead.");
 			return false;
@@ -587,6 +583,82 @@ export default function OwnerWorkEditor({
 			setFrameBusy(false);
 		}
 	};
+
+	/**
+	 * Follow one queued frame take until it settles. The job row is what is polled rather
+	 * than the Work because a failure leaves the Work untouched — the worker writes its
+	 * reason onto the row, and that sentence is what the creator sees.
+	 *
+	 * The tick cap is the "somebody should have seen this by now" bound: a job that has not
+	 * settled in a minute is not a slow decode, and leaving the page polling for ever would
+	 * be a spinner with nothing behind it. A reload resumes the watch on the same row.
+	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: one queued take, followed from its id
+	useEffect(() => {
+		if (frameJobId === null) return;
+		let live = true;
+		let ticks = 0;
+		const poll = async () => {
+			ticks += 1;
+			try {
+				const res = await client.api.content.works[":id"]["thumbnail-frame"].$get({
+					param: { id: String(current.id) },
+				});
+				if (!live || !res.ok) return;
+				const { job } = (await res.json()) as {
+					job: { id: number; status: string; errorMessage: string } | null;
+				};
+				if (!live || !job) return;
+				if (job.status === "completed") {
+					setFrameJobId(null);
+					await refreshMedia();
+					return;
+				}
+				if (job.status === "failed") {
+					setFrameJobId(null);
+					setFrameError(
+						job.errorMessage || "Taking the frame didn't work. Upload an image instead.",
+					);
+					return;
+				}
+				if (ticks >= 40) {
+					setFrameJobId(null);
+					setFrameError("The frame is still being taken. Reload the page in a moment to see it.");
+				}
+			} catch {
+				// A failed poll is not a failed take; the next tick asks again.
+			}
+		};
+		const interval = setInterval(() => {
+			if (!document.hidden) void poll();
+		}, 1500);
+		void poll();
+		return () => {
+			live = false;
+			clearInterval(interval);
+		};
+	}, [frameJobId]);
+
+	// Pick up a take that was already running when this page opened — a reload mid-take is
+	// the ordinary way to arrive here with the worker still on it.
+	useEffect(() => {
+		let live = true;
+		void client.api.content.works[":id"]["thumbnail-frame"]
+			.$get({ param: { id: String(current.id) } })
+			.then(async (res) => {
+				if (!live || !res.ok) return;
+				const { job } = (await res.json()) as {
+					job: { id: number; status: string } | null;
+				};
+				if (job && (job.status === "pending" || job.status === "processing")) {
+					setFrameJobId(job.id);
+				}
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, [current.id]);
 
 	// ── Processing: cancel, remove ──
 	const [cancelBusy, setCancelBusy] = useState(false);
@@ -955,7 +1027,7 @@ export default function OwnerWorkEditor({
 					label="thumbnail"
 					triggerLabel="Edit Thumbnail"
 					hasImage={Boolean(thumbnailPreview)}
-					busy={thumbSaving}
+					busy={thumbSaving || frameJobId !== null}
 					onUpload={() => {
 						setThumbError(null);
 						thumbInput.current?.click();
@@ -973,8 +1045,10 @@ export default function OwnerWorkEditor({
 							: undefined
 					}
 				/>
+				{frameJobId !== null && <p className="text-xs text-base-content/60">Taking this moment…</p>}
 			</div>
 			{thumbError && <p className="w-full text-xs text-error">{thumbError}</p>}
+			{frameError && <p className="w-full text-xs text-warning">{frameError}</p>}
 		</div>
 	);
 
