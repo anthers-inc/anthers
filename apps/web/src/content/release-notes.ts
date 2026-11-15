@@ -71,6 +71,17 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.18",
+		date: "2026-11-14",
+		lede: "A reader touring the app and a creator building a catalog now each meet a checklist that follows what the account has done rather than what was clicked.",
+		entries: [
+			"Discovery carries a reader's orientation card called Getting Around Anthers, with four things to try: follow a creator, save a Work or a post to the Library, give a profile a picture and a line about them, and open the Studio to make something. A row is answered by what the account has done, not by a click; the card leaves once every row is answered, and I know my way around puts it away for good.",
+			"The Studio's Works page carries the creator's checklist in its lower-right corner rather than across the top, in two phases. Until the ATProto creator permissions are granted and Stripe Payout Setup is complete it is those two rows, which cannot be dismissed; once both are answered the same card becomes Creator First Steps: a picture and a line, a first Work, a release, a first post, and Badges.",
+			"Each checklist links to the wiki walkthrough that covers the whole sequence, Your First Visit for a reader and Releasing Your First Work for a creator, in the required phase as well as the follow-up one. The card is the short form of the same path.",
+			"The credits editor's link to the credits policy now opens the page where crediting a Work lives, after that page moved to the credits section of the wiki.",
+		],
+	},
+	{
 		version: "2026.11.17",
 		date: "2026-11-14",
 		lede: "A Work can now be owned by several creators, and a sale of a co-owned Work is divided evenly among its owners.",
