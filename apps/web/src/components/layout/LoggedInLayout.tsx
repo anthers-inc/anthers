@@ -16,6 +16,7 @@ import { useMediaPlayer } from "../../lib/media-player";
 import { isApplePlatform } from "../../lib/platform";
 import { studioUrl } from "../../lib/studio";
 import { USER_TABS, userTabPath } from "../../lib/user-tabs";
+import { CREATOR_GUIDE_URL } from "../../lib/wiki";
 import { isStudioNavActive, STUDIO_NAV } from "../../studio/studio-nav";
 import PlayerBar from "../media/PlayerBar";
 import AlphaNotice from "./AlphaNotice";
@@ -584,7 +585,10 @@ export default function LoggedInLayout() {
 				    corner. It lifts above the player bar, which is up in either mode when
 				    something is playing. */}
 				{!chromeHidden && studio && pathname === studioUrl("/works") && (
-					<CreatorChecklist playerUp={playerUp} />
+					<CreatorChecklist
+						playerUp={playerUp}
+						guide={{ label: "Follow the full walkthrough", href: CREATOR_GUIDE_URL }}
+					/>
 				)}
 
 				<PlayerBar />

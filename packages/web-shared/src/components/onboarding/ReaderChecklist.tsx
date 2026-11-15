@@ -22,7 +22,13 @@ import {
 } from "../../lib/onboarding";
 import SetupChecklist, { checklistCornerClass } from "../ui/SetupChecklist";
 
-export default function ReaderChecklist({ playerUp }: { playerUp: boolean }) {
+export default function ReaderChecklist({
+	playerUp,
+	guide,
+}: {
+	playerUp: boolean;
+	guide?: { label: string; href: string };
+}) {
 	const { user, refreshUser } = useAuth();
 	const onboardingFacts = useOnboardingFacts();
 	const [dismissed, setDismissed] = useState(false);
@@ -49,6 +55,7 @@ export default function ReaderChecklist({ playerUp }: { playerUp: boolean }) {
 				title="Getting Around Anthers"
 				intro="A few things to try while you look around. Nothing here is required."
 				items={items}
+				guide={guide}
 				onDismiss={dismiss}
 				dismissLabel="I know my way around"
 			/>

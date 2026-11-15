@@ -105,6 +105,7 @@ import { useKeyboardShortcuts } from "../lib/keyboard-shortcuts";
 import { readIncludeSpoken } from "../lib/lens-preferences";
 import { useMediaPlayer } from "../lib/media-player";
 import { isApplePlatform } from "../lib/platform";
+import { READER_GUIDE_URL } from "../lib/wiki";
 
 /** One entry of the feed's stream, as `?scope=global` sends it. */
 type FeedEntry = {
@@ -1121,7 +1122,10 @@ export default function DiscoverPage() {
 			    belongs to this page rather than to the shell: the app's parts are learned
 			    where a session starts, and a card that followed a reader onto a Work, the
 			    cart or a player would be an overlay on somebody else's screen. */}
-			<ReaderChecklist playerUp={playerUp} />
+			<ReaderChecklist
+				playerUp={playerUp}
+				guide={{ label: "Follow the full walkthrough", href: READER_GUIDE_URL }}
+			/>
 		</div>
 	);
 }

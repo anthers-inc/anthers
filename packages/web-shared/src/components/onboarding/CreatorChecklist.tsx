@@ -29,7 +29,13 @@ import SetupChecklist, {
 	type SetupChecklistItem,
 } from "../ui/SetupChecklist";
 
-export default function CreatorChecklist({ playerUp }: { playerUp: boolean }) {
+export default function CreatorChecklist({
+	playerUp,
+	guide,
+}: {
+	playerUp: boolean;
+	guide?: { label: string; href: string };
+}) {
 	const { user, refreshUser } = useAuth();
 	const payoutsReady = usePayoutsReady();
 	const permissionMissing = usePublishingPermissionMissing();
@@ -62,6 +68,7 @@ export default function CreatorChecklist({ playerUp }: { playerUp: boolean }) {
 					title="Creator Setup Checklist"
 					intro="Before you can publish Works or posts, you need to:"
 					items={setupItems}
+					guide={guide}
 				/>
 			</div>
 		);
@@ -85,6 +92,7 @@ export default function CreatorChecklist({ playerUp }: { playerUp: boolean }) {
 				title="Creator First Steps"
 				intro="Your account can publish now. These are the steps that put something in front of people."
 				items={items}
+				guide={guide}
 				onDismiss={dismiss}
 			/>
 		</div>
