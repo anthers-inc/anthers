@@ -9,10 +9,12 @@
  * so it never comes back. The reload is the assertion that matters for the dismissal, since
  * a card kept away in `localStorage` would pass the click and fail here.
  *
- * ⚠️ **The reader's card is shell chrome, so it follows the reader between the two tabs.**
- * That is checked on the Library after meeting it on Discovery; a page-level card would
- * only ever pass on the page it was mounted on. The accounts are throwaways made with
- * `db:local-account`, so neither card is meeting state another spec left behind.
+ * ⚠️ **Both cards are page-scoped, and that is part of the rule.** The reader's belongs to
+ * Discovery, the page a session starts on, and the creator's to the Studio's Works page;
+ * neither follows a person onto a Work, the cart or a player, where an overlay would sit on
+ * somebody else's controls. The Library absence below is the reader half of that. The
+ * accounts are throwaways made with `db:local-account`, so neither card is meeting state
+ * another spec left behind.
  */
 import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
@@ -83,7 +85,7 @@ test.describe("the onboarding checklists", () => {
 
 		await page.goto("/discovery");
 
-		const card = page.getByRole("complementary", { name: "Getting Around Anthers" });
+		const card = page.getByRole("region", { name: "Getting Around Anthers" });
 		await expect(card).toBeVisible();
 		// A brand-new account has none of the four, and the card says so plainly.
 		await expect(card.getByText("0 of 4 done")).toBeVisible();
@@ -92,9 +94,12 @@ test.describe("the onboarding checklists", () => {
 		// the one that stands on the page it names.
 		await expect(card.getByRole("link")).toHaveCount(3);
 
-		// Shell chrome, not a page card: moving to the other user tab keeps it on screen.
+		// The card belongs to Discovery and does not follow the reader onto the Library:
+		// that scoping is what keeps an overlay off other pages' controls.
 		await page.goto("/library");
-		await expect(page.getByRole("complementary", { name: "Getting Around Anthers" })).toBeVisible();
+		await expect(page.getByRole("region", { name: "Getting Around Anthers" })).toHaveCount(0);
+		await page.goto("/discovery");
+		await expect(page.getByRole("region", { name: "Getting Around Anthers" })).toBeVisible();
 
 		// The vocabulary's own gesture — the card folds into the round button and back.
 		await page.getByRole("button", { name: "Collapse the Getting Around Anthers" }).click();
@@ -103,7 +108,7 @@ test.describe("the onboarding checklists", () => {
 		});
 		await expect(collapsed).toBeVisible();
 		await collapsed.click();
-		await expect(page.getByRole("complementary", { name: "Getting Around Anthers" })).toBeVisible();
+		await expect(page.getByRole("region", { name: "Getting Around Anthers" })).toBeVisible();
 
 		const dismissed = page.waitForResponse(
 			(res) =>
@@ -112,15 +117,11 @@ test.describe("the onboarding checklists", () => {
 		);
 		await page.getByRole("button", { name: "I know my way around" }).click();
 		expect((await dismissed).status()).toBe(200);
-		await expect(page.getByRole("complementary", { name: "Getting Around Anthers" })).toHaveCount(
-			0,
-		);
+		await expect(page.getByRole("region", { name: "Getting Around Anthers" })).toHaveCount(0);
 
 		// The account's answer, not this browser's: a fresh load still has no card.
 		await page.reload();
-		await expect(page.getByRole("complementary", { name: "Getting Around Anthers" })).toHaveCount(
-			0,
-		);
+		await expect(page.getByRole("region", { name: "Getting Around Anthers" })).toHaveCount(0);
 	});
 
 	test("a creator meets the follow-up checklist after the gate, in the same floating card", async ({
@@ -135,14 +136,12 @@ test.describe("the onboarding checklists", () => {
 
 		await page.goto("/studio/works");
 
-		const card = page.getByRole("complementary", { name: "Creator First Steps" });
+		const card = page.getByRole("region", { name: "Creator First Steps" });
 		await expect(card).toBeVisible();
 		await expect(card.getByText("0 of 5 done")).toBeVisible();
 		await expect(card.getByRole("listitem")).toHaveCount(5);
 		// The required card is not on screen once the gate is passed.
-		await expect(page.getByRole("complementary", { name: "Creator Setup Checklist" })).toHaveCount(
-			0,
-		);
+		await expect(page.getByRole("region", { name: "Creator Setup Checklist" })).toHaveCount(0);
 
 		// The same collapse gesture as the reader's card.
 		await page.getByRole("button", { name: "Collapse the Creator First Steps" }).click();
@@ -159,9 +158,9 @@ test.describe("the onboarding checklists", () => {
 		);
 		await card.getByRole("button", { name: "Dismiss" }).click();
 		expect((await dismissed).status()).toBe(200);
-		await expect(page.getByRole("complementary", { name: "Creator First Steps" })).toHaveCount(0);
+		await expect(page.getByRole("region", { name: "Creator First Steps" })).toHaveCount(0);
 
 		await page.reload();
-		await expect(page.getByRole("complementary", { name: "Creator First Steps" })).toHaveCount(0);
+		await expect(page.getByRole("region", { name: "Creator First Steps" })).toHaveCount(0);
 	});
 });

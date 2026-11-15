@@ -71,6 +71,7 @@ import {
 } from "@anthers/shared/discovery";
 import { matchesChord } from "@anthers/shared/keybindings";
 import { useAuth } from "@anthers/web-shared/auth";
+import ReaderChecklist from "@anthers/web-shared/onboarding/ReaderChecklist";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import { useSidebar } from "@anthers/web-shared/sidebar";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
@@ -102,6 +103,7 @@ import MusicLens from "../components/library/MusicLens";
 import { feedLensItems } from "../lib/feed-lenses";
 import { useKeyboardShortcuts } from "../lib/keyboard-shortcuts";
 import { readIncludeSpoken } from "../lib/lens-preferences";
+import { useMediaPlayer } from "../lib/media-player";
 import { isApplePlatform } from "../lib/platform";
 
 /** One entry of the feed's stream, as `?scope=global` sends it. */
@@ -411,6 +413,12 @@ export default function DiscoverPage() {
 	const { setPageContent, setSharedContent } = useSidebar();
 	const { user, refreshUser } = useAuth();
 	const viewFilter = useViewFilter();
+	/**
+	 * Whether the player bar is up, which decides how high the orientation checklist sits.
+	 * The card belongs to this page — the app's parts are learned where a session starts —
+	 * so it is the page that pins it, the way a Work pins its own checklist.
+	 */
+	const playerUp = useMediaPlayer().currentTrack !== null;
 	// Filter mode's term is a server condition here for the same reason it is on any
 	// paginated list: filtering the page already fetched would filter the wrong corpus.
 	useFilterable("Discovery");
@@ -1108,6 +1116,12 @@ export default function DiscoverPage() {
 					<button type="submit">close</button>
 				</form>
 			</dialog>
+
+			{/* The reader's orientation checklist, in the corner every setup card sits in. It
+			    belongs to this page rather than to the shell: the app's parts are learned
+			    where a session starts, and a card that followed a reader onto a Work, the
+			    cart or a player would be an overlay on somebody else's screen. */}
+			<ReaderChecklist playerUp={playerUp} />
 		</div>
 	);
 }

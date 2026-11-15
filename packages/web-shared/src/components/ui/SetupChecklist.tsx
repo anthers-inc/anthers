@@ -202,7 +202,7 @@ export default function SetupChecklist({
 	}
 
 	return (
-		<aside
+		<section
 			aria-label={title}
 			className="w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-base-300 bg-base-100/95 shadow-xl backdrop-blur"
 		>
@@ -231,6 +231,6 @@ export default function SetupChecklist({
 				{rows}
 				{dismiss}
 			</div>
-		</aside>
+		</section>
 	);
 }

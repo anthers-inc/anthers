@@ -4,7 +4,6 @@ import { matchesChord, resolveKeyboardShortcuts } from "@anthers/shared/keybindi
 import { useAuth } from "@anthers/web-shared/auth";
 import { MeadowBackdrop } from "@anthers/web-shared/decor/MeadowBackdrop";
 import CreatorChecklist from "@anthers/web-shared/onboarding/CreatorChecklist";
-import ReaderChecklist from "@anthers/web-shared/onboarding/ReaderChecklist";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useLocation } from "@anthers/web-shared/router";
 import { useSidebar } from "@anthers/web-shared/sidebar";
@@ -579,12 +578,11 @@ export default function LoggedInLayout() {
 					</div>
 				</div>
 
-				{/* The onboarding checklists, in the corner every setup checklist sits in. The
-				    reader's follows them through user mode; the creator's stands on the Works
-				    page, the Studio's front door and the one Studio page without a floating
-				    card of its own. Both lift above the player bar, which is up in either
-				    mode when something is playing. */}
-				{!chromeHidden && !studio && <ReaderChecklist playerUp={playerUp} />}
+				{/* The creator's onboarding checklist, in the corner every setup checklist
+				    sits in, on the Works page alone: the Studio's front door is where a
+				    creator lands, and the Work editor already carries its own card in that
+				    corner. It lifts above the player bar, which is up in either mode when
+				    something is playing. */}
 				{!chromeHidden && studio && pathname === studioUrl("/works") && (
 					<CreatorChecklist playerUp={playerUp} />
 				)}
