@@ -71,10 +71,17 @@ import {
 } from "@anthers/shared/discovery";
 import { matchesChord } from "@anthers/shared/keybindings";
 import { useAuth } from "@anthers/web-shared/auth";
+import {
+	checklistComplete,
+	dismissOnboardingChecklist,
+	readerChecklistItems,
+	useOnboardingFacts,
+} from "@anthers/web-shared/onboarding";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import { useSidebar } from "@anthers/web-shared/sidebar";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
+import SetupChecklist from "@anthers/web-shared/ui/SetupChecklist";
 import {
 	ArrowPathIcon,
 	CheckIcon,
@@ -411,6 +418,36 @@ export default function DiscoverPage() {
 	const { setPageContent, setSharedContent } = useSidebar();
 	const { user, refreshUser } = useAuth();
 	const viewFilter = useViewFilter();
+
+	/**
+	 * The reader's orientation checklist, at the top of the feed.
+	 *
+	 * ⭐ **Discovery is where a session starts and where the app's four parts are least
+	 * obvious**, since the recipe bar and the filters are the first thing a newcomer meets.
+	 * The card sits above them and is drawn while any of its rows is still open, until the
+	 * reader puts it away; `user.readerChecklistDismissedAt` is the account's record of
+	 * that, so the card does not come back on another device.
+	 */
+	const onboardingFacts = useOnboardingFacts();
+	const [readerChecklistDismissed, setReaderChecklistDismissed] = useState(false);
+	const readerChecklist =
+		user && onboardingFacts ? readerChecklistItems(onboardingFacts, user) : null;
+	const showReaderChecklist =
+		!!readerChecklist &&
+		!readerChecklistDismissed &&
+		!user?.readerChecklistDismissedAt &&
+		!checklistComplete(readerChecklist);
+
+	const dismissReaderChecklist = () => {
+		setReaderChecklistDismissed(true);
+		void dismissOnboardingChecklist("reader").then((ok) => {
+			// A refusal un-hides the card rather than pretending the account recorded it;
+			// the card is guidance, so honesty costs one render.
+			if (!ok) setReaderChecklistDismissed(false);
+			else void refreshUser();
+		});
+	};
+
 	// Filter mode's term is a server condition here for the same reason it is on any
 	// paginated list: filtering the page already fetched would filter the wrong corpus.
 	useFilterable("Discovery");
@@ -887,6 +924,19 @@ export default function DiscoverPage() {
 					title="Discovery"
 					subtitle="Your network, and everything else on Anthers. Pick a recipe, or cook up your own. There's no paid promotion or hidden algorithms."
 				/>
+
+				{showReaderChecklist && readerChecklist && (
+					<div className="mb-6">
+						<SetupChecklist
+							variant="inline"
+							title="Getting Around Anthers"
+							intro="A few things to try while you look around. Nothing here is required."
+							items={readerChecklist}
+							onDismiss={dismissReaderChecklist}
+							dismissLabel="I know my way around"
+						/>
+					</div>
+				)}
 
 				<RecipeBar
 					recipe={recipe}

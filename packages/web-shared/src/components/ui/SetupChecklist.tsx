@@ -53,6 +53,8 @@ export default function SetupChecklist({
 	intro,
 	items,
 	variant = "inline",
+	onDismiss,
+	dismissLabel = "Dismiss",
 }: {
 	/** The checklist's name, in title case — "Work Setup Checklist", "Creator Setup Checklist". */
 	title: string;
@@ -65,6 +67,15 @@ export default function SetupChecklist({
 	 * something is left to do.
 	 */
 	variant?: "floating" | "inline";
+	/**
+	 * Put the card away for good, when the caller has somewhere to record that. ⚠️ **Only
+	 * guidance lists take one.** A checklist standing between somebody and an act is the
+	 * rule's own conditions, so it leaves when they are met rather than when it is closed;
+	 * the caller decides which kind it has and passes this only for the other.
+	 */
+	onDismiss?: () => void;
+	/** What the dismiss control says, when the caller has a better word for the act. */
+	dismissLabel?: string;
 }) {
 	const [open, setOpen] = useState(true);
 	const done = items.filter((item) => item.state === "done").length;
@@ -151,6 +162,22 @@ export default function SetupChecklist({
 		/>
 	);
 
+	/**
+	 * The way off a guidance list, and never off a gate: the caller only passes `onDismiss`
+	 * for the first kind (see the prop's note). Quiet rather than a second button, because
+	 * it is the smallest act the card offers and the one a person is least likely to want
+	 * to do by accident.
+	 */
+	const dismiss = onDismiss ? (
+		<button
+			type="button"
+			className="mt-3 text-xs text-base-content/50 underline-offset-2 hover:text-base-content hover:underline"
+			onClick={onDismiss}
+		>
+			{dismissLabel}
+		</button>
+	) : null;
+
 	if (variant === "inline") {
 		return (
 			<section
@@ -168,7 +195,10 @@ export default function SetupChecklist({
 							</p>
 						</div>
 					</div>
-					<div className="min-w-0 flex-1">{rows}</div>
+					<div className="min-w-0 flex-1">
+						{rows}
+						{dismiss}
+					</div>
 				</div>
 			</section>
 		);
@@ -220,7 +250,10 @@ export default function SetupChecklist({
 					{allSet ? "Everything on this list is set." : `${done} of ${total} done`}
 				</p>
 			</div>
-			<div className="p-3">{rows}</div>
+			<div className="p-3">
+				{rows}
+				{dismiss}
+			</div>
 		</aside>
 	);
 }
