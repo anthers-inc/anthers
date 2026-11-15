@@ -91,8 +91,13 @@ test.describe("the onboarding checklists", () => {
 		await expect(card.getByText("0 of 4 done")).toBeVisible();
 		await expect(card.getByRole("listitem")).toHaveCount(4);
 		// Four rows; the three that point somewhere else are doors, and the follow row is
-		// the one that stands on the page it names.
-		await expect(card.getByRole("link")).toHaveCount(3);
+		// the one that stands on the page it names. The guide is the fourth door, and it
+		// leaves the app for the walkthrough that covers the whole list.
+		await expect(card.getByRole("link")).toHaveCount(4);
+		await expect(card.getByRole("link", { name: "Follow the full walkthrough" })).toHaveAttribute(
+			"href",
+			"https://anthers.wiki/first-steps/your-first-visit",
+		);
 
 		// The card belongs to Discovery and does not follow the reader onto the Library:
 		// that scoping is what keeps an overlay off other pages' controls.
@@ -140,6 +145,11 @@ test.describe("the onboarding checklists", () => {
 		await expect(card).toBeVisible();
 		await expect(card.getByText("0 of 5 done")).toBeVisible();
 		await expect(card.getByRole("listitem")).toHaveCount(5);
+		// The guide leaves the app for the walkthrough that covers the whole path.
+		await expect(card.getByRole("link", { name: "Follow the full walkthrough" })).toHaveAttribute(
+			"href",
+			"https://anthers.wiki/getting-started/releasing-your-first-work",
+		);
 		// The required card is not on screen once the gate is passed.
 		await expect(page.getByRole("region", { name: "Creator Setup Checklist" })).toHaveCount(0);
 

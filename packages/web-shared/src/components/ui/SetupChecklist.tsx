@@ -21,6 +21,7 @@
  */
 
 import {
+	ArrowTopRightOnSquareIcon,
 	CheckCircleIcon,
 	ChevronDownIcon,
 	ChevronRightIcon,
@@ -67,6 +68,7 @@ export default function SetupChecklist({
 	title,
 	intro,
 	items,
+	guide,
 	onDismiss,
 	dismissLabel = "Dismiss",
 }: {
@@ -75,6 +77,12 @@ export default function SetupChecklist({
 	/** What the list is for, in one sentence — the caller's copy. */
 	intro: string;
 	items: SetupChecklistItem[];
+	/**
+	 * The walkthrough that covers the whole list, for a caller whose checklist has one. The
+	 * wiki's tutorial pages are the long form of the same sequence; the card stays the short
+	 * form, and this is the door between them.
+	 */
+	guide?: { label: string; href: string };
 	/**
 	 * Put the card away for good, when the caller has somewhere to record that. ⚠️ **Only
 	 * guidance lists take one.** A checklist standing between somebody and an act is the
@@ -226,6 +234,17 @@ export default function SetupChecklist({
 				<p className="mt-1 text-xs text-base-content/50">
 					{allSet ? "Everything on this list is set." : `${done} of ${total} done`}
 				</p>
+				{guide && (
+					<a
+						href={guide.href}
+						target="_blank"
+						rel="noreferrer"
+						className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+					>
+						{guide.label}
+						<ArrowTopRightOnSquareIcon aria-hidden="true" className="size-3" />
+					</a>
+				)}
 			</div>
 			<div className="p-3">
 				{rows}
