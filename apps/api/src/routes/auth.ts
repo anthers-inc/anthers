@@ -303,6 +303,8 @@ async function serializeUser(user: typeof users.$inferSelect) {
 			savedRecipes: userPreferences.savedRecipes,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
 			keyboardShortcuts: userPreferences.keyboardShortcuts,
+			readerChecklistDismissedAt: userPreferences.readerChecklistDismissedAt,
+			creatorChecklistDismissedAt: userPreferences.creatorChecklistDismissedAt,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -356,6 +358,10 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		// The account's rebindable chords — read at boot with the rest of the chrome, so
 		// the bar and the players never register against the defaults and then swap them.
 		keyboardShortcuts: prefs?.keyboardShortcuts ?? null,
+		// Whether each onboarding checklist has been put away. Read at boot so the shell
+		// and the Studio's Works page never draw a card the person has already closed.
+		readerChecklistDismissedAt: prefs?.readerChecklistDismissedAt?.toISOString() ?? null,
+		creatorChecklistDismissedAt: prefs?.creatorChecklistDismissedAt?.toISOString() ?? null,
 		atprotoDid: user.atprotoDid,
 		// The server holding that identity. Public — it is in the DID document — and the client
 		// needs it to send somebody to the server's own account page.
