@@ -332,6 +332,33 @@ export const userPreferences = pgTable("user_preferences", {
 	 */
 	creatorEmailDelivery: jsonb("creator_email_delivery").$type<Record<string, string>>(),
 
+	/**
+	 * When the reader's onboarding checklist was put away, or null while it still stands.
+	 *
+	 * ⭐ **A timestamp rather than a boolean, because nothing turns it back on.** The
+	 * checklist is orientation rather than a gate, so dismissing it is a one-way act, and
+	 * the moment is what a later, quieter reminder would have to measure from if one is
+	 * ever wanted. Null means the reader has not dismissed it; it says nothing about
+	 * whether the rows are done, which is answered from the account's own facts.
+	 *
+	 * An account-level preference rather than a browser one, for the reason
+	 * `persistentMiniplayer` states: putting the card away on a laptop is not something a
+	 * phone should undo.
+	 */
+	readerChecklistDismissedAt: timestamp("reader_checklist_dismissed_at", { withTimezone: true }),
+
+	/**
+	 * The same timestamp for the creator follow-up checklist on the Studio's Works page,
+	 * and separate from the reader's because the two are put away by different people at
+	 * different moments.
+	 *
+	 * ⚠️ **The required setup rows are not covered by this.** Those two are the publishing
+	 * gate and are not the creator's to dismiss; only the follow-up list after them is.
+	 */
+	creatorChecklistDismissedAt: timestamp("creator_checklist_dismissed_at", {
+		withTimezone: true,
+	}),
+
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
