@@ -78,6 +78,8 @@
 		"./ui/ImageEditMenu": "./src/components/ui/ImageEditMenu.tsx",
 		"./ui/ImageFrameModal": "./src/components/ui/ImageFrameModal.tsx",
 		"./ui/SetupChecklist": "./src/components/ui/SetupChecklist.tsx",
+		"./onboarding/ReaderChecklist": "./src/components/onboarding/ReaderChecklist.tsx",
+		"./onboarding/CreatorChecklist": "./src/components/onboarding/CreatorChecklist.tsx",
 		"./editor/RichTextEditor": "./src/components/editor/RichTextEditor.tsx",
 		"./post/AccessTables": "./src/components/post/AccessTables.tsx",
 		"./post/Spoiler": "./src/components/post/Spoiler.tsx",

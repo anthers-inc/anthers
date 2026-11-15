@@ -1,30 +1,40 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The two onboarding checklists in the browser: one at the top of Discovery for a reader,
- * one at the top of the Studio's Works page for a creator.
+ * The two onboarding checklists in the browser: the reader's floating in the shell's
+ * lower-right corner, and the creator's on the Studio's Works page.
  *
- * 🚨 **What this spec pins is the whole loop, not the card's shape.** Each checklist is
- * drawn only while its rows are open and its account has not put it away, dismissing it
- * is a write to the account rather than to this browser, and the reload is the assertion
- * that matters: a dismissal kept in `localStorage` would pass the click and fail here. The
- * accounts are throwaways made with `db:local-account`, so neither card is meeting state
- * another spec left behind.
+ * 🚨 **What this spec pins is the vocabulary and the whole loop.** Both cards are the same
+ * floating `SetupChecklist` the Work page already uses: expanded on arrival, collapsible to
+ * a round button that keeps the count, and — for the reader's, the guidance one — dismissible
+ * so it never comes back. The reload is the assertion that matters for the dismissal, since
+ * a card kept away in `localStorage` would pass the click and fail here.
  *
- * ⚠️ **The two cards are different kinds and the difference is in the spec.** The reader's
- * is guidance and takes a dismiss; the creator's first phase is the publishing gate and
- * only the follow-up list after it can be put away, which is why the creator account here
- * has payout setup completed before the page is opened.
+ * ⚠️ **The reader's card is shell chrome, so it follows the reader between the two tabs.**
+ * That is checked on the Library after meeting it on Discovery; a page-level card would
+ * only ever pass on the page it was mounted on. The accounts are throwaways made with
+ * `db:local-account`, so neither card is meeting state another spec left behind.
  */
 import { fileURLToPath } from "node:url";
+import { db } from "@anthers/db/client";
+import { users } from "@anthers/db/schema";
 import type { Page } from "@playwright/test";
+import { eq } from "drizzle-orm";
 import { enablePayoutsFor } from "../../../api/src/__tests__/payouts-fixture";
 import { purgeAccountIds } from "../../../api/src/__tests__/purge";
 import { expect, leashedExecFileSync, mintSession, test } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
-/** A throwaway account, made the canonical way. */
-function makeAccount(name: string): { email: string; id: number } {
+/**
+ * A throwaway account, made the canonical way, with the terms accepted.
+ *
+ * ⚠️ **The terms matter to this spec.** A terms-owing account's shell hides its chrome,
+ * the onboarding cards included, because they are the app's chrome and its links would be
+ * dead ends behind the welcome gate. `db:local-account` leaves the terms unaccepted, so the
+ * fixture accepts them here — the same state every real account is in by the time it meets
+ * either checklist.
+ */
+async function makeAccount(name: string): Promise<{ email: string; id: number }> {
 	const email = `${name}@example.com`;
 	const out = JSON.parse(
 		leashedExecFileSync("bun", ["run", "db:local-account", "--name", name, "--email", email], {
@@ -35,6 +45,7 @@ function makeAccount(name: string): { email: string; id: number } {
 			.split("\n")
 			.at(-1) as string,
 	) as { userId: number };
+	await db.update(users).set({ termsAcceptedAt: new Date() }).where(eq(users.id, out.userId));
 	return { email, id: out.userId };
 }
 
@@ -63,16 +74,16 @@ test.describe("the onboarding checklists", () => {
 		await purgeAccountIds(created);
 	});
 
-	test("a reader meets the orientation checklist once, and its dismissal is the account's", async ({
+	test("a reader meets the orientation checklist as the floating card, and its dismissal is the account's", async ({
 		page,
 	}) => {
-		const reader = makeAccount(`e2e_orientation_${stamp}`);
+		const reader = await makeAccount(`e2e_orientation_${stamp}`);
 		created.push(reader.id);
 		await signInAs(page, reader.id, "anthers e2e orientation");
 
 		await page.goto("/discovery");
 
-		const card = page.getByRole("region", { name: "Getting Around Anthers" });
+		const card = page.getByRole("complementary", { name: "Getting Around Anthers" });
 		await expect(card).toBeVisible();
 		// A brand-new account has none of the four, and the card says so plainly.
 		await expect(card.getByText("0 of 4 done")).toBeVisible();
@@ -81,24 +92,41 @@ test.describe("the onboarding checklists", () => {
 		// the one that stands on the page it names.
 		await expect(card.getByRole("link")).toHaveCount(3);
 
+		// Shell chrome, not a page card: moving to the other user tab keeps it on screen.
+		await page.goto("/library");
+		await expect(page.getByRole("complementary", { name: "Getting Around Anthers" })).toBeVisible();
+
+		// The vocabulary's own gesture — the card folds into the round button and back.
+		await page.getByRole("button", { name: "Collapse the Getting Around Anthers" }).click();
+		const collapsed = page.getByRole("button", {
+			name: "Open the Getting Around Anthers: 0 of 4 done",
+		});
+		await expect(collapsed).toBeVisible();
+		await collapsed.click();
+		await expect(page.getByRole("complementary", { name: "Getting Around Anthers" })).toBeVisible();
+
 		const dismissed = page.waitForResponse(
 			(res) =>
 				res.url().includes("/api/accounts/me/onboarding/dismiss") &&
 				res.request().method() === "POST",
 		);
-		await card.getByRole("button", { name: "I know my way around" }).click();
+		await page.getByRole("button", { name: "I know my way around" }).click();
 		expect((await dismissed).status()).toBe(200);
-		await expect(card).toHaveCount(0);
+		await expect(page.getByRole("complementary", { name: "Getting Around Anthers" })).toHaveCount(
+			0,
+		);
 
 		// The account's answer, not this browser's: a fresh load still has no card.
 		await page.reload();
-		await expect(page.getByRole("region", { name: "Getting Around Anthers" })).toHaveCount(0);
+		await expect(page.getByRole("complementary", { name: "Getting Around Anthers" })).toHaveCount(
+			0,
+		);
 	});
 
-	test("a creator meets the follow-up checklist after the gate, and can put it away", async ({
+	test("a creator meets the follow-up checklist after the gate, in the same floating card", async ({
 		page,
 	}) => {
-		const creator = makeAccount(`e2e_firststeps_${stamp}`);
+		const creator = await makeAccount(`e2e_firststeps_${stamp}`);
 		created.push(creator.id);
 		// Payout setup is one half of the publishing gate; the hosted identity answers the
 		// other, so the required card is behind this account and the follow-up is what shows.
@@ -107,12 +135,22 @@ test.describe("the onboarding checklists", () => {
 
 		await page.goto("/studio/works");
 
-		const card = page.getByRole("region", { name: "Creator First Steps" });
+		const card = page.getByRole("complementary", { name: "Creator First Steps" });
 		await expect(card).toBeVisible();
 		await expect(card.getByText("0 of 5 done")).toBeVisible();
 		await expect(card.getByRole("listitem")).toHaveCount(5);
 		// The required card is not on screen once the gate is passed.
-		await expect(page.getByRole("region", { name: "Creator Setup Checklist" })).toHaveCount(0);
+		await expect(page.getByRole("complementary", { name: "Creator Setup Checklist" })).toHaveCount(
+			0,
+		);
+
+		// The same collapse gesture as the reader's card.
+		await page.getByRole("button", { name: "Collapse the Creator First Steps" }).click();
+		await expect(
+			page.getByRole("button", { name: "Open the Creator First Steps: 0 of 5 done" }),
+		).toBeVisible();
+
+		await page.getByRole("button", { name: "Open the Creator First Steps: 0 of 5 done" }).click();
 
 		const dismissed = page.waitForResponse(
 			(res) =>
@@ -121,9 +159,9 @@ test.describe("the onboarding checklists", () => {
 		);
 		await card.getByRole("button", { name: "Dismiss" }).click();
 		expect((await dismissed).status()).toBe(200);
-		await expect(card).toHaveCount(0);
+		await expect(page.getByRole("complementary", { name: "Creator First Steps" })).toHaveCount(0);
 
 		await page.reload();
-		await expect(page.getByRole("region", { name: "Creator First Steps" })).toHaveCount(0);
+		await expect(page.getByRole("complementary", { name: "Creator First Steps" })).toHaveCount(0);
 	});
 });

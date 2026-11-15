@@ -3,6 +3,8 @@
 import { matchesChord, resolveKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { useAuth } from "@anthers/web-shared/auth";
 import { MeadowBackdrop } from "@anthers/web-shared/decor/MeadowBackdrop";
+import CreatorChecklist from "@anthers/web-shared/onboarding/CreatorChecklist";
+import ReaderChecklist from "@anthers/web-shared/onboarding/ReaderChecklist";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useLocation } from "@anthers/web-shared/router";
 import { useSidebar } from "@anthers/web-shared/sidebar";
@@ -222,6 +224,8 @@ function PhoneTabs({ hidden }: { hidden: boolean }) {
 export default function LoggedInLayout() {
 	const { user } = useAuth();
 	const { currentTrack } = useMediaPlayer();
+	/** Whether the player bar is up, which decides how high a floating checklist sits. */
+	const playerUp = currentTrack !== null;
 	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent, sharedContent, topBarContent } =
 		useSidebar();
 	const { pathname, search } = useLocation();
@@ -574,6 +578,16 @@ export default function LoggedInLayout() {
 						</main>
 					</div>
 				</div>
+
+				{/* The onboarding checklists, in the corner every setup checklist sits in. The
+				    reader's follows them through user mode; the creator's stands on the Works
+				    page, the Studio's front door and the one Studio page without a floating
+				    card of its own. Both lift above the player bar, which is up in either
+				    mode when something is playing. */}
+				{!chromeHidden && !studio && <ReaderChecklist playerUp={playerUp} />}
+				{!chromeHidden && studio && pathname === studioUrl("/works") && (
+					<CreatorChecklist playerUp={playerUp} />
+				)}
 
 				<PlayerBar />
 				{phoneTabbed && <PhoneTabs hidden={sidebarOpen} />}

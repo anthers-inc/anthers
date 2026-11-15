@@ -40,20 +40,10 @@ import {
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import Modal from "../components/ui/Modal";
-import SetupChecklist, { type SetupChecklistItem } from "../components/ui/SetupChecklist";
-import { useAuth } from "../lib/auth";
-import {
-	checklistComplete,
-	creatorChecklistItems,
-	dismissOnboardingChecklist,
-	useOnboardingFacts,
-} from "../lib/onboarding";
-import { usePayoutsReady } from "../lib/payouts";
-import { usePublishingPermissionMissing } from "../lib/publishing";
 import { Link, useSearchParams } from "../lib/router";
 import { client } from "../lib/rpc";
 import { useSidebar } from "../lib/sidebar";
-import { studioNewWorkUrl, studioUrl } from "../lib/studio";
+import { studioNewWorkUrl } from "../lib/studio";
 import type { Work } from "../lib/types";
 import { useWorkUploads } from "../lib/work-uploads";
 
@@ -67,66 +57,6 @@ interface UsingPost {
 export default function WorksPage() {
 	const [items, setItems] = useState<Work[]>([]);
 	const [loading, setLoading] = useState(true);
-
-	/**
-	 * The creator's own setup, for the onboarding card at the top of the page.
-	 *
-	 * ⭐ **This is the same pair the Work page's floating card shows, and the same pair the
-	 * server refuses a release for** (`publishRefusal`). It lives here because the Works page
-	 * is the Studio's front door: a creator who has just turned creator mode on lands on it,
-	 * and the two things publishing takes are what stands between them and their first
-	 * release. A creator with both done moves on to the first-steps card below.
-	 */
-	const payoutsReady = usePayoutsReady();
-	const permissionMissing = usePublishingPermissionMissing();
-	const creatorSetupKnown = payoutsReady !== null && permissionMissing !== null;
-	const creatorSetupMissing = payoutsReady === false || permissionMissing === true;
-	const creatorSetupItems: SetupChecklistItem[] = [
-		{
-			key: "permission",
-			label: "Allow ATProto creator permissions",
-			state: permissionMissing ? "todo" : "done",
-			href: studioUrl("/settings"),
-		},
-		{
-			key: "payouts",
-			label: "Complete your Stripe Payout Setup",
-			state: payoutsReady ? "done" : "todo",
-			href: studioUrl("/payments"),
-		},
-	];
-
-	/**
-	 * The creator's own onboarding, in two phases.
-	 *
-	 * ⭐ **The required pair first, then the steps that make a catalog.** The gate is the
-	 * two account conditions publishing refuses without; once both are answered the card
-	 * follows with the first steps that give a creator somewhere to go, and only then can
-	 * it be dismissed. It is one card reading as one sequence rather than two cards
-	 * competing for the top of the page.
-	 */
-	const { user, refreshUser } = useAuth();
-	const onboardingFacts = useOnboardingFacts();
-	const [creatorChecklistDismissed, setCreatorChecklistDismissed] = useState(false);
-	const creatorFirstSteps =
-		user && onboardingFacts ? creatorChecklistItems(onboardingFacts, user) : null;
-	const showCreatorFirstSteps =
-		creatorSetupKnown &&
-		!creatorSetupMissing &&
-		!!creatorFirstSteps &&
-		!creatorChecklistDismissed &&
-		!user?.creatorChecklistDismissedAt &&
-		!checklistComplete(creatorFirstSteps);
-
-	const dismissCreatorChecklist = () => {
-		setCreatorChecklistDismissed(true);
-		void dismissOnboardingChecklist("creator").then((ok) => {
-			// The same honesty as the reader's card: a refused write puts it back rather
-			// than leaving the page claiming a dismissal the account never recorded.
-			if (!ok) setCreatorChecklistDismissed(false);
-			else void refreshUser();
-		});
-	};
 
 	const [deleteTarget, setDeleteTarget] = useState<Work | null>(null);
 	// Held across the dialog's exit, so the box keeps naming the Work while it fades.
@@ -397,29 +327,6 @@ export default function WorksPage() {
 					<PlusIcon className="w-4 h-4" /> New Work
 				</Link>
 			</div>
-
-			{creatorSetupKnown && creatorSetupMissing && (
-				<div className="mb-4">
-					<SetupChecklist
-						variant="inline"
-						title="Creator Setup Checklist"
-						intro="Before you can publish Works or posts, you need to:"
-						items={creatorSetupItems}
-					/>
-				</div>
-			)}
-
-			{showCreatorFirstSteps && creatorFirstSteps && (
-				<div className="mb-4">
-					<SetupChecklist
-						variant="inline"
-						title="Creator First Steps"
-						intro="Your account can publish now. These are the steps that put something in front of people."
-						items={creatorFirstSteps}
-						onDismiss={dismissCreatorChecklist}
-					/>
-				</div>
-			)}
 
 			{releaseError && (
 				<div className="alert alert-error text-sm mb-4">

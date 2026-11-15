@@ -1,20 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * A **setup checklist** — the conditions standing between somebody and an act, drawn as a
- * progress bar and a short list. One component behind two surfaces: the floating guide on a
- * Work's page and the creator-onboarding card at the top of the Studio's Works page.
+ * progress bar and a short list in a card pinned to the page's lower-right corner.
  *
- * ⭐ **The two placements are the same object in different containers.** `floating` starts
- * open and collapses to a round button that keeps the completed count; `inline` is a card in
- * the page's flow, rendered while there is still something to do. The caller owns where the
- * floating card is pinned, because that depends on the shell's fixed bars rather than on the
- * card itself.
+ * ⭐ **One component behind every checklist in the app.** The Work's own release gate, the
+ * creator's account setup, the creator's first steps and the reader's orientation are the
+ * same object in the same corner, so a person meets one vocabulary rather than four
+ * designs. The card starts open and collapses to a round button that keeps the completed
+ * count.
  *
  * 🚨 **The items are the rule's own conditions, never a second definition of ready.** The
  * caller derives them from the same predicates the server reads, so the card cannot say a
  * thing is done while the act refuses it. A **done** row is satisfied; a **todo** row is the
  * person's to fix and opens the place it is fixed; a **waiting** row resolves without them
  * and is muted rather than offered as an act.
+ *
+ * ⚠️ **Where it is pinned is the caller's**, because clearing the shell's fixed bars (the
+ * player, the phone tabs) depends on where the card is mounted rather than on the card.
+ * `checklistCornerClass` is that decision, in one place, for every surface.
  */
 
 import {
@@ -38,6 +41,18 @@ export interface SetupChecklistItem {
 	onOpen?: () => void;
 }
 
+/**
+ * Where a floating checklist sits.
+ *
+ * ⭐ **The player bar owns the bottom of the shell when something is playing**, so the card
+ * lifts above it; on a phone the tab bar already holds the bottom edge, which is why the
+ * base offset is taller than the desktop one. Every surface that pins a checklist uses
+ * this, so the four cards never sit at three different heights.
+ */
+export function checklistCornerClass(playerUp: boolean): string {
+	return `fixed right-4 z-40 sm:right-6 ${playerUp ? "bottom-40 sm:bottom-24" : "bottom-28 sm:bottom-6"}`;
+}
+
 /** The circle a todo item draws in place of the done check. */
 function TodoMark() {
 	return (
@@ -52,7 +67,6 @@ export default function SetupChecklist({
 	title,
 	intro,
 	items,
-	variant = "inline",
 	onDismiss,
 	dismissLabel = "Dismiss",
 }: {
@@ -61,12 +75,6 @@ export default function SetupChecklist({
 	/** What the list is for, in one sentence — the caller's copy. */
 	intro: string;
 	items: SetupChecklistItem[];
-	/**
-	 * `floating` is the Work page's corner card, collapsible to a button; `inline` is the
-	 * Studio's onboarding card, which lives in the page's flow and is rendered only while
-	 * something is left to do.
-	 */
-	variant?: "floating" | "inline";
 	/**
 	 * Put the card away for good, when the caller has somewhere to record that. ⚠️ **Only
 	 * guidance lists take one.** A checklist standing between somebody and an act is the
@@ -122,11 +130,7 @@ export default function SetupChecklist({
 				return (
 					<li key={item.key}>
 						{item.href ? (
-							<Link
-								to={item.href}
-								className={rowClass}
-								onClick={variant === "floating" ? () => setOpen(false) : undefined}
-							>
+							<Link to={item.href} className={rowClass} onClick={() => setOpen(false)}>
 								{mark}
 								{label}
 								{go}
@@ -137,9 +141,8 @@ export default function SetupChecklist({
 								className={rowClass}
 								onClick={() => {
 									item.onOpen?.();
-									// The floating card gets out of the way of the control it just
-									// opened; the inline card stays for its other rows.
-									if (variant === "floating") setOpen(false);
+									// The card gets out of the way of the control it just opened.
+									setOpen(false);
 								}}
 							>
 								{mark}
@@ -177,32 +180,6 @@ export default function SetupChecklist({
 			{dismissLabel}
 		</button>
 	) : null;
-
-	if (variant === "inline") {
-		return (
-			<section
-				aria-label={title}
-				className="rounded-xl border border-base-300 bg-base-100 shadow-sm"
-			>
-				<div className="flex flex-col gap-4 p-4 md:flex-row md:items-start">
-					<div className="md:w-72 md:shrink-0">
-						<h2 className="text-sm font-semibold">{title}</h2>
-						<p className="mt-1 text-sm text-base-content/60">{intro}</p>
-						<div className="mt-3 flex flex-col gap-1">
-							{progress}
-							<p className="text-xs text-base-content/50">
-								{allSet ? "Everything on this list is set." : `${done} of ${total} done`}
-							</p>
-						</div>
-					</div>
-					<div className="min-w-0 flex-1">
-						{rows}
-						{dismiss}
-					</div>
-				</div>
-			</section>
-		);
-	}
 
 	if (!open) {
 		return (
