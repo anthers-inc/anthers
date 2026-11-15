@@ -3,6 +3,7 @@
 import { matchesChord, resolveKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { useAuth } from "@anthers/web-shared/auth";
 import { MeadowBackdrop } from "@anthers/web-shared/decor/MeadowBackdrop";
+import CreatorChecklist from "@anthers/web-shared/onboarding/CreatorChecklist";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useLocation } from "@anthers/web-shared/router";
 import { useSidebar } from "@anthers/web-shared/sidebar";
@@ -222,6 +223,8 @@ function PhoneTabs({ hidden }: { hidden: boolean }) {
 export default function LoggedInLayout() {
 	const { user } = useAuth();
 	const { currentTrack } = useMediaPlayer();
+	/** Whether the player bar is up, which decides how high a floating checklist sits. */
+	const playerUp = currentTrack !== null;
 	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent, sharedContent, topBarContent } =
 		useSidebar();
 	const { pathname, search } = useLocation();
@@ -574,6 +577,15 @@ export default function LoggedInLayout() {
 						</main>
 					</div>
 				</div>
+
+				{/* The creator's onboarding checklist, in the corner every setup checklist
+				    sits in, on the Works page alone: the Studio's front door is where a
+				    creator lands, and the Work editor already carries its own card in that
+				    corner. It lifts above the player bar, which is up in either mode when
+				    something is playing. */}
+				{!chromeHidden && studio && pathname === studioUrl("/works") && (
+					<CreatorChecklist playerUp={playerUp} />
+				)}
 
 				<PlayerBar />
 				{phoneTabbed && <PhoneTabs hidden={sidebarOpen} />}

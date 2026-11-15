@@ -84,7 +84,7 @@ test("the Work checklist starts open, names what is missing, and gets out of the
 	await signInAsMediaFixture(context);
 	await openEditor(page, publicId);
 
-	const card = page.getByRole("complementary", { name: "Work Setup Checklist" });
+	const card = page.getByRole("region", { name: "Work Setup Checklist" });
 	await expect(card, "the checklist opens without being asked for").toBeVisible();
 	await expect(card.getByText("The media for the Work")).toBeVisible();
 	await expect(card.getByText("At least one human credit")).toBeVisible();
@@ -124,7 +124,8 @@ test("a creator whose own setup is unfinished sees that checklist instead of the
 		route.fulfill({ json: { payoutsEnabled: false, onboardingComplete: false } }),
 	);
 
-	// The Studio's front door carries the onboarding card while setup is incomplete.
+	// The Studio's front door carries the onboarding card while setup is incomplete, in the
+	// same floating card the Work page uses.
 	await page.goto("/studio/works");
 	await expect(page.getByRole("heading", { name: "Works" })).toBeVisible();
 	const creatorCard = page.getByRole("region", { name: "Creator Setup Checklist" });
@@ -134,7 +135,7 @@ test("a creator whose own setup is unfinished sees that checklist instead of the
 
 	// The same draft Work shows that checklist, not its own, until the setup is done.
 	await openEditor(page, publicId);
-	const floatingCreator = page.getByRole("complementary", { name: "Creator Setup Checklist" });
+	const floatingCreator = page.getByRole("region", { name: "Creator Setup Checklist" });
 	await expect(floatingCreator).toBeVisible();
 	await expect(floatingCreator.getByText("The media for the Work")).toHaveCount(0);
 
@@ -144,7 +145,7 @@ test("a creator whose own setup is unfinished sees that checklist instead of the
 		route.fulfill({ json: { payoutsEnabled: true, onboardingComplete: true } }),
 	);
 	await page.reload();
-	const workCard = page.getByRole("complementary", { name: "Work Setup Checklist" });
+	const workCard = page.getByRole("region", { name: "Work Setup Checklist" });
 	await expect(workCard).toBeVisible();
 	await expect(workCard.getByText("The media for the Work")).toBeVisible();
 });

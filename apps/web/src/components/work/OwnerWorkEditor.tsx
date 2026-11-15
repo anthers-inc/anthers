@@ -123,7 +123,10 @@ import ImageEditMenu from "@anthers/web-shared/ui/ImageEditMenu";
 import ImageFrameModal from "@anthers/web-shared/ui/ImageFrameModal";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import Modal from "@anthers/web-shared/ui/Modal";
-import SetupChecklist, { type SetupChecklistItem } from "@anthers/web-shared/ui/SetupChecklist";
+import SetupChecklist, {
+	checklistCornerClass,
+	type SetupChecklistItem,
+} from "@anthers/web-shared/ui/SetupChecklist";
 import { uploadMediaFile } from "@anthers/web-shared/upload";
 import { useWebBuildUploads } from "@anthers/web-shared/web-build-uploads";
 import { hasSeveralOwners } from "@anthers/web-shared/work-owners";
@@ -2236,17 +2239,8 @@ export default function OwnerWorkEditor({
 			    whose own setup is unfinished sees that first; the Work's rows follow once
 			    the account can publish at all. */}
 			{unpublished && creatorSetupKnown && (
-				<div
-					className={`fixed right-4 z-40 sm:right-6 ${
-						playerUp ? "bottom-40 sm:bottom-24" : "bottom-28 sm:bottom-6"
-					}`}
-				>
-					<SetupChecklist
-						variant="floating"
-						title={checklist.title}
-						intro={checklist.intro}
-						items={checklist.items}
-					/>
+				<div className={checklistCornerClass(playerUp)}>
+					<SetupChecklist title={checklist.title} intro={checklist.intro} items={checklist.items} />
 				</div>
 			)}
 		</WorkColumn>

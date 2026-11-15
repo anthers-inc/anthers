@@ -89,6 +89,14 @@ export interface User {
 	 * Null = never set, so the defaults in `@anthers/shared/keybindings` stand.
 	 */
 	keyboardShortcuts: Record<string, string> | null;
+	/**
+	 * When the reader's onboarding checklist was put away, or null while it still stands.
+	 * A timestamp rather than a flag because the act is one-way; the client only asks
+	 * whether one exists.
+	 */
+	readerChecklistDismissedAt: string | null;
+	/** The same, for the creator follow-up checklist on the Studio's Works page. */
+	creatorChecklistDismissedAt: string | null;
 	/** Every account holds exactly one ATProto identity, so it is always present. */
 	atprotoDid: string;
 	/**

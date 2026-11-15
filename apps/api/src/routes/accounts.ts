@@ -30,6 +30,9 @@
  *   GET    /me/storage              — the account's storage reading: allowance at the held
  *                                     Badge, bytes held this cycle, per-purpose lines
  *                                     (services/storage-reading.ts composes it)
+ *   GET    /me/onboarding           — what the account has done, for the two onboarding
+ *                                     checklists (services/onboarding.ts)
+ *   POST   /me/onboarding/dismiss   — put one checklist away for good
  *   GET    /me/content-preferences  — per-rung Hide/Blur/Show; readable signed-out, because
  *                                     the defaults are what a signed-out visitor gets
  *   PATCH  /me/content-preferences  — change either rung, or any kind of content
@@ -156,6 +159,7 @@ import {
 	unreadCount,
 	unsubscribeGroup,
 } from "../services/notifications.js";
+import { dismissChecklist, onboardingFactsFor } from "../services/onboarding.js";
 import {
 	clearParentalControls,
 	parentalPolicyFor,
@@ -252,6 +256,8 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
 			creatorEmailDelivery: userPreferences.creatorEmailDelivery,
 			keyboardShortcuts: userPreferences.keyboardShortcuts,
+			readerChecklistDismissedAt: userPreferences.readerChecklistDismissedAt,
+			creatorChecklistDismissedAt: userPreferences.creatorChecklistDismissedAt,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -302,6 +308,11 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
 		// The bar's two chords; null means the defaults in `@anthers/shared/keybindings`.
 		keyboardShortcuts: prefs?.keyboardShortcuts ?? null,
+		// Whether each onboarding checklist has been put away. A timestamp because the act
+		// is one-way and the client only asks whether one exists; null means the card
+		// still stands.
+		readerChecklistDismissedAt: prefs?.readerChecklistDismissedAt?.toISOString() ?? null,
+		creatorChecklistDismissedAt: prefs?.creatorChecklistDismissedAt?.toISOString() ?? null,
 		atprotoDid: user.atprotoDid,
 		// The server holding that identity, so Settings can name it and link its account page.
 		atprotoPdsUrl: user.atprotoPdsUrl,
@@ -518,6 +529,17 @@ const savedRecipesSchema = z
 			rows.every((row) => !RECIPE_PRESETS.some((preset) => sameRecipe(preset.recipe, row.recipe))),
 		{ message: "That recipe is already one of the site's presets." },
 	);
+
+/**
+ * The dismissal act's body, one checklist at a time.
+ *
+ * ⚠️ **A named checklist rather than two routes**, because the two are the same act on
+ * different cards and the client always knows which card it closed. The two names are
+ * the two checklists, not the two statuses either one can be in.
+ */
+const dismissChecklistSchema = z.object({
+	checklist: z.enum(["reader", "creator"]),
+});
 
 const updateProfileSchema = z.object({
 	displayName: z.string().max(150).optional(),
@@ -2264,6 +2286,29 @@ const accountRoutes = new Hono()
 		// cloud saves reads their own figure just as a creator does.
 		return c.json(await storageReadingFor(c.get("user").id));
 	})
+
+	// ── The onboarding checklists ────────────────────────────────────────────
+	//
+	// What an account has done, for the reader's checklist on Discovery and the creator's
+	// follow-up on the Studio's Works page. Read-only, and the rows derive from it rather
+	// than from a click, so a checklist cannot claim something is done before it is.
+	.get("/me/onboarding", requireAuth, async (c) => {
+		return c.json(await onboardingFactsFor(c.get("user").id));
+	})
+
+	// Putting a checklist away is a one-way act, so it is a POST rather than a field on
+	// `PATCH /me`: nothing turns it back on, and the client sends which card it closed
+	// rather than a timestamp of its own.
+	.post(
+		"/me/onboarding/dismiss",
+		requireAuth,
+		zValidator("json", dismissChecklistSchema, invalidBody),
+		async (c) => {
+			const { checklist } = c.req.valid("json");
+			const { dismissedAt } = await dismissChecklist(c.get("user").id, checklist);
+			return c.json({ checklist, dismissedAt: dismissedAt.toISOString() });
+		},
+	)
 
 	// ── Saved billing address ──────────────────────────────────────────────
 	//

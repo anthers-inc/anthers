@@ -1,0 +1,2 @@
+ALTER TABLE "user_preferences" ADD COLUMN "reader_checklist_dismissed_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "user_preferences" ADD COLUMN "creator_checklist_dismissed_at" timestamp with time zone;
