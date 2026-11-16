@@ -11,20 +11,21 @@ export const WIKI_ROADMAP_URL = "https://anthers.wiki/roadmap";
 
 /**
  * The credits policy, linked from the credits editor above its table the way the Rating
- * tab links to the Rating Standard. The page is `35.01 Crediting a Work` under
- * `35 Credits` in the vault, and the publishing host's two-level slug strips the
- * Johnny.Decimal prefixes from the category and the page alike.
+ * tab links to the Rating Standard. The page is `32.01 Crediting a Work` under
+ * `32 Credits & Collaborators` in the vault, and the publishing host's two-level slug
+ * strips the Johnny.Decimal prefixes from the category and the page alike.
  */
-export const CREDITS_WIKI_URL = "https://anthers.wiki/credits/crediting-a-work";
+export const CREDITS_WIKI_URL = "https://anthers.wiki/credits-collaborators/crediting-a-work";
 
 /**
- * The reader's walkthrough, linked from the orientation checklist in the shell's corner.
+ * The user's walkthrough, linked from the orientation checklist in the shell's corner.
  *
- * The page is `20.01 Your First Visit` under `20 First Steps`, and it is the long form of
- * the same first session the checklist draws as four rows. The guide link is how a reader
- * who wants the whole path follows it instead of treating four rows as the whole thing.
+ * The page is `20.01 Your First Visit` under `20 First Steps` in the User Guide, and it is
+ * the long form of the same first session the checklist draws as four rows. The guide link
+ * is how a user who wants the whole path follows it instead of treating four rows as the
+ * whole thing.
  */
-export const READER_GUIDE_URL = "https://anthers.wiki/first-steps/your-first-visit";
+export const USER_GUIDE_URL = "https://anthers.wiki/first-steps/your-first-visit";
 
 /**
  * The creator's walkthrough, linked from the Studio's checklist in the same corner.
