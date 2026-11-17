@@ -13,7 +13,7 @@
 // `RIVAL_SPEND` rows — published rates and published nulls, never estimates.
 //
 // 🚨 **A null split is a finding.** `creator` / `platform` of `null` render as "not
-// published"; the layer never substitutes a number for them, and the reader's totals
+// published"; the layer never substitutes a number for them, and the user's totals
 // carry the gap instead (the wiki page's § What Can Be Known is the authority).
 //
 // 🚨 **Badges are subscription purchases, never gifts** (2026-10-15, in 82.01).
@@ -26,13 +26,13 @@ import {
 } from "@anthers/shared/constants";
 import { RIVAL_SPEND, STOREFRONT_CROSSOVER } from "@anthers/shared/figures";
 
-// ─── The month the reader builds ───────────────────────────────────────────────
+// ─── The month the user builds ───────────────────────────────────────────────
 
 export type LineKey = "video" | "music" | "purchases" | "direct" | "free";
 
 export interface SpendLine {
 	on: boolean;
-	/** The line's monthly dollars: the published list price for subscriptions, the reader's amount elsewhere. */
+	/** The line's monthly dollars: the published list price for subscriptions, the user's amount elsewhere. */
 	spend: number;
 	/** Watching hours — video and the free line; read against the Public Access allowance. */
 	hours: number;
@@ -58,7 +58,7 @@ const ROWS = {
 	free: row("free"),
 };
 
-/** The reader's starting month: a whole one — Premium and Spotify as published, one typical storefront purchase, two pledges by name; the free line off, because its state is the losing case. */
+/** The user's starting month: a whole one — Premium and Spotify as published, one typical storefront purchase, two pledges by name; the free line off, because its state is the losing case. */
 export function startLines(): Record<LineKey, SpendLine> {
 	return {
 		video: { on: true, spend: ROWS.video.price, hours: 25, itemPrice: 30, items: 1, recipients: 1 },
@@ -79,7 +79,7 @@ export const RUNGS: { label: string; amount: number }[] = ANTHERS_BADGES.map((b)
  * The smallest monthly amount whose five lines all come out non-negative.
  *
  * Below it the charge cannot cover its own card fee, so Anthers Support comes out below
- * zero — the reader is being subsidized rather than supporting anything, and the page
+ * zero — the user is being subsidized rather than supporting anything, and the page
  * states that gap instead of rendering a negative line as money moving.
  *
  * ⚠️ **Walked in cents rather than closed-form, because the storage reserve is a step
@@ -120,7 +120,7 @@ export function patreonPledgeReach(pledge: number): number {
 	);
 }
 
-/** What a creator receives from one storefront purchase: the reader's money less the published cut, which absorbs its own processing. */
+/** What a creator receives from one storefront purchase: the user's money less the published cut, which absorbs its own processing. */
 export function storefrontItemReach(price: number): number {
 	return cent(price * (ROWS.storefront.creatorShare ?? 0));
 }
@@ -135,9 +135,9 @@ export function crossover(): number {
 export interface TodayRow {
 	key: LineKey;
 	name: string;
-	/** What the line gets the reader, as one sentence the UI renders verbatim. */
+	/** What the line gets the user, as one sentence the UI renders verbatim. */
 	gets: string;
-	/** What the reader pays this month, tax included; null where the line pays nothing. */
+	/** What the user pays this month, tax included; null where the line pays nothing. */
 	pay: number | null;
 	platform: number | null;
 	creator: number | null;
@@ -161,9 +161,9 @@ export interface MediaMonth {
 		rows: TodayRow[];
 		/** The whole month's pay, tax included. */
 		paid: number;
-		/** What reaches the people the reader chose, per published rates — an exact lower bound's parts. */
+		/** What reaches the people the user chose, per published rates — an exact lower bound's parts. */
 		knownByName: number;
-		/** What rides lines whose split is not published — the gap, in the reader's own dollars. */
+		/** What rides lines whose split is not published — the gap, in the user's own dollars. */
 		notPublished: number;
 		/** True when nothing but (at most) the free line is enabled — the month Anthers loses on money. */
 		paysNothing: boolean;
@@ -174,7 +174,7 @@ export interface MediaMonth {
 		/** The Anthers side and the directed side, as actually computed. */
 		given: number;
 		directed: number;
-		/** False while the reader has typed the directed amount by hand. */
+		/** False while the user has typed the directed amount by hand. */
 		directedAuto: boolean;
 		breakdown: ReturnType<typeof supportBreakdownDisplay>;
 		purchases: PurchaseRow[];
@@ -304,7 +304,7 @@ export function computeMonth(lines: Record<LineKey, SpendLine>, rePoint: RePoint
 	const subsSpend = cent(
 		(video.on ? video.spend : 0) + (music.on ? music.spend : 0) + (direct.on ? direct.spend : 0),
 	);
-	// The Public Access price rides when there is a month to re-point. A reader whose
+	// The Public Access price rides when there is a month to re-point. A user whose
 	// month is the free line pays nothing, and their comparable Anthers month is the
 	// free account — nothing given, ten hours — not a badge charged onto nothing.
 	const given =

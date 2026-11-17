@@ -10,7 +10,7 @@
  * being discovered to disagree with three call sites.
  *
  * 🚨 **The local id travels beside the canonical address, and both are deliberate.** A record
- * is the reader's pointer to a Work, and the address is what makes the pointer portable — but
+ * is the user's pointer to a Work, and the address is what makes the pointer portable — but
  * a Work that was never published has no address, and a saved Work whose listing was
  * withdrawn still has to project. The id is Anthers' own handle on the subject; the address,
  * when present, is preferred on the way back in and is what another client would follow.
@@ -19,9 +19,9 @@
 /**
  * The collections the user space declares.
  *
- * The three reader-state records are written by the outbox and the projection; `receipt` is
+ * The three user-state records are written by the outbox and the projection; `receipt` is
  * written by the access-receipt job from the ledger, because a purchase's proof is not a
- * projection of the reader's own state.
+ * projection of the user's own state.
  */
 export const USER_SPACE_COLLECTIONS = {
 	libraryItem: "org.anthers.libraryItem",
@@ -56,7 +56,7 @@ export type LibraryItemRecord = {
 	};
 	hidden: boolean;
 	sortOrder: number;
-	/** When the reader kept it, as an ISO datetime. */
+	/** When the user kept it, as an ISO datetime. */
 	savedAt: string;
 } & Record<string, unknown>;
 
@@ -74,7 +74,7 @@ export interface LibraryItemState {
  *
  * ⚠️ **The row id is deliberately not the key.** `user_library_items.id` changes if the Library is
  * ever rebuilt from the space, which would make every rebuilt entry a new record; the subject
- * is the stable identity, and a reader keeps one entry per subject.
+ * is the stable identity, and a user keeps one entry per subject.
  */
 export function libraryItemRkey(subject: Pick<LibrarySubject, "kind" | "id">): string {
 	return `${subject.kind}-${subject.id}`;
@@ -103,7 +103,7 @@ const SUBJECT_KINDS = new Set<LibrarySubjectKind>(["work", "project", "post"]);
  * Read a record back into the state the projection needs.
  *
  * 🚨 **Malformed is a result, not an exception.** A record in the space may have been written
- * by a newer build or by the reader's own app, and a projection that threw on the first one
+ * by a newer build or by the user's own app, and a projection that threw on the first one
  * would stop rebuilding the whole Library. What it may never do is guess: an unknown subject
  * kind, a non-integer id or a missing `savedAt` is refused by name so the report says which
  * record to look at.
@@ -142,7 +142,7 @@ export function parseLibraryItemRecord(value: unknown): ParsedLibraryItem {
 }
 
 /**
- * The reading-position record: where a reader stopped in one Work.
+ * The reading-position record: where a user stopped in one Work.
  *
  * 🚨 **No floating point crosses into the record.** `user_reading_positions.progress` is a SQL
  * `real`, and the protocol's data model has integers and strings, not floats. The position is
@@ -192,7 +192,7 @@ export function readingPositionRecord(state: {
  * ⚠️ **Inline is a decision, not an omission.** A save is capped small (`SAVE_BLOB_MAX_CHARS`
  * in the route), and a record carries it as a string; the space namespace has no upload, so a
  * blob route would mean the ordinary repository, a `blob:` permission and a ref the restore has
- * to keep in step. A reader's save is text under the cap, so the record is the whole artifact.
+ * to keep in step. A user's save is text under the cap, so the record is the whole artifact.
  * If a future save grows past a record, it becomes a blob and this shape changes with it.
  */
 export type WorkSaveRecord = {

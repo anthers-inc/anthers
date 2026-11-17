@@ -2,7 +2,7 @@
 /**
  * The record link — the one component every page that names a thing's ATProto record
  * uses: a small globe fed by anything's record address
- * (`https://atproto.at/uri/{at-uri}`), the one form a reader can follow. Reusable by
+ * (`https://atproto.at/uri/{at-uri}`), the one form a user can follow. Reusable by
  * shape — a Work's listing, a Project's, a post's record, anything carrying an ATProto
  * link — and the one form everywhere (Parker, 2026-10-16): the sentence form that used
  * to stand beside it was retired here, so the globe and its tooltip are the only

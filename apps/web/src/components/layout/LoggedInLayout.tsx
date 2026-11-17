@@ -159,10 +159,10 @@ function ProfileRow({ rail, active }: { rail: boolean; active: boolean }) {
  *
  * 🚨 **This is a third shape for the phone, not a breakpoint on the desktop bar.** The
  * desktop's sidebar is a drawer below `md`, so every destination there costs two taps — open
- * the drawer, then tap — on the surface a reader navigates from most. The bar puts the two
+ * the drawer, then tap — on the surface a user navigates from most. The bar puts the two
  * content tabs and the account door one tap away, and leaves the drawer for its real phone
  * job: the filters and page sections the sidebar carries. The Studio keeps that drawer and
- * has no bar, because its seven places are a tool's nav rather than a reader's.
+ * has no bar, because its seven places are a tool's nav rather than a user's.
  *
  * The bar is hidden while the drawer is open so the backdrop and the bar never compete for
  * the same tap, and while the chrome is hidden by its shortcut. It carries the bottom inset
@@ -244,7 +244,7 @@ export default function LoggedInLayout() {
 	/**
 	 * The lens survives a switch between the two content tabs (Parker, 2026-11-06).
 	 *
-	 * ⭐ **Every Library/Discovery link carries the lens the reader is under**, so moving
+	 * ⭐ **Every Library/Discovery link carries the lens the user is under**, so moving
 	 * from "my Library under the Music Player" to Discovery lands on "the stream under the
 	 * Music Player" rather than resetting to No Lens. The lens remains the page's URL
 	 * parameter — this only carries it across the nav, which is what makes it feel like a
@@ -295,7 +295,7 @@ export default function LoggedInLayout() {
 	 *
 	 * ⚠️ **It fires with a text field focused, and that is deliberate.** The search bar skips
 	 * `Ctrl+K` over an editor because that chord is an editing command in a composer;
-	 * `Ctrl+/` is not, so a reader halfway through a comment can put the sidebar away without
+	 * `Ctrl+/` is not, so a user halfway through a comment can put the sidebar away without
 	 * clicking out first. Safety while typing comes from the grammar's modifier requirement,
 	 * which every page shortcut carries, rather than from a target check here.
 	 *
@@ -330,7 +330,7 @@ export default function LoggedInLayout() {
 				    rather than inside the header. The alpha notice sits above the top bar now, so
 				    the inset has to sit above that too, while the notice's ground is what the
 				    strip paints — the inset never shows the page behind it. It stays mounted
-				    whether or not the reader has closed the notice, so the header below is
+				    whether or not the user has closed the notice, so the header below is
 				    unchanged in either state. */}
 				<div className="safe-top bg-base-200" aria-hidden="true" />
 
@@ -340,7 +340,7 @@ export default function LoggedInLayout() {
 				<AlphaNotice />
 
 				{/* Top bar: brand and the mode switch on the left, search in the middle, the
-		    reader's own controls on the right. It is the one header in both modes; studio
+		    user's own controls on the right. It is the one header in both modes; studio
 		    mode leaves out search, the notifications and the cart, which belong to user mode,
 		    and keeps the theme picker, which belongs to the whole app. The sidebar's
 		    own toggle used to live here too and moved onto the sidebar's edge (2026-10-16),
@@ -388,7 +388,7 @@ export default function LoggedInLayout() {
 					    2026-11-13). All three hold their place; only a count badge is
 					    conditional, because a permanent "0" is noise and a control that comes
 					    and goes is worse. The theme picker is the marketing shell's own
-					    dropdown, because the choice is about the page in front of the reader in
+					    dropdown, because the choice is about the page in front of the user in
 					    either mode. The bell's count rides the shared store so one poll serves
 					    every surface. The cart is the one surface where money changes hands, so
 					    it should not depend on being non-empty to exist. Studio leaves out the

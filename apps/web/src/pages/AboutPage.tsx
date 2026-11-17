@@ -50,7 +50,7 @@
 //
 // The wiki's *How Anthers Talks About Itself* § Claims owns the rule; this is the
 // part the page implements. The two-list structure below separates what binds the
-// Corporation now from what federal recognition would add, so a reader never has to
+// Corporation now from what federal recognition would add, so a user never has to
 // work out which column a sentence belongs in.
 //
 // What `about-claims.test.ts` holds:

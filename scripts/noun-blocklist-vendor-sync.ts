@@ -17,7 +17,7 @@
  * own term list, imported — and pushes what is missing with `overwrite: false`. The
  * local `noun_blocklist` table in production is the OTHER copy; the two are reconciled
  * by the same terms living in both this file and the seed script, which is why the seed
- * script's TERMS are imported rather than restated — one list, two readers, and the
+ * script's TERMS are imported rather than restated — one list, two users, and the
  * diff prints any disagreement rather than papering over it.
  *
  * After a successful run, their side carries every term; the vendor's view caches ten

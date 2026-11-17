@@ -2,7 +2,7 @@
 /**
  * The Work's storefront carousel — the Steam and Vimeo On Demand shape (Parker,
  * 2026-10-19). Slide 0 is passed in as an element: the locked composition for a Work the
- * reader cannot open, the download card for a download-only Work they can. Every later
+ * user cannot open, the download card for a download-only Work they can. Every later
  * slide is a screenshot or a trailer the creator added.
  *
  * The strip is the direct-pick row and the side chevrons are its pointer equivalent. Both

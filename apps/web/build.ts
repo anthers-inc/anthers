@@ -18,7 +18,7 @@ const result = await Bun.build({
 	outdir: "./dist",
 	minify: true,
 	// Route-level chunks. Without this Bun INLINES every dynamic import, so the eight
-	// React.lazy authoring pages in App.tsx ship to every reader (+484 KB) instead of
+	// React.lazy authoring pages in App.tsx ship to every user (+484 KB) instead of
 	// loading when someone opens the Studio.
 	splitting: true,
 	// Root-absolute asset URLs (/chunk-*.js) so deep SPA routes resolve them from

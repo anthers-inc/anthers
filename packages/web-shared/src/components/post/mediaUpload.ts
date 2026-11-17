@@ -56,7 +56,7 @@ export async function uploadImageFile(
  * Upload the whole picture a framing surface keeps in its `*Source` column.
  *
  * The source is owner-only: it is stored private under `sources/`, and only the derivative
- * `frameImageFile` writes is public. The surface still displays the derivative, so a reader
+ * `frameImageFile` writes is public. The surface still displays the derivative, so a user
  * never needs the source URL.
  */
 export async function uploadImageSource(

@@ -9,7 +9,7 @@
  *
  * ⚠️ **The publisher is a record and billing home, not a rank.** Every owner edits and
  * splits evenly; the panel says so where the role is introduced, because a chip that only
- * says "Publisher" invites the reader to infer that the publisher owns more of the Work.
+ * says "Publisher" invites the user to infer that the publisher owns more of the Work.
  */
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../lib/auth";

@@ -10,7 +10,7 @@
  * mode) and counts this module fetches (followed creators, saved things, Works, posts,
  * Badges).
  *
- * ⭐ **The reader's checklist is orientation and the creator's is momentum.** The reader's
+ * ⭐ **The user's checklist is orientation and the creator's is momentum.** The user's
  * four rows each name a part of the app and open it, and none of them gates anything;
  * the creator's five follow the publishing gate and stop at the point a catalog exists.
  * Neither is a conversion surface: nothing here asks for money, and the creator's Badge
@@ -83,20 +83,20 @@ export async function dismissOnboardingChecklist(which: OnboardingChecklist): Pr
 	}
 }
 
-/** What the reader checklist reads off the account itself rather than from a count. */
+/** What the user checklist reads off the account itself rather than from a count. */
 type ReaderProfile = Pick<User, "avatar" | "bio" | "creatorMode">;
 
 /**
- * The reader's checklist: four parts of the app, each opened by its row.
+ * The user's checklist: four parts of the app, each opened by its row.
  *
- * ⚠️ **Creator mode is an offer, not a step.** Every creator begins as a reader, but most
- * readers will never want the Studio, so the row says what the door is for and nothing
+ * ⚠️ **Creator mode is an offer, not a step.** Every creator begins as a user, but most
+ * users will never want the Studio, so the row says what the door is for and nothing
  * more. Its link goes to `/studio`, whose gate is already the place that explains creator
  * mode and leads to the switch.
  *
  * ⚠️ **The follow row has no door because the card stands where following happens.** The
  * checklist is drawn at the top of Discovery (`DiscoverPage`), and a row whose link
- * pointed back at the page the reader is on would be furniture pretending to be a control.
+ * pointed back at the page the user is on would be furniture pretending to be a control.
  * The row still names the act, so the part it teaches is the feed underneath it.
  */
 export function readerChecklistItems(

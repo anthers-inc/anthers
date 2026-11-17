@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Reading one gated Work's manifest as the signed-in reader.
+ * Reading one gated Work's manifest as the signed-in user.
  *
  * ⭐ **The access check is the gate's own function, not a second opinion.** The route that
  * serves a manifest and the route a space authority calls to issue a credential both ask
- * `authorizeSpaceAccess`, so a reader who is refused the credential cannot be served the
- * manifest by a different rule — and a reader the gate admits cannot be refused here for a
+ * `authorizeSpaceAccess`, so a user who is refused the credential cannot be served the
+ * manifest by a different rule — and a user the gate admits cannot be refused here for a
  * reason the app invented.
  *
- * ⚠️ **The reader's session is the hosted route today.** A reader whose identity Anthers does
+ * ⚠️ **The user's session is the hosted route today.** A user whose identity Anthers does
  * not host needs an OAuth grant that includes a `space:` permission, and the production
  * authorization server does not know that resource until the spaces-capable image ships. Until
  * then this answers `no_session` for them, exactly as the space writer does, and the browser

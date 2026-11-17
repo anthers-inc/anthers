@@ -4,7 +4,7 @@
  *
  * A source-text guard in the family of `cart-layout.test.ts`: the pieces that make
  * Library and Discovery one family are a shared header, one nav vocabulary, and a
- * Discovery body that shows one stream under a recipe the reader can see and change.
+ * Discovery body that shows one stream under a recipe the user can see and change.
  * Each is a decision a refactor can quietly undo — a page growing its own heading again,
  * a retired tab surviving beside its replacement, a second mode picker creeping back over
  * a single stream — so each is pinned here.
@@ -43,7 +43,7 @@ describe("the two user tabs share one header", () => {
 		expect(library).toContain(
 			"Every Work you've made, and everything else you've purchased or saved",
 		);
-		// The merged tab's subtitle has to be true of both jobs it now does: the reader's
+		// The merged tab's subtitle has to be true of both jobs it now does: the user's
 		// own network and the whole site. The anti-algorithm claim is the part of the old
 		// copy that survives verbatim, because it is a promise rather than a description.
 		expect(discovery).toContain("Your network, and everything else on Anthers");
@@ -121,7 +121,7 @@ describe("the nav speaks the one vocabulary", () => {
 	it("keeps the retired tab's address as a redirect onto its preset", () => {
 		// The site is publicly reachable and /network was where most accounts landed, so
 		// the address survives as a redirect rather than a 404 — and it names the recipe
-		// it meant instead of landing on whatever this reader's account opens on.
+		// it meant instead of landing on whatever this user's account opens on.
 		expect(app).toContain('path="/network"');
 		expect(app).toContain("recipePath(RECIPE_PRESETS[0].recipe)");
 		expect(app, "the retired page still has a route").not.toContain("AuthenticatedHomePage");
@@ -170,7 +170,7 @@ describe("Discovery's recipe can be cooked, not only read", () => {
 		expect(discovery).toContain("onChoice={(choice) => applyRecipe(choice.recipe)}");
 	});
 
-	it("renders the reader's saved recipes beside the built-ins, built-ins first", () => {
+	it("renders the user's saved recipes beside the built-ins, built-ins first", () => {
 		// The chip list is composed in the shared module rather than in the page, so the
 		// ordering rule has one home and a server-side test can read it too.
 		expect(discovery).toContain("recipeChoices(saved)");
@@ -179,7 +179,7 @@ describe("Discovery's recipe can be cooked, not only read", () => {
 	});
 
 	it("offers saving only for a recipe no chip names, and editing only one it saved", () => {
-		// A built-in is the site's recipe; a pencil there would promise a change the reader
+		// A built-in is the site's recipe; a pencil there would promise a change the user
 		// cannot make, and a Save chip on a named recipe would make two chips for one recipe.
 		expect(discovery).toContain(
 			"const canSave = activeChoice === null && saved.length < SAVED_RECIPE_LIMIT;",
@@ -204,7 +204,7 @@ describe("Discovery's recipe can be cooked, not only read", () => {
 		expect(discovery).toContain("if (dialogRef.current?.open) return;");
 	});
 
-	it("writes all three stages when the reader chooses, never only the changed one", () => {
+	it("writes all three stages when the user chooses, never only the changed one", () => {
 		// Omitting a stage would make it mean "whatever the account says" rather than
 		// "this value", so a chip whose stage matched the built-in default would leave the
 		// previous recipe in force until the account write landed.

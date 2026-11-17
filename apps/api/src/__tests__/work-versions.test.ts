@@ -334,7 +334,7 @@ describe("a Work's archived media versions", () => {
 		expect(detailBody.work.versionLabel).toBe("");
 	});
 
-	it("shows readers only the versions added after release, as names and dates", async () => {
+	it("shows users only the versions added after release, as names and dates", async () => {
 		const releasedAt = new Date("2026-05-01T12:00:00.000Z");
 		const work = await insertWork({
 			type: "video",
@@ -382,7 +382,7 @@ describe("a Work's archived media versions", () => {
 			},
 		});
 
-		// No cookie at all: this is the reader's read.
+		// No cookie at all: this is the user's read.
 		const res = await req(`/api/content/works/${work.id}/versions/history`);
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as {
@@ -399,7 +399,7 @@ describe("a Work's archived media versions", () => {
 		expect(serialized).not.toContain("creators/");
 
 		// Removing the post-release version takes its entry with it: a removal is an edit
-		// to the history a reader sees.
+		// to the history a user sees.
 		const [archived] = await db
 			.select()
 			.from(workMediaVersions)

@@ -28,6 +28,13 @@
  * renders top-right, or from Settings — playing at the shared media volume and
  * under its mute. Both families carry it, because the setting names the sound a
  * hover makes rather than one media type's rendition of it (Parker, 2026-10-19).
+ *
+ * A preview also starts at the first second, so a viewer who wants to see a later
+ * moment would otherwise have to sit through the beginning (Parker, 2026-11-16).
+ * The scrub strip along the band's bottom is that way around: it seeks the playing
+ * element on a click or drag, and the preview carries on from wherever it lands.
+ * Both families carry it, including a listened Work whose band shows only a poster,
+ * because for that preview the strip is the one visible sign of where it is.
  */
 
 import { SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/solid";
@@ -38,6 +45,7 @@ import { useExclusivePlayback } from "../../lib/playback";
 import { previewOriginalSourceFor, previewSourceFor } from "../../lib/tile-preview";
 import { setPreviewAudio, usePreviewAudio } from "../../lib/tile-preview-settings";
 import { effectiveVolume, useVolume } from "../media/transport/volume";
+import PreviewScrubber from "./PreviewScrubber";
 
 export interface TilePreviewWork {
 	id: number;
@@ -282,6 +290,7 @@ function TileVideoPreview({ work, onDone }: TileHoverPreviewProps) {
 				className="absolute inset-0 h-full w-full object-cover"
 				onEnded={onDone}
 			/>
+			<PreviewScrubber mediaRef={videoRef} />
 			<PreviewAudioButton audioOn={audioOn} />
 		</>
 	);
@@ -342,6 +351,7 @@ function TileAudioPreview({ work, onDone }: TileHoverPreviewProps) {
 	return (
 		<>
 			<audio ref={audioRef} src={previewSourceFor(work)} muted autoPlay onEnded={onDone} />
+			<PreviewScrubber mediaRef={audioRef} />
 			<PreviewAudioButton audioOn={audioOn} />
 		</>
 	);

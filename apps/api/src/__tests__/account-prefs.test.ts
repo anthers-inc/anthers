@@ -13,7 +13,7 @@
  * recipe preset. A stored `network` is not refused on read — the serializers treat any id
  * this build's nav does not have as never-answered — so the account lands on the merged
  * tab rather than nowhere. The recipe the merged tab remembers is pinned below, and so are
- * the recipes a reader saved beside the built-in presets.
+ * the recipes a user saved beside the built-in presets.
  */
 
 import { beforeAll, describe, expect, it } from "bun:test";

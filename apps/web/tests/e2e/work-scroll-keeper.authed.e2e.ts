@@ -3,14 +3,14 @@
  * The Work page's two height rules, walked on one page.
  *
  * **The keeper's rule** — a toggle that changes the page's height must not cost the
- * reader their place: opening a field for edit makes the page taller, saving or
+ * user their place: opening a field for edit makes the page taller, saving or
  * canceling shrinks it back, and `keepScroll` (`components/work/scrollKeeper.ts`)
  * captures and restores the offset at every one of those moments.
  *
  * **The stack's rule** (Parker, 2026-10-17) — a tab switch changes nothing at all:
  * the tab groups hold a stable height (`components/work/TabPanels.tsx` stacks every
  * panel in one grid cell, as tall as the tallest), so both the page's height and the
- * reader's place in it are pinned across a switch, with no keeper involved. The
+ * user's place in it are pinned across a switch, with no keeper involved. The
  * assertion is the stronger one — the height does not move, which is what makes the
  * place trivially safe.
  *
@@ -18,7 +18,7 @@
  * `locator.click()`. Playwright's actionability scrolls a below-the-fold target into
  * view before activating it, which is a scroll the keeper cannot undo (its captured
  * offset already carries it), so a locator-driven walk would be testing the harness's
- * own scrolling. A reader clicks only what they can already see; so does this walk:
+ * own scrolling. A user clicks only what they can already see; so does this walk:
  * each target is centered in its container by the walk's own JS scroll first, the
  * offset is measured immediately before the click, and the assertion is that the same
  * offset survives the toggle. The viewport's dimensions belong to whichever project
@@ -158,7 +158,7 @@ test("switching tabs changes nothing about the page's height", async ({ page, co
 	// as a switch having moved the page.
 	await settleHeight(page);
 
-	// Both groups, every tab: each switch holds the page's height and the reader's
+	// Both groups, every tab: each switch holds the page's height and the user's
 	// place in it exactly.
 	for (const tab of ["Ratings", "Accessibility", "Credits", "Details", "Reviews", "Showings"]) {
 		await clickExpectingStillness(page, page.getByRole("tab", { name: tab, exact: true }));

@@ -303,7 +303,7 @@ export function InlineField<V>({
 		try {
 			await save(draft);
 			// Saved — back to the read view. The saved field is shorter than the working
-			// one usually, and a shorter page must not cost the reader their place.
+			// one usually, and a shorter page must not cost the user their place.
 			keepScroll(rootRef.current, () => setMode("read"));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Couldn't save this just now.");

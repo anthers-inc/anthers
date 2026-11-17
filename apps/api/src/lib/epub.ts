@@ -10,8 +10,8 @@
  * untrusted; nothing here evaluates anything (no scripts, no XML entities expanded, no
  * external references followed) — the functions read structure out of well-formed OCF
  * packages and refuse, with a legible message, what they cannot read. The extracted
- * XHTML is stored unchanged for the reader to render inside its sandboxed iframe; the
- * script-blocking posture is the reader's CSP, not a promise made of sanitizing here.
+ * XHTML is stored unchanged for the user to render inside its sandboxed iframe; the
+ * script-blocking posture is the user's CSP, not a promise made of sanitizing here.
  *
  * Everything is keyed on **container-relative paths** (no leading slash, no `..`), which
  * is the stable identity a re-ingest keeps: storage keys change, these do not.
@@ -245,7 +245,7 @@ export function parseEpub(entries: Record<string, Uint8Array>): ParsedEpub {
 
 	// Every manifest resource, spine items included: a component the manifest names but
 	// the caps filtered out is absent from `entries` here, and it records nothing rather
-	// than half a component — the inventory stays honest (the reader's lookup of a
+	// than half a component — the inventory stays honest (the user's lookup of a
 	// missing reference reads as its own "not found", never as a wrong file).
 	const spineSet = new Set(spineHrefs);
 	const resources = new Map<string, EpubResource>();

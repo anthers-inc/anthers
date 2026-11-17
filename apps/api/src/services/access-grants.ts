@@ -10,7 +10,7 @@
  *
  * 🚨 **A grant does not replace the ledger read.** The delivery route resolves access from
  * `purchases` on every request and refuses first, exactly as it did before; the grant then
- * proves the permission was issued for *this* reader, *this* Work and *these* files, and that
+ * proves the permission was issued for *this* user, *this* Work and *these* files, and that
  * it has not expired. The lab's scenario 03 makes the same point — a refund denies delivery
  * even with a grant that still verifies — and that is the order the route keeps.
  *
@@ -40,7 +40,7 @@ export const GRANT_LIFETIME_MS = 10 * 60 * 1000;
 
 export interface AccessGrantPayload {
 	$type: typeof GRANT_TYPE;
-	/** A fresh id per mint, so two grants for one reader are distinguishable in a log. */
+	/** A fresh id per mint, so two grants for one user are distinguishable in a log. */
 	id: string;
 	/** The public listing address when there is one, so a host can name what it serves. */
 	work: string | null;
@@ -48,7 +48,7 @@ export interface AccessGrantPayload {
 	workId: number;
 	/** The receipt this grant backs, when a purchase is the basis; null for another entitlement. */
 	receipt: string | null;
-	/** The reader's DID. */
+	/** The user's DID. */
 	reader: string;
 	/** How the ledger said yes: `purchased`, `entitled`, `free` or `owner`. */
 	basis: string;
@@ -102,7 +102,7 @@ export type GrantRefusal =
 	| "wrong_file";
 
 export interface VerifyGrantOptions {
-	/** The reader the request is authenticated as. */
+	/** The user the request is authenticated as. */
 	readerDid: string;
 	workId: number;
 	/** The storage key the request is about to serve. */

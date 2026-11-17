@@ -43,7 +43,7 @@ export const CREATOR_SPACE_COLLECTIONS = {
  * `role` is what the file is to the Work rather than what it is to a player: `source` is the
  * primary uploaded artifact (the video, the audio, an ebook's PDF), `original` is the upload a
  * remux replaced, `download` is an attached build or installer, and `build` is a browser
- * build's root. A consumer that only wants the thing a reader downloads can filter on the
+ * build's root. A consumer that only wants the thing a user downloads can filter on the
  * first and third.
  */
 export interface ManifestFile {

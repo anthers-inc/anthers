@@ -83,7 +83,7 @@ export default function DiscordCard({ className }: { className?: string }) {
 	const verified = user.isCreator === true;
 	// A linked account gets no explanatory line at all: the connection state and the role chips
 	// carry everything that is true of it, and the Creator chip appears only where it applies.
-	// A reader who is not already a creator has no creator setup to read about. The unlinked card
+	// A user who is not already a creator has no creator setup to read about. The unlinked card
 	// is the one state that still needs a line, because it has an action to explain.
 	const body = linked ? null : "Join the Anthers server.";
 	const message = error ?? notice;

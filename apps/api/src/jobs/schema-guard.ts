@@ -23,7 +23,7 @@ import { readSchemaStanding, type SchemaStanding } from "@anthers/db/schema-head
 /** How often a serving worker asks whether the schema has moved under it. */
 export const SCHEMA_GUARD_INTERVAL_MS = 15_000;
 
-/** The reader seam, so a suite observes the decision rather than a real database. */
+/** The user seam, so a suite observes the decision rather than a real database. */
 export type SchemaStandingReader = () => Promise<SchemaStanding>;
 
 /** One check that never throws: a read that fails answers `unknown`, which serves. */

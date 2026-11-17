@@ -56,7 +56,7 @@ export function framedImageKey(
  *
  * The upload door used to store the client's bytes with the client's declared type, so an
  * image-named HTML file could be served from a trusted subdomain, and an image could carry
- * EXIF or an oversized canvas into every reader's browser. This decodes with sharp, applies
+ * EXIF or an oversized canvas into every user's browser. This decodes with sharp, applies
  * EXIF rotation, bounds the long edge, strips metadata and writes WebP. Anything sharp
  * cannot decode is refused by the caller.
  */

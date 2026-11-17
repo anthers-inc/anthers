@@ -98,7 +98,7 @@ export function previewAudio(): boolean {
 	return currentAudio;
 }
 
-/** The store's change subscription, as an unsubscribe — the hooks register the readers. */
+/** The store's change subscription, as an unsubscribe — the hooks register the users. */
 export function subscribe(fn: () => void): () => void {
 	listeners.add(fn);
 	return () => {
@@ -106,7 +106,7 @@ export function subscribe(fn: () => void): () => void {
 	};
 }
 
-/** The current previews preference with live updates — setting it re-renders every reader. */
+/** The current previews preference with live updates — setting it re-renders every user. */
 export function usePreviewsEnabled(): boolean {
 	return useSyncExternalStore(subscribe, previewsEnabled);
 }

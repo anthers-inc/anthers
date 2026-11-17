@@ -556,7 +556,7 @@ interface PerkCell {
 	note?: string;
 	/**
 	 * A hoverable (i)'s text, rendered beside the value — for a fact the cell cannot fit,
-	 * on the one state where the figure a reader could otherwise wonder about is absent.
+	 * on the one state where the figure a user could otherwise wonder about is absent.
 	 */
 	info?: string;
 }
@@ -597,7 +597,7 @@ function NotBuiltYet() {
 
 /**
  * The perk set, one row per perk — the ladder the wiki's *21.02 Anthers Badges* publishes,
- * in the same order, so the page a reader meets first and the page they are sent to cannot
+ * in the same order, so the page a user meets first and the page they are sent to cannot
  * describe two different ladders.
  *
  * 🚨 **The canon is the document, not this array.** `21.02` is hand-written and reconciled
@@ -631,7 +631,7 @@ const PERK_ROWS: PerkRow[] = [
 		// 🚨 Parker's wording of this row's description is the copy that ships (2026-10-18);
 		// keep the vocabulary's capitalization when touching it.
 		// ⚠️ The figure is the pool proper — what is paid out by time — not the whole
-		// creator half: the Sticker budget is the row below it, and two rows a reader
+		// creator half: the Sticker budget is the row below it, and two rows a user
 		// cannot add up was the defect the ladder was rebuilt for (Parker, 2026-10-25).
 		desc: "Paid to the creators whose Public Access works you spend time with, split by the share of that time each one got. For free users, Anthers funds their Time Pool from the Time Pool Fund, so creators are still paid for time spent by free accounts, without serving ads.",
 		cell: (amount, fundSlice) => ({

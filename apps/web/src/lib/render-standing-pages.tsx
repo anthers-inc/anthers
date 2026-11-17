@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Render every standing page to the body a document carries for a reader without
+ * Render every standing page to the body a document carries for a user without
  * JavaScript.
  *
  * 🚨 **Build-time only, and never in the browser bundle.** `build.ts` imports this after
@@ -12,7 +12,7 @@
  * browser: `BrowserRouter` becomes `MemoryRouter` at the page's own path, and `ScrollToTop`
  * is dropped. `AuthProvider` is kept rather than stubbed because the marketing pages read
  * `useAuth` for their call to action — its effects do not run during a static render, so it
- * answers the signed-out state, which is what a reader without JavaScript is.
+ * answers the signed-out state, which is what a user without JavaScript is.
  */
 import { AuthProvider } from "@anthers/web-shared/auth";
 import { ContentPreferencesProvider } from "@anthers/web-shared/content-preferences";

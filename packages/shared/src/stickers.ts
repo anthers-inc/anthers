@@ -177,7 +177,7 @@ export const batchesAreWellFormed = (): boolean => batchProblems().length === 0;
  *
  * ⭐ **The decoration scales with how many distinct levels a thing has received, never with
  * how many Stickers or how much money** (Parker, 2026-09-13). One Sticker at each level and
- * fifty spread across every level look identical, so a reader can tell the least that was
+ * fifty spread across every level look identical, so a user can tell the least that was
  * given and never the actual amount.
  *
  * ⚠️ **A level is an AMOUNT, not a drawing.** Batches accumulate — nothing is ever retired

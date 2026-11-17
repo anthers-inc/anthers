@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The two onboarding checklists in the browser: the reader's floating in the shell's
+ * The two onboarding checklists in the browser: the user's floating in the shell's
  * lower-right corner, and the creator's on the Studio's Works page.
  *
  * 🚨 **What this spec pins is the vocabulary and the whole loop.** Both cards are the same
  * floating `SetupChecklist` the Work page already uses: expanded on arrival, collapsible to
- * a round button that keeps the count, and — for the reader's, the guidance one — dismissible
+ * a round button that keeps the count, and — for the user's, the guidance one — dismissible
  * so it never comes back. The reload is the assertion that matters for the dismissal, since
  * a card kept away in `localStorage` would pass the click and fail here.
  *
- * ⚠️ **Both cards are page-scoped, and that is part of the rule.** The reader's belongs to
+ * ⚠️ **Both cards are page-scoped, and that is part of the rule.** The user's belongs to
  * Discovery, the page a session starts on, and the creator's to the Studio's Works page;
  * neither follows a person onto a Work, the cart or a player, where an overlay would sit on
- * somebody else's controls. The Library absence below is the reader half of that. The
+ * somebody else's controls. The Library absence below is the user half of that. The
  * accounts are throwaways made with `db:local-account`, so neither card is meeting state
  * another spec left behind.
  */
@@ -76,7 +76,7 @@ test.describe("the onboarding checklists", () => {
 		await purgeAccountIds(created);
 	});
 
-	test("a reader meets the orientation checklist as the floating card, and its dismissal is the account's", async ({
+	test("a user meets the orientation checklist as the floating card, and its dismissal is the account's", async ({
 		page,
 	}) => {
 		const reader = await makeAccount(`e2e_orientation_${stamp}`);
@@ -99,7 +99,7 @@ test.describe("the onboarding checklists", () => {
 			"https://anthers.wiki/first-steps/your-first-visit",
 		);
 
-		// The card belongs to Discovery and does not follow the reader onto the Library:
+		// The card belongs to Discovery and does not follow the user onto the Library:
 		// that scoping is what keeps an overlay off other pages' controls.
 		await page.goto("/library");
 		await expect(page.getByRole("region", { name: "Getting Around Anthers" })).toHaveCount(0);
@@ -153,7 +153,7 @@ test.describe("the onboarding checklists", () => {
 		// The required card is not on screen once the gate is passed.
 		await expect(page.getByRole("region", { name: "Creator Setup Checklist" })).toHaveCount(0);
 
-		// The same collapse gesture as the reader's card.
+		// The same collapse gesture as the user's card.
 		await page.getByRole("button", { name: "Collapse the Creator First Steps" }).click();
 		await expect(
 			page.getByRole("button", { name: "Open the Creator First Steps: 0 of 5 done" }),

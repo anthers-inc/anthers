@@ -85,7 +85,7 @@ export interface BadgeRow {
  * 🚨 **`timePool` and `timePoolByTime` are different figures and the table uses the
  * second** (Parker, 2026-10-25). The first is the creator half — the envelope — and the
  * second is the part of it disbursed by time, its Sticker budget having been set aside as
- * its own line. Publishing both on one table is what produced two rows a reader could not
+ * its own line. Publishing both on one table is what produced two rows a user could not
  * add up, so a table picks one: `timePoolByTime`.
  *
  * ⚠️ **`support` is a FLOOR, not a forecast.** The storage line is a reserve at the rung's
@@ -531,7 +531,7 @@ const spendPatreon = RIVAL_MEMBERSHIPS.find((r) => r.name === "Patreon");
 if (!spendPatreon) throw new Error("RIVAL_SPEND — the Patreon row is gone from RIVAL_MEMBERSHIPS");
 
 /**
- * The spend calculator's rival set — the monthly lines a reader builds their current
+ * The spend calculator's rival set — the monthly lines a user builds their current
  * media month from on `/resources/media-month`, and what each platform publishes
  * about where the money goes.
  *
@@ -545,16 +545,16 @@ if (!spendPatreon) throw new Error("RIVAL_SPEND — the Patreon row is gone from
  * What a row can claim: `creatorShare` / `platformCut` are **published** per-user
  * splits, or `null` — and a null is a finding, not a missing datum. The tool's whole
  * honesty rule is that where the split is not published, the row says so and the gap
- * is shown in the reader's own totals rather than estimated away (the wiki's *What It
+ * is shown in the user's own totals rather than estimated away (the wiki's *What It
  * Costs, Against What You Pay Now* § What Can Be Known is the authority). `known`
  * carries what IS published, stated so the gap reads as a gap.
  */
 export const RIVAL_SPEND: {
 	key: string;
 	name: string;
-	/** The line's published list price, US individual — 0 where the reader supplies the amount (a storefront average, a Patreon total). */
+	/** The line's published list price, US individual — 0 where the user supplies the amount (a storefront average, a Patreon total). */
 	price: number;
-	/** The published share of the reader's money that reaches creators, or null when not published. */
+	/** The published share of the user's money that reaches creators, or null when not published. */
 	creatorShare: number | null;
 	/** The published share the platform keeps, or null. */
 	platformCut: number | null;

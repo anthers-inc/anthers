@@ -3,7 +3,7 @@
  * Hand-rolled declarations for the vendored foliate-js tree (`src/vendor/foliate-js/`,
  * see its VENDOR.md). The vendored modules are plain JavaScript with no type surface —
  * they are excluded from tsc (`allowJs` stays off), and these ambient declarations cover
- * exactly what the reader glue imports, no more: the rest of the tree is reached only
+ * exactly what the user glue imports, no more: the rest of the tree is reached only
  * through `view.js`'s own imports, which tsc never sees.
  *
  * The declarations mirror upstream's documented book interface (README § The Main
@@ -24,7 +24,7 @@ interface FoliateSection {
 }
 
 /**
- * The book interface object the reader glue builds from the access-ladder manifest.
+ * The book interface object the user glue builds from the access-ladder manifest.
  * Structural only — the optional fields the view consults are the ones present.
  */
 interface FoliateBook {
@@ -72,7 +72,7 @@ declare module "@/vendor/foliate-js/view.js" {
 
 declare module "@/vendor/foliate-js/epub.js" {
 	/**
-	 * Upstream's resource-rewriting machinery, driven by the reader's ladder-backed
+	 * Upstream's resource-rewriting machinery, driven by the user's ladder-backed
 	 * loader. `resources.manifest` is the list of container-relative components
 	 * (`{ href, mediaType }`) references are resolved against.
 	 */

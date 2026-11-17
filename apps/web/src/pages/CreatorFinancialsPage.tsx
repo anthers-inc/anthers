@@ -13,7 +13,7 @@
 // lives in `lib/creator-financials.ts` (tested against `fees.ts`'s decimal originals
 // and the wiki's generated tables); this file renders what it returns. The SPA never
 // imports `fees.ts`; the display copies it reads were pinned by the economics tests
-// to the money version. The input defaults are the reader's scenario — a place to
+// to the money version. The input defaults are the user's scenario — a place to
 // stand, not a fee anyone charges.
 //
 // 🚨 **The free tier's pool is the Time Pool Fund, and it is not this file's number.**
@@ -65,7 +65,7 @@ import { useTimePoolFund } from "../lib/time-pool-fund";
 
 const PAID_BADGES: Exclude<BadgeKey, "free">[] = ["root", "sprout", "petal", "blossom"];
 
-/** The scenario the reader lands on — modest, whole numbers, nothing that looks like a fee. */
+/** The scenario the user lands on — modest, whole numbers, nothing that looks like a fee. */
 const DEFAULTS = {
 	supporters: {
 		badge: "root",

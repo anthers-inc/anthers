@@ -3,7 +3,7 @@
  * The two tables the user-space write path needs: the registry and the outbox.
  *
  * 🚨 **Neither table is the canonical copy of anything.** A user's space is the canonical
- * home of what the reader kept and how far they got; these tables are the map that finds the
+ * home of what the user kept and how far they got; these tables are the map that finds the
  * space and the queue that carries a write to it. That inversion is the whole point of
  * *A Canonical Data Model for Spaces*, and it is what makes the export structural rather
  * than a feature somebody remembers to offer.
@@ -60,7 +60,7 @@ export const USER_SPACE_SKEY = "self";
  * `user_id` would lose the thread across exactly the events the registry exists for.
  */
 // org — the map from an account on this deployment to the space under its DID. It is
-// service state rather than the reader's record: the space holds the record, and this row is
+// service state rather than the user's record: the space holds the record, and this row is
 // what lets the service find it again after a move or a corrupted address.
 export const userSpaces = pgTable(
 	"user_spaces",

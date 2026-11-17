@@ -3,7 +3,7 @@
  * A Work's media versions — the one writer of `work_media_versions`.
  *
  * ⭐ **A version is history, never the current media.** The live deliverable stays on the
- * Work row, the source set and the build tables, because every reader, pipeline and listing
+ * Work row, the source set and the build tables, because every user, pipeline and listing
  * already reads it there. An archived version holds only the ORIGINAL bytes a replacement
  * retired: no HLS ladder, no remuxed MP4, no MP3, no rendered page, no reflow section. Its
  * manifest names storage keys so the purge and storage-usage enumerations can see them.
@@ -67,10 +67,10 @@ export interface WorkVersionSummary {
 }
 
 /**
- * One version as a reader sees it — its name and the date it was added, and no more.
+ * One version as a user sees it — its name and the date it was added, and no more.
  *
  * The release build is deliberately absent from the list this type describes: it is the
- * baseline the reader is already looking at, and it was uploaded while the Work was being
+ * baseline the user is already looking at, and it was uploaded while the Work was being
  * made rather than after the Work was released.
  */
 export interface PublicWorkVersion {
@@ -226,7 +226,7 @@ export async function archiveCurrentMedia(
 			// The date this media carried as current; the Work's own creation is the
 			// fallback for a row that predates the column's backfill.
 			uploadedAt: work.versionAddedAt ?? work.createdAt,
-			// The name it carried while it was current, so a reader's history keeps it.
+			// The name it carried while it was current, so a user's history keeps it.
 			versionLabel: work.versionLabel,
 			// ⭐ **The flag moves with the version.** Whatever this media held while it
 			// was the one being served, it keeps — preservation marks the bytes Anthers
@@ -313,7 +313,7 @@ export async function listWorkVersions(workId: number): Promise<WorkMediaVersion
 }
 
 /**
- * Every version a reader may see — the ones added at or after the Work was released.
+ * Every version a user may see — the ones added at or after the Work was released.
  *
  * The current version is a row on `works`, not in the archive, so it is assembled here
  * beside the archived rows. Both halves are filtered by `releasedAt`: a version uploaded

@@ -3,14 +3,14 @@
  * Reading and writing `@` mentions of a Work in a Post's title — the server half of
  * `@anthers/shared/post-title`.
  *
- * 🚨 **Two rules decide every query here, and both are about the reader rather than the
+ * 🚨 **Two rules decide every query here, and both are about the user rather than the
  * author.** A mention resolves only to a Work the READER may see, so a post title can
  * never become a back door around the Adult rung or a block; and it resolves to the
  * Work's CURRENT name, so a retitle reaches every title that mentions it. A mention that
  * does not resolve falls back to the text the author stored, which is a name they typed
  * into a public title.
  *
- * The write path is the same rule with the author as the reader: a mention to a Work that
+ * The write path is the same rule with the author as the user: a mention to a Work that
  * is not released, or that the author cannot see, is stripped to plain text before the
  * title is stored. That is deliberately a query against `works` rather than a shape check
  * — a client is not trusted to have picked from the picker.
@@ -43,7 +43,7 @@ export interface MentionableWork {
 	 * Carried because a post's tile shows the first Work its body embeds, and that image
 	 * reaches the same audience a title does — so it answers to the same allow-list. A card
 	 * that read `works` directly for the thumbnail would be showing the cover of an Adult
-	 * Work to a reader the rung keeps from its existence.
+	 * Work to a user the rung keeps from its existence.
 	 */
 	thumbnail: string | null;
 }
@@ -52,7 +52,7 @@ export interface MentionableWork {
  * The Works among `publicIds` that `viewerId` may see, keyed by public id.
  *
  * 🚨 **This is a listing of Works and carries the full listing allow-list** on purpose.
- * A title is public, so resolving an Adult Work's name for an unverified reader would be
+ * A title is public, so resolving an Adult Work's name for an unverified user would be
  * exactly the leak `maturityHiddenFrom` exists to prevent, and a blocked creator's Work
  * has no business appearing in a title either. Released-only is the other half: a draft
  * is not something a public post may name, its own author's included.
@@ -178,7 +178,7 @@ export interface WorkMentioningPost {
  * The public id is in the title's link destination, so the same SQL pattern the body's
  * posting history uses finds it — no table, and no way for a mention and its record to
  * drift apart. Drafts are excluded: a mention in a draft has not been made in public.
- * The reader's blocks and the suspended/test accounts are the listing filters every
+ * The user's blocks and the suspended/test accounts are the listing filters every
  * other surface uses.
  */
 export async function postsMentioningWork(

@@ -30,7 +30,7 @@
  * images. Its mutations render nothing and enqueue nothing — the files ARE the deliverable —
  * so `askRerender`'s no-op for them is the whole pipeline. What follows the legacy column
  * differs by family instead: a paged set leaves its Work's `source_key` on the newest file
- * (the old readers read it only as presence), while an image set updates it to the **first**
+ * (the old users read it only as presence), while an image set updates it to the **first**
  * file on every mutation, because for an image Work the column is the cover — the thumbnail,
  * the listing image, the release gate's media presence — and "the Work's image" means the set's
  * first picture.
@@ -341,9 +341,9 @@ export async function appendSourceFiles(
 		);
 	});
 	const rows = await listSourceFiles(work);
-	// The legacy column follows the set — it is what the old readers (the serializer's
+	// The legacy column follows the set — it is what the old users (the serializer's
 	// resolution paths, storage-usage) read, and an empty column under a Work whose set is
-	// non-empty is a lie those readers would tell. The two families follow differently, and
+	// non-empty is a lie those users would tell. The two families follow differently, and
 	// the difference is load-bearing: a paged column points at the set's NEWEST file (it is
 	// read only as presence), while an image column points at the set's FIRST — for an image
 	// Work the column IS the cover ("the Work's image" for listings, thumbnails and the
@@ -360,7 +360,7 @@ export async function appendSourceFiles(
  * Replace a Work's whole set — the new-version path for a released comic, book or gallery.
  *
  * 🚨 **A released Work's set does not change in place.** The append, reorder and remove
- * routes refuse it, because those acts edit the version a reader is looking at. This is the
+ * routes refuse it, because those acts edit the version a user is looking at. This is the
  * one mutation that moves a released set: the whole new set arrives together, the current
  * set is archived first, and the Work's version date moves. A draft can use it too; it is
  * the same wholesale replacement either way.

@@ -4,7 +4,7 @@
  *
  * 🚨 **A composition function, not a per-file guess.** The 2026-10-11 design gave an ebook
  * Work's ingest result two shapes — fixed (`work_pages`, the page pipeline) and reflow
- * (`work_sections`, the EPUB extraction) — and the reader picks by what the ingest
+ * (`work_sections`, the EPUB extraction) — and the user picks by what the ingest
  * produced, which means the whole set must land in ONE shape. The function here is the
  * one place that decision is made, and the one place it is TESTED: enqueueing and the
  * orphan-resume sweep both call it, so an orphaned EPUB ingest resumes onto the EPUB
@@ -25,7 +25,7 @@ export type PagedIngestQueue = "ingest-ebook" | "render-paged";
 
 /**
  * Route a paged Work's source set to its ingest. The set's shape is all-or-nothing: one
- * EPUB anywhere makes the set reflow-shaped (the reader picks reflow the moment any
+ * EPUB anywhere makes the set reflow-shaped (the user picks reflow the moment any
  * section exists), so a set that mixes an EPUB with page-shaped files — a PDF, a page
  * image — is refused here rather than half-processed, named by the offending file.
  *

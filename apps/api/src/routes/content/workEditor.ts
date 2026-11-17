@@ -183,7 +183,7 @@ const workEditorRoutes = new Hono()
 		// drafting rule (Parker, 2026-10-10): a Work can be drafted before its file exists,
 		// and the kind a draft starts as often isn't the kind it ends as. Once media exists,
 		// the kind is fixed — a comic Work with a video's source file is a row whose every
-		// downstream reader (processing, delivery, the reader) disagrees about what it is —
+		// downstream reader (processing, delivery, the user) disagrees about what it is —
 		// and the honest refusal says to make a new Work. Two further guards: a released
 		// Work's kind is part of its public listing and never changes here, and an
 		// operator-set rating must not be erased by a type change, so that case is refused
@@ -429,7 +429,7 @@ const workEditorRoutes = new Hono()
 		if (data.embedUrl !== undefined) updates.embedUrl = data.embedUrl;
 		if (data.durationSeconds !== undefined) updates.durationSeconds = data.durationSeconds;
 		if (data.note !== undefined) updates.note = data.note;
-		// The current version's name. Editing it is a correction to what a reader sees only
+		// The current version's name. Editing it is a correction to what a user sees only
 		// when that version came after release; a version that is already archived keeps the
 		// name it carried then.
 		if (data.versionLabel !== undefined) updates.versionLabel = data.versionLabel.trim();
@@ -1199,7 +1199,7 @@ const workEditorRoutes = new Hono()
 
 	// ── A released (or draft) set's whole replacement: the new-version path ──
 	// 🚨 **This is the one mutation a released set accepts.** Append, reorder and remove
-	// edit the version a reader is looking at, so they stay draft-only; a new version is a
+	// edit the version a user is looking at, so they stay draft-only; a new version is a
 	// whole new set, archived first, with the Work's version date moved. See
 	// `replaceSourceSet`.
 	.put("/works/:id/source-files", requireAuth, zValidator("json", sourceFilesSchema), async (c) => {
@@ -1372,7 +1372,7 @@ const workEditorRoutes = new Hono()
  * the same outcome for the same buyer and told them **nothing**. One path told them and
  * the other did not, and which one you got depended on why the creator did it.
  *
- * ⚠️ **A Work saved by readers and bought by nobody has no buyers, so this sends nothing.**
+ * ⚠️ **A Work saved by users and bought by nobody has no buyers, so this sends nothing.**
  * Preservation is not a purchase, and the people who saved a withdrawn Work can still open
  * it — there is no lost thing to tell them about.
  *

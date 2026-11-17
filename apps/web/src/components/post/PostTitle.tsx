@@ -4,7 +4,7 @@
  *
  * The stored title holds an id in the link destination and a name in its text, and that
  * text may be out of date the moment the Work is retitled. `mentionedWorks` carries the
- * Works resolved for this reader, so the name shown is the current one; a Work that did
+ * Works resolved for this user, so the name shown is the current one; a Work that did
  * not resolve keeps the stored text and is not a link, the same decay a body embed has
  * when its Work is gone.
  *

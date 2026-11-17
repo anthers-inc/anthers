@@ -245,7 +245,7 @@ async function start() {
 		},
 	);
 
-	// The receipts owed to readers' spaces. A minute apart, because the row is the worklist
+	// The receipts owed to users' spaces. A minute apart, because the row is the worklist
 	// and a settled purchase's proof should not lag the purchase.
 	await queue.work<AccessReceiptsJobData>(
 		QUEUES.ACCESS_RECEIPTS,

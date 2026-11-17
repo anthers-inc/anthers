@@ -79,7 +79,7 @@ import SanitizedHtml from "../ui/SanitizedHtml";
 export type WorkDetail = Work & {
 	/**
 	 * The creator, as much as a card needs — the name, thumbnail and bio the Showings
-	 * panel's creator card shows, plus whether this reader already follows them. The
+	 * panel's creator card shows, plus whether this user already follows them. The
 	 * page's endpoint sends all of it; the owner's editor fills the same shape from the
 	 * signed-in account.
 	 */
@@ -298,7 +298,7 @@ export function formatVersionDate(iso: string): string {
 /**
  * The release dates, the byline's one line (Parker, 2026-11-06): the date this Work went
  * out or "Unreleased", a hairline, then the date it first came out anywhere when the
- * creator gave one. The listing's globe rides the release date, where a reader looks for
+ * creator gave one. The listing's globe rides the release date, where a user looks for
  * it; a scheduled Work says when it is due under the line.
  */
 export function WorkDateLine({
@@ -578,7 +578,7 @@ export interface WorkBylineProps {
 	/** In place of the title, for a control standing in for it. */
 	title?: ReactNode;
 	/**
-	 * To the title's right, at the page's edge — a signed-in reader's Share and Save, or
+	 * To the title's right, at the page's edge — a signed-in user's Share and Save, or
 	 * the Access chip where a signed-out page has neither to stand there.
 	 */
 	actions?: ReactNode;
@@ -587,13 +587,13 @@ export interface WorkBylineProps {
 	/**
 	 * The kind as a chip — the strip's own `ContentTypeBadge` unless the page has a reason
 	 * to render something else there. The owner's page sends the chip that is also its own
-	 * editor (Parker, 2026-10-29), so the kind a reader reads is the control a creator
+	 * editor (Parker, 2026-10-29), so the kind a user reads is the control a creator
 	 * changes it with; a viewer's page sends nothing and gets the plain badge.
 	 */
 	kindChip?: ReactNode;
 	/**
 	 * The release dates, in place of the read-only line — the owner's editable field
-	 * (Parker, 2026-11-06). A reader's page sends nothing and gets `WorkDateLine`.
+	 * (Parker, 2026-11-06). A user's page sends nothing and gets `WorkDateLine`.
 	 */
 	dates?: ReactNode;
 	/**
@@ -618,7 +618,7 @@ export interface WorkBylineProps {
  * Under the strip, the Anthers release date rides again (Parker, 2026-10-16): a second
  * copy of the line the Details tab carries, so the facts around the title answer where
  * a viewer looks first. The listing's record link — the globe — rides that line
- * (Parker, 2026-10-19), so a reader finds the raw ATProto record where the release is
+ * (Parker, 2026-10-19), so a user finds the raw ATProto record where the release is
  * stated. A draft, with no release date, renders nothing.
  *
  * The versions added *after* release ride that line too: how many there have been, and the
@@ -721,7 +721,7 @@ export function WorkByline({
  * canonical, every kind derives from it, and one media card — a single 16:9 stage — is
  * what makes the page hold still while kinds flip. The frame's fill mode is decided per
  * branch: **video, a hosted build and a picture contain themselves in the stage**; every
- * other branch is a composition inside it (the listened kinds' stage, the readers, the
+ * other branch is a composition inside it (the listened kinds' stage, the users, the
  * writing column, the store panel, a placeholder, a gate), whose taller content scrolls
  * inside the stage rather than growing the card. The embed page is the one caller that
  * opts out (`framed` false): a bare window on one medium has no page to hold still, and
@@ -958,9 +958,9 @@ export function WorkDeliverable({
 				// ladder; none → the page reader, comic and PDF-shaped ebook alike.
 				(work.type === "ebook" && (work.sectionCount ?? 0) > 0
 					? frame(
-							// `h-full w-full` is load-bearing on these readers: they take the
+							// `h-full w-full` is load-bearing on these users: they take the
 							// stage's whole height, and their own transport rows sit at its foot
-							// rather than under a viewport-sized reading box. A reader with no
+							// rather than under a viewport-sized reading box. A user with no
 							// width of its own would also shrink-to-fit here and crush its seek
 							// bar to a zero-width input (the CI ebook failure's finding). The
 							// embed route has no stage to fill, so it keeps a viewport height.
@@ -1065,7 +1065,7 @@ export function WorkDeliverable({
 							</div>,
 						)
 					: frame(
-							// Same `w-full` as the readers: the prose column takes the stage's
+							// Same `w-full` as the users: the prose column takes the stage's
 							// width rather than sitting in a shrink-to-fit box.
 							<div className="w-full">
 								<article className="prose max-w-none">
@@ -1207,7 +1207,7 @@ export function DescriptionBody({ description }: { description: string | null })
 }
 
 /**
- * A text Work's scroll position: how deep into the article the reader has gotten, as the
+ * A text Work's scroll position: how deep into the article the user has gotten, as the
  * reading-positions module's third currency (pages, CFIs, and now depth-scrolled).
  *
  * **Depth-scrolled is the whole position** — a scroll has no pages to have stopped on, so
@@ -1216,7 +1216,7 @@ export function DescriptionBody({ description }: { description: string | null })
  * measure is the article element against the surface that scrolls it — the media area's
  * own scroll box when the piece is framed (the standard-profile task, 2026-10-19), the
  * window on the bare embed route: when that surface's bottom edge has passed that depth
- * of the piece, the reader has seen that much of it. (An article that fits on one screen
+ * of the piece, the user has seen that much of it. (An article that fits on one screen
  * is read as soon as it has been seen at all, which the clamp to 1 states honestly.)
  *
  * **Never written on mount.** The same contract the paged readers keep: opening a piece
@@ -1305,8 +1305,8 @@ export function WorkArticle({ html, workId }: { html: string; workId?: number })
 
 /**
  * How a single credit's machine involvement is badged. A bare `generated` row is simply
- * **AI** — the readers' own word for a machine-made part (Parker, 2026-10-16: the badge is
- * reader copy, not the stored vocabulary) — with no contributor, since a generated credit
+ * **AI** — the users' own word for a machine-made part (Parker, 2026-10-16: the badge is
+ * user copy, not the stored vocabulary) — with no contributor, since a generated credit
  * never names the model, because a machine makes nothing anyone owns; the type records that
  * the role was machine-made and no more. A `created+generated` blend is labeled
  * **Human + AI**, because the human it names is real and the machine's part is part of the

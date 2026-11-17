@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Content routes: the reader's Library and reading positions.
+ * Content routes: the user's Library and reading positions.
  *
- * Saving is curation rather than entitlement — the rows here are what a reader kept, and
+ * Saving is curation rather than entitlement — the rows here are what a user kept, and
  * access to anything in it still resolves on its own gates (see `services/library.ts`).
  *
  * Split out of `routes/content.ts` on 2026-10-28; docblocks moved with their code.
@@ -178,7 +178,7 @@ const libraryRoutes = new Hono()
 		const projectById = new Map(projectRows.map((p) => [p.id, p]));
 		const postById = new Map(postRows.map((p) => [p.id, p]));
 		// A saved Project whose thumbnail is one of its Works reads that thumbnail here too — as the
-		// Library's reader may see it, not as its owner can.
+		// Library's user may see it, not as its owner can.
 		const projectThumbnails = await resolveProjectThumbnails(projectRows, {
 			userId: user.id,
 			seeAll: false,
@@ -433,7 +433,7 @@ const libraryRoutes = new Hono()
 	// ── Reading positions ────────────────────────────────────────────────────────
 	//
 	// Where the caller got to in each Work — the Bookshelf rail's data and the
-	// readers' cross-device resume, one row per account and Work. The access and
+	// users' cross-device resume, one row per account and Work. The access and
 	// privacy reasoning is on the table itself (`user_reading_positions` in
 	// `packages/db/src/schema/content.ts`) and in `services/reading-positions.ts`,
 	// the one writer. Two doors, both the user's own rows:
@@ -466,7 +466,7 @@ const libraryRoutes = new Hono()
 
 	/**
 	 * Upsert the caller's position for one Work — the newest-write-wins write the
-	 * readers make behind their local writes.
+	 * users make behind their local writes.
 	 *
 	 * The route carries the access check (the same shape `workSaves`' routes use): you
 	 * record a position only in a Work you can reach, so a signed-in account cannot
@@ -488,7 +488,7 @@ const libraryRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			// The param is whatever findWorkRow resolves — a bare id, a publicId, or the
-			// slug-publicId form — because the route only needs the row, and the readers'
+			// slug-publicId form — because the route only needs the row, and the users'
 			// own callers name Works both ways.
 			const work = await findWorkRow(c.req.param("workId") ?? "");
 			if (!work) return c.json({ error: "Work not found" }, 404);

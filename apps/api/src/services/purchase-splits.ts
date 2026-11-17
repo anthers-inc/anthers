@@ -4,7 +4,7 @@
  *
  * A purchase is one charge and one entitlement, so its row stays the buyer's receipt. A
  * Collab Work's creator earnings belong to several people, and this module writes the
- * one row per owner at the moment the sale completes. Every later reader — the transfer,
+ * one row per owner at the moment the sale completes. Every later user — the transfer,
  * the retry job, a refund, a dispute — reads these rows rather than recomputing a split
  * from today's ownership, which is what keeps an ownership change from rewriting an old
  * sale.

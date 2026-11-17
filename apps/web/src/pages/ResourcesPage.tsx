@@ -49,7 +49,7 @@ interface ResourceCard {
 	icon: typeof BanknotesIcon;
 }
 
-/** The user category's flagship: the reader's own spending, compared, which the
+/** The user category's flagship: the user's own spending, compared, which the
  * wiki's *What It Costs, Against What You Pay Now* links to from its page. */
 const USER_FLAGSHIP: ResourceCard = {
 	to: "/resources/media-month",
@@ -141,7 +141,7 @@ export default function ResourcesPage() {
 				</div>
 			</header>
 
-			{/* For Users — the reader's own money, flagship first. */}
+			{/* For Users — the user's own money, flagship first. */}
 			<Section>
 				<Reveal>
 					<Eyebrow>For Users</Eyebrow>

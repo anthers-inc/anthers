@@ -5,7 +5,7 @@
  * ⭐ **It is the purchase card's place without the purchase** (Parker, 2026-11-07): the
  * cover, the title, the creator and the price the Work will ask are all readable, and the
  * one thing missing is a way to buy, download or play. The release date is the only date
- * on the page; the pre-release date is when the page itself opened and is not a reader's
+ * on the page; the pre-release date is when the page itself opened and is not a user's
  * business.
  *
  * Every kind wears the video treatment — the clear cover fills the stage and the card sits

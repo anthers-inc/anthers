@@ -321,7 +321,7 @@ describe("Delivery-layer access", () => {
 	/*
 	 * The image set, the picture gate at its gallery shape (2026-10-18): a denied user is
 	 * not handed a pointer at any picture the Work carries, and the reachable side again
-	 * proves the payload is real — the ordered set arrives, in the order a reader sees it.
+	 * proves the payload is real — the ordered set arrives, in the order a user sees it.
 	 * The first-picture Work whose set has no rows reads the legacy column as its gallery
 	 * (`listSourceFiles`' fallback), so the one-image Work's payload is the same field.
 	 */

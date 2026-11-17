@@ -62,7 +62,7 @@ export const TOPUP_STAMP = "storage-topup";
  * a `user_cycles` row.
  *
  * Nothing here re-reads the upstream tables: the meter is the figure's author and this is
- * a reader, on the same one-writer rule the account-facing reading takes. The eligibility
+ * a user, on the same one-writer rule the account-facing reading takes. The eligibility
  * rule is the ruling's, whole: allowance from the held Anthers Badge (`storageGibFor`,
  * the same read every other gate runs), charged only from Root. A cycle with no snapshot
  * row is an undercount by absence — the meter writes only accounts holding bytes — and

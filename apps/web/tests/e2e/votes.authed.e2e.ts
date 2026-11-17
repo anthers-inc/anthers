@@ -126,7 +126,7 @@ test("🚨 the post carries a vote control at all, with the counts on its button
 	await expect(control).toBeVisible();
 
 	// ⭐ The numbers ride the buttons now (Parker, 2026-10-16), and the read that answers
-	// carries the counts to every reader — this post being the signed-in creator's own
+	// carries the counts to every user — this post being the signed-in creator's own
 	// used to change what they were owed, and no longer does. Each direction therefore
 	// shows its own count, whatever it is.
 	await expect(control).toContainText(/^\d+$/);

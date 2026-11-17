@@ -10,7 +10,7 @@
  * hide is asserted twice — gone from the feed, still there at its own address — and there is
  * a search assertion for the same reason.
  *
- * ⚠️ **Per-user, not site-wide.** Hiding is one reader's view, so a second account is walked
+ * ⚠️ **Per-user, not site-wide.** Hiding is one user's view, so a second account is walked
  * through the same listing and must still see both entries. That is the assertion that would
  * catch the filter being written into a shared place.
  */
@@ -81,7 +81,7 @@ beforeAll(async () => {
 		creatorId: author.userId,
 		type: "text",
 		title: `Hide me ${run}`,
-		description: "A Work this reader will hide.",
+		description: "A Work this user will hide.",
 	});
 	keptWork = await insertWork({
 		creatorId: author.userId,
@@ -140,12 +140,12 @@ describe("hiding one Work", () => {
 		).toBe(true);
 	});
 
-	it("is one reader's list, not the site's", async () => {
+	it("is one user's list, not the site's", async () => {
 		const entries = await feed(other.cookie);
 		expect(entries.map((entry) => entry.title)).toContain(`Hide me ${run}`);
 	});
 
-	it("comes back when the reader says so", async () => {
+	it("comes back when the user says so", async () => {
 		expect((await showAgain(viewer.cookie, `works/${hiddenWork.id}`)).status).toBe(204);
 		const entries = await feed(viewer.cookie);
 		expect(entries.map((entry) => entry.title)).toContain(`Hide me ${run}`);
@@ -172,18 +172,18 @@ describe("hiding a creator", () => {
 		expect(work.status).toBe(200);
 	});
 
-	it("refuses to hide the reader's own account", async () => {
+	it("refuses to hide the user's own account", async () => {
 		const res = await hide(viewer.cookie, `creators/${viewer.userId}`);
 		expect(res.status).toBe(400);
 	});
 
-	it("is still one reader's list", async () => {
+	it("is still one user's list", async () => {
 		const titles = (await feed(other.cookie)).map((entry) => entry.title);
 		expect(titles).toContain(`Keep me ${run}`);
 		expect(titles).toContain(postTitle);
 	});
 
-	it("comes back when the reader says so", async () => {
+	it("comes back when the user says so", async () => {
 		expect((await showAgain(viewer.cookie, `creators/${author.userId}`)).status).toBe(204);
 		const titles = (await feed(viewer.cookie)).map((entry) => entry.title);
 		expect(titles).toContain(`Keep me ${run}`);

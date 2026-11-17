@@ -446,7 +446,7 @@ export async function creatorTrafficSeries(
 
 /**
  * A creator's views split by referrer source, over their own pages — where their
- * readers arrived from, as aggregates the raw and rolled-up halves merge. Sources are
+ * users arrived from, as aggregates the raw and rolled-up halves merge. Sources are
  * classified at intake and stored; nothing here re-derives one.
  */
 export async function creatorTrafficSources(
@@ -551,7 +551,7 @@ export interface FunnelStage {
  * of the people who landed, of the people who signed up in the same window, of the
  * people whose FIRST support landed in it. Reading these as a cohort conversion
  * overstates nothing and connects nobody — that is the trade the no-identity decision
- * made, stated here where the reader of the figure will find it.
+ * made, stated here where the user of the figure will find it.
  */
 export async function trafficFunnel(days: number): Promise<FunnelStage> {
 	const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);

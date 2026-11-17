@@ -27,7 +27,7 @@
  *   would be one column — but the Privacy Policy's measurement sentence holds that no
  *   IP address enters the record, and an attribute derived from your IP on every
  *   request is the one compromise that would weaken that sentence. The un-parking
- *   condition is a real creator demand signal (a creator asking where their readers
+ *   condition is a real creator demand signal (a creator asking where their users
  *   are), and the day it comes it takes a policy wording pass, a column at intake, and
  *   a disclosed creator surface — never a quiet default. Until then, site-level
  *   geography is answerable from Cloudflare's own aggregate dashboards.

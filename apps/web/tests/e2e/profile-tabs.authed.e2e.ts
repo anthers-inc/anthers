@@ -21,7 +21,7 @@ import { profileUrl } from "@anthers/web-shared/profile";
 import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
 
 /**
- * The tab row as a reader sees it left to right, with each group rule as a `|`. Read from the
+ * The tab row as a user sees it left to right, with each group rule as a `|`. Read from the
  * row's own children rather than from screenshots, so a divider that moves is caught.
  */
 async function rowShape(page: import("@playwright/test").Page): Promise<string[]> {

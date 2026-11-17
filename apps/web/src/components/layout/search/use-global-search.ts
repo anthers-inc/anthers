@@ -6,7 +6,7 @@
  * bios, descriptions and Post bodies, and only when stage one came up short — a query with
  * a handful of name matches never pays for the slower fields. The stages stay separate in
  * state so the panel can put a divider between them rather than presenting one list that
- * changed underneath the reader.
+ * changed underneath the user.
  *
  * 🚨 **Every request is abortable, and stage two carries stage one's rows as exclusions.**
  * The old bar had no abort, so a slow early keystroke could overwrite a fast later one.
@@ -88,7 +88,7 @@ export function useGlobalSearch({
 				});
 
 				// Stage two is a second request, not a wider first one: the panel already
-				// has something to show, and a reader who acts on it never waits for this.
+				// has something to show, and a user who acts on it never waits for this.
 				if (names.length >= SEARCH_BODY_STAGE_BELOW || terms.length === 0) return;
 				const bodyParams = new URLSearchParams({ q: query, scope: "body", limit });
 				if (filter !== "all") bodyParams.set("type", filter);
@@ -111,7 +111,7 @@ export function useGlobalSearch({
 			} catch {
 				if (controller.signal.aborted) return;
 				// A failed first pass is the only one that leaves the panel empty; a failed
-				// second pass keeps the results the reader already has.
+				// second pass keeps the results the user already has.
 				setState((prev) => ({
 					...prev,
 					loadingNames: false,

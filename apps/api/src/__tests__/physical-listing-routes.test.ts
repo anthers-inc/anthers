@@ -175,7 +175,7 @@ describe("a physical Work's listing", () => {
 		]);
 
 		// The derived catalog cover takes the address, like every other writer of the
-		// column. A bare key here renders only where the reader remembers to resolve it.
+		// column. A bare key here renders only where the user remembers to resolve it.
 		const [work] = await db.select().from(works).where(eq(works.id, physicalWork));
 		expect(work.thumbnail).toBe(await storage.getUrl(back));
 

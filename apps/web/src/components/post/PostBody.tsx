@@ -2,7 +2,7 @@
 /**
  * A post's body, rendered from its stored markdown with the spoiler convention applied.
  *
- * Both places the page draws a body — the creator's inline preview and the reader's copy —
+ * Both places the page draws a body — the creator's inline preview and the user's copy —
  * go through this one component, so a spoiler cannot render in one and print its words in
  * the other. The prose wrapper and the `post-body` variant belong here for the same reason.
  */

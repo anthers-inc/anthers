@@ -14,7 +14,7 @@
 // ⭐ **Both shells carry it: the marketing corner and the signed-in topbar** (Parker,
 // 2026-11-13). The signed-in surface had it in the account settings card from 2026-10-26
 // until the theme moved back into the topbar; the choice is about the page in front of
-// the reader, and the two shells share `useThemeChoice` so the pick behaves identically.
+// the user, and the two shells share `useThemeChoice` so the pick behaves identically.
 
 import { SwatchIcon } from "@heroicons/react/24/outline";
 import ThemePicker from "./ThemePicker";

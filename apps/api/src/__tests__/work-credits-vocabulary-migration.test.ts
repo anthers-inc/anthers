@@ -91,7 +91,7 @@ describe("the credits vocabulary migration", () => {
 		expect(rewritten.credits).toEqual([
 			{ role: "Written by", contributor: "The Author", types: ["created"] },
 			{ role: "Cover art", contributor: "", types: ["generated"] },
-			// A named licensed row credits its named maker — the contract behind it is not the reader's business.
+			// A named licensed row credits its named maker — the contract behind it is not the user's business.
 			{ role: "Arrangement", contributor: "The Arranger", types: ["created"] },
 			{ role: "Blended art", contributor: "The Artist", types: ["created", "generated"] },
 			{ role: "Composed with a license", contributor: "The Composer", types: ["created"] },

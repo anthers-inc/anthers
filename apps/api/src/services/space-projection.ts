@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Library projection: `user_library_items` rebuilt from the reader's space.
+ * The Library projection: `user_library_items` rebuilt from the user's space.
  *
  * 🚨 **The space is the record and this table is the read model.** That is why a rebuild can
- * delete a local row: if the Library does not contain the entry, the reader's own space — the
+ * delete a local row: if the Library does not contain the entry, the user's own space — the
  * one place the keep actually lives — does not either. The table still exists because every
  * list, count and access check on Anthers reads a local row in one query, and a page that
  * listed a space to draw the Library would put a PDS in the path of every render.
@@ -121,7 +121,7 @@ export async function removeProjectedLibraryItem(
  *
  * ⚠️ **A row the space does not carry is deleted, and that is the rebuild's meaning.** It is
  * safe because the space is the source: the row was either never projected or was retracted
- * in the space by the reader's own app, and keeping either would make the read model disagree
+ * in the space by the user's own app, and keeping either would make the read model disagree
  * with the record it exists to mirror.
  */
 export async function rebuildLibraryProjection(

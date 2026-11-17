@@ -8,7 +8,7 @@
  * read the same clock.
  *
  * ⚠️ **Quiet when there was nothing to do.** A nightly sweep whose ordinary answer is zero
- * captures (no registered spaces yet) should not write a line that trains a reader to skip the
+ * captures (no registered spaces yet) should not write a line that trains a user to skip the
  * output.
  */
 import { backupOwnedSpaces, pruneSpaceBackups } from "../services/space-backup.js";

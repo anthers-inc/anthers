@@ -20,7 +20,7 @@ import {
 const realStorage = globalThis.localStorage;
 
 beforeEach(() => {
-	// Fresh store per test — the reader is exercised against a storage that actually
+	// Fresh store per test — the user is exercised against a storage that actually
 	// round-trips, which is where a "0 means off" misread would show itself.
 	const store = new Map<string, string>();
 	Object.assign(globalThis, {
@@ -35,7 +35,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	Object.assign(globalThis, { localStorage: realStorage });
-	// Restore the defaults, so a later reader of the module state sees the first-
+	// Restore the defaults, so a later user of the module state sees the first-
 	// visit answers rather than a leaked stop or a leaked sound from these tests.
 	setPreviewsEnabled(true);
 	setPreviewAudio(false);

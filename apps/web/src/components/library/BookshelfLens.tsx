@@ -28,14 +28,14 @@
  * nothing to continue to; the rail is what you continue, the shelf is everything you
  * kept. Positions there are the **user's**, one row per Work in `user_reading_positions`,
  * pushed behind every local write — so the rail is the same on every device, which is
- * the whole thing the spine markers alone could never be. Signed-out readers keep
+ * the whole thing the spine markers alone could never be. Signed-out users keep
  * whatever this device knows, which `lib/reading-positions.ts` answers for.
  *
  * A `text` Work's position is depth-scrolled (settled the same day): the article records
  * a scroll fraction in the same 0–1 currency, so the rail's promise holds across all
  * three kinds of reading — pages, reflow, scroll — from one number.
  *
- * Opening a spine routes to the Work's own reader, wherever the Work page resolves it —
+ * Opening a spine routes to the Work's own user, wherever the Work page resolves it —
  * a comic into panel mode, an ebook into page turns, `text` into the article surface —
  * the shelf they sit on is one, and the lens adds no second player.
  *
@@ -293,7 +293,7 @@ function Spine({
 			</span>
 			{fraction != null && (
 				// The progress marker the shelf metaphor promises: a ribbon hanging from
-				// the top of the spine, however deep into the book the reader got. The
+				// the top of the spine, however deep into the book the user got. The
 				// page position itself rides the spine's own `title` — a ribbon is a
 				// mark, not a control.
 				<span
@@ -436,7 +436,7 @@ export default function BookshelfLens({
 		);
 	}
 
-	// Reading the hook's store keeps the rail live across the refreshes a reader's
+	// Reading the hook's store keeps the rail live across the refreshes a user's
 	// pushes trigger elsewhere.
 	const rail = continueReading(books, positions);
 	const shelves = budget > 0 ? shelvesOf(books, budget) : [books];

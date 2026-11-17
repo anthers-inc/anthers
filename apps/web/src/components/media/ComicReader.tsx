@@ -13,7 +13,7 @@
  * on mobile. Page URLs are minted per request for page-flip mode, and panel mode uses the
  * same page endpoint for the underlying image.
  *
- * The transport's last pair is full screen then theater mode: the first hands the reader
+ * The transport's last pair is full screen then theater mode: the first hands the user
  * the monitor, the second grows the page's media card to the content area and leaves the
  * rest of the page a scroll away. Both keys are the account's own (`useKeyboardShortcuts`).
  */
@@ -79,7 +79,7 @@ export default function ComicReader({
 	 *
 	 * 🚨 It has to ride on the URL rather than in a header: these are `<img src>` values, and
 	 * an `<img>` issues its own request with nothing the page can attach to it. Without the
-	 * token a share-link recipient would get a user full of broken images and no
+	 * token a share-link recipient would get a reader full of broken images and no
 	 * explanation — the dead-player failure the whole meter design exists to avoid.
 	 */
 	shareToken?: string | null;
@@ -187,7 +187,7 @@ export default function ComicReader({
 	// A page with no confirmed panels on an enabled page is a whole page, so guided view
 	// still turns through it; and a Work with nothing confirmed anywhere offers no guided
 	// view at all. `readerPages` drops proposals and pages that are off, which makes the
-	// creator's own preview match what a reader gets.
+	// creator's own preview match what a user gets.
 	const asReader = useMemo(() => readerPages(panelPages ?? []), [panelPages]);
 	const walkable = useMemo(() => guidedPages(asReader), [asReader]);
 	const guidedAvailable = panelPages != null && hasGuidedView(asReader);

@@ -218,7 +218,7 @@ describe("what a rung adds over the one below it", () => {
 	/**
 	 * 🚨 **The five lines add up to the price, and that is the whole point of the split**
 	 * (Parker, 2026-10-25). The ladder used to publish a Time Pool figure and a Sticker
-	 * figure where one contained the other, so a reader adding the rows got more than they
+	 * figure where one contained the other, so a user adding the rows got more than they
 	 * paid; storage sat invisibly inside the remainder. Each line is now its own named
 	 * destination and the column comes to the charge exactly.
 	 */

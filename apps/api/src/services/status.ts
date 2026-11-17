@@ -24,7 +24,7 @@ import { type HeartbeatState, readHeartbeatState } from "./heartbeat.js";
 export interface StatusComponent {
 	name: string;
 	state: ComponentState;
-	/** What a reader is told when the state is not operational. Absent when operational. */
+	/** What a user is told when the state is not operational. Absent when operational. */
 	detail?: string;
 	/**
 	 * ISO timestamp of when this component's present condition began — how long it has
@@ -99,7 +99,7 @@ export async function statusReport(): Promise<StatusReport> {
 	// Its `since` is when its present answer began — the last report's own timestamp,
 	// whether that report named trouble or has merely gone stale — so the page can say
 	// how long the check has been saying this, not only that it is. The name is the
-	// reader's question ("is the site up?") rather than the machinery's ("how the answer
+	// user's question ("is the site up?") rather than the machinery's ("how the answer
 	// was measured"): a row's name names the product, the pill says its state, and any
 	// detail about where the answer came from renders only when it is not fine.
 	const externalState = heartbeatComponentState(heartbeat.state);

@@ -27,7 +27,7 @@ describe("userTabPath", () => {
 
 	// The case that exists in real rows: an account whose starting tab was Network before
 	// the tabs merged. It must land on the merged tab rather than on a route that only
-	// redirects, so the address a reader keeps in a bookmark is the one they mean.
+	// redirects, so the address a user keeps in a bookmark is the one they mean.
 	it("sends a stored network starting tab to the merged tab", () => {
 		expect(userTabPath("network")).toBe("/discovery");
 	});

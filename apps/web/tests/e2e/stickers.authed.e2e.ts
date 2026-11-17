@@ -10,7 +10,7 @@
  *
  * ⭐ **What a give leaves behind is an outline, not a count** (Parker, 2026-09-13). The wall of
  * chips this suite used to assert published how many Stickers of each drawing a thing carried,
- * which let a reader add up the money; the mark counts distinct levels and states no amount.
+ * which let a user add up the money; the mark counts distinct levels and states no amount.
  *
  * ⭐ **The overlay is the product claim** (Parker, 2026-10-16): the picker is a dropdown
  * over the page and not an inline expansion — opening it must move nothing below it. A

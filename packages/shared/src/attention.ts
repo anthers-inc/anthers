@@ -105,7 +105,7 @@ export function isTimePoolEligible(contentType: string): boolean {
  * with the work: crediting it writes an activity-history range saying a person played
  * something they never opened, and — when the Work is marked streaming, which makes its
  * seconds Public Access — pays a creator from the pool for a page view. That is the same
- * distinction `review-eligibility` draws when it asks a downloadable-only Work's reader
+ * distinction `review-eligibility` draws when it asks a downloadable-only Work's user
  * for the download rather than for time on the page. The caller supplies the hosted-build
  * answer because only it knows how to load a Work's builds; every other kind's deliverable
  * is the page itself, so its consumption mode is the whole answer.

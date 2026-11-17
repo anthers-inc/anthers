@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The signed access receipt: a permanent statement that a purchase happened, written into
- * the reader's own space.
+ * the user's own space.
  *
  * ⭐ **The ledger is the entitlement and this is the proof, so the two say different things.**
  * `purchases` answers "does this Work open now" and is the only artifact a refund edits. A
@@ -12,10 +12,10 @@
  *
  * 🚨 **The receipt carries no money.** No amount, processing fee, sales tax, tax
  * jurisdiction, address, or payment-method detail reaches the space, because those are
- * Anthers' financial record and a portable copy in a reader's repository would be a privacy
+ * Anthers' financial record and a portable copy in a user's repository would be a privacy
  * leak with no purpose. What it carries is the Work's public id, title and kind as sold (all
  * public catalog facts, kept so the record is legible), the two DIDs, the date, and the
- * processor's transaction reference — the same reference that is already on the reader's
+ * processor's transaction reference — the same reference that is already on the user's
  * emailed receipt.
  *
  * ⚠️ **The write is a row on `purchase_receipts` first, then a background write.** The payment
@@ -51,7 +51,7 @@ export type ReceiptKind = "purchase" | "refund";
  * The signed half of a purchase receipt.
  *
  * ⚠️ **The Work URI is the listing as it was when the receipt was written.** A Work deleted
- * later keeps its public id and title on the receipt; the address is the one a reader could
+ * later keeps its public id and title on the receipt; the address is the one a user could
  * have followed at the time, and `null` when the Work had no listing.
  */
 export interface PurchaseReceiptPayload {
@@ -84,8 +84,8 @@ export type ReceiptPayload = PurchaseReceiptPayload | RefundReceiptPayload;
 /**
  * The record as it lands in the space.
  *
- * `issuer` and `keyId` are what make it checkable elsewhere: the reader's app, or a third
- * party the reader shows it to, fetches `${issuer}/api/content/access/issuer.json`, finds the
+ * `issuer` and `keyId` are what make it checkable elsewhere: the user's app, or a third
+ * party the user shows it to, fetches `${issuer}/api/content/access/issuer.json`, finds the
  * key by id, and verifies the signature over the canonical payload. The envelope's `id` and
  * `kind` mirror the signed ones so a listing can group records without verifying every one.
  */
@@ -230,7 +230,7 @@ export type ReceiptWrite =
 /**
  * Write one purchase or refund statement into the buyer's space.
  *
- * The order is: the row, then the reader's DID, then the space. A buyer with no hosted
+ * The order is: the row, then the user's DID, then the space. A buyer with no hosted
  * identity has no credential this deployment may use, so the write is skipped by name rather
  * than attempted — the receipt remains reissuable from the ledger the day that identity
  * grants a write path.

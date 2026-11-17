@@ -3,7 +3,7 @@
 // The signup picks shape, and the amount a backed creator's pick bills.
 //
 // `normalizePicks` reads whatever an older shape left in storage (a bare handle, a rung
-// id gone missing) into the shape every reader honors, and `directedAmountFor` is the one
+// id gone missing) into the shape every user honors, and `directedAmountFor` is the one
 // function both places that quote and bill a pick resolve by — /signup's chips, its echo,
 // and /finish's summary and charge. The fallbacks are the whole point: a pick carries a
 // rung id, never a price, so every dollar a signup charges is a threshold a creator's own

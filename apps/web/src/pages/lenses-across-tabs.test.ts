@@ -14,7 +14,7 @@
  * ⚠️ **The Network tab's rows moved here when it merged into Discovery (2026-10-24).**
  * Its lens adapters now serve Discovery's network-shaped recipes: the merged page picks
  * the lens's empty-state words from whether the recipe draws the whole site or the
- * reader's network, which is the distinction the two tabs used to carry.
+ * user's network, which is the distinction the two tabs used to carry.
  */
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -74,7 +74,7 @@ describe("the Lenses section on both tabs", () => {
 	/**
 	 * The one corpus is drawn two ways, and the lens's words follow the recipe rather than
 	 * the tab. A lens over the whole site says something different from a lens over the
-	 * reader's own network, and before the merge that difference was two tabs.
+	 * user's own network, and before the merge that difference was two tabs.
 	 */
 	it("picks the lens's corpus words from the recipe, not from a tab", () => {
 		expect(discovery).toContain('const drawsEveryone = recipe.candidates === "everyone";');

@@ -408,7 +408,7 @@ export function amountLabel(amount: string | number | null | undefined): string 
  * The **creator half** of a monthly amount, in dollars — the envelope a Sticker budget and
  * the Time Pool are both drawn from.
  *
- * 🚨 **This is the envelope, not the Time Pool row a reader sees.** A paid rung's creator
+ * 🚨 **This is the envelope, not the Time Pool row a user sees.** A paid rung's creator
  * half splits into two named lines: {@link timePoolByTimeFor} is disbursed by the time
  * people spend, and {@link stickerBudgetFor} is the part its holder aims by hand, flowing
  * into the same time distribution if it goes unspent. A surface publishing "the Time Pool"
@@ -468,7 +468,7 @@ export function isStickerDenomination(amount: unknown): boolean {
  * ⭐ **Separate line items, and unspent budget pours into the Time Pool** (Parker,
  * 2026-10-25). The earlier framing called a Sticker an *override* of the Time Pool, which
  * was the same money and a worse description: it published a pool figure and a Sticker
- * figure that overlapped, and no reader could add the ladder up. The two are now named as
+ * figure that overlapped, and no user could add the ladder up. The two are now named as
  * what they are — two channels into the same creator half — and what a giver does not hand
  * out is disbursed by time at the end of the cycle, which `distribute-pool.ts` computes as
  * `creator half − Stickers`.
@@ -800,7 +800,7 @@ export function withTaxDisplay(amount: number): number {
  * across a grid of charges; if that test ever fails, the money one wins.
  *
  * The shape mirrors the generated `user-cases` table exactly, because that is what
- * the copy beside the calculator promises: the reader's whole month — their Anthers
+ * the copy beside the calculator promises: the user's whole month — their Anthers
  * side and what they direct at creators — rides ONE monthly charge, so the single
  * at-cost card fee is paid once and split pro-rata between the two sides, the
  * fee's rounding remainder landing on the Anthers side (creators are never short a
@@ -810,15 +810,15 @@ export function withTaxDisplay(amount: number): number {
  *
  * Faithful to the money version down to the shape of its zero: with nothing given
  * to Anthers, `timePool` carries the platform's own free-account pool, which the
- * reader does not pay for — the calculator must not silently fold that into a
- * reader-financed flow.
+ * user does not pay for — the calculator must not silently fold that into a
+ * user-financed flow.
  *
  * 🚨 **The Anthers side is published as the ladder's five lines, and they are exposed here
  * rather than derived by each page** (Parker, 2026-10-25): {@link timePoolByTimeFor},
  * {@link stickerBudgetFor}, {@link storageReserveFor}, this side's share of the card fee and
  * {@link supportLineFor}. Two surfaces publish them — the spend calculator and the signup
  * panel — and a page that recomputed one could disagree with the other and with the ladder.
- * They sum to `anthers` exactly, so a page may render them as a column and let the reader
+ * They sum to `anthers` exactly, so a page may render them as a column and let the user
  * check the addition.
  *
  * ⚠️ **A zero Anthers side has no storage reserve**, because there is no charge for a

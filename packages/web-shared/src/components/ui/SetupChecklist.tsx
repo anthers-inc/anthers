@@ -4,7 +4,7 @@
  * progress bar and a short list in a card pinned to the page's lower-right corner.
  *
  * ⭐ **One component behind every checklist in the app.** The Work's own release gate, the
- * creator's account setup, the creator's first steps and the reader's orientation are the
+ * creator's account setup, the creator's first steps and the user's orientation are the
  * same object in the same corner, so a person meets one vocabulary rather than four
  * designs. The card starts open and collapses to a round button that keeps the completed
  * count.

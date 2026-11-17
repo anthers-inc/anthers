@@ -103,7 +103,7 @@ test("a post's preview names the post, and canonically points at its permalink",
 
 	expect(html).toContain(`<title>${title} — Anthers</title>`);
 	expect(html).toContain(`<meta property="og:title" content="${title}" />`);
-	// The body ships as the words a reader would see, not as markdown.
+	// The body ships as the words a user would see, not as markdown.
 	expect(html).toContain(
 		'<meta property="og:description" content="A short note about the garden, written for the preview walk." />',
 	);

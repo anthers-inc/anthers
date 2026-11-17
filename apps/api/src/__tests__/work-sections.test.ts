@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The reflow ebook ingest and its ladder — the two-shape design's new half
- * (Parker, 2026-10-11), landing before the vendored reader exists.
+ * (Parker, 2026-10-11), landing before the vendored user exists.
  *
  * The properties under test, one spec each:
  * - **The ingest decomposes a container**: an EPUB's spine becomes `work_sections` rows
@@ -352,7 +352,7 @@ describe("the ingest job, end to end on a fixture book", () => {
 		for (const section of sections) {
 			expect(section.sizeBytes ?? 0).toBeGreaterThan(0);
 			expect(await storage.exists(section.file)).toBe(true);
-			// The reader reaches the component through the ladder, never the key — the
+			// The user reaches the component through the ladder, never the key — the
 			// private bucket is where these live, and a signed URL is the only way in.
 			expect(section.file).toContain(`works/${workId}/ebook/${workId}/`);
 		}

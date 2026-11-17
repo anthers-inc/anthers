@@ -277,7 +277,7 @@ const uploadsRoutes = new Hono()
 
 			// Every image is re-encoded before it is stored: the client's declared type is not
 			// evidence, an image-named HTML file must never reach a trusted subdomain, and the
-			// bytes that reach a reader carry no EXIF and no unbounded canvas.
+			// bytes that reach a user carry no EXIF and no unbounded canvas.
 			let contentType = file.type;
 			let body: Buffer = Buffer.from(await file.arrayBuffer());
 			if (isImage) {

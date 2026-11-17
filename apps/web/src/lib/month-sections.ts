@@ -5,7 +5,7 @@
 // sections add the one thing a flat run cannot say, which is *when* the work landed.
 //
 // Two shape rules live here rather than in the renderer, because they are the ones a
-// reader notices:
+// user notices:
 //
 // - **A month with nothing in it gets no heading.** Months are not a calendar walk; a
 //   section exists only where an entry exists. So a month that had nothing never gains
@@ -41,9 +41,9 @@ export function monthLabel(year: number, month: number): string {
 }
 
 /**
- * The label the spacer carries for the reader who cannot see the glyph. One skipped
+ * The label the spacer carries for the user who cannot see the glyph. One skipped
  * month names itself; a run of them names the span, because "no content in three
- * months" leaves the reader to work out which three.
+ * months" leaves the user to work out which three.
  */
 function gapLabel(months: string[]): string {
 	if (months.length === 1) return `No content in ${months[0]}`;
