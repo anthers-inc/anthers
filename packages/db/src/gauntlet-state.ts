@@ -8,9 +8,11 @@
  * without Stripe configured and needs a running `stripe listen` forwarder when it is. The e2e spec's default (Stripe-free) mode therefore
  * UI-walks everything that doesn't bill — follow, comment, the giving stepper — and
  * hops the *billing* facts here, at the same rows the webhooks would have written:
- * the user's `stripe_customers` row and a completed `purchases` row. Under the Badge
- * model the **amounts are `user_badges` holdings**, which is what the `--give` hop
- * writes; the two amount columns the old `accounts` table carried are gone.
+ * the user's `stripe_customers` row and a completed `purchases` row, plus the Library
+ * entry that purchase puts there, since a bought Work is a Work its buyer can find
+ * again. Under the Badge model the **amounts are `user_badges` holdings**, which is
+ * what the `--give` hop writes; the two amount columns the old `accounts` table
+ * carried are gone.
  * The full-Stripe walk (`GAUNTLET_STRIPE=1`) skips this tool entirely.
  *
  * Usage (flags compose; each is applied only when passed):
@@ -41,7 +43,16 @@ import {
 } from "./gauntlet.js";
 import { anthersUserIdOfSession, applyAnthersSupport } from "./gauntlet-support.js";
 import { WALK_CREATOR_USERNAME, WALK_SLUG_PREFIX, WALK_WALKER_USERNAME } from "./gauntlet-walk.js";
-import { attentionEvents, badges, db, purchases, userBadges, users, works } from "./index.js";
+import {
+	attentionEvents,
+	badges,
+	db,
+	purchases,
+	userBadges,
+	userLibraryItems,
+	users,
+	works,
+} from "./index.js";
 
 const TAG = "[gauntlet-state]";
 
@@ -133,17 +144,17 @@ function currentBillingCycle(): string {
 }
 
 /**
- * The fixture's username is the preferred NAME the account was created with; the lookup key
- * is the handle the server issued for it — see `gauntletHandle`./
+ * The user behind an account *name*, resolved the way the seeder resolves it.
+ *
+ * ⚠️ **A name is not a handle, and the difference bites the default dev account.** The
+ * server reserves some names, and `localHandleName` (`apps/api/src/scripts/local-accounts.ts`)
+ * answers a reserved one with `<name>-dev`, which is why `DEV_ACCOUNT_USERNAME=parkerhdavis`
+ * exists as `parkerhdavis-dev.anthers.test`. The seeder resolves the viewer through that
+ * function; this hop only dasherized the name and appended the suffix, so with the account
+ * every `make dev` creates it looked for one that has never existed and reported the user as
+ * missing. Same two candidates in the same order, so the two doors agree.
  */
-/**
- * The handle an account holds, derived the same way `gauntletHandle` derives it for the
- * spec — the handle-safe spelling (lowercase, non-handle characters to dashes) under the
- * hosted suffix the API publishes. The walk's account names are handle-safe themselves
- * (see `gauntlet-walk.ts` for why), so the two spellings agree, and both the seeder and
- * the spec resolve the same account for the same name.
- */
-async function resolveAccountHandle(apiUrl: string, name: string, role: string): Promise<string> {
+async function userIdByAccountName(apiUrl: string, name: string, role: string): Promise<number> {
 	const res = await fetch(`${apiUrl}/api/atproto/config`);
 	if (!res.ok) throw new Error(`/api/atproto/config answered ${res.status}`);
 	const { hostedHandleSuffix: suffix } = (await res.json()) as { hostedHandleSuffix: string };
@@ -152,17 +163,15 @@ async function resolveAccountHandle(apiUrl: string, name: string, role: string):
 		.toLowerCase()
 		.replace(/[^a-z0-9-]+/g, "-")
 		.replace(/^-+|-+$/g, "");
-	return `${dashed}.${suffix}`;
-}
-
-async function userIdByHandle(handle: string): Promise<number> {
-	const [row] = await db
-		.select({ id: users.id })
-		.from(users)
-		.where(eq(users.atprotoHandle, handle))
-		.limit(1);
-	if (!row) throw new Error(`${handle} not found. Run \`make gauntlet-reset\` first.`);
-	return row.id;
+	for (const candidate of [dashed, `${dashed}-dev`]) {
+		const [row] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.atprotoHandle, `${candidate}.${suffix}`))
+			.limit(1);
+		if (row) return row.id;
+	}
+	throw new Error(`${name} (${role}) not found. Run \`make gauntlet-reset\` first.`);
 }
 
 async function main(): Promise<void> {
@@ -176,10 +185,8 @@ async function main(): Promise<void> {
 	const walkerUsername =
 		flagValue("--user") || process.env.DEV_ACCOUNT_USERNAME?.trim() || inst.userFallbackUsername;
 	const apiUrl = `http://localhost:${process.env.API_PORT ?? 8000}`;
-	const userId = await userIdByHandle(await resolveAccountHandle(apiUrl, walkerUsername, "User"));
-	const creatorId = await userIdByHandle(
-		await resolveAccountHandle(apiUrl, inst.creatorUsername, "Gauntlet creator"),
-	);
+	const userId = await userIdByAccountName(apiUrl, walkerUsername, "User");
+	const creatorId = await userIdByAccountName(apiUrl, inst.creatorUsername, "Gauntlet creator");
 
 	const anthersSupport = numFlag("--anthers-support", 0, 300);
 	const give = numFlag("--give", 0, 300);
@@ -311,7 +318,13 @@ async function main(): Promise<void> {
 		// A purchase unlocks a WORK — that is where access lives, so that is what a
 		// permanent unlock has to name.
 		const [work] = await db
-			.select({ id: works.id })
+			.select({
+				id: works.id,
+				title: works.title,
+				type: works.type,
+				creatorId: works.creatorId,
+				publicId: works.publicId,
+			})
 			.from(works)
 			.where(eq(works.slug, purchaseSlug))
 			.limit(1);
@@ -324,16 +337,34 @@ async function main(): Promise<void> {
 			.where(eq(purchases.stripePaymentIntentId, syntheticPi))
 			.limit(1);
 		if (!existing) {
+			// 🚨 **The snapshots are the receipt.** `workTitle`/`workType`/`creatorId` are
+			// captured at sale and never re-read from the Work, because a receipt has to
+			// keep reading after the Work is renamed, withdrawn or deleted — a hop that
+			// left them null produced a purchase the Purchases tab listed as "Untitled"
+			// with no creator, which is a state no real checkout can reach.
 			await db.insert(purchases).values({
 				buyerId: userId,
 				workId: work.id,
+				creatorId: work.creatorId,
+				workTitle: work.title,
+				workType: work.type,
+				workPublicId: work.publicId,
 				type: "digital",
 				amount: DOWNLOAD_PRICE,
 				processingFee: "0.00",
+				salesTax: "0.00",
 				creatorEarnings: DOWNLOAD_PRICE,
 				stripePaymentIntentId: syntheticPi,
 				status: "completed",
 			});
+			// And the purchase has to land in the Library, which is where a buyer goes to
+			// find what they own. The webhook does this through `saveOnPurchase`
+			// (`apps/api/src/services/library.ts`); this hop writes the same row rather
+			// than calling it because the service lives above this package and
+			// `packages/db` cannot import it. Keep the two in step: a purchase the
+			// Library does not list is a state the app cannot reach, and the User Guide
+			// teaches people to look here.
+			await db.insert(userLibraryItems).values({ userId, workId: work.id }).onConflictDoNothing();
 		}
 	}
 
