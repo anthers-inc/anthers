@@ -29,6 +29,19 @@ function siteFontFamily(): string | undefined {
  * Appearance for the Payment and Address Elements, with theme-resolved colors. Stripe's
  * Appearance API rejects `oklch()` and CSS variables, so the values are rasterised to
  * `rgb()` here rather than passed through.
+ *
+ * 🚨 **These are DaisyUI 5's tokens, and the short names are gone, not renamed quietly.**
+ * This read `oklch(var(--bc))`, `--b1`, `--p` and `--er` — DaisyUI 4's variables — long
+ * after the theme moved to DaisyUI 5, which defines none of them. An undefined custom
+ * property inside `var()` makes the whole declaration invalid rather than falling back to
+ * a default, so the probe kept the color it inherited from `body` and every Element was
+ * painted with that one value: on the light theme the card and address fields came out
+ * dark green (the body's ink) with dark green text, and on the dark theme they came out
+ * cream with cream labels, which is unreadable rather than merely wrong.
+ *
+ * The tokens are complete colors, so they are passed through whole — never wrapped in
+ * `oklch()` again, which would be `oklch(oklch(…))`. `stripeCard.test.ts` watches both
+ * halves of that, because a missing variable here fails silently in exactly this way.
  */
 export function stripeAppearance() {
 	return {
@@ -36,10 +49,10 @@ export function stripeAppearance() {
 		variables: {
 			fontFamily: siteFontFamily(),
 			fontSizeBase: "16px",
-			colorPrimary: toRgb("oklch(var(--p))"),
-			colorText: toRgb("oklch(var(--bc))"),
-			colorBackground: toRgb("oklch(var(--b1))"),
-			colorDanger: toRgb("oklch(var(--er))"),
+			colorPrimary: toRgb("var(--color-primary)"),
+			colorText: toRgb("var(--color-base-content)"),
+			colorBackground: toRgb("var(--color-base-100)"),
+			colorDanger: toRgb("var(--color-error)"),
 			borderRadius: "0.5rem",
 		},
 	};
