@@ -4,7 +4,7 @@
  * completion's identity, computed here once and used twice. The expectation is
  * computed by Bun's own hasher, independent of the chained-slice read under test;
  * what the suite proves is that the slices arrive in order and nothing is skipped
- * or doubled at the 8 MiB boundary the reader uses.
+ * or doubled at the 8 MiB boundary the user uses.
  */
 import { describe, expect, it } from "bun:test";
 import { type SessionPartPutter, uploadSessionPlan, wholeFileSha256Hex } from "./upload";

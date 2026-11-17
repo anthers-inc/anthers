@@ -4,7 +4,7 @@
  *
  * ⭐ **The decoration scales with how many distinct levels a thing has received, not with how
  * many Stickers or how much money** (Parker, 2026-09-13). One Sticker at each level and fifty
- * spread across every level look identical, so a reader can tell the least that was given and
+ * spread across every level look identical, so a user can tell the least that was given and
  * never the actual amount. That is why this draws concentric stripes rather than a count, a
  * badge or a chip: there is no number in it to read.
  *

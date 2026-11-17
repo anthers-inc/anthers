@@ -698,7 +698,7 @@ export async function linkCheckoutCustomer(
 		});
 }
 
-/** The card a reader has saved, with the funding type the adult check reads. */
+/** The card a user has saved, with the funding type the adult check reads. */
 export interface SavedCard {
 	id: string;
 	brand: string;
@@ -790,7 +790,7 @@ export async function paymentInfoFor(userId: number): Promise<PaymentInfo> {
 }
 
 /**
- * Start the SetupIntent that attaches the reader's card, with the address collected beside it.
+ * Start the SetupIntent that attaches the user's card, with the address collected beside it.
  *
  * ⭐ **The offer comes from the account's configuration, not from this call.** This API
  * version rejects `payment_method_types`, and the Payment Element reads the intent's

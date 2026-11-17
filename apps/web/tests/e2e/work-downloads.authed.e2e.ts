@@ -4,7 +4,7 @@
  * downloads, not three Works.
  *
  * The model already worked this way (builds are rows on the Work, each labeled by platform),
- * but nothing in the browser suite proved a reader meets it that way. This walk writes the
+ * but nothing in the browser suite proved a user meets it that way. This walk writes the
  * three rows where the build editor writes them, releases the Work, and checks the page a
  * player sees: one title, one Downloads table, and one row per platform.
  */

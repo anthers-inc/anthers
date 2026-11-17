@@ -320,14 +320,14 @@ export async function findRejectedCredit(
  *
  * There is no third party to ask: the creator wrote the row, so waiting for their own
  * confirmation is a question with no one to answer it. Recording an ordinary accepted
- * decision here — rather than teaching each reader a second rule — keeps one source of
+ * decision here — rather than teaching each user a second rule — keeps one source of
  * truth for what has been accepted: `creditsForOwner`, `creditsForUser` and
  * `loadConfirmedCredits` all consult that table and need no self case of their own.
  *
  * ⚠️ **No repository record is written.** `acceptCredit` writes `org.anthers.creditAcceptance`
  * in the caller's own repo to make a claim about them public with their word behind it; a
  * self-credit's author is already the Work's own creator, and the Work's record carries the
- * contribution beside their name. The local row is the whole of what the readers need.
+ * contribution beside their name. The local row is the whole of what the users need.
  *
  * Idempotent: the unique index on (work, contributor, role) makes a re-save an update of
  * `decidedAt`, never a second row. It is called on every Work write rather than only when

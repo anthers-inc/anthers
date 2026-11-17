@@ -137,7 +137,7 @@ describe("guided view is an explicit per-page opt-in", () => {
 			],
 		},
 		{
-			// On, but the proposals were never confirmed, so a reader still gets a whole page.
+			// On, but the proposals were never confirmed, so a user still gets a whole page.
 			pageNumber: 2,
 			width: 800,
 			height: 1200,
@@ -145,7 +145,7 @@ describe("guided view is an explicit per-page opt-in", () => {
 			panels: [{ panelNumber: 1, x: 0, y: 0, width: 1, height: 1, auto: true }],
 		},
 		{
-			// Off, with proposals beside it: nothing a reader should ever see.
+			// Off, with proposals beside it: nothing a user should ever see.
 			pageNumber: 3,
 			width: 800,
 			height: 1200,

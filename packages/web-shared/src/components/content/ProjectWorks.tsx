@@ -3,10 +3,10 @@
  * The Works on a Project page — an ordered list the owner arranges by dragging, and
  * reads through one of four sort modes.
  *
- * ⭐ **The chosen sort is the Project's, and it governs what readers see** (Parker,
+ * ⭐ **The chosen sort is the Project's, and it governs what users see** (Parker,
  * 2026-10-19, replacing the 2026-10-17 "Manual is the only real order" ruling): changing
  * the dropdown saves the mode on the Project row and the API serializes the members in
- * that order for every reader. Manual is the default and the stored drag order, so the
+ * that order for every user. Manual is the default and the stored drag order, so the
  * handles stay the way a creator arranged them until they choose otherwise; a non-manual
  * mode is a named reading order over the same list and never rewrites `sortOrder`.
  *

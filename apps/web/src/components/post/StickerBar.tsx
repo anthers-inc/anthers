@@ -10,7 +10,7 @@
  * ⭐ **Nothing here is a count.** What shows on the page is {@link StickerDecoration}'s
  * outline, which counts distinct levels and states no amount (Parker, 2026-09-13); the wall
  * of chips it replaces published a count per drawing, which let anybody work out the sum.
- * The reader's own Stickers live in the picker instead, because that is where taking one back
+ * The user's own Stickers live in the picker instead, because that is where taking one back
  * belongs once the chips are gone.
  *
  * ⚠️ **A Sticker is a monetary commitment that can still be removed from display**
@@ -41,7 +41,7 @@ import StickerDecoration from "./StickerDecoration";
 
 export type StickerSubject = "work" | "post" | "comment" | "review";
 
-/** One Sticker the reader gave on this subject, as the server identifies it. */
+/** One Sticker the user gave on this subject, as the server identifies it. */
 interface Mine {
 	id: number;
 	/** The level id — the amount it was given at, never displayed as money here. */
@@ -224,7 +224,7 @@ export default function StickerBar({
 					</summary>
 
 					<div className="dropdown-content z-20 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
-						{/* ⭐ What the reader gave, where taking it back now lives. It sits above the
+						{/* ⭐ What the user gave, where taking it back now lives. It sits above the
 						    batch because it is about this page rather than about giving. */}
 						{mine.length > 0 && (
 							<div className="mb-1 border-b border-base-300 pb-1">

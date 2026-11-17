@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * `GET /api/content/works/:id/manifest` — the reader's copy of a gated Work's manifest.
+ * `GET /api/content/works/:id/manifest` — the user's copy of a gated Work's manifest.
  *
  * The route is thin because the interesting question is not here: `gatedManifestFor` asks the
  * same `authorizeSpaceAccess` the space authority will ask before it issues a credential, and
@@ -8,9 +8,9 @@
  * mapping an outcome to an answer a page can act on, without leaking a refusal reason the gate
  * meant for its own logs.
  *
- * ⚠️ **A refusal is not a 500.** A reader the gate does not admit gets a 403; a Work with no
+ * ⚠️ **A refusal is not a 500.** A user the gate does not admit gets a 403; a Work with no
  * manifest gets a 404; a deployment without the app's attestation key gets a 503 that says the
- * feature is unavailable rather than pretending the reader is at fault. The authority's own
+ * feature is unavailable rather than pretending the user is at fault. The authority's own
  * error names (`AppNotAuthorized`, `UserNotAuthorized`) are passed through where they explain
  * something the page can show.
  */

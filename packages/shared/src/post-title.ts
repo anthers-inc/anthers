@@ -55,7 +55,7 @@ export function postTitleSegments(title: string | null | undefined): PostTitleSe
 }
 
 /**
- * The title as a reader would say it, with every mention kept as its stored text. This is
+ * The title as a user would say it, with every mention kept as its stored text. This is
  * what a slug is derived from, so a mention never puts the Work's public id into a post's
  * URL, and what search matches (the stored text is the name at write time).
  */

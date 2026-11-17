@@ -349,7 +349,7 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		// The last-used Discovery recipe — read at boot with the chrome, so a bare
 		// `/discovery` opens on it without a second request.
 		homeRecipe: prefs?.homeRecipe ?? null,
-		// The reader's own Discovery recipes — read at boot for the same reason the built-in
+		// The user's own Discovery recipes — read at boot for the same reason the built-in
 		// presets live in the bundle: the chips row renders before anything is clicked.
 		savedRecipes: prefs?.savedRecipes ?? null,
 		// Where audio playback lives (the persistent footer bar or the page's player).

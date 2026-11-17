@@ -877,7 +877,7 @@ describe("Webhook: payment_intent.succeeded", () => {
 			.where(eq(charitableLedger.purchaseId, pending.id));
 		expect(ledger).toHaveLength(0);
 
-		// The reader's space is owed a receipt: the row is the worklist the sweep drains, and
+		// The user's space is owed a receipt: the row is the worklist the sweep drains, and
 		// a cart writes one per purchase. It is inserted beside the completion, not by the
 		// job, so a webhook that lands is a receipt that will follow.
 		const owed = await db
@@ -1558,7 +1558,7 @@ describe("GET /stripe/onboard — reconcile on read", () => {
 		expect(body.chargesEnabled).toBe(true);
 		expect(body.payoutsEnabled).toBe(true);
 
-		// The row was written too, so every other reader — the release gate, the
+		// The row was written too, so every other user — the release gate, the
 		// settings card — now agrees with Stripe without another live read.
 		const [row] = await db
 			.select()

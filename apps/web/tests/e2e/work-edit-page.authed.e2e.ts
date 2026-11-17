@@ -135,7 +135,7 @@ test("a video's editing surface is its own page, and the two lead to each other"
 		readBack.value?.$type,
 		`getRecord answered ${readBackRes.status} for ${owner?.atprotoUri}: ${readBackBody.slice(0, 300)}`,
 	).toBe("org.anthers.work");
-	// And it is every reader's: a signed-out read of the same Work carries the same record
+	// And it is every user's: a signed-out read of the same Work carries the same record
 	// link the owner's shape carries — no longer the creator's alone.
 	const asStranger = (await (
 		await fetch(`${API_URL}/api/content/works/${video.publicId}`)
@@ -461,8 +461,8 @@ test("the creator's own comic page renders the book, not the no-pages placeholde
 	page,
 	context,
 }) => {
-	// The owner's Work page goes through a different serializer from a reader's, and it
-	// used to omit the page and section counts the readers branch on. The result was the
+	// The owner's Work page goes through a different serializer from a user's, and it
+	// used to omit the page and section counts the users branch on. The result was the
 	// creator seeing "This book has no pages yet" on a Work everyone else could read.
 	session = await signInAsMediaFixture(context);
 	const [comic] = (await ownWorks()).filter((w) => w.title === FIXTURE_COMIC);

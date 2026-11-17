@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The reader's half of a gated space read: the client attestation, the request signature, the
+ * The user's half of a gated space read: the client attestation, the request signature, the
  * key share, and the MAC check.
  *
  * ⭐ **These are the protocol's wire formats, ported rather than guessed.** The branch's
@@ -13,7 +13,7 @@
  * whether the copies still match.
  *
  * 🚨 **The MAC is the read's proof, not a decoration.** A space record's bytes come from one
- * server, and the MAC is the only thing that ties them to the URI and CID the reader asked for.
+ * server, and the MAC is the only thing that ties them to the URI and CID the user asked for.
  * A read that skips it is a read of whatever the connection answered.
  */
 import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
@@ -120,7 +120,7 @@ export function formatWantMacHeader(keyShare: string): string {
 /**
  * The key share and shared secret for one read.
  *
- * The author's `#atproto_kem` key is published in their DID document. The reader makes an
+ * The author's `#atproto_kem` key is published in their DID document. The user makes an
  * ephemeral keypair, sends its public half, and derives the same secret the server will from
  * its private half — DHKEM(P-256, HKDF-SHA256), RFC 9180 §4.1. A fresh keypair per request is
  * what keeps a captured MAC from meaning anything later.

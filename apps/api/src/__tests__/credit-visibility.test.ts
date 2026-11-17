@@ -290,7 +290,7 @@ describe("a credit naming the Work's own creator", () => {
 		expect(owned[0]?.contributor).toBe(creator.did);
 
 		// The user path resolves it too: the acceptance row is what both shapes read, so a
-		// signed-out reader sees the creator's name rather than a withheld credit.
+		// signed-out user sees the creator's name rather than a withheld credit.
 		const publicView = await creditsForUser(row, null);
 		expect(publicView.find((c) => c.role === "Written by")?.contributor).toBe(creator.handle);
 	});

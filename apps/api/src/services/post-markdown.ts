@@ -46,7 +46,7 @@ const HTML_TO_MARKDOWN = new TurndownService({
 	 * would be lost on storage and then again on every later normalization. The portable
 	 * spelling of "an empty line" is a paragraph holding one non-breaking space — it
 	 * renders as a full-height empty paragraph in remark's renderer and any other markdown
-	 * reader, and the round trip is stable by itself: `isBlank` reads `^\s*$`, which the
+	 * user, and the round trip is stable by itself: `isBlank` reads `^\s*$`, which the
 	 * space satisfies, and CommonMark treats the character as text, so `marked` re-parses
 	 * the stored line into the same empty `<p>` and this rule runs again. Leading and
 	 * trailing blank paragraphs still fall to the final `trim()` in

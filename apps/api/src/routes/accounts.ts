@@ -301,7 +301,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		// The last-used Discovery recipe, read at boot with the rest of the chrome so a
 		// bare `/discovery` opens on it without a second request.
 		homeRecipe: prefs?.homeRecipe ?? null,
-		// The reader's own Discovery recipes, in chip order. Null and `[]` mean the same
+		// The user's own Discovery recipes, in chip order. Null and `[]` mean the same
 		// thing, and the client parses each row rather than trusting the column.
 		savedRecipes: prefs?.savedRecipes ?? null,
 		// Where audio playback lives — null means "never said", the client reads on.
@@ -488,7 +488,7 @@ const NAV_IDS = ["library", "discovery"] as const;
  * them.
  *
  * The enums are the shared vocabulary rather than restatements of it: the page parses the
- * same three lists, so a write this route accepts is one the reader can run.
+ * same three lists, so a write this route accepts is one the user can run.
  */
 const recipeSchema = z.object({
 	window: z.enum(RECIPE_WINDOWS),
@@ -497,7 +497,7 @@ const recipeSchema = z.object({
 });
 
 /**
- * One recipe a reader saved: a name and a color over three values.
+ * One recipe a user saved: a name and a color over three values.
  *
  * 🚨 **Three refusals beyond the field shapes, and each is about a chip that would lie.**
  * Two saved recipes may not share an id, because the chips key on it; two may not be the
@@ -567,11 +567,11 @@ const updateProfileSchema = z.object({
 	homeDefaultTab: z.enum(NAV_IDS).optional(),
 	/**
 	 * The Discovery recipe the account last chose, written whole — the three stages a
-	 * reader sets. Stored as values rather than a preset id so a recipe survives a preset
+	 * user sets. Stored as values rather than a preset id so a recipe survives a preset
 	 * being renamed or removed, and so a hand-built combination is saveable at all.
 	 *
 	 * The enums are the shared vocabulary rather than restatements of it: the page parses
-	 * the same three lists, so a write this route accepts is one the reader can run.
+	 * the same three lists, so a write this route accepts is one the user can run.
 	 */
 	homeRecipe: recipeSchema.optional(),
 	/**
@@ -939,17 +939,17 @@ const accountRoutes = new Hono()
 	// point — a creator is here because some number of the people this account
 	// follows also follow them, and the number travels with the row so a page can
 	// say why it is showing them. That is the visible, choosable alternative to a
-	// hidden recommendation engine — `min_shared` is the reader's control over the
+	// hidden recommendation engine — `min_shared` is the user's control over the
 	// recipe's one parameter — and it waits for enough content for the edges to
 	// say more than a plain listing would.
 	//
-	// ⚠️ **Creators the reader already follows stay in the list.** The graph is a
+	// ⚠️ **Creators the user already follows stay in the list.** The graph is a
 	// picture of the network around them, not a list of strangers; a creator they
 	// follow but whose other followers they share is still a true edge, and the
-	// card says "Following". Excluding them would make a well-connected reader's
+	// card says "Following". Excluding them would make a well-connected user's
 	// graph look empty precisely when their network is richest.
 	//
-	// A reader who follows nobody has no edges to trace: the route falls back to
+	// A user who follows nobody has no edges to trace: the route falls back to
 	// creators ordered by followers and says so with `basis: "followers"`, which
 	// the page renders as the recipe it actually ran rather than pretending the
 	// network produced it.
@@ -1097,7 +1097,7 @@ const accountRoutes = new Hono()
 		// creators whose Badge it holds, and the creators behind the posts and Works it
 		// saved or purchased. A creator who reaches the feed by more than one route is
 		// listed once, and `sourceByCreator` keeps the strongest reason for the card:
-		// following over supporting over saving, because that is the order the reader
+		// following over supporting over saving, because that is the order the user
 		// chose them in.
 		//
 		// 🚨 **Every source is filtered at the source**, not after the union. A blocked,
@@ -1294,7 +1294,7 @@ const accountRoutes = new Hono()
 								notBlockedBy(sessionUser.id, posts.creatorId),
 								notSuspendedAccount(posts.creatorId),
 								notTestAccount(posts.creatorId),
-								// The reader's own hide lists. A post is not a Work, so only the
+								// The user's own hide lists. A post is not a Work, so only the
 								// creator half applies here; the release half below carries both.
 								notHiddenFrom(sessionUser.id, { creatorId: posts.creatorId }),
 								eq(posts.isPublished, true),
@@ -1355,7 +1355,7 @@ const accountRoutes = new Hono()
 								notBlockedBy(sessionUser.id, works.creatorId),
 								notSuspendedAccount(works.creatorId),
 								notTestAccount(works.creatorId),
-								// The reader's own hide lists, both halves: this Work, or this
+								// The user's own hide lists, both halves: this Work, or this
 								// Work's creator. Scoped to the stream on purpose — the Work stays
 								// listed in search, the Catalog and the creator's profile.
 								notHiddenFrom(sessionUser.id, {
@@ -1421,7 +1421,7 @@ const accountRoutes = new Hono()
 		// showing nothing would waste the tile. Extracted from the bodies the
 		// rows already carry (`lib/post-work-links.ts` — nothing is stored), and
 		// resolved through the same allow-list a title's mention uses: an image
-		// reaches the same readers a name does, so an Adult Work's cover is not
+		// reaches the same users a name does, so an Adult Work's cover is not
 		// handed to somebody who has not opted in.
 		const embeddedIds = [...new Set(feedPosts.flatMap((r) => workPublicIdsFromBody(r.post.body)))];
 		const mentionable = await mentionableWorks(embeddedIds, sessionUser.id);
@@ -1456,7 +1456,7 @@ const accountRoutes = new Hono()
 		// `excerpt` is exception-shaped rather than an exception: a post's body is public
 		// (a post carries no gate of its own, and its page reads signed out), and the plain-text
 		// form the tile renders is lighter than the markdown it is derived from.
-		// The name each post title's `@` mention resolves to for this reader — one lookup for
+		// The name each post title's `@` mention resolves to for this user — one lookup for
 		// the feed, beside the thumbnails the same rows already need.
 		const postDisplayTitles = await displayPostTitles(
 			feedPosts.map((row) => row.post.title),
@@ -1834,7 +1834,7 @@ const accountRoutes = new Hono()
 	})
 
 	/**
-	 * The card a shared profile is unfurled with, for a reader who holds no session.
+	 * The card a shared profile is unfurled with, for a user who holds no session.
 	 *
 	 * Beside the profile read because the two answer the same questions. Nothing here
 	 * writes — the profile read counts a view, and an unfurl is not one.
@@ -2289,7 +2289,7 @@ const accountRoutes = new Hono()
 
 	// ── The onboarding checklists ────────────────────────────────────────────
 	//
-	// What an account has done, for the reader's checklist on Discovery and the creator's
+	// What an account has done, for the user's checklist on Discovery and the creator's
 	// follow-up on the Studio's Works page. Read-only, and the rows derive from it rather
 	// than from a click, so a checklist cannot claim something is done before it is.
 	.get("/me/onboarding", requireAuth, async (c) => {
@@ -2546,7 +2546,7 @@ const accountRoutes = new Hono()
 	})
 
 	// ── Hidden from Discovery ────────────────────────────────────────────────
-	// The reader's own filter over the stream, and NOT a block: a hidden Work and a
+	// The user's own filter over the stream, and NOT a block: a hidden Work and a
 	// hidden creator's profile both stay reachable by search, by direct link and in the
 	// Library, and nothing here touches the follow, the Badge or a purchase. Both lists
 	// and their listing condition live in `services/content-preferences.ts`.

@@ -12,7 +12,7 @@
  * and `work_section_assets`, the ladder's inventory — and the container itself is only
  * ever reachable where a creator enabled downloads.
  *
- * 👉 This job lands BEFORE the vendored foliate-js view, so the reader's first run reads
+ * 👉 This job lands BEFORE the vendored foliate-js view, so the user's first run reads
  * real checked routes: nothing here knows, or must ever know, what the reader looks like.
  * The contract the reader builds on is the manifest endpoint (`/works/:id/sections`,
  * which maps container-relative paths to ladder routes) plus the two redirecting unit
@@ -23,7 +23,7 @@
  * decompression, anything past the caps below — a ZIP bomb decompresses to nothing rather
  * than to its payload, and one pathological upload fails its job legibly instead of
  * filling the worker's memory or disk. Chapters are stored as-is (no sanitizing here:
- * the script-blocking posture is the reader's sandboxed iframe + CSP, and the standing
+ * the script-blocking posture is the user's sandboxed iframe + CSP, and the standing
  * test proves a scripted section cannot reach the network).
  *
  * Bounds, beside the disk arithmetic that set the page render's caps: the container
@@ -225,7 +225,7 @@ export async function ingestEbook(data: IngestEbookData) {
 			const containerPath = await storage.downloadToTemp(source.file);
 			downloaded.push(containerPath);
 			const bytes = new Uint8Array(await readFile(containerPath));
-			// 🚨 This container's temp copy dies HERE — its only reader is the unzip below,
+			// 🚨 This container's temp copy dies HERE — its only user is the unzip below,
 			// in the same breath; holding a delivered file's copy past that is residency
 			// the caps have no reason to pay for (renderPaged's rule).
 			await rm(containerPath, { force: true }).catch(() => {});
@@ -255,7 +255,7 @@ export async function ingestEbook(data: IngestEbookData) {
 			}
 			for (const resource of parsed.assets) {
 				// A path two volumes share takes the first one's bytes — a collision means
-				// ambiguity the reader could not resolve either, and the first is what the
+				// ambiguity the user could not resolve either, and the first is what the
 				// set's spine order reads first.
 				if (!assets.has(resource.path)) {
 					assets.set(resource.path, {

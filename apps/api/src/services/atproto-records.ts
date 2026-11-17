@@ -40,7 +40,7 @@ export interface PublishableWork extends AccessibleWork {
  * Where a gated Work's audience-readable records live.
  *
  * ⚠️ **A pointer is not a permission.** `space` names the space a gated listing points at and
- * `manifest` names the record inside it; whether a reader may open either is answered by the
+ * `manifest` names the record inside it; whether a user may open either is answered by the
  * app the space names, on every credential request. A listing that treated these as an access
  * grant would be a second gate, free to disagree with the first.
  */
@@ -267,7 +267,7 @@ export function workToRecord(
 	// 🚨 **The pointers appear only on a gated listing and only when both were really
 	// written.** An `open` Work has no audience to read them, and a gated one whose space
 	// write has not landed yet would otherwise advertise a space that does not carry its
-	// manifest — the listing would be the first thing a reader followed to nothing.
+	// manifest — the listing would be the first thing a user followed to nothing.
 	const space = opts.accessPointers?.space;
 	const manifest = opts.accessPointers?.manifest;
 	if (state === "gated" && space) {

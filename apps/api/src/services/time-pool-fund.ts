@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Time Pool Fund — the ledger's one writer, and the slice's one reader.
+ * The Time Pool Fund — the ledger's one writer, and the slice's one user.
  *
  * Free accounts' Time Pools are funded by the Fund, not by a constant: the organization
  * chooses a **service level** each cycle — dollars per eligible free account — and the

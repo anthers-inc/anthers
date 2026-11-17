@@ -41,7 +41,7 @@ export interface MediaFixtureWork {
 	media: "video" | "music" | "comic" | "ebook" | "audio";
 	/**
 	 * Whether the reflow book's sections are hostile: a script that beacons outward and
-	 * same-origin the moment it runs, a meta refresh, an inline event handler. The reader
+	 * same-origin the moment it runs, a meta refresh, an inline event handler. The user
 	 * security spec reads it; the seeding produces exactly the EPUB the ingest extracts.
 	 */
 	scripted?: boolean;
@@ -157,7 +157,7 @@ export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
 	},
 	// Two reflow books: one clean (prose the reader spec navigates through), one whose
 	// chapters are hostile (the standing security test's subject). Both upload as real
-	// EPUBs and go through the real ingest — the reader's ladder is what the specs are
+	// EPUBs and go through the real ingest — the user's ladder is what the specs are
 	// for, so the fixture must carry the shape #488's ingest produces, not hand-built rows.
 	{
 		key: "ebook",

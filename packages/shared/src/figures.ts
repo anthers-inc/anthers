@@ -10,7 +10,7 @@
 //
 // ⚠️ **One section is the exception, and it says so where it lives**: `MONEY_FLOWS`'s
 // Anthers-subscription lines are computed from the ladder's own helpers, because the page
-// that reads them draws a five-line column a reader is expected to add up. The rest of the
+// that reads them draws a five-line column a user is expected to add up. The rest of the
 // file keeps the contract above.
 
 import {
@@ -204,7 +204,7 @@ function anthersSubLines(monthly: number) {
  * 🚨 **The Anthers subscription's lines are read from the ladder's own helpers rather than
  * typed here** (2026-10-25). This file exists to keep `fees.ts` and its decimal chain out of
  * the browser bundle, not to hold a second copy of the split: the diagram draws five lines
- * that a reader can add up, and `/signup`, the Badges page and this page must all be
+ * that a user can add up, and `/signup`, the Badges page and this page must all be
  * describing the same five. `supportLineFor` is the definition of the last one, so the
  * column cannot drift from the model by a cent.
  */
@@ -276,7 +276,7 @@ export const RIVAL_STOREFRONTS = [
 ] as const;
 
 /**
- * The spend calculator's rival lines — the monthly spending lines a reader builds
+ * The spend calculator's rival lines — the monthly spending lines a user builds
  * their own media month from, with what each platform publishes about the split.
  *
  * Hand-maintained in `scenarios.ts` beside `RIVAL_STOREFRONTS` (same discipline:

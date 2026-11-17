@@ -27,7 +27,7 @@ import { useEffect, useState } from "react";
 /** How many suggestions a non-searching picker asks for. */
 const DIRECTORY_LIMIT = "20";
 
-/** The chips a reader sees, with an empty state the creator's read view can name. */
+/** The chips a user sees, with an empty state the creator's read view can name. */
 export function WorkTagChips({ tags, empty = "No tags yet." }: { tags: string[]; empty?: string }) {
 	if (tags.length === 0) {
 		return <p className="text-sm text-base-content/40">{empty}</p>;

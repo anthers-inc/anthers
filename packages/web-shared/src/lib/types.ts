@@ -375,7 +375,7 @@ export interface WorkCaptionTrack {
 	url: string;
 	/**
 	 * The row's size and cue count — the Studio editor's facts about what was uploaded.
-	 * Owner-shape only; the reader's player payload omits them.
+	 * Owner-shape only; the user's player payload omits them.
 	 */
 	byteSize?: number;
 	cueCount?: number;
@@ -546,7 +546,7 @@ export interface Work {
 	/**
 	 * The fulfillment details a physical good or a service carries, in its creator's own
 	 * words. **Owner-facing only** — the public shape omits it, because it is fulfillment
-	 * material rather than a description a reader reads.
+	 * material rather than a description a user reads.
 	 */
 	note?: string;
 
@@ -648,13 +648,13 @@ export interface Work {
 	 */
 	captions?: WorkCaptionTrack[];
 	/**
-	 * When the CURRENT media version was added. The page shows it so a reader can tell a
+	 * When the CURRENT media version was added. The page shows it so a user can tell a
 	 * 2019 film uploaded yesterday from one updated last week; the creator's Versions tab
 	 * puts the same date above the archive. Absent for a Work with no media.
 	 */
 	versionAddedAt?: string;
 	/**
-	 * The current version's name, empty when its creator left it unnamed. A reader sees it
+	 * The current version's name, empty when its creator left it unnamed. A user sees it
 	 * beside the version's date when the version was added after release.
 	 */
 	versionLabel?: string;
@@ -667,9 +667,9 @@ export interface Work {
 	atprotoUri?: string | null;
 	/**
 	 * The Work's public record link, as the record's own address on Taproot
-	 * (`https://atproto.at/uri/{at-uri}`) — the one form a reader can follow. Carried by
+	 * (`https://atproto.at/uri/{at-uri}`) — the one form a user can follow. Carried by
 	 * both shapes since the widening (2026-10-10): the record is public no matter who
-	 * reads, so every reader who can see the Work sees this too. Null means no listing.
+	 * reads, so every user who can see the Work sees this too. Null means no listing.
 	 */
 	recordUrl?: string | null;
 }
@@ -693,7 +693,7 @@ export interface WorkMediaVersionSummary {
 }
 
 /**
- * One version as a reader sees it: the name its creator gave it (empty when unnamed) and
+ * One version as a user sees it: the name its creator gave it (empty when unnamed) and
  * the date it was added. The public history read returns only versions added at or after
  * the Work was released — the release build is the baseline — and deliberately carries no
  * file, size or download.
@@ -798,7 +798,7 @@ export interface Post {
 	atprotoUri: string | null;
 	/**
 	 * The post's public record link — the record's own address on Taproot
-	 * (`https://atproto.at/uri/{at-uri}`), the form a reader can follow (the widening
+	 * (`https://atproto.at/uri/{at-uri}`), the form a user can follow (the widening
 	 * task, 2026-10-10). Null while the post has no record, which is ordinary.
 	 */
 	recordUrl?: string | null;
@@ -815,12 +815,12 @@ export interface Post {
 	 */
 	linkedWorks?: PostWorkRef[];
 	/**
-	 * The title with each `@`-mentioned Work's current name — what a reader sees.
+	 * The title with each `@`-mentioned Work's current name — what a user sees.
 	 * `title` is the stored form, whose mention text is only the fallback for a Work
 	 * that no longer resolves.
 	 */
 	displayTitle?: string | null;
-	/** The Works the title mentions, resolved for this reader, in first-appearance order. */
+	/** The Works the title mentions, resolved for this user, in first-appearance order. */
 	mentionedWorks?: PostMentionedWork[];
 	/** Transparent edit history (newest first), present on the detail endpoint. */
 	edits?: PostEdit[];
@@ -931,7 +931,7 @@ export interface Project {
 	atprotoUri: string | null;
 	/**
 	 * The project's public record link — the record's own address on Taproot, the form a
-	 * reader can follow (the widening task, 2026-10-10). Null while there is no record,
+	 * user can follow (the widening task, 2026-10-10). Null while there is no record,
 	 * which is ordinary.
 	 */
 	recordUrl?: string | null;
@@ -1005,7 +1005,7 @@ export interface Comment {
 	atprotoUri: string | null;
 	/**
 	 * The comment's public record link — the record's own address on Taproot, the form a
-	 * reader can follow (the widening task, 2026-10-10). Null while the comment has no
+	 * user can follow (the widening task, 2026-10-10). Null while the comment has no
 	 * record, which is ordinary. A removed entry carries neither field.
 	 */
 	recordUrl?: string | null;
@@ -1084,7 +1084,7 @@ export interface Review {
 	body: string;
 	/**
 	 * The review's public record link — the record's own address on Taproot, the form a
-	 * reader can follow (the widening task, 2026-10-10). Null while there is no record,
+	 * user can follow (the widening task, 2026-10-10). Null while there is no record,
 	 * which is ordinary.
 	 */
 	recordUrl?: string | null;
@@ -1104,13 +1104,13 @@ export interface Review {
 	userVote: "up" | "down" | null;
 }
 
-/** Why a reader cannot write a review, as the server decides it. */
+/** Why a user cannot write a review, as the server decides it. */
 export type ReviewRefusalCode = "own_work" | "pre_release" | "unreleased" | "locked" | "unconsumed";
 
 export interface ReviewEligibility {
 	canReview: boolean;
 	code: ReviewRefusalCode | null;
-	/** Written for the reader and rendered verbatim; null when `canReview`. */
+	/** Written for the user and rendered verbatim; null when `canReview`. */
 	reason: string | null;
 }
 
@@ -1150,8 +1150,8 @@ export interface ReviewAggregate {
 	/** The user's own review text, so the form can open pre-filled for an edit. */
 	userReview: string | null;
 	/**
-	 * Whether this reader may write a review, or the one reason they may not.
-	 * Null for a signed-out reader, who has no composer.
+	 * Whether this user may write a review, or the one reason they may not.
+	 * Null for a signed-out user, who has no composer.
 	 */
 	eligibility: ReviewEligibility | null;
 	/**
@@ -1416,7 +1416,7 @@ export interface StorageReading {
 	topUpEligible: boolean;
 	/** The at-cost overflow estimate in dollars, "0.00" when within the allowance or ineligible. */
 	overflowCost: string;
-	/** Per-purpose lines; every known kind present, so a reader never defaults a key. */
+	/** Per-purpose lines; every known kind present, so a user never defaults a key. */
 	purposes: Record<string, number>;
 	/** When this cycle's figure was sampled — null before the meter's first sweep saw the account. */
 	sampledAt: string | null;

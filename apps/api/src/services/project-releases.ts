@@ -19,7 +19,7 @@
  *
  * 🚨 **The counts are the viewer's counts.** They are taken with the same Adult and
  * parental visibility conditions the calling listing applied to the Works themselves, so
- * a release never advertises a track the reader will not find inside it.
+ * a release never advertises a track the user will not find inside it.
  */
 
 import { db } from "@anthers/db/client";

@@ -423,7 +423,7 @@ export async function settleRefundedPurchase(
 		.where(and(eq(purchases.id, purchase.id), eq(purchases.status, "completed")))
 		.returning();
 
-	// The refund event is owed by the reader's space whether this call settled the row or a
+	// The refund event is owed by the user's space whether this call settled the row or a
 	// previous one did: a redelivery is the repair path for an insert that failed after the
 	// money moved. `oweAccessReceipt` is idempotent on (purchase, kind).
 	if (!updated) {

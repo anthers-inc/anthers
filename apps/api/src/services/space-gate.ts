@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The one question `checkUserAccess` exists to answer: may this reader read this creator's
+ * The one question `checkUserAccess` exists to answer: may this user read this creator's
  * gated space?
  *
  * The answer is the product's existing one. `resolveAccess` decides what a user may consume —

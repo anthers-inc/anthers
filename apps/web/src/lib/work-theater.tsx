@@ -95,7 +95,7 @@ export function useContentStage(
 		measure();
 		const observer = new ResizeObserver(measure);
 		observer.observe(main);
-		// The work is what the mode puts in front of the reader, so entering it starts at
+		// The work is what the mode puts in front of the user, so entering it starts at
 		// the work rather than wherever the page was scrolled to.
 		ref.current?.scrollIntoView({ block: "start" });
 		return () => observer.disconnect();

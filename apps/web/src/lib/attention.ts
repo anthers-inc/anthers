@@ -436,14 +436,14 @@ function announceStarted(workId: number | null) {
  * Be told when a claim on a Work **starts earning** — the first tick of a new range, not
  * every second of one.
  *
- * ⭐ **This is how a surface learns that a reader has now consumed what it is gating on.**
+ * ⭐ **This is how a surface learns that a user has now consumed what it is gating on.**
  * A review composer that stood closed because nobody had watched anything is the case:
  * pressing play is the moment its answer changes, and the alternative is polling on a
  * guess. The listener is told the Work's id (null for a claim that is not about a Work)
  * and decides whether it cares.
  *
  * ⚠️ **The event is local evidence, not server state.** The seconds are still in this
- * tab's queue when the listener runs; a reader of this must flush before asking the
+ * tab's queue when the listener runs; a user of this must flush before asking the
  * server whether the work counts. `flushAttentionNow` is that flush.
  *
  * Subscribing also reports any range already open, so a surface that mounts mid-play does

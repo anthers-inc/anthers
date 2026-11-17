@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Reading the service-auth JWT a space authority sends when it asks us about a reader.
+ * Reading the service-auth JWT a space authority sends when it asks us about a user.
  *
  * This is the whole authentication of `checkUserAccess`. A space authority mints a JWT signed
  * by its own `#atproto` key, addressed to the managing app's service identifier (`aud`) and

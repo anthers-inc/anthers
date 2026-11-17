@@ -26,7 +26,7 @@
 // *How Anthers Talks About Itself* § Claims is the authority.
 //
 // 🚨 **A Badge is a subscription purchase, never a gift** (2026-10-15, recorded in
-// *How Anthers Talks About Itself*'s vocabulary): the reader pays a monthly amount
+// *How Anthers Talks About Itself*'s vocabulary): the user pays a monthly amount
 // and buys the lifted limit and a standing. This page's copy says subscription, and
 // the verb *give* only where it earns its place.
 //

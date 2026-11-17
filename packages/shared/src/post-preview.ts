@@ -32,7 +32,7 @@ export const POST_PREVIEW_FALLBACK_DESCRIPTION =
  * Shorter than the feed tile's excerpt on purpose: a tile's line clamp cuts a paragraph
  * that is already on the page, while a card is pasted into a chat where every unfurler
  * truncates it again — at roughly this length. Cutting here means the words that survive
- * are the ones the reader was meant to see rather than whatever the platform kept.
+ * are the ones the user was meant to see rather than whatever the platform kept.
  */
 export const POST_PREVIEW_EXCERPT_LIMIT = 200;
 

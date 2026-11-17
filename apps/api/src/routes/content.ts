@@ -551,11 +551,11 @@ export async function resolveProjectThumbnails(
 }
 
 /**
- * The facts a link preview may show about one Work, for an anonymous reader.
+ * The facts a link preview may show about one Work, for an anonymous user.
  *
  * 🚨 **Anonymous is the whole caller set, and that is a property of the surface rather
  * than a limitation.** A crawler unfolds a URL with no session, so the owner branch, the
- * withdrawn-purchaser branch and the reader's opt-in have no subject to consult — a Work
+ * withdrawn-purchaser branch and the user's opt-in have no subject to consult — a Work
  * that is not `released`, is Adult-rated, or belongs to a suspended creator is absent,
  * exactly as it is from the page. `null` here becomes the same 404 the page answers,
  * never a differently-worded one that would leak the state.
@@ -699,7 +699,7 @@ export async function serializeWork(
 		transcoding: job,
 		// The owner's caption tracks, ungated here — this shape is what the Studio edits —
 		// with the play-facing URLs built the way the user shape builds them. Full rows,
-		// not the reader's slim objects: the editor shows size and cue count, which say
+		// not the user's slim objects: the editor shows size and cue count, which say
 		// something about what was uploaded that the play menu has no use for.
 		captions:
 			item.type !== "video"
@@ -723,7 +723,7 @@ export async function serializeWork(
 			: [],
 		/**
 		 * The Work's listing on the network while it has one, and the public record link
-		 * beside it — every reader who can see the Work sees it too (the record is public
+		 * beside it — every user who can see the Work sees it too (the record is public
 		 * anyway). The link is a pure function of the stored address, so it costs no
 		 * lookup. Null for a Work with no listing, which is ordinary rather than a fault.
 		 */
@@ -1118,7 +1118,7 @@ export async function workAccessFor(
 /**
  * The same resolution, with the two facts the delivery rules turn on.
  *
- * `userId` is the signed-in reader and `sharedBy` the sharer whose link the request rode.
+ * `userId` is the signed-in user and `sharedBy` the sharer whose link the request rode.
  * The download route needs both: a share link is its own credential and needs no grant,
  * while a signed-in request must present one. Returning them beside the verdict keeps the
  * two lookups this resolver already did from being repeated by the caller.
@@ -1298,7 +1298,7 @@ export async function serializeWorkForUser(
 	pageCount = 0,
 	/**
 	 * How many **reflow** sections an ebook's EPUB ingest extracted, or 0 — the fixed
-	 * shape's `pageCount` sibling. This is the only ingest-produced signal the reader
+	 * shape's `pageCount` sibling. This is the only ingest-produced signal the user
 	 * needs to pick its view: sections exist → reflow (`work_sections`, foliate);
 	 * none → fixed (`work_pages`, the page reader). Same publicity rule as `pageCount` —
 	 * a count is the book's shape, never a pointer into it.
@@ -1425,7 +1425,7 @@ export async function serializeWorkForUser(
 		sourceUrl: work.sourceUrl,
 		viewCount: work.viewCount,
 		downloadCount: work.downloadCount,
-		/** The current media version's date, for the reader. Its name travels beside it. */
+		/** The current media version's date, for the user. Its name travels beside it. */
 		versionAddedAt: work.versionAddedAt,
 		versionLabel: work.versionLabel,
 		createdAt: work.createdAt,
@@ -1602,7 +1602,7 @@ export async function loadWorkBundles(workIds: number[]): Promise<{
 	jobByWork: Map<number, TranscodingJobRow>;
 	/** Page count per ebook Work. A COUNT, never the keys — see `serializeWorkForUser`. */
 	pagesByWork: Map<number, number>;
-	/** Reflow section count per ebook Work — the reader's shape signal, `pageCount`'s sibling. */
+	/** Reflow section count per ebook Work — the user's shape signal, `pageCount`'s sibling. */
 	sectionsByWork: Map<number, number>;
 	/** Browser builds per Work, with their file rows. Owner-facing payload; see `serializeWork`. */
 	buildsByWork: Map<number, WebBuildWithFiles[]>;

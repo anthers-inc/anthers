@@ -243,13 +243,13 @@ describe("a Project's Works", () => {
 
 	/**
 	 * The saved sort is the Project's, not the viewer's (2026-10-19): a creator's choice
-	 * orders the list for a signed-out reader too, and switching back to Manual returns
+	 * orders the list for a signed-out user too, and switching back to Manual returns
 	 * the stored drag order because no sort ever rewrites `sortOrder`.
 	 *
 	 * Descending alphabetical — C, B, A against the stored C, A, B — is deliberate: the
 	 * stored order and the sorted order cannot be confused.
 	 */
-	it("a saved sort orders the list for every reader, and Manual gives the stored order back", async () => {
+	it("a saved sort orders the list for every user, and Manual gives the stored order back", async () => {
 		const saved = await req(`/api/content/projects/${SLUG}`, {
 			method: "PATCH",
 			headers: auth,
@@ -262,7 +262,7 @@ describe("a Project's Works", () => {
 
 		const reversed = [`Track C ${id}`, `Track B ${id}`, `Track A ${id}`];
 		expect(await orderOf(SLUG)).toEqual(reversed);
-		// A signed-out reader gets the same order: the setting belongs to the Project.
+		// A signed-out user gets the same order: the setting belongs to the Project.
 		expect(await orderOf(SLUG, strangerCookie)).toEqual(reversed);
 
 		const manual = await req(`/api/content/projects/${SLUG}`, {

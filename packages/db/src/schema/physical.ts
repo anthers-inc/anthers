@@ -8,7 +8,7 @@
  * tax, and whatever choices a buyer makes before paying. Those are facts about selling
  * rather than about the thing, which is why they sit beside the Work rather than on it:
  * a digital Work has no shipping price, and a column nobody fills is a column every
- * reader has to wonder about.
+ * user has to wonder about.
  *
  * ⚠️ **The price is the Work's, not this table's.** A physical good is priced by the same
  * access row a digital Work uses, so `resolvePurchase` needs no new branch to know what to

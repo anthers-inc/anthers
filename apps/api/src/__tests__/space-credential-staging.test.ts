@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The reader's side of a gated space, against the branch's real PDS — the lab's 05 and 11
+ * The user's side of a gated space, against the branch's real PDS — the lab's 05 and 11
  * driven through the code the app runs.
  *
  * What only this test can hold is the authority's own verdicts: the app perimeter refuses a
  * space whose allow-list does not name this client, a forged attestation is refused before the
  * managing app is asked, a non-member is refused through `checkUserAccess`, and a removed
  * member's next credential is refused while the one in hand still reads. It also proves the MAC
- * is real: the record the reader accepts is one whose signature and MAC the branch's PDS
+ * is real: the record the user accepts is one whose signature and MAC the branch's PDS
  * produced, not one this code made for itself.
  *
  * Skipped unless `SPACE_STAGING_PDS_URL` names a server:
@@ -125,7 +125,7 @@ const SAVED = {
 	ATPROTO_CLIENT_JWK: process.env.ATPROTO_CLIENT_JWK,
 };
 
-staged("the reader's gated space credential against a staging PDS", () => {
+staged("the user's gated space credential against a staging PDS", () => {
 	let server: ReturnType<typeof Bun.serve> | undefined;
 	let identity: ManagingAppIdentity;
 	let clientId = "";

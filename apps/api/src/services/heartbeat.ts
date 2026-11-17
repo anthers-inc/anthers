@@ -6,7 +6,7 @@
  * makes about itself shares a failure domain with that process. When App Platform is the
  * problem — a bad deploy, a wedged build, a load balancer refusing requests — the hub's own
  * `/health` is unreachable *with everything else on it*, and a status page whose outage row
- * comes from the thing that is down renders nothing precisely when a reader needs it to say
+ * comes from the thing that is down renders nothing precisely when a user needs it to say
  * something. So the check runs on the `anthers.social` droplet, a failure domain App
  * Platform does not share, and its verdict is carried *in* here rather than measured here.
  * If the hub is down, this page goes down with it — the honest cost of declining a
@@ -14,7 +14,7 @@
  * never dependent on the page.
  *
  * **The state model is staleness, deliberately.** The ingest accepts one thing — "I checked
- * at this time, this is what I saw" — and the *reader* of the state decides health from
+ * at this time, this is what I saw" — and the *user* of the state decides health from
  * freshness: a heartbeat inside the window is the outside view; one outside it (or none
  * ever) is *unknown*, never *operational*. A monitor that has silently died must not leave
  * a page saying everything is fine forever, which is the failure staleness exists to catch.

@@ -3,10 +3,10 @@
  * The signed-in app's phone navigation is a bottom tab bar, not a drawer.
  *
  * Library, Discovery and Settings were all behind the sidebar's chevron below `md`, so every
- * destination on the surface a reader uses most cost two taps. The bar puts them one tap away
+ * destination on the surface a user uses most cost two taps. The bar puts them one tap away
  * and leaves the drawer for filters and page sections. It is a phone-only third shape: the
  * desktop sidebar is unchanged, and the Studio keeps the drawer because its seven places are
- * a tool's nav rather than a reader's.
+ * a tool's nav rather than a user's.
  *
  * ⚠️ **The reserved-space assertion is the one that catches the invisible half.** A fixed bar
  * over a scroll area looks right until the last row of a page is underneath it; `main`'s

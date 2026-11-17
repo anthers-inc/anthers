@@ -4,21 +4,21 @@
  * a **Your Review** section and an **Other Reviews** section.
  *
  * ⭐ **Your Review is one card with three modes** (Parker, 2026-11-11): closed with the
- * reason the reader cannot review yet, open for a new review, or holding the one they
+ * reason the user cannot review yet, open for a new review, or holding the one they
  * wrote and can manage. The composer is the tallest, and the other two hold its height, so
  * a review landing replaces the composer in place rather than changing the tab's shape —
- * which also means the review a reader wrote is never shown twice, because Other Reviews
+ * which also means the review a user wrote is never shown twice, because Other Reviews
  * leaves their own words out.
  *
  * ⭐ **The section keeps itself current.** Eligibility is the server's answer on each read,
- * and the browser's attention engine tells this component when the reader starts earning
+ * and the browser's attention engine tells this component when the user starts earning
  * on this Work; that moment is flushed and the section re-read, so pressing play opens the
  * composer without a reload. A slow poll covers a change this tab did not witness.
  *
  * The composer stands open for a signed-in user, and the verdict is what makes it
  * postable: choosing one is a selection, not a reveal, and text is optional. A
  * verdict alone counts in both shares and stays out of the list below, where only
- * reviews with words appear — a list of bare verdicts is nothing a reader can read.
+ * reviews with words appear — a list of bare verdicts is nothing a user can read.
  *
  * ⭐ **The aggregate is a proportion and not an average**, because a review recommends a Work
  * or does not. `@anthers/shared/content` carries why, and it is the same reasoning that gives
@@ -101,7 +101,7 @@ const ELIGIBILITY_POLL_MS = 15_000;
  * The Your Review card's floor, and the reason it is a constant: the composer is the
  * tallest of the section's three modes, and the other two hold its height so the tab does
  * not move when a review lands. A long review body may still grow the card — clamping a
- * reader's own words to keep a layout fixed would hide them.
+ * user's own words to keep a layout fixed would hide them.
  */
 const YOUR_REVIEW_HEIGHT = "min-h-[11rem]";
 
@@ -220,7 +220,7 @@ export default function WorkReviews({
 	creatorId,
 }: {
 	workId: number;
-	/** The Work's creator, so the reader's own Work is known without another read. */
+	/** The Work's creator, so the user's own Work is known without another read. */
 	creatorId: number | null;
 }) {
 	const { isAuthenticated, user } = useAuth();
@@ -233,11 +233,11 @@ export default function WorkReviews({
 	const [versionFilter, setVersionFilter] = useState<VersionFilter>("all");
 	// Which scope the payload in `agg` actually answers. Held separately from the select so a
 	// figure is never labeled with a scope the server has not returned yet: the label follows
-	// the data, not the reader's next click.
+	// the data, not the user's next click.
 	const [appliedVersion, setAppliedVersion] = useState<VersionFilter>("all");
 	const [draftVerdict, setDraftVerdict] = useState<string | null>(null);
 	const [draftBody, setDraftBody] = useState("");
-	// An existing review is shown as the reader's own; the composer opens only when they
+	// An existing review is shown as the user's own; the composer opens only when they
 	// choose to change it, rather than standing open and inviting a second one.
 	const [editing, setEditing] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
@@ -363,7 +363,7 @@ export default function WorkReviews({
 			});
 			if (!res.ok) {
 				// The server's own refusal names the state (own Work, unlocked, unseen);
-				// a generic failure message would hide the one thing the reader can act on.
+				// a generic failure message would hide the one thing the user can act on.
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
 				setError(body?.error ?? "That review couldn't be saved. Please try again.");
 				return;
@@ -390,7 +390,7 @@ export default function WorkReviews({
 	// payload so the two controls can never disagree about what was fetched. Newest first
 	// breaks a helpfulness tie, recency being the only other thing a user can check.
 	//
-	// A reader's own review is deliberately not in this list: it is theirs to manage in
+	// A user's own review is deliberately not in this list: it is theirs to manage in
 	// Your Review above, and repeating it under Other Reviews would show one voice twice.
 	const shown = useMemo(() => {
 		if (!agg) return [];
@@ -418,7 +418,7 @@ export default function WorkReviews({
 	const hasReview = agg.userVerdict !== null;
 	const locked = !hasReview && agg.eligibility !== null && !agg.eligibility.canReview;
 	// The gate is the composer's; an existing review stays editable unless it was never
-	// this reader's to write (their own Work), where Remove is the way out.
+	// this user's to write (their own Work), where Remove is the way out.
 	const canEdit = agg.eligibility?.code !== "own_work";
 	// True only while the payload really is the current version's: a Work with a single
 	// version never offers the control, and the label follows the scope the server answered.
@@ -434,7 +434,7 @@ export default function WorkReviews({
 					{/* One card, one floor, three modes: closed with the reason, open for a new
 					    review, and holding the review already written. The composer is the
 					    tallest, so the other two borrow its height — a section that grew only
-					    when a review landed would move the tab under a reader's cursor. */}
+					    when a review landed would move the tab under a user's cursor. */}
 					<div
 						data-testid="your-review"
 						className={`flex ${YOUR_REVIEW_HEIGHT} flex-col rounded-box border border-base-300 p-3`}

@@ -5,7 +5,7 @@
  * 🚨 **This is the case both disposal doors used to get wrong.** The preservation program
  * promises that a Work anybody saved stays available, and `works.preserved` has been set on
  * a save since the program landed. The delete route did not ask it: it counted *completed
- * purchases*, so a released Public Access Work with a hundred readers on their shelves and
+ * purchases*, so a released Public Access Work with a hundred users on their shelves and
  * no buyer was flagged for preservation, purged, and deleted. Same rule as a purchase:
  * somebody chose to keep this, and the creator's decision ends its public circulation rather
  * than the bytes.

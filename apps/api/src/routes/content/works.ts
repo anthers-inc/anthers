@@ -278,7 +278,7 @@ const worksRoutes = new Hono()
 	 * each, and a tag nobody has used yet must be visibly new rather than absent.
 	 *
 	 * ⚠️ **The count is public Works only.** Drafts and private Works never qualify (they
-	 * are not part of the catalog a reader can browse), and Adult Works are left out for
+	 * are not part of the catalog a user can browse), and Adult Works are left out for
 	 * the same reason every listing leaves them out: an aggregate is still a statement
 	 * that Adult work exists, and the rung's invisibility is a query condition. Mature
 	 * Works count normally — Mature is a warning and a blur, never invisibility.
@@ -558,7 +558,7 @@ const worksRoutes = new Hono()
 	 * ⚠️ **The row stays and `allow` becomes false**, rather than the row being deleted: the
 	 * Access table is one row per rung, and the Studio's editor re-materializes every rung on
 	 * its next save. A deleted row would come back as the same row with the same false flag,
-	 * so the stored shape is the one every reader already understands.
+	 * so the stored shape is the one every user already understands.
 	 *
 	 * The rewrite goes through `normalizeAccessRows` — the one place the Badge-or-price rule
 	 * is enforced — rather than writing `works.access` directly.
@@ -599,7 +599,7 @@ const worksRoutes = new Hono()
 	})
 
 	/**
-	 * The card a shared link is unfurled with, for a reader who holds no session.
+	 * The card a shared link is unfurled with, for a user who holds no session.
 	 *
 	 * Separate from `GET /works/:id` on purpose: that route counts a view and serializes
 	 * the whole deliverable shape, while a crawler wants four fields and must leave no
@@ -613,7 +613,7 @@ const worksRoutes = new Hono()
 	})
 
 	/**
-	 * The card a shared post is unfurled with, for a reader who holds no session.
+	 * The card a shared post is unfurled with, for a user who holds no session.
 	 *
 	 * Separate from `GET /posts/:slug` for the same reason the Work card is: that route
 	 * counts a view, while a crawler wants a heading, a line of text and an image, and must
@@ -718,11 +718,11 @@ const worksRoutes = new Hono()
 			// always see their own media; `deliveryCtx(c)` with no share token is the
 			// owner's own session, exactly what this branch serves.
 			const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx(c));
-			// 🚨 **The owner's shape needs the counts the reader branches on.** This branch
+			// 🚨 **The owner's shape needs the counts the user branches on.** This branch
 			// does not go through `loadWorkBundles` or `serializeWorkForUser`, and
 			// `serializeWork` has never carried `pageCount`/`sectionCount` — so without
 			// these two queries a creator opening their own comic got `pageCount` undefined,
-			// read as 0, and rendered "This book has no pages yet" while every other reader
+			// read as 0, and rendered "This book has no pages yet" while every other user
 			// saw the book. An ebook's section count is the same defect in the other
 			// direction: 0 sends the owner to the page reader instead of the reflow one.
 			const [pageRow] = await db
@@ -769,7 +769,7 @@ const worksRoutes = new Hono()
 		const { sharedBy } = await requesterFor(c, work.id);
 		const ctx = await buildAccessContext(userId, { workIds: [work.id], sharedBy });
 		// A withdrawn Work can outlive its creator's account — see `works.creator_id`.
-		// The card's own facts (bio, follower count, whether this reader follows them)
+		// The card's own facts (bio, follower count, whether this user follows them)
 		// ride the creator so the Showings panel shows a person rather than a name
 		// (Parker, 2026-10-19); the follow lookup is the same EXISTS the profile route uses.
 		const [creator] = work.creatorId
@@ -804,7 +804,7 @@ const worksRoutes = new Hono()
 		// This endpoint does not go through `loadWorkBundles`, so the page count is counted
 		// here. It is the ONE page a user actually opens a book from, and leaving it on
 		// the parameter default would have reported every ebook as zero pages — with no
-		// error, and a user that renders nothing.
+		// error, and a reader that renders nothing.
 		const [pageRow] = await db
 			.select({ count: sql<number>`count(*)::int` })
 			.from(workPages)
@@ -1298,7 +1298,7 @@ export async function publicPostCard(param: string) {
 	let image: string | null = null;
 	if (embedded.length > 0) {
 		// `mentionableWorks` is the allow-list a title's mention already resolves through, so
-		// asking it which embedded Works this reader may see keeps the image and the name on
+		// asking it which embedded Works this user may see keeps the image and the name on
 		// one rule: a Work it filters out contributes no thumbnail either. It also resolves a
 		// stored key into a URL, so the preview never carries a relative storage path.
 		const mentionable = await mentionableWorks(embedded, null);

@@ -127,7 +127,7 @@ test("the menu is a button with a name, not a bare icon", async ({ page }) => {
 	await trigger.click();
 	await expect(trigger).toHaveAttribute("aria-expanded", "true");
 
-	// Escape is the keyboard exit the panel owes a reader.
+	// Escape is the keyboard exit the panel owes a user.
 	await page.keyboard.press("Escape");
 	await expect(trigger).toHaveAttribute("aria-expanded", "false");
 });

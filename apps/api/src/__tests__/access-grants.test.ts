@@ -45,7 +45,7 @@ function post(path: string, cookie: string, body?: unknown) {
 }
 
 describe("the access grant", () => {
-	it("verifies for the reader, Work and file it was minted for", () => {
+	it("verifies for the user, Work and file it was minted for", () => {
 		const now = new Date("2026-10-24T12:00:00.000Z");
 		const { token, payload } = mintAccessGrant({
 			workId: 7,
@@ -90,7 +90,7 @@ describe("the access grant", () => {
 		).toEqual({ ok: false, reason: "expired" });
 	});
 
-	it("refuses another reader, Work or file", () => {
+	it("refuses another user, Work or file", () => {
 		const { token } = mintAccessGrant({
 			workId: 7,
 			workUri: null,

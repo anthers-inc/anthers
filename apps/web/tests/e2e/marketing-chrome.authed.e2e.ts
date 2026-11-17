@@ -5,10 +5,10 @@
  * 🚨 **The bug this pins is a shell choice, so nothing else can see it.** A page in the
  * auth-switching group still renders, still answers its address, and still passes every
  * assertion about its own content — it merely arrives inside the signed-in layout, a
- * sidebar of Discovery, Library and Settings over a page the reader is consulting. That is
+ * sidebar of Discovery, Library and Settings over a page the user is consulting. That is
  * the frame for *using* Anthers; a policy, a fee calculator or a changelog has no use for
  * it. `/resources`, its calculators and `/faq` sat there until 2026-10-25, linked from a
- * marketing nav that put the same pages in front of a signed-in reader wearing the app's
+ * marketing nav that put the same pages in front of a signed-in user wearing the app's
  * chrome instead.
  *
  * ⚠️ **The first test is what keeps the rest honest.** These routes look right signed out
@@ -16,7 +16,7 @@
  * that stopped arriving signed in would leave every other assertion here passing on
  * nothing at all. The account button exists only behind a session, so it is the check.
  *
- * The list is the public half of `App.tsx`'s two route groups: the pages a reader consults
+ * The list is the public half of `App.tsx`'s two route groups: the pages a user consults
  * rather than uses. A page added to the shared group by mistake is what this file is for.
  */
 import { expect, type Page, test } from "@playwright/test";

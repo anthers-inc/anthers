@@ -195,8 +195,8 @@ export const works = pgTable(
 		// what someone wrote. Only music Works display them.
 		lyrics: text("lyrics").default(""),
 		// The alt text of the image an image Work **is**. Authored in the Studio beside the
-		// image; a reader who authored nothing gets the title, which is the fallback the
-		// reader always fell back to (see WorkLayout's image render). Stored for any type
+		// image; a user who authored nothing gets the title, which is the fallback the
+		// user always fell back to (see WorkLayout's image render). Stored for any type
 		// rather than only `image`, same reasoning as `lyrics` above: changing a Work's kind
 		// cannot silently destroy what someone wrote, and the column is inert everywhere else.
 		//
@@ -209,7 +209,7 @@ export const works = pgTable(
 		 * dimensions, turnaround, terms — in its creator's own words.
 		 *
 		 * 🚨 **Creator-only.** This is fulfillment material rather than a public description,
-		 * so the public serializer omits it; `description` is the blurb a reader sees.
+		 * so the public serializer omits it; `description` is the blurb a user sees.
 		 */
 		note: text("note").notNull().default(""),
 
@@ -278,7 +278,7 @@ export const works = pgTable(
 		/**
 		 * **The media version this Work currently serves is preserved.** Somebody other
 		 * than its creator has saved the Work to their Library, so Anthers keeps the bytes
-		 * it hands readers indefinitely rather than for a window.
+		 * it hands users indefinitely rather than for a window.
 		 *
 		 * 🚨 **The creator's own save does not set it.** `saveWork` lets a creator keep
 		 * their own unreleased Work, and a flag set by that save would make a draft
@@ -299,7 +299,7 @@ export const works = pgTable(
 		 * expires, and no allowance is charged for the bytes.
 		 *
 		 * 🚨 **A boolean, never a date.** A preservation timestamp would record only
-		 * when the decision was made, which is not interesting; what a reader wants to
+		 * when the decision was made, which is not interesting; what a user wants to
 		 * know is when the bytes they can still fetch were uploaded, and every version
 		 * already carries that. The Studio shows a `Preserved` tag on the version
 		 * record for exactly that reason.
@@ -456,7 +456,7 @@ export const works = pgTable(
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 		/**
 		 * When the CURRENT media version was added — the date the Work's page shows a
-		 * reader. Distinct from `createdAt` (the Work entered the Catalog) and `updatedAt`
+		 * user. Distinct from `createdAt` (the Work entered the Catalog) and `updatedAt`
 		 * (any edit at all): a Work can be edited for months without its media changing,
 		 * and a video can be replaced without the Work being new.
 		 *
@@ -467,7 +467,7 @@ export const works = pgTable(
 		/**
 		 * The name the creator gave the CURRENT media version, or an empty string when they
 		 * left it unnamed. Beside `versionAddedAt` because the two travel together: the
-		 * name is what a reader sees next to that date, and a replacement clears it as it
+		 * name is what a user sees next to that date, and a replacement clears it as it
 		 * moves the date. {@link workMediaVersions.versionLabel} carries it into history.
 		 */
 		versionLabel: text("version_label").notNull().default(""),
@@ -631,7 +631,7 @@ export const projects = pgTable(
 		// How the Project's two lists read, beside the stored drag order they never
 		// rewrite: `manual` is the drag order itself, the other modes are named reading
 		// orders the creator saved (2026-10-19). The API applies these when serializing
-		// members, so every reader gets the same order.
+		// members, so every user gets the same order.
 		worksSortMode: text("works_sort_mode").$type<ProjectSortMode>().notNull().default("manual"),
 		worksSortDirection: text("works_sort_direction")
 			.$type<ProjectSortDirection>()
@@ -855,7 +855,7 @@ export const workPages = pgTable(
 		 *
 		 * Detection writes proposals onto every page, so the presence of `panels` cannot
 		 * be the signal: a proposal is a guess, not an opt-in. This flag is the creator's
-		 * deliberate choice for this page, and it is what decides whether the reader may
+		 * deliberate choice for this page, and it is what decides whether the user may
 		 * use geometry here at all. A page that is off needs no confirmation and publishes
 		 * as a whole page; turning it on is what makes defining its panels a requirement.
 		 */
@@ -867,7 +867,7 @@ export const workPages = pgTable(
 		 * ⭐ **A column rather than a table**: the set is a handful of rectangles read
 		 * whole with the page, addressed by nothing else, carrying no storage key, and
 		 * replaced in one write. `auto` is true on a detected region and cleared by the
-		 * creator's own save; `guidedView` above decides whether a reader may use any.
+		 * creator's own save; `guidedView` above decides whether a user may use any.
 		 */
 		panels: jsonb("panels").$type<WorkPanelRegion[]>().notNull().default([]),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -958,7 +958,7 @@ export type WorkVersionMedia =
  * date each carried.
  *
  * ⭐ **The current media does not live here.** It stays in `works.source_key`, the source
- * set and the build tables, because every reader, pipeline and listing already reads it
+ * set and the build tables, because every user, pipeline and listing already reads it
  * there; a row in this table is always historical. That is what makes "only the current
  * version has transcodes" true without a second set of joins.
  *
@@ -973,7 +973,7 @@ export type WorkVersionMedia =
  * enumerated from `media` by `media-purge.ts` and the storage-usage job, so a Work delete,
  * an account delete and a creator's storage total all see them. Removing a version is the
  * one path that deletes these originals while the Work remains, and once a version is
- * public its removal is also an edit to the history a reader sees.
+ * public its removal is also an edit to the history a user sees.
  */
 // node — a Work's archived original media. Node-side, cascades with the Work. Its name and
 // date are public after release; its files never are.
@@ -1022,7 +1022,7 @@ export const workMediaVersions = pgTable(
  * and what HLS segments are to a video: the unit that can actually be checked.
  *
  * `href` is the container-relative path the resource had inside the EPUB, and it is the
- * identity a reader resolves chapter jumps through — the book interface's `resolveHref`
+ * identity a user resolves chapter jumps through — the book interface's `resolveHref`
  * keys on these, never on raw hrefs inside stored XHTML. `title` is the chapter name the
  * book's own navigation carried (EPUB 3 nav or EPUB 2 NCX), so the table of contents is
  * the book's, not ours to invent.
@@ -1145,14 +1145,14 @@ export const workSections = pgTable(
  * **container-relative path** a chapter references it by.
  *
  * 🚨 **This table is the ladder's inventory** (the design's *Parked at implementation*
- * reason for it): the reader's loader maps every asset reference a chapter makes to these
+ * reason for it): the user's loader maps every asset reference a chapter makes to these
  * rows and through them to `/works/:id/assets/:id` — a per-asset check — so a chapter can
  * fetch its own picture without ever being handed the container. `isOwnStorageRef`'s rule
  * applies upstream of every key here: these keys are minted by the ingest job itself, not
  * accepted from a client, which is what keeps a foreign reference from riding an upload.
  *
  * Re-resolution is by *path*, not baked URL: a re-ingest changes every storage key but the
- * container-relative paths — so the reader's map is rebuilt fresh from this table each
+ * container-relative paths — so the user's map is rebuilt fresh from this table each
  * session and no stored chapter ever carries a URL that can go stale.
  */
 // node — components an ebook Work's sections reference. Node media, cascades with the Work.
@@ -1369,8 +1369,8 @@ export const workSaves = pgTable(
 );
 
 /**
- * Where a reader got to in a book Work — one row per account and Work, carrying both
- * the resume pointer the readers open at and the 0–1 progress the Bookshelf's rail and
+ * Where a user got to in a book Work — one row per account and Work, carrying both
+ * the resume pointer the users open at and the 0–1 progress the Bookshelf's rail and
  * spine ribbons draw.
  *
  * 🚨 **Authoritative and unpublished** — arrangement three of *Where the Data Is Canonical*,
@@ -1384,8 +1384,8 @@ export const workSaves = pgTable(
  * `attention_events` and its rollup, not the user's own resume pointers.
  *
  * **Newest-write-wins, and that is the whole conflict rule.** Whatever a device pushed last
- * is where the reader is; a row exists to say "resume here", and resume means where the
- * reader most recently actually was — not the furthest they once got, which would refuse a
+ * is where the user is; a row exists to say "resume here", and resume means where the
+ * user most recently actually was — not the furthest they once got, which would refuse a
  * re-read by dragging the opening back to the high-water mark. (The further-along rule between
  * the page and panel keys on one device is the marker's local reconciliation and stays local;
  * the server never arbitrates modes.)
@@ -1411,8 +1411,8 @@ export const userReadingPositions = pgTable(
 		workId: integer("work_id")
 			.notNull()
 			.references(() => works.id, { onDelete: "cascade" }),
-		/** How far the reader got across the whole Work, 0–1 — the one currency every spine
-		 *  ribbon reads, whatever the reader's native shape (pages, CFI, scroll). The rail's
+		/** How far the user got across the whole Work, 0–1 — the one currency every spine
+		 *  ribbon reads, whatever the user's native shape (pages, CFI, scroll). The rail's
 		 *  membership test reads this column and nothing else. */
 		progress: real("progress").notNull(),
 		/** The type-specific resume pointer, opaque to the server — see the table's docblock. */

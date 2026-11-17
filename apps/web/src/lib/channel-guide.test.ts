@@ -5,7 +5,7 @@
 // agreeing on a real time), next is one rank toward the newest and ends there, and
 // autoplay is off until a user turns it on, then remembered on this device. The
 // orientation (2026-10-24) is a device preference too: columns by default, rows when
-// the reader flips it. The same localStorage stand-in `listen-positions.test.ts` runs
+// the user flips it. The same localStorage stand-in `listen-positions.test.ts` runs
 // against, because a throwing store must never take the guide down either.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Work } from "@anthers/web-shared/types";

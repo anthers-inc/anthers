@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The transactional outbox that carries a reader's state into their own space.
+ * The transactional outbox that carries a user's state into their own space.
  *
  * 🚨 **The rule this module exists to keep: a row clears only after a verified read-back.**
  * `putRecord` answering 200 says the server accepted the call. It does not say the record is
  * at the address and CID the caller was handed, that the repo's commit moved, or that the
  * oplog carries the operation. All four are checked here, and any disagreement leaves the row
  * and its payload in place for the next drain. A failure that retried forever would be bad; a
- * failure that quietly cleared would be the reader's Library silently not existing.
+ * failure that quietly cleared would be the user's Library silently not existing.
  *
  * ⭐ **Every row is absolute state rather than an increment**, which is what makes the retry
  * safe: the record carries the whole entry (its hidden flag, its order), so writing it again

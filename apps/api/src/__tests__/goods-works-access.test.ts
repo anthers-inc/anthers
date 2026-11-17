@@ -4,7 +4,7 @@
  *
  * Parker, 2026-10-09: the Public Access rules — how the money works, measuring
  * attention, sign-in restrictions — bind only **streamable** Works. A physical Work
- * delivers by being bought; it has no player, no reader, nothing the attention model
+ * delivers by being bought; it has no player, no user, nothing the attention model
  * can attribute, so the commons machinery must produce none of its postures on it:
  * no free-commons verdict, no signed-out login wall in front of a buyable page, no
  * purchase-forever lockout. What replaces it is stated in the resolver's own comment;

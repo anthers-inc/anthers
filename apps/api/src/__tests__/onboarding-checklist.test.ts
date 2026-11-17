@@ -5,7 +5,7 @@
  *
  * 🚨 **The rule this suite pins is that a row is answered by the thing itself.** The
  * subtlest case is `saved`: a creator's own Works join the Library at creation, so a
- * count of every Library row would check the reader's "save something" for an account
+ * count of every Library row would check the user's "save something" for an account
  * that has only ever made something. The exclusion is `workOwnedBy`, the same predicate
  * the Works page lists by.
  *
@@ -80,7 +80,7 @@ describe("the onboarding facts", () => {
 	});
 
 	// The subtle one. A creator's own Work arrives in their Library on creation, so the
-	// reader's row must not read that as a save.
+	// user's row must not read that as a save.
 	it("does not count a creator's own Work as something saved", async () => {
 		const creator = await createAccount(`selfsave${Date.now().toString(36)}`);
 		const own = await insertWork({ creatorId: creator.userId, type: "image" });
@@ -115,7 +115,7 @@ describe("the onboarding facts", () => {
 });
 
 describe("dismissing a checklist", () => {
-	it("records the reader's and leaves the creator's alone", async () => {
+	it("records the user's and leaves the creator's alone", async () => {
 		const reader = await createAccount(`dismiss${Date.now().toString(36)}`);
 		const res = await dismiss({ checklist: "reader" }, reader.cookie);
 		expect(res.status).toBe(200);

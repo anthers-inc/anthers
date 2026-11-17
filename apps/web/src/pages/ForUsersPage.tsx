@@ -59,7 +59,7 @@ const ctaMotion = "transition duration-200 motion-safe:hover:-translate-y-0.5";
 
 export default function ForUsersPage() {
 	usePageTitle("For Users");
-	// The seeded ladder, for the prices this page quotes the reader: the entry price and
+	// The seeded ladder, for the prices this page quotes the user: the entry price and
 	// the pool a fan's support sets. Constants stand in until the fetch lands; what is
 	// quoted is a claim about the ladder, so the rows own it.
 	const { rungs, publicAccessPrice } = useAnthersLadder();

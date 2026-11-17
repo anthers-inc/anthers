@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Anthers' signature over the two access artifacts: the receipt in the reader's space and
+ * Anthers' signature over the two access artifacts: the receipt in the user's space and
  * the short-lived grant delivery checks.
  *
  * ⭐ **One issuer, one key, one published JWKS.** A receipt says a transaction happened and a

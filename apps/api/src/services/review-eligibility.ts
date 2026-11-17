@@ -4,7 +4,7 @@
  *
  * A review is an opinion about something you have actually met, left for the people
  * deciding whether to meet it. The composer therefore answers before it is used rather
- * than after a failed post: the three refusals below are states of the reader, not
+ * than after a failed post: the three refusals below are states of the user, not
  * errors to discover by pressing a button.
  *
  * ⭐ **Consumption is the evidence each medium already produces.** A video or a track
@@ -12,7 +12,7 @@
  * and the person is present. `attention_events` records both, under the one policy in
  * `@anthers/shared/attention`, so "has consumed this Work" is a row on the Work rather
  * than a second definition invented here. One second is enough: the review is the
- * reader's verdict, and a minutes-long floor would be a different policy with no
+ * user's verdict, and a minutes-long floor would be a different policy with no
  * source behind it.
  *
  * ⚠️ **Raw attention rows prune after `ATTENTION_RAW_RETENTION_DAYS`**, so this evidence
@@ -32,14 +32,14 @@ import { isWorkOwner } from "./work-owners.js";
 
 type WorkRow = typeof works.$inferSelect;
 
-/** Why a reader cannot write a review. */
+/** Why a user cannot write a review. */
 export type ReviewRefusalCode = "own_work" | "pre_release" | "unreleased" | "locked" | "unconsumed";
 
 /** The composer's answer: open, or the one reason it is not. */
 export interface ReviewEligibility {
 	canReview: boolean;
 	code: ReviewRefusalCode | null;
-	/** Written for the reader and rendered verbatim; null when `canReview`. */
+	/** Written for the user and rendered verbatim; null when `canReview`. */
 	reason: string | null;
 }
 
@@ -54,12 +54,12 @@ const REASONS: Record<ReviewRefusalCode, string> = {
 };
 
 /**
- * What would open the composer, said in the reader's own terms.
+ * What would open the composer, said in the user's own terms.
  *
- * ⭐ **The refusal names the evidence the reader can actually produce.** A streamable Work
+ * ⭐ **The refusal names the evidence the user can actually produce.** A streamable Work
  * is experienced in place, so watching or listening is the thing to do; a downloadable-only
  * Work is taken as a file, so its refusal speaks about downloading rather than about time
- * on a page the reader may only ever have seen as a storefront.
+ * on a page the user may only ever have seen as a storefront.
  */
 function unconsumedReason(work: WorkRow): string {
 	if (work.streamEnabled) return "You can review this Work once you've experienced some of it.";
@@ -72,7 +72,7 @@ function refusal(code: ReviewRefusalCode, reason = REASONS[code]): ReviewEligibi
 }
 
 /**
- * Whether this reader has spent any recorded time with this Work.
+ * Whether this user has spent any recorded time with this Work.
  *
  * `via_share_link` rows are excluded on purpose: they are attributed to the SHARER on
  * behalf of a stranger, so they say nothing about what the sharer themselves watched.
@@ -94,7 +94,7 @@ async function hasConsumed(userId: number, workId: number): Promise<boolean> {
 }
 
 /**
- * The full answer for one reader and one Work.
+ * The full answer for one user and one Work.
  *
  * The order matters: authorship is stated before access (the owner always has access),
  * and an unreleased Work is stated before its gate (there is nothing to unlock yet).

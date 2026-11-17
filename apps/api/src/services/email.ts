@@ -229,7 +229,7 @@ export const EMAIL_LINK_COLOR = BRAND;
  * Exported for the one outside sender that renders through it too: the notification
  * digest (`notifications.ts`), so a notification is recognizably Anthers mail.
  * Operational alerts stay bare `<p>` HTML on purpose — operator mail, not
- * reader-facing brand.
+ * user-facing brand.
  */
 export function shell(heading: string, bodyHtml: string): string {
 	// Decor as inline data URIs — no hosted image, so the mail makes no off-origin
@@ -254,7 +254,7 @@ export function shell(heading: string, bodyHtml: string): string {
 		<!--
 		Light-authored, and not available in dark. The palette below is the light theme's
 		hexes baked at authoring time; a client that re-themes the message for a dark
-		(reader's) setting produces the one combination this mail can neither predict nor
+		(user's) setting produces the one combination this mail can neither predict nor
 		test against — darkened cream reads as murky olive, and the dark-green ink is
 		auto-lightened into washed-out contrast. Every component color is declared
 		inline, so nothing here actually benefits from a client's dark translation:
@@ -773,7 +773,7 @@ export function terminalSecondLegLine(): string {
  * `ComplainantNotice` above states.
  */
 export interface ReceiptLine {
-	/** What the reader bought, as the receipt snapshot recorded it at sale time. */
+	/** What the user bought, as the receipt snapshot recorded it at sale time. */
 	description: string;
 	/** The line's money figure, as a dollar string ("9.99"); a refund's lines are negative. */
 	amount: string;
@@ -899,7 +899,7 @@ export function renderCreatorSaleReceiptEmail(args: {
 		html: shell(
 			"A sale on your work",
 			`${receiptMeta(args.date, args.reference)}
-			<p style="margin:0 0 14px;">A reader bought something of yours. Here's what sold:</p>
+			<p style="margin:0 0 14px;">A user bought something of yours. Here's what sold:</p>
 			${itemsTable({ lines: args.lines, totalLabel: "Your earnings, after the card fee", total: args.earnings })}
 			<p style="margin:0 0 18px;">After the card processor's at-cost fee, <strong style="color:${MEADOW.ink};">${usd(args.earnings)}</strong> is on its way to your connected account.</p>
 			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because receipt emails are on for your creator account; you can turn them off in your Studio settings. Anthers keeps none of the sale's price.</p>`,
@@ -1001,7 +1001,7 @@ export async function sendCreatorRefundReceiptEmail(args: {
  * A creator's payout receipt: the fourteen-day hold ended and their settled earnings
  * moved into their connected account's balance.
  *
- * The distinction the copy lives on (`31.02 Payouts` carries it for the reader, and the
+ * The distinction the copy lives on (`31.02 Payouts` carries it for the user, and the
  * transfer job is where it happens): the *transfer* into their processor balance is ours
  * and automatic, and the *payout* from balance to bank is the creator's own choice with
  * its own fee. This email marks the first, so it says the money is in their balance and

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The reader-state cutover: rows into the space, the flag that makes it canonical, and the
+ * The user-state cutover: rows into the space, the flag that makes it canonical, and the
  * rollback that makes the database canonical again.
  *
  * The test reads the records out of the fake PDS rather than trusting the migration's counts,
- * because the promise is that the reader's Library, progress and save are in the space at the
+ * because the promise is that the user's Library, progress and save are in the space at the
  * same values. It also proves the two directions the flag owns: a forward write queues only on
  * `space`, and a failed read-back refuses the flip.
  */
@@ -35,7 +35,7 @@ async function rowsFor(userId: number) {
 	return db.select().from(spaceOutbox).where(eq(spaceOutbox.userId, userId));
 }
 
-describe("the reader-state cutover", () => {
+describe("the user-state cutover", () => {
 	it("backfills the Library, progress and save, then flips to the space", async () => {
 		const ctx = await spaceContext();
 		const saved = await saveWork(ctx.userId, ctx.workId);

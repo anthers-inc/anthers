@@ -164,7 +164,7 @@ export default function WorkPage() {
 	});
 
 	const [work, setWork] = useState<WorkDetail | null>(null);
-	// The versions a reader may see: names and dates of those added after release. Loaded
+	// The versions a user may see: names and dates of those added after release. Loaded
 	// beside the Work rather than inside its payload, because only this page renders them
 	// and the history is its own public read.
 	const versionHistory = useWorkVersionHistory(work?.id, work?.versionAddedAt);
@@ -387,7 +387,7 @@ export default function WorkPage() {
 	 * Who sent them, and the way to an account of their own — on the media rather than under
 	 * it (2026-10-23). It rides every branch that draws the media area, not only the playing
 	 * one: a Work still processing or not yet carrying bytes is exactly where somebody who
-	 * followed a link has the least idea what they are looking at. A signed-in reader is never
+	 * followed a link has the least idea what they are looking at. A signed-in user is never
 	 * told they were shared to, because the token changes nothing for them.
 	 */
 	const shareNotice =

@@ -9,7 +9,7 @@
  * worker's reminder sweep and the admin home's deadline list render **one** answer to "what is
  * owed, and when" rather than each carrying its own.
  *
- * **One service module is the only user of its records' deadline shape** — the same invariant the
+ * **One service module is the only reader of its records' deadline shape** — the same invariant the
  * other services hold for their writes. `routes/admin.ts`'s deadlines endpoint and the
  * `deadline-reminders` job both call `gatherDeadlines`; nothing else re-derives a due date or
  * decides which rows count, because two derivations of "what is a deadline" is how one of them

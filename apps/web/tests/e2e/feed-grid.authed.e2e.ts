@@ -46,7 +46,7 @@ const BODY_TEXT =
 const tileRoot = (overlay: Locator): Locator => overlay.locator("xpath=..");
 
 /**
- * The reader's orientation card floats over the grid's lower-right corner, and a
+ * The user's orientation card floats over the grid's lower-right corner, and a
  * tile can sit under it — the video fixture did on CI's wider window, where a press
  * on the scrub strip landed on the card instead. Collapsing is a per-page state
  * rather than a dismissal, so it gets the card out of the way without changing the

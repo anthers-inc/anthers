@@ -127,7 +127,7 @@ describe("a user's filter by kind of content", () => {
 			madeWorkIds.push(row.id);
 			workByTitle.set(f.title, { id: row.id, publicId: row.publicId, slug: row.slug });
 		}
-		// A post embedding both a Work the reader will hide and one they will not, with
+		// A post embedding both a Work the user will hide and one they will not, with
 		// neutral link text so an assertion on the embedded card cannot be satisfied or
 		// defeated by the body's own words.
 		const cartoon = workByTitle.get(CARTOON)!;
@@ -249,7 +249,7 @@ describe("a user's filter by kind of content", () => {
 
 		it("drops a hidden Work's card from a post that embeds it", async () => {
 			// A post body's Work link renders as a card, and that card is a listing like
-			// any other: the hidden Work is absent while the Work the reader kept is shown.
+			// any other: the hidden Work is absent while the Work the user kept is shown.
 			const detail = await postDetail(userCookie);
 			const titles = detail.post.linkedWorks.map((row) => row.work.title);
 			expect(titles).toContain(GENTLE);
@@ -260,7 +260,7 @@ describe("a user's filter by kind of content", () => {
 			);
 		});
 
-		it("keeps both embedded cards for a reader who did not ask", async () => {
+		it("keeps both embedded cards for a user who did not ask", async () => {
 			const detail = await postDetail();
 			expect(detail.post.linkedWorks.map((row) => row.work.title)).toEqual([CARTOON, GENTLE]);
 		});

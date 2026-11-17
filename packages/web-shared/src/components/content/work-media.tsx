@@ -163,7 +163,7 @@ export interface WorkTypeFactsCopy {
 const PLATFORM_POINTS: Record<string, string> = {
 	windows:
 		"Windows — a .zip or an installer (.exe or .msi); Windows may warn about an unsigned build's publisher.",
-	mac: "macOS — a .zip or a .dmg; an unsigned app needs the reader to allow it in Gatekeeper the first time.",
+	mac: "macOS — a .zip or a .dmg; an unsigned app needs the user to allow it in Gatekeeper the first time.",
 	linux: "Linux — a .zip, .AppImage, .deb or a tarball, whichever suits what you ship.",
 	android:
 		"Android — an .apk, which people install after allowing installs from outside the Play Store.",
@@ -223,7 +223,7 @@ const WORK_TYPE_FACTS: Record<ContentType, (platform: string | undefined) => Wor
 		heading: "What Anthers accepts for an image",
 		points: [
 			"Format — any image format a browser displays.",
-			"A set — the image you pick here is the first; the Work's page adds more, in the order a reader sees them. The first is what listings show.",
+			"A set — the image you pick here is the first; the Work's page adds more, in the order a user sees them. The first is what listings show.",
 			`Size — up to ${fileSizeSentence(fileRules("image").maxSize)} per image.`,
 		],
 	}),

@@ -159,7 +159,7 @@ describe("coming into the program", () => {
 	});
 
 	it("a space projecting a Library applies the same keeper rule as a save", async () => {
-		// The third door into the Library. A rebuild from a reader's space is still somebody
+		// The third door into the Library. A rebuild from a user's space is still somebody
 		// keeping a Work, and the creator projecting their own entry is still not.
 		const own = await insertWork({ creatorId, type: "game", title: "ProjectedOwn" });
 		workIds.push(own.id);

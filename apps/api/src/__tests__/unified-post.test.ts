@@ -270,7 +270,7 @@ describe("Catalog vertical slice", () => {
 		await db.update(posts).set({ atprotoUri: uri }).where(sql`slug = ${announcementSlug}`);
 		try {
 			// A stranger's read, not the creator's — the record is public no matter who
-			// reads, so the announcement's reader carries the same link (the widening
+			// reads, so the announcement's user carries the same link (the widening
 			// task, 2026-10-10).
 			const detail = await req(`/api/content/posts/${announcementSlug}`, {
 				headers: { Cookie: otherCookie },

@@ -8,7 +8,7 @@
  * listener rather than only the settings card.
  *
  * 🚨 **This is the only spec file that touches the account's shortcut map.** The authed
- * project shares one fixture account, so a reader in another file races a rebind here
+ * project shares one fixture account, so a user in another file races a rebind here
  * exactly as a second writer would; `serial` orders this file's own tests and nothing
  * more. Every spec that presses or asserts a stored chord belongs here, including the
  * sidebar's toggle, rather than in the spec that owns the surface the chord moves.
@@ -204,7 +204,7 @@ test("a rebound Search shortcut is the one the bar listens for", async ({ page }
  * The sidebar's toggle is the card's third page shortcut, and it is the one whose binding
  * the *layout* reads rather than a component in the header — so this is the test that
  * proves a stored chord reaches the listener, not only the card that wrote it. It lives
- * here because this file owns the account's shortcut map; a reader in another file races
+ * here because this file owns the account's shortcut map; a user in another file races
  * a rebind in flight just as surely as a second writer would.
  */
 test("a rebound sidebar shortcut is the one the layout listens for", async ({ page }) => {

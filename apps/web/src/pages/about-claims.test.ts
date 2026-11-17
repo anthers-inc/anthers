@@ -118,7 +118,7 @@ const PREMATURE: { claim: string; phrases: string[]; sayableWhen: string }[] = [
 		claim: "Anthers holds federal tax-exempt status",
 		// The Form 1023-EZ was filed on 2026-11-02, so *applied for* and *pending* became
 		// sayable that day and the phrases carrying them left this row in the same commit.
-		// What remains forbidden is the status itself, in every construction a reader would
+		// What remains forbidden is the status itself, in every construction a user would
 		// take as present-tense — including "pending 501(c)(3)", which names the status
 		// rather than the application. The positive assertion below pins the filed-and-
 		// pending framing, so re-tensing breaks two tests rather than none.

@@ -3,7 +3,7 @@
  * Reading positions — the only writer of `user_reading_positions`.
  *
  * Single-writer in the same family as `services/library.ts` and `services/moderation.ts`:
- * the rows are the continue-reading rail's data and the readers' cross-device resume, and
+ * the rows are the continue-reading rail's data and the users' cross-device resume, and
  * a second writer would let a position disagree with itself. Each row is the user's own
  * state about where they stopped in one Work.
  *
@@ -11,11 +11,11 @@
  * table's reasoning is on the table itself in `packages/db/src/schema/content.ts` — no
  * record ever publishes it, no `atproto_uri` column joins it, and nothing OUTSIDE the
  * user's own reads consumes it: no creator surface, no analytics, no rollup. A future
- * feature that wants "where readers stopped" must arrive as a decision on that page and a
- * deliberate widening of this module, never as a second reader of the table.
+ * feature that wants "where users stopped" must arrive as a decision on that page and a
+ * deliberate widening of this module, never as a second user of the table.
  *
  * **Newest-write-wins** is the whole conflict rule the module implements: an upsert
- * replaces the row whole, so the last device to push is where the reader is. The
+ * replaces the row whole, so the last device to push is where the user is. The
  * further-along reconciliation between a Work's page and panel keys is a client-side,
  * same-device concern and deliberately does not exist here — the server would otherwise
  * refuse a re-read by dragging the opening back to the high-water mark.
@@ -53,7 +53,7 @@ export async function listPositions(userId: number): Promise<ReadingPosition[]> 
  * route carries the access check, because whether the caller may reach the Work is a
  * request-shape question, not a storage question.
  *
- * Progress is clamped into 0–1 rather than validated into a refusal: a reader whose
+ * Progress is clamped into 0–1 rather than validated into a refusal: a user whose
  * fraction landed a hair outside (a reflow renderer's 1.0000001) should write a clamped
  * position, not bounce.
  */

@@ -123,7 +123,7 @@ describe("reading a record's address", () => {
 
 describe("the record link people see", () => {
 	it("points the record's own address at Taproot, the public record explorer", () => {
-		// The one form a reader can follow (Parker, 2026-10-10): the raw `at://` value is
+		// The one form a user can follow (Parker, 2026-10-10): the raw `at://` value is
 		// what Anthers wrote for its own reading, not what a person clicks.
 		expect(recordUrlFor(URI)).toBe(`https://atproto.at/uri/${URI}`);
 	});

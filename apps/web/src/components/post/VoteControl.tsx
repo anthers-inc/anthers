@@ -38,7 +38,7 @@ import { useEffect, useRef, useState } from "react";
  * Don't Recommend shape its page's vote row shares, filled (`btn-primary` up,
  * `btn-error` down) when chosen, each carrying its own count — the numbers on the
  * buttons (Parker, 2026-10-16, second note), YouTube's shape with the down side
- * filled in too. The single-subject read serves both counts to every reader now,
+ * filled in too. The single-subject read serves both counts to every user now,
  * revising the one-number display of 2026-09-04 for this surface; the net still sorts
  * the thread and still reads out on the screen reader.
  */
@@ -90,7 +90,7 @@ export default function VoteControl({
 	/** Subtle (comments, review helpfulness) or boxed (a post page's vote row). */
 	variant?: VoteVariant;
 	/**
-	 * Why this reader may not vote at all, shown on hover and to a screen reader.
+	 * Why this user may not vote at all, shown on hover and to a screen reader.
 	 * Undefined is the ordinary case; set it rather than hiding the control, so the
 	 * reason has somewhere to be said.
 	 */

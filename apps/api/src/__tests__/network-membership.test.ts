@@ -2,7 +2,7 @@
 /**
  * The Network tab's widened membership (Parker, 2026-10-19).
  *
- * The default network is who the reader follows, who they support with a Badge, and
+ * The default network is who the user follows, who they support with a Badge, and
  * who made the posts and Works they saved or bought. `network_source` narrows it to
  * one of those routes in, with `following` preserving the old feed exactly.
  *
@@ -175,7 +175,7 @@ describe("the Network tab's default membership", () => {
 });
 
 describe("the Network membership filter", () => {
-	it("keeps following-only to the creators the reader follows", async () => {
+	it("keeps following-only to the creators the user follows", async () => {
 		const seen = titles((await feed(viewerCookie, "?network_source=following")).entries);
 		expect(seen).toContain(FOLLOWED);
 		for (const title of [SUBSCRIBED, SAVED_POST, SAVED_WORK, PURCHASED, STRANGER]) {
@@ -183,7 +183,7 @@ describe("the Network membership filter", () => {
 		}
 	});
 
-	it("keeps support-only to the creators whose Badge the reader holds", async () => {
+	it("keeps support-only to the creators whose Badge the user holds", async () => {
 		const seen = titles((await feed(viewerCookie, "?network_source=subscribed")).entries);
 		expect(seen).toContain(SUBSCRIBED);
 		for (const title of [FOLLOWED, SAVED_POST, SAVED_WORK, PURCHASED, STRANGER]) {
@@ -201,7 +201,7 @@ describe("the Network membership filter", () => {
 		}
 	});
 
-	it("drops a creator the reader blocks from every view", async () => {
+	it("drops a creator the user blocks from every view", async () => {
 		const handle = (
 			await db.select({ handle: users.atprotoHandle }).from(users).where(eq(users.id, savedId))
 		)[0]!.handle!;

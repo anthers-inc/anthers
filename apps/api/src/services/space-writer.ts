@@ -10,7 +10,7 @@
  * path is the same code with the hosted resolver.
  *
  * 🚨 **Only the hosted route exists today, and that is a statement about the deployment
- * rather than about the design.** A reader whose identity lives elsewhere writes their space
+ * rather than about the design.** A user whose identity lives elsewhere writes their space
  * with their own OAuth grant, whose scope has to include `space:org.anthers.userSpace…`; the
  * app's OAuth and its published permission sets are switched together with the production
  * image, deliberately, because today's authorization server rejects the `space` resource.

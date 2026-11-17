@@ -7,7 +7,7 @@
  *   follow them, and carries the edge count plus the vocabulary the shared Types and
  *   Tags filters read. No page calls it today; the graph waits on a platform with
  *   enough content for the edges to say something, and the route keeps its own shape.
- *   A reader who follows nobody gets the stated follower-count fallback rather than an
+ *   A user who follows nobody gets the stated follower-count fallback rather than an
  *   empty page with no explanation.
  * - `GET /me/feed?scope=global` is the stream Discovery shows: the same stream and card
  *   fields as the Network feed, widened to every creator. The default feed stays the
@@ -128,7 +128,7 @@ describe("Discovery's graph and ticker routes", () => {
 
 		// A physical good's cover reaches `works.thumbnail` as a bare storage key (the
 		// listing writer's legacy shape). Both the release tile and a post that embeds the
-		// Work must hand a reader the resolved address, not a relative path.
+		// Work must hand a user the resolved address, not a relative path.
 		keyThumbKey = `creators/${unfollowedCreatorId}/thumbnails/unknown/key-thumb-${run}.png`;
 		const keyed = await insertWork({
 			creatorId: unfollowedCreatorId,

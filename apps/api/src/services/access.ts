@@ -449,7 +449,7 @@ export function unlockRoute(
  * the Public Access meter (an account's allowance is not a property of a Work — see the
  * wiki's *What Is Free, and What Is Gated*) and the Library (a Library entry is curation, and
  * `resolveAccess` must never learn to read `user_library_items`).
- * The reader-facing statement of this branch's rule is the wiki's
+ * The user-facing statement of this branch's rule is the wiki's
  * *What Is Free, and What Is Gated* § Goods Are Never Locked, and the verdicts are
  * pinned in `goods-works-access.test.ts`.
  */
@@ -532,7 +532,7 @@ function resolveAccessBase(work: AccessibleWork, ctx: AccessContext): AccessResu
 	}
 
 	// ── Goods works: the deliverable is the goods themselves ────────────────────
-	// A physical Work has no stream, no reader, no frame — nothing the attention
+	// A physical Work has no stream, no user, no frame — nothing the attention
 	// model can attribute, so the commons machinery that the rest of the resolver
 	// serves does not apply to it (Parker, 2026-10-09: "Public Access rules — how
 	// the money works, measuring attention, sign-in restrictions — are only

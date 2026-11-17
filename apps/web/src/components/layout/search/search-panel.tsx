@@ -8,7 +8,7 @@
  * the visible half of `Tab` cycling: pressing Tab changes the same state a click does.
  *
  * Stage one and stage two are labeled sections rather than one merged list, because the
- * distinction is real to the reader: a name match is a stronger answer than a mention in
+ * distinction is real to the user: a name match is a stronger answer than a mention in
  * a description, and the second section may still be arriving while the first is usable.
  */
 

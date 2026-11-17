@@ -38,7 +38,7 @@ test("a released comic's set offers a new version and no in-place edits", async 
 	await page.getByRole("button", { name: "Edit Media" }).click();
 	await page.getByRole("tab", { name: "Source" }).click();
 
-	// The set is the version its readers have: the rows stand, and their edit controls do not.
+	// The set is the version its users have: the rows stand, and their edit controls do not.
 	await expect(page.getByRole("button", { name: "Add a New Version…" })).toBeVisible();
 	await expect(page.getByRole("button", { name: /^Remove / })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: /^Move .* earlier$/ })).toHaveCount(0);
@@ -70,7 +70,7 @@ test("the Versions section lists a previous version with its original", async ({
 	// The current media and the version it replaced, written where the replacement would
 	// have written them; no encoder runs in a browser session. The Work is marked released
 	// and back-dated so the version added afterwards is public history rather than the
-	// baseline — the reader surface this walk is here to see.
+	// baseline — the user surface this walk is here to see.
 	const current = `creators/${row?.creatorId}/videos/current-walk.mp4`;
 	await db
 		.update(works)
@@ -105,15 +105,15 @@ test("the Versions section lists a previous version with its original", async ({
 		await expect(page.getByText("Current version", { exact: true })).toBeVisible();
 		await expect(page.getByLabel("Name this version")).toHaveValue("1.1");
 		// The list names the version by its date, its file count and its size; the
-		// filenames are the reader's business only on the current version.
+		// filenames are the user's business only on the current version.
 		await expect(page.getByText("1 file · 4.2 KB")).toBeVisible();
 		await expect(page.getByRole("button", { name: "Download original" })).toBeVisible();
 		await expect(page.getByRole("button", { name: "Remove", exact: true })).toBeVisible();
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${SHOTS}/17-versions-tab.png`, fullPage: true });
 
-		// The reader's page, in its own signed-out context: the creator's own view is the
-		// editor, whose byline is not the reader's. The byline states the count and the
+		// The user's page, in its own signed-out context: the creator's own view is the
+		// editor, whose byline is not the user's. The byline states the count and the
 		// newest version, and the Details tab lists every version added after release.
 		const reader = await browser.newContext();
 		try {

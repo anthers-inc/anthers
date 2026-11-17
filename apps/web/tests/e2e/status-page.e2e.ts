@@ -42,11 +42,11 @@ test.describe("the status page", () => {
 		await expect(page.getByText("Past Incidents")).toBeVisible();
 	});
 
-	test("hands readers to the standalone page served off the platform", async ({ page }) => {
+	test("hands users to the standalone page served off the platform", async ({ page }) => {
 		await page.goto(PAGE);
 		// The standalone page at status.anthers.org (served by the droplet the outside
 		// check runs on) is the answer to this page dying with the platform; the lede
-		// hands readers there in one sentence, without an apology for it.
+		// hands users there in one sentence, without an apology for it.
 		await expect(page.locator('a[href="https://status.anthers.org"]')).toBeVisible();
 		await expect(page.getByText("served by the same platform")).toHaveCount(0);
 	});

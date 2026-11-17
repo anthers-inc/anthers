@@ -2447,7 +2447,7 @@ const paymentRoutes = new Hono()
 		 *
 		 * 🚨 The per-item money is the resolution's PINNED line share, not a recomputation —
 		 * `calculateFees` on a $1 item would attach a fresh $0.30 to it, so the rows would
-		 * sum to far more than was charged and every downstream user — earnings, the tax
+		 * sum to far more than was charged and every downstream reader — earnings, the tax
 		 * remittance record, refunds — would be wrong. The fee is split **pro-rata by item
 		 * value across every line of the charge** (Works and Badges alike), with the last
 		 * row absorbing the rounding remainder so the parts sum to the whole exactly.
@@ -2876,7 +2876,7 @@ const paymentRoutes = new Hono()
 			// the wrong moment, which is why this sits after the loop above.
 			await sendPurchaseReceipts(completedRows);
 
-			// What the reader's own space is owed: one signed receipt per purchase row.
+			// What the user's own space is owed: one signed receipt per purchase row.
 			// 🚨 Read back by intent rather than reused from `completedRows`, because a
 			// redelivery has no newly-completed rows — that is what makes an insert that
 			// failed last time get repaired this time. The insert is idempotent either way.

@@ -6,7 +6,7 @@
 // There are two layers, and the page is honest about both. The **raw release notes** —
 // every change between two tags, one line each — are published unedited as the GitHub
 // release on each version's tag, and this page links to them beside every release. This
-// page is the **reader-facing pass** over that list: the changes grouped into arcs
+// page is the **user-facing pass** over that list: the changes grouped into arcs
 // rather than commits, filtered of what a user cannot see (test machinery,
 // contributor tooling, internal rewrites), and translated into what a user or a
 // creator can now do that they could not before. No entry here adds anything the
@@ -97,9 +97,9 @@ export function groupedByMonth(
 }
 
 /**
- * A release's date as a reader reads it — `October 23, 2026`. Built from the ISO parts
+ * A release's date as a user reads it — `October 23, 2026`. Built from the ISO parts
  * rather than `Date`, because `new Date("2026-10-23")` is UTC midnight and a negative
- * offset would print the day before in some readers' timezones.
+ * offset would print the day before in some users' timezones.
  */
 export function fullDate(iso: string): string {
 	const [year, month, day] = iso.split("-").map(Number);

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Reading-position persistence, tested against a localStorage stand-in. The rules being
-// pinned are the shelf-facing ones: page numbers survive round trips, a store the reader
-// never wrote reads as page one for the reader but as *no marker* for the shelf, panel
+// pinned are the shelf-facing ones: page numbers survive round trips, a store the user
+// never wrote reads as page one for the user but as *no marker* for the shelf, panel
 // and page modes reconcile by taking the further-along page, and the whole suite stays
 // total when the store itself throws (Safari private mode — the same stand-in
 // `listen-positions.test.ts` runs against).
@@ -65,7 +65,7 @@ describe("page positions", () => {
 		expect(readPage(7)).toBe(12);
 	});
 
-	test("a never-written Work reads as no marker, and page one for the reader", () => {
+	test("a never-written Work reads as no marker, and page one for the user", () => {
 		expect(readStoredPage(1)).toBeNull();
 		expect(readPage(1)).toBe(1);
 	});
@@ -153,12 +153,12 @@ describe("scroll positions", () => {
 
 	test("a sliver of scroll still records locally — depth is depth", () => {
 		// The floor decides whether the row ever hears about it; the device never lies
-		// about where the reader got, even if the row is not told.
+		// about where the user got, even if the row is not told.
 		writeScroll(2, 0.004);
 		expect(readScrollFraction(2)).toBe(0.004);
 	});
 
-	test("a store the reader never wrote reads as never opened", () => {
+	test("a store the user never wrote reads as never opened", () => {
 		expect(readScrollFraction(3)).toBeNull();
 	});
 });

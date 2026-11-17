@@ -92,7 +92,7 @@ describe("GET /posts/:slug/card", () => {
 
 			// The title resolves the mention to the Work's current name, exactly as the page's does.
 			expect(preview.title).toBe("New from @The Quiet Year");
-			// Markdown never reaches a preview: the body ships as the text a reader would see.
+			// Markdown never reaches a preview: the body ships as the text a user would see.
 			expect(preview.description).toStartWith("A short note about the garden.");
 			expect(preview.image).toBe(THUMBNAIL);
 		},

@@ -196,8 +196,8 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			// already visible to you as a count. Ids only — no names, no emails.
 			followers: followerRows.map((f) => ({ followerId: f.followerId, createdAt: f.createdAt })),
 			blocked: blockRows.map((b) => ({ blockedId: b.blockedId, createdAt: b.createdAt })),
-			// The two hide lists: what this reader asked Discovery not to show. Ids only,
-			// beside `blocked` because they are the same kind of row — the reader's own
+			// The two hide lists: what this user asked Discovery not to show. Ids only,
+			// beside `blocked` because they are the same kind of row — the user's own
 			// decision about somebody else's account or work.
 			hiddenWorks: hiddenWorkRows.map((h) => ({ workId: h.workId, createdAt: h.createdAt })),
 			hiddenCreators: hiddenCreatorRows.map((h) => ({

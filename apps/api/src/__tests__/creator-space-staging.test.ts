@@ -10,7 +10,7 @@
  * tests the mapping; this tests the addresses.
  *
  * ⚠️ **The read of the manifest as an entitled outsider is deliberately not here.** That needs
- * an HTTP message signature and an `atproto-space-want-mac` key share, which is the reader-side
+ * an HTTP message signature and an `atproto-space-want-mac` key share, which is the user-side
  * credential client rather than the gate. The lab's 05, 07 and 11 hold that path; this holds the
  * creator's copy and the refusal.
  *

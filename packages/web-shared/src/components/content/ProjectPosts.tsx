@@ -17,10 +17,10 @@
  * on its own endpoint rather than with any form: a creator arranging twelve devlogs
  * should not lose them to a failed save on an unrelated field.
  *
- * **A Project's saved sort governs what readers see** (Parker, 2026-10-19, replacing the
+ * **A Project's saved sort governs what users see** (Parker, 2026-10-19, replacing the
  * works list's 2026-10-17 "Manual is the only real order" ruling, binding here):
  * changing a dropdown saves the mode on the Project row, and the API serializes the
- * members in that order for every reader. Manual remains the default and the stored drag
+ * members in that order for every user. Manual remains the default and the stored drag
  * order; a non-manual mode never writes it. A post has no original release date, so this
  * list's dated key is its publish date — the field the Project serializer carries for a
  * post — and the Release Date mode reads that. The picker it opens is multi-select.
