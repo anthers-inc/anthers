@@ -27,7 +27,7 @@ export interface ExtractFrameData {
 }
 
 /** A single-frame extraction reads only up to the paused moment and encodes one frame —
- *  seconds, not minutes. The timeout exists so a wedged reader (an unreachable storage
+ *  seconds, not minutes. The timeout exists so a wedged user (an unreachable storage
  *  address) fails the job instead of holding the worker. */
 export const FRAME_EXTRACT_TIMEOUT_MS = 20_000;
 

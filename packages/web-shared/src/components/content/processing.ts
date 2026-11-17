@@ -59,7 +59,7 @@ export function processingStatusText(job: Work["transcoding"]): string | null {
 	if (job.status === "pending") return queuePositionText(job);
 	if (job.status !== "processing") return null;
 	// A playable row stops being a progress figure the moment it plays (publish-early,
-	// 2026-10-18): "Processing 40%" names a state the reader has already outrun, and the
+	// 2026-10-18): "Processing 40%" names a state the user has already outrun, and the
 	// number has nowhere further to go that matters to them. "Playable" is the state.
 	if (job.playableAt != null) return "Playable";
 	return `Processing ${job.progress ?? 0}%`;

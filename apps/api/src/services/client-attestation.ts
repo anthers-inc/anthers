@@ -2,10 +2,10 @@
 /**
  * The app's own key: the P-256 private half an OAuth client mints client attestations with.
  *
- * ⭐ **The key is the app's identity to a space authority, not a reader's secret.** A space
+ * ⭐ **The key is the app's identity to a space authority, not a user's secret.** A space
  * names Anthers in its `appAccess` allow-list by the client id; the authority verifies the
  * attestation against the JWKS published in this app's client metadata and hands the verified
- * id to `checkUserAccess`. The reader's own credential is a different key, generated per read
+ * id to `checkUserAccess`. The user's own credential is a different key, generated per read
  * and never stored — see `space-credential.ts`.
  *
  * 🚨 **The private half lives in Bitwarden Secrets and reaches this process as an environment

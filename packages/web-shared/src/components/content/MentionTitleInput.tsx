@@ -2,7 +2,7 @@
 /**
  * The title editor with a `@` picker for the author's Works.
  *
- * ⭐ **The input shows the title a reader would see; the stored title is the link form.**
+ * ⭐ **The input shows the title a user would see; the stored title is the link form.**
  * Typing `@` offers the author's released Works; picking one inserts `@Curtains` and
  * remembers which Work that run of characters names. The canonical markdown
  * (`[@Curtains](/works/curtains-534000269)`) is what `onChange` emits and what the post

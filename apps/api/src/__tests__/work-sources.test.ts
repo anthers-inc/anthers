@@ -20,7 +20,7 @@
  * - **A foreign file is refused**, the storage-ownership rule (`isOwnStorageRef`) applied
  *   like the assets route applies it — a set row signs its key for the Work's owner, so a
  *   row naming another creator's private original would hand it over.
- * - **A released Work's set is closed** — the pages its readers hold came from it, and
+ * - **A released Work's set is closed** — the pages its users hold came from it, and
  *   mutating under them makes the release gate's answer a lie.
  * - **A stale order is refused wholesale**, because a partial renumber is the one way the
  *   dense-position invariant can be broken by a valid request.
@@ -174,7 +174,7 @@ describe("a paged Work's source set", () => {
 		const files = await readSet(work.id);
 		expect(files.map((f) => f.position)).toEqual([0, 1, 2]);
 		expect(files.map((f) => f.filename)).toEqual([expect.any(String), "second.png", "third.png"]);
-		// The legacy column follows the set's newest file, so the old readers never read
+		// The legacy column follows the set's newest file, so the old users never read
 		// a paged Work's column as empty while its set stands.
 		const [row] = await db
 			.select({ sourceKey: works.sourceKey })

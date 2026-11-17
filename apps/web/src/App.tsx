@@ -205,7 +205,7 @@ export default function App() {
 				the botanical decor never remounts as you navigate between them.
 
 				⭐ **The group is the whole public face, not just the pages with a pitch on
-				them.** A signed-in reader following a footer link to the FAQ, the terms or the
+				them.** A signed-in user following a footer link to the FAQ, the terms or the
 				release notes is reading the site as a site, and the signed-in chrome — a
 				sidebar of Discovery, Library and Settings above a page about how we compute a
 				fee — is the wrong frame for that. The shared group below carries the
@@ -242,7 +242,7 @@ export default function App() {
 						<Route path="/resources" element={<ResourcesPage />} />
 					</Route>
 					{/* Resource tools / calculators — public, and work logged-in or out. They are
-					marketing pages rather than app surfaces: a reader arrives here from
+					marketing pages rather than app surfaces: a user arrives here from
 					/resources, the marketing footer or a link somebody sent, and what they are
 					reading has nothing to do with the account they happen to hold. */}
 					<Route path="/resources/pay-comparison" element={<CreatorPayComparisonPage />} />
@@ -272,10 +272,10 @@ export default function App() {
 					<Route path="/resources/creator-financials" element={<CreatorFinancialsPage />} />
 
 					{/* ── The public reference surface ──────────────────────────────────────
-					    Everything a reader consults rather than uses: the FAQ, the policies,
+					    Everything a user consults rather than uses: the FAQ, the policies,
 					    the pages a parent or a reporter arrives on, the release notes and the
 					    status page. All of them are linked from the marketing footer, so a
-					    signed-in reader who follows one is reading the site's public face —
+					    signed-in user who follows one is reading the site's public face —
 					    and the signed-in sidebar has nothing to offer a policy or a changelog.
 					    They belong in this shell for the same reason the marketing pages do.
 					*/}
@@ -352,7 +352,7 @@ export default function App() {
 					redirect rather than a 404 because the site is publicly reachable and the
 					tab was where most accounts landed: a bookmark or an old footer link keeps
 					working, and it lands on the recipe the address actually named rather than
-					on whatever this reader's account happens to open on.
+					on whatever this user's account happens to open on.
 				*/}
 					<Route
 						path="/network"
@@ -456,12 +456,12 @@ export default function App() {
 				mounted when navigating across the whole public surface.
 
 				⚠️ **This group is content and the account's own flows, and nothing else.**
-				A Work, a post and a creator's page are things a signed-in reader acts on
+				A Work, a post and a creator's page are things a signed-in user acts on
 				(save, comment, follow), so the app's sidebar belongs beside them. Everything
-				public that a reader merely consults — the FAQ, the policies, the resources,
+				public that a user merely consults — the FAQ, the policies, the resources,
 				the release notes, the status page — lives in the marketing group above,
 				because a sidebar of app destinations is no use beside a policy document. A
-				page added here gets the signed-in chrome for signed-in readers; if that is
+				page added here gets the signed-in chrome for signed-in users; if that is
 				not what it wants, it is in the wrong group.
 			*/}
 				<Route element={<PublicShell />}>

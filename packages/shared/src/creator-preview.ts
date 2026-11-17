@@ -10,7 +10,7 @@
  *
  * A card names the person and stops. What the profile lists — the Library, the posts, the
  * counts — is the page's business, and a preview that tried to summarize somebody's body
- * of work would be describing it to a reader who has not met it.
+ * of work would be describing it to a user who has not met it.
  */
 
 /** The sentence a profile with no bio still says. */

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Noun Project blocklist's starter term list — one list, two readers:
+ * The Noun Project blocklist's starter term list — one list, two users:
  *
  * - `scripts/seed-noun-blocklist.ts` writes it into production's `noun_blocklist`
  *   (the local control the search routes read),
@@ -9,7 +9,7 @@
  *
  * The terms and their reasons are the seed document's
  * (`wiki-anthers/Internal Wiki/Transient/Noun Project Blocklist Seed.md`); this file is
- * the machine-readable half, and a term added here is added to BOTH by the two readers.
+ * the machine-readable half, and a term added here is added to BOTH by the two users.
  * Removals never happen here in bulk — remove an entry in production through the admin
  * door and re-run the sync, which reconciles by pushing the missing and never
  * overwriting what is already there.

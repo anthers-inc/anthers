@@ -4,7 +4,7 @@
  *
  * The two failures that matter are the ones a URL string cannot show: a hostname that
  * resolves to a private address, and a redirect that moves a checked request somewhere
- * unchecked. The literal cases are here too, because they are the ones a reader will try.
+ * unchecked. The literal cases are here too, because they are the ones a user will try.
  */
 import { describe, expect, it } from "bun:test";
 import { assertPublicUrl, fetchPublicUrl, isPrivateAddress } from "../lib/atproto-fetch";

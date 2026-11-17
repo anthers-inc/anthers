@@ -10,7 +10,7 @@
  * the protocol path end to end: identity document, service auth, route, answer.
  *
  * ⚠️ **The read of the manifest is not here, deliberately.** A space read needs an HTTP message
- * signature and an `atproto-space-want-mac` key share, which is the reader-side credential
+ * signature and an `atproto-space-want-mac` key share, which is the user-side credential
  * client rather than the gate. The lab's 07 and 11 already hold that path; this holds the
  * question the authority asks of us.
  *
@@ -134,7 +134,7 @@ staged("the managing-app gate against a staging PDS", () => {
 		expect(document.service[0]?.serviceEndpoint).toBe(`http://localhost:${server?.port}`);
 	});
 
-	it("issues a credential to a reader it authorizes and refuses one it does not", async () => {
+	it("issues a credential to a user it authorizes and refuses one it does not", async () => {
 		const creator = await account("gc");
 		const reader = await account("gr");
 		const outsider = await account("go");

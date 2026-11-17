@@ -4,7 +4,7 @@
  *
  * The protocol half is `space-credential-staging.test.ts`. What this holds is the shell: an
  * unauthenticated caller is refused, a Work with no manifest is a 404 rather than a read, and
- * a reader the gate does not admit is refused **before** any delegation or credential request
+ * a user the gate does not admit is refused **before** any delegation or credential request
  * — which is the property that keeps a refusal from costing a network round trip and keeps the
  * route from being an oracle.
  */
@@ -66,7 +66,7 @@ describe("GET /works/:id/manifest", () => {
 		expect((await response.json()).code).toBe("manifest_missing");
 	});
 
-	it("refuses a reader the gate does not admit, before any space call", async () => {
+	it("refuses a user the gate does not admit, before any space call", async () => {
 		const work = await insertWork({
 			creatorId,
 			type: "text",

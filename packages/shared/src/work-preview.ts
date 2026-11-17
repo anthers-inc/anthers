@@ -10,7 +10,7 @@
  * site card, never its own title, blurb or thumbnail.** The thumbnail itself is required
  * to be free of Mature and Adult content (`THUMBNAIL_RULE` in `content.ts`), so the
  * thumbnail is not the risk the rating is — the title and the blurb are the creator's own
- * words about the work, written for a reader who asked to meet it.
+ * words about the work, written for a user who asked to meet it.
  *
  * `general` is the only rung that travels, and everything else — `mature`, `adult`,
  * `unrated`, a value this build has never heard of — fails closed. That is the same

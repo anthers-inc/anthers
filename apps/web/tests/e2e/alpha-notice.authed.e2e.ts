@@ -6,7 +6,7 @@
  * The things pinned here are the decisions the notice makes. It is the topmost strip of the
  * shell and its sentence is centered; closing it is what puts it away and no timer does, so
  * the reload is the assertion that matters; and it belongs to the app chrome, so a signed-in
- * reader consulting a marketing page — which wears the marketing shell even behind a session
+ * user consulting a marketing page — which wears the marketing shell even behind a session
  * (`marketing-chrome.authed.e2e.ts`) — does not meet it, and neither does anybody signed out.
  *
  * ⚠️ **The remembered answer is per browser** (`lib/alpha-notice.ts`), so each Playwright
@@ -17,9 +17,7 @@ import { expect, test } from "@playwright/test";
 
 const NOTICE = /Anthers is in alpha, and might still have some rough edges\./;
 
-test("a signed-in reader meets the alpha notice, and closing it keeps it away", async ({
-	page,
-}) => {
+test("a signed-in user meets the alpha notice, and closing it keeps it away", async ({ page }) => {
 	await page.goto("/discovery");
 
 	const notice = page.getByText(NOTICE);
@@ -40,13 +38,13 @@ test("a signed-in reader meets the alpha notice, and closing it keeps it away", 
 	await page.getByRole("button", { name: "Dismiss the alpha notice" }).click();
 	await expect(page.getByText(NOTICE)).toHaveCount(0);
 
-	// No timer, no route change, no second visit: the reader's close is the whole rule.
+	// No timer, no route change, no second visit: the user's close is the whole rule.
 	await page.reload();
 	await expect(page.getByText(NOTICE)).toHaveCount(0);
 	await expect(page.getByRole("button", { name: "Dismiss the alpha notice" })).toHaveCount(0);
 });
 
-test("the notice is the app chrome's, so marketing pages and signed-out readers do not carry it", async ({
+test("the notice is the app chrome's, so marketing pages and signed-out users do not carry it", async ({
 	page,
 	browser,
 }) => {

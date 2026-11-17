@@ -2,9 +2,9 @@
 /**
  * Discovery's recipe, as three named stages rather than a sentence about a query.
  *
- * The page promises that a reader can always see how the corpus is being drawn and
+ * The page promises that a user can always see how the corpus is being drawn and
  * change it, and the promise is architectural: **candidates** decide what is eligible,
- * **signals** decide what is scored and how, and **mix** decides the order the reader
+ * **signals** decide what is scored and how, and **mix** decides the order the user
  * actually sees. The page and the route read this module, so the recipe the bar renders
  * and the ranking the route ran are the same object rather than two descriptions that
  * drift.
@@ -41,7 +41,7 @@ export const DISCOVERY_STAGE_LABELS: Record<DiscoveryStage, string> = {
 };
 
 /**
- * Why a feed entry is in front of the reader, as the API states it. `discovery` is
+ * Why a feed entry is in front of the user, as the API states it. `discovery` is
  * unique to Discovery's whole-site stream; the rest are the network feed's own routes in.
  */
 export const FEED_ENTRY_SOURCES = ["own", "following", "subscribed", "saved", "discovery"] as const;
@@ -62,7 +62,7 @@ export interface RecipeStage {
 	label: string;
 }
 
-/** A recipe the page can render and a reader can hold the ranking against. */
+/** A recipe the page can render and a user can hold the ranking against. */
 export interface DiscoveryRecipe {
 	/** One sentence saying what the recipe does. */
 	sentence: string;
@@ -79,7 +79,7 @@ export type RecipeWindow = (typeof RECIPE_WINDOWS)[number];
  *
  * ⭐ **The membership narrowing is a value here rather than a second control.** The
  * network is a union of follows, Badge subscriptions and the creators behind saved or
- * purchased work, and a reader who wants one route in is answering the same question
+ * purchased work, and a user who wants one route in is answering the same question
  * this stage asks — *whose work am I drawing from* — so `following`, `subscribed` and
  * `saved` are candidates rather than a filter applied after them.
  *
@@ -98,7 +98,7 @@ export const RECIPE_CANDIDATES = [
 ] as const;
 export type RecipeCandidates = (typeof RECIPE_CANDIDATES)[number];
 
-/** What each candidate value is called, wherever a reader sees it. */
+/** What each candidate value is called, wherever a user sees it. */
 export const RECIPE_CANDIDATE_LABELS: Record<RecipeCandidates, string> = {
 	everyone: "Everyone",
 	network: "Everyone in your network",
@@ -178,7 +178,7 @@ export function recipeQuery(
  * in the page.
  *
  * ⚠️ **Color is an accent, never the only signal.** Two chips can share a color, and a
- * reader who cannot distinguish them still has the label and the pressed state; the
+ * user who cannot distinguish them still has the label and the pressed state; the
  * swatch picker marks its selection with a check as well as a ring.
  */
 export const RECIPE_COLORS = [
@@ -210,7 +210,7 @@ export function asRecipeColor(value: string | null | undefined): RecipeColor {
 		: "moss";
 }
 
-/** One named recipe a reader can select in a click. */
+/** One named recipe a user can select in a click. */
 export interface RecipePreset {
 	/** Stable identity, for the chip's key. Saved recipes carry their own ids. */
 	id: string;
@@ -222,7 +222,7 @@ export interface RecipePreset {
 }
 
 /**
- * One recipe a reader saved, as the account stores it.
+ * One recipe a user saved, as the account stores it.
  *
  * ⭐ **The recipe is stored whole rather than as a preset id**, the same rule
  * `homeRecipe` follows: a saved chip is a name and a color over three values, so it keeps
@@ -245,7 +245,7 @@ export const SAVED_RECIPE_LABEL_MAX = 40;
 
 /**
  * The color a newly saved recipe opens with: the first one this account has not used, so
- * a second chip is visibly a second thing, and a reader who has used the whole palette
+ * a second chip is visibly a second thing, and a user who has used the whole palette
  * cycles rather than getting a duplicate everywhere.
  */
 export function nextRecipeColor(saved: readonly SavedRecipe[]): RecipeColor {
@@ -257,7 +257,7 @@ export function nextRecipeColor(saved: readonly SavedRecipe[]): RecipeColor {
 }
 
 /**
- * What a newly saved recipe is called before the reader renames it.
+ * What a newly saved recipe is called before the user renames it.
  *
  * The candidate stage is the part that makes one recipe different from another at a
  * glance, so the suggestion names that rather than the whole sentence. It is a
@@ -279,17 +279,17 @@ export function sameRecipe(a: Recipe, b: Recipe): boolean {
 	return a.window === b.window && a.candidates === b.candidates && a.mix === b.mix;
 }
 
-/** One chip in the row: a built-in preset, or a recipe this reader saved. */
+/** One chip in the row: a built-in preset, or a recipe this user saved. */
 export interface RecipeChoice extends RecipePreset {
 	/** The saved recipe this choice is, or null for a built-in. */
 	savedId: string | null;
 }
 
 /**
- * The chips, in the order they render: the site's presets first, then the reader's own in
+ * The chips, in the order they render: the site's presets first, then the user's own in
  * the order they arranged them.
  *
- * Built-ins ahead of saved recipes is the one ordering the reader cannot change, because
+ * Built-ins ahead of saved recipes is the one ordering the user cannot change, because
  * they are different kinds of thing — the site's named recipes come first and stay put.
  * The saved ones are moveable among themselves, which is what "which of them renders
  * first" means.
@@ -327,7 +327,7 @@ export function choiceForRecipe(
  * The payload is untrusted at the type boundary and may predate this build. A row missing
  * an id, a name or a recipe is left out rather than rendered as a half-chip; a stage or a
  * color this build does not recognize degrades to its default instead, so a row written by
- * a later build still opens the reader's own name and recipe rather than vanishing.
+ * a later build still opens the user's own name and recipe rather than vanishing.
  * Duplicate ids keep the first: two chips with one key are one chip React cannot tell from
  * the other.
  */
@@ -370,17 +370,17 @@ export function savedRecipesFrom(
  * The presets a new account starts with, in the order the chips render.
  *
  * ⭐ **My Network first, because it is where a new account opens.** The merged Discovery
- * was the Network tab's home as much as its own, and a reader whose only interest is the
+ * was the Network tab's home as much as its own, and a user whose only interest is the
  * chronological feed should land on it without learning the recipe system first — the
  * preset is that page, named.
  *
  * ⭐ **Across Anthers is the opening recipe Discovery always had.** It stays second
- * rather than first: the whole site's newest entries are what a reader goes looking for,
+ * rather than first: the whole site's newest entries are what a user goes looking for,
  * and the feed is what they come back for.
  *
- * ⭐ **These are the site's own recipes, and they stay code.** A reader's saved recipes are
+ * ⭐ **These are the site's own recipes, and they stay code.** A user's saved recipes are
  * rows on their account (`savedRecipes`), rendered after these; a built-in is not
- * renameable, deletable or reorderable because it is not the reader's to change. Both
+ * renameable, deletable or reorderable because it is not the user's to change. Both
  * kinds reach the chips through `recipeChoices`, so the row does not care which is which.
  */
 export const RECIPE_PRESETS: readonly RecipePreset[] = [
@@ -400,7 +400,7 @@ export const RECIPE_PRESETS: readonly RecipePreset[] = [
 	},
 ];
 
-/** The recipe a reader lands on when their account has never chosen one. */
+/** The recipe a user lands on when their account has never chosen one. */
 export const DEFAULT_RECIPE: Recipe = RECIPE_PRESETS[0].recipe;
 
 /**
@@ -408,7 +408,7 @@ export const DEFAULT_RECIPE: Recipe = RECIPE_PRESETS[0].recipe;
  * names.
  *
  * Exact rather than nearest: a chip that lit up for a recipe it would not reproduce is
- * a chip that lies about what a click does. A reader who has narrowed My Network to
+ * a chip that lies about what a click does. A user who has narrowed My Network to
  * "Creators you follow" is on no preset, and the chips say so.
  */
 export function presetFor(recipe: Recipe): RecipePreset | null {
@@ -428,7 +428,7 @@ export function presetFor(recipe: Recipe): RecipePreset | null {
  * Null — an account that never answered — reads as `DEFAULT_RECIPE`, so the merged tab
  * opens on My Network without a row being written. A stage this build does not know
  * degrades to that stage's opening value rather than to the whole default: a future
- * build's new candidate name still opens the reader's saved window and mix.
+ * build's new candidate name still opens the user's saved window and mix.
  */
 export function recipeFrom(
 	raw:
@@ -461,7 +461,7 @@ export function recipePath(recipe: Recipe): string {
 	return `/discovery?${params.toString()}`;
 }
 
-/** Which corpus the Graph draws from: the reader's network, or everyone. */
+/** Which corpus the Graph draws from: the user's network, or everyone. */
 export type GraphBasis = "network" | "followers";
 
 const SOURCE_LABELS: Record<FeedEntrySource, string> = {
@@ -475,7 +475,7 @@ const SOURCE_LABELS: Record<FeedEntrySource, string> = {
 /**
  * The reason an entry is present, from the `source` the feed states for it. Every one
  * of these is a candidate-stage reason: none of them is a score, which is exactly the
- * distinction a reader is owed when a card says why it is there.
+ * distinction a user is owed when a card says why it is there.
  */
 export function reasonForSource(source: FeedEntrySource): DiscoveryReason {
 	return { stage: "candidates", code: source, label: SOURCE_LABELS[source] };
@@ -538,7 +538,7 @@ export function interleaveByAuthor<T>(
 }
 
 /**
- * Discovery's recipe: the newest Works and Posts from the candidate set the reader
+ * Discovery's recipe: the newest Works and Posts from the candidate set the user
  * chose, over the window they chose, ordered the way they chose. The window is applied
  * by the page over the page the route returned, so it is stated here rather than
  * pretending the server filtered it; the candidate and mix stages are the route's own.
@@ -595,11 +595,11 @@ export function streamRecipe(input: {
 
 /**
  * The Graph's recipe. With a network to trace, the candidate set is the creators the
- * people the reader follows follow, and the one signal is how many of those people
+ * people the user follows follow, and the one signal is how many of those people
  * share the follow; with nobody followed, the route says so and falls back to follower
  * count, which this builder renders as the recipe it actually ran.
  *
- * No page draws this today: the graph ranks nearly everyone a reader can already see
+ * No page draws this today: the graph ranks nearly everyone a user can already see
  * until there is enough content for the edges to say something. It stays beside
  * `GET /me/graph` for the page that returns to it.
  */

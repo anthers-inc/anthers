@@ -237,7 +237,7 @@ export default function OwnerWorkEditor({
 	// ── The fields, as the row holds them ──
 	const [title, setTitle] = useState(work.title ?? "");
 	const [description, setDescription] = useState(work.description ?? "");
-	// The Work's tags — the same list the Details tab shows a reader, edited in place.
+	// The Work's tags — the same list the Details tab shows a user, edited in place.
 	const [tags, setTags] = useState<string[]>(work.tags ?? []);
 	// A piece of writing's body, written in place in the typography it is read in. The
 	// plain-text shadow goes with it, as it does from the post editor, because search
@@ -248,7 +248,7 @@ export default function OwnerWorkEditor({
 	// A song's words, edited on the panel the user reads them on.
 	const [lyrics, setLyrics] = useState(work.lyrics ?? "");
 	// The image an image Work is — the description its picture announces to a screen
-	// reader. Empty keeps the reader's title fallback, and sending it unconditionally on
+	// user. Empty keeps the user's title fallback, and sending it unconditionally on
 	// an image Work (including empty) means clearing it is a real edit, as with lyrics.
 	const [imageAlt, setImageAlt] = useState(work.imageAlt ?? "");
 	const [thumbnailUrl, setThumbnailUrl] = useState(work.thumbnail ?? "");
@@ -1618,7 +1618,7 @@ export default function OwnerWorkEditor({
 
 	/**
 	 * The kind, edited from the chip in the byline strip (Parker, 2026-10-29): the chip a
-	 * reader reads is the door a draft's kind is changed through, the same shape as the
+	 * user reads is the door a draft's kind is changed through, the same shape as the
 	 * access chip beside it, and no separate Kind control stands anywhere else.
 	 */
 	const kindField = (
@@ -2178,7 +2178,7 @@ export default function OwnerWorkEditor({
 					</div>
 				}
 				title={titleSection.editing ? titleEdit : titleRead}
-				// The kind chip is the same chip a reader sees, with its own pencil: only a
+				// The kind chip is the same chip a user sees, with its own pencil: only a
 				// draft that could still be another kind gets the door (Parker, 2026-10-29).
 				kindChip={kindChangeable ? kindField : undefined}
 				chips={accessField}
@@ -2497,7 +2497,7 @@ export function AccessSummary({
  * The creator's kind chip (Parker, 2026-10-29): the Work's kind as the byline strip's
  * chip, and for a draft that could still be another kind the chip is the door — it
  * opens the kinds in a dialog, asked for deliberately. It replaced the Kind select: the
- * chip a reader reads is the control a creator changes it with, the same shape as the
+ * chip a user reads is the control a creator changes it with, the same shape as the
  * access chip beside it.
  */
 function OwnerKindChipEditor({
@@ -2512,7 +2512,7 @@ function OwnerKindChipEditor({
 	const [error, setError] = useState<string | null>(null);
 	const dialog = useRef<HTMLDialogElement>(null);
 	// The chip's look comes from the same catalog the user page's badge does, so the
-	// creator's chip and the reader's cannot drift apart.
+	// creator's chip and the user's cannot drift apart.
 	const { label, Icon, color } = contentTypeMeta(type);
 
 	useEffect(() => {

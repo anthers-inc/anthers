@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * A hoverable (i) with a small overlay — the explainer beside a figure or heading a
- * reader could otherwise only wonder about (what the sales tax was derived from, what
+ * user could otherwise only wonder about (what the sales tax was derived from, what
  * a creator's "receives" figure lost to the card fee, what a visibility word means).
  * Lives in the shared package beside the other UI primitives so the Studio's sections
  * share it rather than copying it.

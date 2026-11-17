@@ -7,8 +7,8 @@
  * Accepting adds the second view; declining leaves the Badge where it was. A publisher
  * request is the same shape — the target has to agree before the billing and art home moves.
  *
- * ⭐ **This is a creator surface, not a reader one.** It belongs beside the creator's own
- * earnings and publishing settings, not on the account settings page a reader uses to manage
+ * ⭐ **This is a creator surface, not a user one.** It belongs beside the creator's own
+ * earnings and publishing settings, not on the account settings page a user uses to manage
  * what they give. The Collabs tab is also where Collab Work invitations will land.
  */
 import { amountLabel } from "@anthers/shared/constants";

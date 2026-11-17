@@ -52,7 +52,7 @@ export interface User {
 	emailVerified: boolean | null;
 	themePreference: Theme | null;
 	/**
-	 * The tab a signed-in session opens on. Null = never answered, and the reader
+	 * The tab a signed-in session opens on. Null = never answered, and the user
 	 * treats that as **Discovery** — the column never bakes the default in, so a later
 	 * default change would not have to rewrite rows.
 	 */
@@ -78,7 +78,7 @@ export interface User {
 	}> | null;
 	/**
 	 * Whether audio playback rides the persistent footer bar rather than a Work page's
-	 * own player. Null = never answered, and the reader treats that as **on** — the
+	 * own player. Null = never answered, and the user treats that as **on** — the
 	 * column never bakes the default in, so a later default change would not have to
 	 * rewrite rows.
 	 */
@@ -90,7 +90,7 @@ export interface User {
 	 */
 	keyboardShortcuts: Record<string, string> | null;
 	/**
-	 * When the reader's onboarding checklist was put away, or null while it still stands.
+	 * When the user's onboarding checklist was put away, or null while it still stands.
 	 * A timestamp rather than a flag because the act is one-way; the client only asks
 	 * whether one exists.
 	 */

@@ -237,7 +237,7 @@ export default function VideoPlayer({
 					urls[t.id] = URL.createObjectURL(new Blob([await res.text()], { type: "text/vtt" }));
 				} catch {
 					// A track that cannot be read is skipped: the menu loses a language, it
-					// does not error the page — the degraded case the reader still controls.
+					// does not error the page — the degraded case the user still controls.
 				}
 			}
 			if (!dead) setTrackBlobUrls(urls);

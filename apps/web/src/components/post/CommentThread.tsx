@@ -404,7 +404,7 @@ function CommentRow({ comment, isReply }: { comment: Comment; isReply: boolean }
 				{/* The body's text in full, with the returns the person typed kept — a break
 				    is what they pressed, and no spacing is added between paragraphs (replies
 				    render here too, through the same row). A spoiler in the text is hidden
-				    behind its own reveal until the reader asks for it. */}
+				    behind its own reveal until the user asks for it. */}
 				<p className="text-sm mt-1 break-words whitespace-pre-line">
 					<SpoilerText text={comment.body} />
 				</p>

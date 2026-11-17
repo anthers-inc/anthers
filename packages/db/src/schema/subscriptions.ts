@@ -232,14 +232,14 @@ export const userPreferences = pgTable("user_preferences", {
 	homeDefaultTab: text("home_default_tab"),
 
 	/**
-	 * The Discovery recipe the account last chose — the three values a reader sets, stored
+	 * The Discovery recipe the account last chose — the three values a user sets, stored
 	 * whole rather than as a preset id, so a shared link, a preset that is later deleted
 	 * and a hand-built combination all survive (Parker, 2026-10-24).
 	 *
 	 * ⭐ **The account is the default layer and the URL is the override.** A bare
 	 * `/discovery` opens on this; a link carrying recipe parameters answers that visit
 	 * without writing here, which is what keeps somebody else's shared recipe — or an
-	 * onboarding link — from silently rewriting what a reader opens on.
+	 * onboarding link — from silently rewriting what a user opens on.
 	 *
 	 * A preference of the same kind as `themePreference` and `homeDefaultTab`: how a
 	 * person reads the site is account-level, not a property of one machine. Null means
@@ -333,12 +333,12 @@ export const userPreferences = pgTable("user_preferences", {
 	creatorEmailDelivery: jsonb("creator_email_delivery").$type<Record<string, string>>(),
 
 	/**
-	 * When the reader's onboarding checklist was put away, or null while it still stands.
+	 * When the user's onboarding checklist was put away, or null while it still stands.
 	 *
 	 * ⭐ **A timestamp rather than a boolean, because nothing turns it back on.** The
 	 * checklist is orientation rather than a gate, so dismissing it is a one-way act, and
 	 * the moment is what a later, quieter reminder would have to measure from if one is
-	 * ever wanted. Null means the reader has not dismissed it; it says nothing about
+	 * ever wanted. Null means the user has not dismissed it; it says nothing about
 	 * whether the rows are done, which is answered from the account's own facts.
 	 *
 	 * An account-level preference rather than a browser one, for the reason
@@ -349,7 +349,7 @@ export const userPreferences = pgTable("user_preferences", {
 
 	/**
 	 * The same timestamp for the creator follow-up checklist on the Studio's Works page,
-	 * and separate from the reader's because the two are put away by different people at
+	 * and separate from the user's because the two are put away by different people at
 	 * different moments.
 	 *
 	 * ⚠️ **The required setup rows are not covered by this.** Those two are the publishing
@@ -364,7 +364,7 @@ export const userPreferences = pgTable("user_preferences", {
 });
 
 /**
- * The reader's own hide lists: a Work, or a Creator, they have asked Discovery not to show.
+ * The user's own hide lists: a Work, or a Creator, they have asked Discovery not to show.
  *
  * ⭐ **A list, and its own table, because it grows without a bound and has to point at
  * the thing hidden.** The settings beside it are one row per account; these are many per
@@ -376,7 +376,7 @@ export const userPreferences = pgTable("user_preferences", {
  * 🚨 **This is a content preference, not a block and not a moderation hide.** A block is a
  * boundary between two accounts and lives in `auth.ts` beside `follows`
  * (`services/blocks.ts`); a moderation hide is an operator's judgment about what may be
- * listed (`services/moderation.ts`). This one is a reader filtering their own stream: it
+ * listed (`services/moderation.ts`). This one is a user filtering their own stream: it
  * reaches nobody else, it removes nothing from the site, and the hidden Work and the
  * hidden creator's profile both stay reachable by search and by direct link. That is also
  * why it is `org` — what appears in the org-served stream is the org's to filter, and the
@@ -385,7 +385,7 @@ export const userPreferences = pgTable("user_preferences", {
  * Both writers live in `services/content-preferences.ts`, beside the rung and flag
  * settings that are the same kind of decision.
  */
-// org — a reader's opinion about the org-served Discovery stream, exactly as the display
+// org — a user's opinion about the org-served Discovery stream, exactly as the display
 // and flag settings on `user_preferences` beside it are. It travels nowhere and means
 // nothing on another PDS.
 export const hiddenWorks = pgTable(
@@ -408,11 +408,11 @@ export const hiddenWorks = pgTable(
 );
 
 /**
- * The creators a reader has asked Discovery not to show — the same list as `hidden_works`
+ * The creators a user has asked Discovery not to show — the same list as `hidden_works`
  * with a creator in place of a Work, and the same reasoning.
  *
  * ⚠️ **Hiding a creator does not unfollow, un-support or un-buy anything**, and it is
- * deliberately a separate row from `follows`: a reader who has had enough of a creator's
+ * deliberately a separate row from `follows`: a user who has had enough of a creator's
  * stream keeps whatever relationship they paid for, and clearing the hidden row is not a
  * re-subscription.
  */

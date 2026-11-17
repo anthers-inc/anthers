@@ -727,7 +727,7 @@ describe("The purchase row after a refund", () => {
 		expect(fake.callsTo("refunds.create")).toHaveLength(1);
 		expect(await ledgerFor(purchase.id)).toHaveLength(1);
 
-		// And one refund record owed to the reader's space, from either door: the first
+		// And one refund record owed to the user's space, from either door: the first
 		// settle inserted it, and the replay is the repair path for an insert that failed
 		// after the money moved — not a second record.
 		const owed = await db

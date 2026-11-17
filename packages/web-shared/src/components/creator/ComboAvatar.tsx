@@ -3,7 +3,7 @@
  * The **combo avatar** — two creators, one face.
  *
  * A Collab Badge and a Collab Work are one object with several owners, and the byline has
- * to say so without turning into a list. The compact mark is the overlapping pair a reader
+ * to say so without turning into a list. The compact mark is the overlapping pair a user
  * already knows from a shared channel, with the full set behind a click. The modal is the
  * same `CreatorCard` the rest of the app uses to introduce a creator, so following and
  * visiting work exactly as they do everywhere else.

@@ -3,7 +3,7 @@
 // Sign and verify the web-dist release asset with a plain Ed25519 signature.
 //
 // THIS SCRIPT DEFINES THE FORMAT CONTRACT the two consumer sides of the desktop's
-// web build agree on. Everything about the format lives here; the mirrored readers
+// web build agree on. Everything about the format lives here; the mirrored users
 // (anthers-desktop's `scripts/resolve-web.ts` today, its Rust verifier later) and
 // anthers-desktop's fixture test are copies, not owners, so format drift between
 // the two fails the desktop's test rather than arriving as a mystery on release day.

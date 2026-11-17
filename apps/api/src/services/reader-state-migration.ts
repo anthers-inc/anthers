@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The reader-state cutover: Postgres rows to user-space records, with a switch that goes back.
+ * The user-state cutover: Postgres rows to user-space records, with a switch that goes back.
  *
  * 🚨 **The migration is reversible because nothing is deleted.** The backfill reads every row
  * into the outbox, drains it through the verified write path, and only then flips
@@ -72,7 +72,7 @@ export async function readerStateHome(userId: number): Promise<"db" | "space"> {
 }
 
 /**
- * Backfill this account's reader state into its space and flip the cutover.
+ * Backfill this account's user state into its space and flip the cutover.
  *
  * The outbox is drained in bounded passes so a large Library does not hold one request or job
  * forever; the caller sees the count that remained and can run it again.

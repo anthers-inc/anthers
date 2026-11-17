@@ -2,8 +2,8 @@
 /**
  * Content routes: the delivery door and the Work media it serves.
  *
- * Access issuance, downloads and grants, versions, transcodes, reader payloads, HLS. These
- * are the routes a reader reaches through a Work page, each gated on the Work it names.
+ * Access issuance, downloads and grants, versions, transcodes, user payloads, HLS. These
+ * are the routes a user reaches through a Work page, each gated on the Work it names.
  *
  * Split out of `routes/content.ts` on 2026-10-28; docblocks moved with their code.
  */
@@ -196,7 +196,7 @@ const workMediaRoutes = new Hono()
 	 *
 	 * 🚨 **A signed-in download must present a grant; a share link is its own credential.**
 	 * The ledger is read first and still decides, exactly as before — the grant adds the
-	 * scope (this reader, this Work, this file) and the ten-minute life that makes a refund
+	 * scope (this user, this Work, this file) and the ten-minute life that makes a refund
 	 * stop delivery at the next grant rather than never. Expiry is enforced here so a
 	 * client that cached one must ask again.
 	 */
@@ -268,10 +268,10 @@ const workMediaRoutes = new Hono()
 	//
 	// One public read and the creator's archive. `GET …/versions/history` carries the name
 	// and date of every version added at or after the Work's first release — maintenance is
-	// a reader's fact, and nothing else about a version is. Everything below it is
+	// a user's fact, and nothing else about a version is. Everything below it is
 	// owner-only: a version holds the ORIGINAL bytes a replacement retired, the current media
 	// is the Work row, the source set and the build tables, and no file, size, key or
-	// download is reachable from a share link or a reader's payload. A non-owner gets the
+	// download is reachable from a share link or a user's payload. A non-owner gets the
 	// same 404 as a missing Work, because the existence of an old version's files is not
 	// something a stranger's request should confirm.
 
@@ -643,7 +643,7 @@ const workMediaRoutes = new Hono()
 	// container into `work_sections` (chapters, in reading order) and `work_section_assets`
 	// (the images, stylesheets and fonts those chapters reference), stored private under
 	// the same rule the pages are — so `downloadEnabled: false` stays honest for a reflow
-	// book too: no one URL the whole title falls out of. The manifest is what the reader's
+	// book too: no one URL the whole title falls out of. The manifest is what the user's
 	// loader maps references through (it carries container-relative paths, the stable
 	// identity a re-ingest keeps), and the two unit routes mint short-lived signed URLs
 	// behind the same gate ladder the page route runs — access, the Public Access meter,
@@ -696,7 +696,7 @@ const workMediaRoutes = new Hono()
 	})
 
 	// One reflow section, one check, one signed address — the page route's shape to the
-	// byte, because the reader's loader must never learn a second way to ask.
+	// byte, because the user's loader must never learn a second way to ask.
 	.get("/works/:id/sections/:section", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
@@ -733,7 +733,7 @@ const workMediaRoutes = new Hono()
 	})
 
 	// One asset — an image, a stylesheet, a font a chapter's XHTML references — through
-	// its own check. The manifest is what makes this possible: the reader maps a
+	// its own check. The manifest is what makes this possible: the user maps a
 	// chapter's references from container-relative paths to these routes, so serving a
 	// picture to a page never re-serves the book.
 	.get("/works/:id/assets/:assetId", requireUserOrShareLink, async (c) => {
@@ -934,7 +934,7 @@ const workMediaRoutes = new Hono()
 	// opt-in; its `panels` are only proposals until a creator confirms them. So the
 	// Work's owner reads both, and every other caller gets geometry only for pages that
 	// are enabled *and* confirmed. Everything else comes back as a page with no panels,
-	// which the reader treats as a whole page — a comic publishes with no panel work at
+	// which the user treats as a whole page — a comic publishes with no panel work at
 	// all.
 	.get("/works/:id/panels", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
@@ -982,7 +982,7 @@ const workMediaRoutes = new Hono()
 	 * opt-in.** `enabled: true` alone keeps the detector's proposals as proposals, which
 	 * the Studio shows for confirming; sending `panels` is what defines them (every region
 	 * a save writes is `auto: false`). `enabled: false` leaves the proposals in place so
-	 * turning the page back on does not lose them, and the reader ignores them either way.
+	 * turning the page back on does not lose them, and the user ignores them either way.
 	 * A request carrying neither is refused rather than read as an accidental no-op.
 	 */
 	.patch(

@@ -5,13 +5,13 @@
  *
  * **What a menu offers belongs to the surface, not to the widget** (Parker,
  * 2026-11-06). A Work means different things in the Library and in Discovery —
- * kept or recommended — so the Library's items tidy what the reader saved and
+ * kept or recommended — so the Library's items tidy what the user saved and
  * Discovery's items shape what the feed offers next. The tile supplies the
  * trigger beside the title and the panel's placement; each listing surface
  * passes its own `<li>` rows.
  *
  * ⚠️ **A popover has to dismiss itself**, and a menu this ordinary owes its
- * reader both an outside click and Escape: the panel covers the card's own
+ * user both an outside click and Escape: the panel covers the card's own
  * body, and a keyboard user needs a way out that is not tabbing past every
  * row. The same effect the Sticker picker carries (`StickerBar.tsx`), without
  * its `<details>` toggle — a tile's trigger is a button, so it says so to a
@@ -58,7 +58,7 @@ export default function TileMenu({ label, children }: { label: string; children:
 			{open && (
 				// Any click inside the panel runs its row's action and closes the menu;
 				// leaving it open over a card whose entry just changed would ask the
-				// reader to dismiss a panel about a thing that may no longer be there.
+				// user to dismiss a panel about a thing that may no longer be there.
 				// Every row is a real button, so a keyboard Enter or Space arrives here
 				// as a click too — the container is not itself interactive.
 				// biome-ignore lint/a11y/useKeyWithClickEvents: the rows inside are buttons, and their keyboard activation bubbles here as a click.

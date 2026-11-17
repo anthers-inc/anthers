@@ -86,7 +86,7 @@ const ROOTS: ReadonlySet<string> = new Set([
  *
  * `creator_` is deliberately here rather than renamed to `payout_`: the prefix already groups
  * those five tables correctly, and renaming a working family for precision is churn without a
- * reader's benefit.
+ * user's benefit.
  */
 const FAMILIES: Readonly<Record<string, { root?: string; why: string }>> = {
 	abuse_: { why: "Illegal-content reporting, a statutory surface with its own clocks" },
@@ -100,7 +100,7 @@ const FAMILIES: Readonly<Record<string, { root?: string; why: string }>> = {
 	dmca_: { why: "Statutory copyright notices" },
 	financial_plan_: { why: "The plan tool's own document and its phases" },
 	hidden_: {
-		why: "One reader's own hide lists over the stream: the Works and creators they asked Discovery not to show",
+		why: "One user's own hide lists over the stream: the Works and creators they asked Discovery not to show",
 	},
 	hosted_: { why: "Identities Anthers issues and the session it writes through" },
 	invoice_: { root: "invoices", why: "The per-destination split of one charge" },

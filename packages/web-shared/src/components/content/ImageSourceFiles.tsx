@@ -45,7 +45,7 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 	const [rows, setRows] = useState<WorkSourceFile[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
-	// A released gallery is the version its readers have; the only act is a whole new one.
+	// A released gallery is the version its users have; the only act is a whole new one.
 	const released = work.visibility === "released";
 
 	const reload = useCallback(async () => {
@@ -132,7 +132,7 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 		<FormField label="Images">
 			<p className="mb-2 text-xs text-base-content/50">
 				{released
-					? "This Work is released, so its gallery is the version readers have. Adding a new version replaces the whole gallery and keeps the current one in the Work's history."
+					? "This Work is released, so its gallery is the version users have. Adding a new version replaces the whole gallery and keeps the current one in the Work's history."
 					: "One image or several. The Work displays them in the order listed here, and the first one is what listings show."}
 			</p>
 			{error && <div className="alert alert-error text-sm mb-2">{error}</div>}

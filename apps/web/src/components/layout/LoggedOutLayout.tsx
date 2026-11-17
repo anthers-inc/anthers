@@ -66,7 +66,7 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		// record of the thing being built, not what the organization is — and a user looking
 		// for "what's next" is looking for development, not "About Us". The Roadmap link came
 		// out on 2026-10-20: the canonical roadmap is the wiki's, and a footer is not where a
-		// reader is sent away from the site for it (Parker).
+		// user is sent away from the site for it (Parker).
 		title: "Development",
 		links: [
 			["Release Notes", "/release-notes"],

@@ -2,16 +2,16 @@
 /**
  * The spoiler reveal, and the plain-text half of the `||…||` convention.
  *
- * ⭐ **The words are in the page and the reader withholds them**, which is the same trade
+ * ⭐ **The words are in the page and the user withholds them**, which is the same trade
  * `MaturityVeil` makes for a cover: a courtesy convention rather than access control, so a
- * reader who opens the source or disables the script sees them. What the shape is for is the
- * ordinary reader meeting an ending above the fold: the text is blurred, it cannot be
+ * user who opens the source or disables the script sees them. What the shape is for is the
+ * ordinary user meeting an ending above the fold: the text is blurred, it cannot be
  * selected or heard by a screen reader, and one deliberate click on the labeled control
  * opens it. Hovering never reveals it, and the openness is not remembered — the next spoiler
  * starts hidden, because opening one says nothing about the next.
  *
  * The button is the accessible door; the blurred words carry a click for a pointer, because
- * clicking the blur is what a reader tries first.
+ * clicking the blur is what a user tries first.
  */
 import { splitSpoilers } from "@anthers/shared/spoiler";
 import { Fragment, type ReactNode, useState } from "react";
@@ -50,7 +50,7 @@ export function Spoiler({ children }: { children: ReactNode }) {
 				}
 				// Inert keeps the hidden words out of the tab order as well as the accessibility
 				// tree — a link inside a spoiler is still a link, and it must not be reachable
-				// before the reader has opened what it sits in.
+				// before the user has opened what it sits in.
 				inert={!shown}
 				aria-hidden={!shown}
 				title={shown ? undefined : "Show spoiler"}

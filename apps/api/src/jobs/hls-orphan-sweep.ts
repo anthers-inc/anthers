@@ -16,7 +16,7 @@
  * already. What this file owns is the cadence:
  *
  * - **Daily, in the small hours.** The bytes are not urgent (private, uncounted, no
- *   reader), and the sweep enumerates every creator's prefix in storage — off-hours is
+ *   user), and the sweep enumerates every creator's prefix in storage — off-hours is
  *   where a walk like that belongs.
  * - Idempotent by construction: a swept prefix is gone, and the next run's candidates
  *   are what remains.

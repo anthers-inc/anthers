@@ -8,7 +8,7 @@
  * shell. A screenshot is the only other way to see it, and the two shells look equally
  * "themed" until the art is over the text.
  *
- * The scope is the surface rather than the `?share=` parameter: a reader arriving from a
+ * The scope is the surface rather than the `?share=` parameter: a user arriving from a
  * search result sees the same page, so every signed-out Work does this. Marketing pages
  * keep their own composition, which the second test pins.
  *

@@ -30,7 +30,7 @@
  * made visible: a real schedule prints times in that gutter, and this one prints the only
  * ordinals the model actually has. The tuned rail keeps the same axis with a node per
  * program: the node immediately toward the newer end is marked *Next* and the current one
- * *On now*, so the step is something a reader sees before they read the arrow.
+ * *On now*, so the step is something a user sees before they read the arrow.
  *
  * 🚨 **A lens is a view, never a container**, and nothing here mutates the Library: no
  * fetch of its own, selection is view state, and closing the player leaves the guide
@@ -723,7 +723,7 @@ export default function ChannelGuideLens({
  * The guide's orientation switch (Parker, 2026-10-24). Two readings of one schedule: the
  * default prints creators as columns with their programs running downward, and the
  * alternate prints creators as rows with their programs running left to right. The
- * choice is the reader's and is remembered on this device, the same as autoplay.
+ * choice is the user's and is remembered on this device, the same as autoplay.
  */
 function OrientationToggle({
 	value,

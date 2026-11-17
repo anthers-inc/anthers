@@ -4,7 +4,7 @@
  *
  * 🚨 **The footer used to render on Settings alone, on the reasoning that an account page
  * wanted the site's reference and legal columns.** It does not: the sidebar already carries
- * the reader's navigation and the settings sections, and the marketing footer under a page
+ * the user's navigation and the settings sections, and the marketing footer under a page
  * a person is managing their own account on reads as a different site leaking in. This is
  * an absence, so nothing else in the repository can tell it from a footer that merely
  * renders hidden — hence the walk.

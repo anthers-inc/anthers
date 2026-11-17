@@ -2,7 +2,7 @@
 /**
  * **Discovery** — one stream over Anthers, and the recipe that draws it.
  *
- * 🚨 **The recipe is the product.** The reader can always see how the corpus is being
+ * 🚨 **The recipe is the product.** The user can always see how the corpus is being
  * drawn and change it, so the stream renders its active recipe above the content and
  * exposes the three choices behind it: the candidate set, the window, and whether the
  * mix spreads creators. There is no hidden ranking, and nothing here is paid placement.
@@ -10,18 +10,18 @@
  * ⭐ **Network retired into this page on 2026-10-24, as its first preset.** The two tabs
  * ran one route, one card, one set of filters and one set of lenses; the only thing
  * Network could do that a recipe could not was the membership narrowing, and that became
- * a candidate value. So the network feed is now **My Network** — a named recipe a reader
+ * a candidate value. So the network feed is now **My Network** — a named recipe a user
  * selects in a click, and the one a new account opens on — rather than a second page
- * whose difference from this one the reader had to infer from a subtitle.
+ * whose difference from this one the user had to infer from a subtitle.
  *
  * ⭐ **The account is the default layer and the URL is the override.** A bare
  * `/discovery` opens on the recipe the account last chose; a link carrying recipe
- * parameters answers that visit, and only a change the reader makes here writes the
+ * parameters answers that visit, and only a change the user makes here writes the
  * account. That is what keeps somebody else's shared recipe, or an onboarding link, from
- * silently rewriting what a reader opens on — and it is why selecting a chip writes the
+ * silently rewriting what a user opens on — and it is why selecting a chip writes the
  * whole triple rather than leaning on the built-in defaults.
  *
- * ⭐ **A reader's own recipes live beside the site's two.** Saving the recipe on screen
+ * ⭐ **A user's own recipes live beside the site's two.** Saving the recipe on screen
  * names it, colors it and adds a chip; the pencil beside the controls renames, recolors,
  * reorders and removes it. The list is stored whole on the account (`savedRecipes`) for
  * the same reason the opening recipe is stored as values: a name is a preference, not a
@@ -30,7 +30,7 @@
  *
  * The graph's shared-follow ranking is a route (`GET /api/accounts/me/graph`) and a
  * recipe builder with no page drawing them: a network of follows ranks nearly everyone a
- * reader can already see until the platform holds enough content for the edges to say
+ * user can already see until the platform holds enough content for the edges to say
  * something. Discovery carried it as a second mode until 2026-10-23; the mode machinery
  * is gone rather than left holding a single live row.
  *
@@ -144,7 +144,7 @@ const MIX_OPTIONS: ReadonlyArray<{ value: RecipeMix; label: string }> = [
 ];
 
 /**
- * The preset the empty state offers a reader whose own network has nothing: the whole
+ * The preset the empty state offers a user whose own network has nothing: the whole
  * site is one click away, and it is the one widening that always has more to show.
  * Looked up by id rather than by position, so a later preset inserted above it cannot
  * silently point the button at a different recipe.
@@ -155,19 +155,19 @@ const ACROSS_ANTHERS = RECIPE_PRESETS.find((preset) => preset.id === "across-ant
 type RecipeDialogState = { mode: "create" } | { mode: "edit"; id: string };
 
 /**
- * The chips: the site's presets, the reader's saved recipes, and — when the recipe on
+ * The chips: the site's presets, the user's saved recipes, and — when the recipe on
  * screen is neither — a way to save it.
  *
  * A chip sets the whole recipe, so it is a named starting point rather than a fourth
- * control; a reader who then narrows one stage lands on no chip at all, and the row says
+ * control; a user who then narrows one stage lands on no chip at all, and the row says
  * so by lighting nothing. That is the honest state: matching is exact, because a chip that
  * lit up for a recipe it would not reproduce would lie about what a click does.
  *
- * ⭐ **A line rather than a dropdown.** The set grows with the reader's own recipes, and a
+ * ⭐ **A line rather than a dropdown.** The set grows with the user's own recipes, and a
  * line is what makes switching one click instead of two — which is what makes the keyboard
  * cycle worth having.
  *
- * ⚠️ **The color is a dot, and the pressed state is the tint plus the weight.** A reader
+ * ⚠️ **The color is a dot, and the pressed state is the tint plus the weight.** A user
  * who cannot tell the colors apart still has the label, the bold name and `aria-pressed`;
  * color is an accent rather than the signal, per the task that added it.
  */
@@ -232,12 +232,12 @@ function PresetChips({
 /**
  * The active recipe, rendered above the content. It names what is being drawn and the
  * three stages that drew it, and the controls beside it change those stages, so the
- * reader never has to guess why a card is on screen. The stages come from the same
+ * user never has to guess why a card is on screen. The stages come from the same
  * module the route ranks with, so the bar cannot describe a pipeline the server did not
  * run.
  *
  * ⭐ **Edit belongs to a saved recipe only.** The two built-ins are the site's named
- * recipes; offering a rename there would promise a change the reader cannot make. When a
+ * recipes; offering a rename there would promise a change the user cannot make. When a
  * saved recipe is active, the same row offers the pencil that renames, recolors, reorders
  * or deletes it.
  */
@@ -375,7 +375,7 @@ function RecipeBar({
  *
  * ⚠️ **Both rows are a content preference, never a block**, and the settings card that holds
  * the lists is where the difference is written down. Nothing here unfollows, un-buys or makes
- * anything unreachable; it removes this entry, and the reader's own stream is the whole scope.
+ * anything unreachable; it removes this entry, and the user's own stream is the whole scope.
  */
 function DiscoveryMenu({
 	entry,
@@ -460,13 +460,13 @@ export default function DiscoverPage() {
 	}, [accountRecipe, searchParams]);
 
 	/**
-	 * The reader's own recipes, parsed row by row: a stored row this build cannot render is
+	 * The user's own recipes, parsed row by row: a stored row this build cannot render is
 	 * dropped rather than drawn as a half-chip, and the order stored is the order the chips
 	 * render in.
 	 */
 	const saved = useMemo(() => savedRecipesFrom(user?.savedRecipes), [user?.savedRecipes]);
 
-	/** Every chip: the site's presets, then the reader's, in that fixed two-part order. */
+	/** Every chip: the site's presets, then the user's, in that fixed two-part order. */
 	const choices = useMemo(() => recipeChoices(saved), [saved]);
 
 	/** The chip this recipe is, or null for a combination no chip names. */
@@ -542,7 +542,7 @@ export default function DiscoverPage() {
 	 * default would leave the previous recipe in force until the account write landed.
 	 *
 	 * The account write is fire-and-forget: the stream does not wait on a preference, and
-	 * a failed save leaves the reader with the recipe they asked for this session. The
+	 * a failed save leaves the user with the recipe they asked for this session. The
 	 * refresh afterwards is what keeps a later bare `/discovery` — this session or
 	 * another device — opening on what they chose.
 	 */
@@ -571,7 +571,7 @@ export default function DiscoverPage() {
 	);
 
 	/**
-	 * Write the saved list, and — when a save also makes a recipe the reader's current one
+	 * Write the saved list, and — when a save also makes a recipe the user's current one
 	 * — the opening recipe in the same request.
 	 *
 	 * ⭐ **Awaiting is the difference from `applyRecipe`.** A control that changed what is
@@ -633,9 +633,9 @@ export default function DiscoverPage() {
 	 * moved to the position the arrows chose.
 	 *
 	 * A new recipe also becomes what a bare `/discovery` opens on, because saving one is a
-	 * change the reader made on the page — the same rule every other control here follows.
+	 * change the user made on the page — the same rule every other control here follows.
 	 * A rename does not touch the opening recipe: it changed the chip's words, not what the
-	 * reader is reading.
+	 * user is reading.
 	 */
 	const submitDialog = useCallback(async () => {
 		if (!dialog) return;
@@ -702,7 +702,7 @@ export default function DiscoverPage() {
 	 *
 	 * From a recipe no chip names, forward starts at the first chip and backward starts at
 	 * the last — so the keystroke always lands on a named recipe rather than doing nothing
-	 * because the reader had narrowed one stage.
+	 * because the user had narrowed one stage.
 	 */
 	const cycleRecipe = useCallback(
 		(delta: 1 | -1) => {
@@ -725,7 +725,7 @@ export default function DiscoverPage() {
 	 * The recipe cycle, bound from the account's map (`Ctrl+[` / `Ctrl+]` by default).
 	 *
 	 * It fires with a text field focused for the sidebar's reason: a `Ctrl` chord is not an
-	 * editing command, and a reader halfway through a filter term should be able to change
+	 * editing command, and a user halfway through a filter term should be able to change
 	 * the recipe without clicking out first. The one exception is the recipe dialog itself,
 	 * where changing the stream behind a modal would be a change nobody asked for.
 	 */
@@ -810,7 +810,7 @@ export default function DiscoverPage() {
 
 	/**
 	 * Which corpus the lenses are reading, for their empty-state words. A lens over the
-	 * whole site says something different from a lens over the reader's own network —
+	 * whole site says something different from a lens over the user's own network —
 	 * before the merge that difference was two tabs, and now it is this.
 	 */
 	const drawsEveryone = recipe.candidates === "everyone";
@@ -819,7 +819,7 @@ export default function DiscoverPage() {
 	 * Hide a Work or a creator from the stream, from the tile's menu.
 	 *
 	 * ⚠️ **The entry leaves the grid on the spot rather than on the next fetch.** A hide
-	 * that waits for the server round-trip shows the reader the thing they just asked not
+	 * that waits for the server round-trip shows the user the thing they just asked not
 	 * to see — and a refetch would also throw away the scroll position and the lens. A
 	 * failed request says so above the grid and leaves the tile where it was, because a
 	 * silent no-op would read as a hide that worked.
@@ -1118,9 +1118,9 @@ export default function DiscoverPage() {
 				</form>
 			</dialog>
 
-			{/* The reader's orientation checklist, in the corner every setup card sits in. It
+			{/* The user's orientation checklist, in the corner every setup card sits in. It
 			    belongs to this page rather than to the shell: the app's parts are learned
-			    where a session starts, and a card that followed a reader onto a Work, the
+			    where a session starts, and a card that followed a user onto a Work, the
 			    cart or a player would be an overlay on somebody else's screen. */}
 			<ReaderChecklist
 				playerUp={playerUp}

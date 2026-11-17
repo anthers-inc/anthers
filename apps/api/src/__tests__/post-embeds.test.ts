@@ -4,7 +4,7 @@
  * the body renders a card under the text, resolved at read time through the Work's own
  * gates, nothing stored. Covers the extractor's recognition rules and the route-level
  * behavior: ordering by first appearance, cross-creator embeds allowed, a dead link
- * rendering as the plain link it already is, and the Adult drop for an unverified reader.
+ * rendering as the plain link it already is, and the Adult drop for an unverified user.
  */
 
 import { describe, expect, it } from "bun:test";

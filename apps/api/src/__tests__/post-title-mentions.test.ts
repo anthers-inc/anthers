@@ -4,7 +4,7 @@
  * name on every surface, and the Showings panel that gathers the posts naming a Work.
  *
  * The tests are about the two halves the feature exists for — a retitle reaching titles that
- * already mention the Work, and a title never resolving a Work its reader may not see — plus
+ * already mention the Work, and a title never resolving a Work its user may not see — plus
  * the write boundary's refusal to store a mention of an unreleased Work.
  */
 
@@ -161,18 +161,18 @@ describe("a Work mentioned in a post title", () => {
 		);
 	});
 
-	it("keeps an Adult Work's name from a reader who has not opted in", async () => {
+	it("keeps an Adult Work's name from a user who has not opted in", async () => {
 		const adult = await makeWork("An Adult Work", "adult");
 		const token = workMentionMarkdown({
 			title: adult.title ?? "",
 			slug: adult.slug,
 			publicId: adult.publicId,
 		});
-		// The creator always resolves their own Work, whatever their reader settings say.
+		// The creator always resolves their own Work, whatever their user settings say.
 		const post = await publish((await owner).cookie, `${token} Discussion`);
 		expect(post.displayTitle).toBe("@An Adult Work Discussion");
 
-		// A reader without the opt-in gets the author's plain text, not the Work's name and
+		// A user without the opt-in gets the author's plain text, not the Work's name and
 		// no link to it.
 		const asStranger = await read(post.slug, (await stranger).cookie);
 		expect(asStranger.mentionedWorks).toEqual([]);

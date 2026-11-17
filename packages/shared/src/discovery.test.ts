@@ -168,14 +168,14 @@ describe("the recipe bar's stages", () => {
 		}
 	});
 
-	test("states the window the reader chose and the mix that actually ran", () => {
+	test("states the window the user chose and the mix that actually ran", () => {
 		expect(recipe({ window: "day" }).sentence).toContain("last 24 hours");
 		expect(recipe({ window: "week" }).stages[1]?.label).toContain("seven days");
 		expect(recipe({ window: "all" }).stages[1]?.label).toBe("Newest first");
 		expect(recipe({ window: "all" }).stages[2]?.label).toBe("One card per creator per round");
 	});
 
-	test("says when the stream is drawn from the reader's network, and not when it is not", () => {
+	test("says when the stream is drawn from the user's network, and not when it is not", () => {
 		const network = recipe({ candidates: "network" });
 		expect(network.sentence).toContain("by you and the creators you follow, support or have saved");
 		expect(network.stages[0]?.label).toBe("You and the creators you follow, support or have saved");
@@ -185,7 +185,7 @@ describe("the recipe bar's stages", () => {
 		expect(everyone.sentence).not.toContain("you and the creators");
 	});
 
-	test("says when the reader turned the mix off, and the stage list changes with it", () => {
+	test("says when the user turned the mix off, and the stage list changes with it", () => {
 		const straight = recipe({ mix: "straight" });
 		expect(straight.sentence).toContain("with no mixing pass");
 		expect(straight.sentence).not.toContain("mixed so one creator");
@@ -343,7 +343,7 @@ describe("a stored recipe", () => {
 	});
 });
 
-describe("a reader's saved recipes", () => {
+describe("a user's saved recipes", () => {
 	const mine: SavedRecipe = {
 		id: "seed-1",
 		label: "Close friends",
@@ -389,7 +389,7 @@ describe("a reader's saved recipes", () => {
 		expect(sameRecipe(mine.recipe, { ...mine.recipe, window: "week" })).toBe(false);
 	});
 
-	test("renders the site's presets first and the reader's own after, in their order", () => {
+	test("renders the site's presets first and the user's own after, in their order", () => {
 		const second: SavedRecipe = { ...mine, id: "seed-2", label: "Wide net", color: "sky" };
 		const choices = recipeChoices([mine, second]);
 		expect(choices.map((choice) => choice.label)).toEqual([
@@ -400,7 +400,7 @@ describe("a reader's saved recipes", () => {
 		expect(choices[0].savedId).toBeNull();
 		expect(choices[choices.length - 1].savedId).toBe("seed-2");
 		// A saved chip's blurb is its own sentence, so the title describes the recipe even
-		// after the reader renames it.
+		// after the user renames it.
 		expect(choices[choices.length - 1].blurb).toBe(streamRecipe(second.recipe).sentence);
 	});
 

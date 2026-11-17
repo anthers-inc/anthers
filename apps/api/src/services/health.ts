@@ -36,7 +36,7 @@ export type ComponentState = "operational" | "degraded" | "down";
 export interface ComponentHealth {
 	/** The state, derived from the component's own probe. */
 	state: ComponentState;
-	/** What a reader is told when the state is anything but operational. Human, not machine. */
+	/** What a user is told when the state is anything but operational. Human, not machine. */
 	detail?: string;
 	/**
 	 * ISO timestamp of when the present condition began, where the check's own evidence
@@ -128,7 +128,7 @@ async function checkQueue(): Promise<ComponentHealth> {
 		const failed = (byState.get("failed") ?? 0) + (byState.get("retry") ?? 0);
 		if (failed === 0) return { state: "operational", ms: Date.now() - started };
 		// When the condition began, from the evidence itself: the oldest failure still in
-		// the window. Drives the status page's "for N hours" — a duration a reader can
+		// the window. Drives the status page's "for N hours" — a duration a user can
 		// act on, derived from the row rather than invented.
 		const oldest = await db.execute(sql`
 			SELECT min(started_on)::text AS since

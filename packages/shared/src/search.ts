@@ -10,7 +10,7 @@
  * a search is harder to reason about than one that misses.
  *
  * ⚠️ **Every term must match, never any of them.** "Any" turns a two-word query into a
- * broader search the more the reader types, which is the opposite of what typing more
+ * broader search the more the user types, which is the opposite of what typing more
  * means. This is the rule both the SQL builder and the client's local matcher obey.
  *
  * The stage split lives here too: names and titles first, the secondary prose only when
@@ -30,7 +30,7 @@ export type SearchScope = (typeof SEARCH_SCOPES)[number];
  * How many name matches make the first pass enough.
  *
  * The second pass costs a second round of queries over the slow fields, so it runs only
- * when the first pass leaves the reader with fewer than a handful of things to choose
+ * when the first pass leaves the user with fewer than a handful of things to choose
  * from. Five is a starting constant rather than a law; it is tuned against real queries.
  */
 export const SEARCH_BODY_STAGE_BELOW = 5;
@@ -105,7 +105,7 @@ export function matchesTerms(
  * Escape the characters a SQL `LIKE`/`ILIKE` pattern treats specially.
  *
  * A query containing `%` or `_` is a literal search for those characters, not a wildcard;
- * a reader typing "100%" is asking for the title that says it. The backslash is escaped
+ * a user typing "100%" is asking for the title that says it. The backslash is escaped
  * first by including it in the same class, so the replacement cannot double-escape itself.
  */
 export function escapeLike(term: string): string {

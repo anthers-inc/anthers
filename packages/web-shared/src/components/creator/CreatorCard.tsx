@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The **creator card** — the one way Anthers shows a person wherever a reader should be
+ * The **creator card** — the one way Anthers shows a person wherever a user should be
  * able to meet them and follow them: their thumbnail, their name and handle, their own
  * bio, and the Follow control.
  *

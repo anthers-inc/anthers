@@ -52,7 +52,7 @@ export interface StorageReading {
 	 * way `estimateStorageCost` computes it, never a billed figure.
 	 */
 	overflowCost: string;
-	/** Per-purpose lines, keyed by every known kind so a reader never has to default them. */
+	/** Per-purpose lines, keyed by every known kind so a user never has to default them. */
 	purposes: Record<StorageUseKind, number>;
 	/** When this cycle's figure was sampled — null before the meter's first sweep saw the account. */
 	sampledAt: Date | null;

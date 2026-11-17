@@ -158,7 +158,7 @@ export default function SearchBar() {
 		return () => document.removeEventListener("keydown", handler);
 	}, [shortcuts, apple, filterableView, activate]);
 
-	// Filter mode writes the URL as the reader types. The view reads it through the same
+	// Filter mode writes the URL as the user types. The view reads it through the same
 	// provider, so the narrowing happens on the page rather than in this component.
 	useEffect(() => {
 		if (mode !== "filter") return;
@@ -179,7 +179,7 @@ export default function SearchBar() {
 
 	// Navigation closes the panel and adopts whatever filter the destination carries.
 	// The path is compared rather than depended on alone: this effect also runs when the
-	// bar writes its own `q`, and adopting that value back would fight the reader mid-word.
+	// bar writes its own `q`, and adopting that value back would fight the user mid-word.
 	const lastPath = useRef(location.pathname);
 	useEffect(() => {
 		if (lastPath.current === location.pathname) return;
@@ -296,7 +296,7 @@ export default function SearchBar() {
 					</button>
 				)}
 
-				{/* The two-way switch. Clicking it keeps focus in the input, so the reader
+				{/* The two-way switch. Clicking it keeps focus in the input, so the user
 				    can type straight through a mode change. */}
 				<div className="join shrink-0">
 					<button

@@ -11,7 +11,7 @@
  *
  * ⭐ **The record list is stored beside the STAR, not parsed out of it.** The STAR is the
  * protocol's own full-state format and is kept for fidelity, but replaying it needs the
- * branch's STAR reader, which this deployment does not carry. `listRecords` gives the same
+ * branch's STAR user, which this deployment does not carry. `listRecords` gives the same
  * records as JSON with their CIDs, which is what the restore actually replays and compares.
  * The STAR is the artifact a future protocol-native import would take.
  *
@@ -233,7 +233,7 @@ export async function captureSpace(
  *
  * ⭐ **Shared by the backup and the export.** A backup writes these artifacts under a capture
  * prefix; an export puts the same bytes in a ZIP. Two readers of the same protocol calls is
- * how one of them ends up carrying a policy the other does not, so there is one reader.
+ * how one of them ends up carrying a policy the other does not, so there is one user.
  */
 export interface SpaceArtifacts {
 	registry: BackupRegistry;
@@ -398,7 +398,7 @@ export async function backupById(id: number) {
 /**
  * The retention policy: thirty daily captures, then the newest of each month for a year.
  *
- * ⚠️ **The window is a product promise rather than a storage decision.** A reader's progress
+ * ⚠️ **The window is a product promise rather than a storage decision.** A user's progress
  * and Library state are theirs, and a month of daily backups is the depth a support request can
  * reasonably reach back into; the monthly tail is what covers "I lost my Library last
  * quarter". A gated media space would want a shorter window because the bytes are large, and

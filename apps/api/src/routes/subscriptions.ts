@@ -1722,7 +1722,7 @@ const subscriptionRoutes = new Hono()
 			 * points at. This endpoint exists only to draw a bar chart, and the section
 			 * labels the picture computed wherever it names it. The two agree the way
 			 * evidence and analysis should: the rows the drill-down opens are the whole
-			 * ranges the credited halves come from, so a reader can check any bar
+			 * ranges the credited halves come from, so a user can check any bar
 			 * against the record below it rather than take an aggregate on faith.
 			 */
 			const credited = await creditedSecondsByDayAndCreator(
@@ -3444,17 +3444,17 @@ const subscriptionRoutes = new Hono()
 	})
 
 	/**
-	 * The decoration on one subject: which levels it has received, and what the reader gave.
+	 * The decoration on one subject: which levels it has received, and what the user gave.
 	 *
 	 * 🚨 **Levels, never counts and never money** (Parker, 2026-09-13). The decoration says
 	 * how many distinct denominations a thing has received, so one Sticker at each level and
-	 * fifty spread across them are indistinguishable — a reader learns the least that was
+	 * fifty spread across them are indistinguishable — a user learns the least that was
 	 * given and never the actual amount. The grouped-by-art payload this replaces published a
 	 * count per drawing, which let anyone work the sum out.
 	 *
 	 * ⚠️ **Public, and it publishes who gave what to nobody.** A Sticker is a visible gesture,
 	 * so the page has to show it, but pairing a name with a sum is a statement about somebody's
-	 * finances. The reader's own Stickers come back identified — that is the only handle the
+	 * finances. The user's own Stickers come back identified — that is the only handle the
 	 * picker has for taking one back now that the chips are gone.
 	 *
 	 * 🚨 **Removed and voided Stickers are both excluded here.** A giver's removal is

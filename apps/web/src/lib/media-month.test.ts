@@ -8,13 +8,13 @@
 //    `storefrontItemReach` are recomputed here in DECIMAL from the same published
 //    rate data, a different engine reading the same numbers — so if the float copy
 //    drifts, this fails; and `purchaseCase()`/`userCases()` (the wiki's own tables)
-//    are asserted against directly where the reader's lines are the wiki's.
+//    are asserted against directly where the user's lines are the wiki's.
 // 2. **The re-pointed month is the generated table's arithmetic.** `supportBreakdownDisplay`
 //    is pinned to `supportBreakdown` in `economics.test.ts`; what is pinned here is
 //    the layer's own decisions: the default mapping (the Public Access price to
 //    Anthers, everything else directed at creators), the purchases line STAYING
 //    purchases, and the whole-month figures matching the wiki's generated cases
-//    when the reader's lines are those.
+//    when the user's lines are those.
 // 3. **A null split stays null.** Nothing in the layer substitutes a number for a
 //    platform that does not publish one, and the losing case stays representable.
 
@@ -110,7 +110,7 @@ describe("computeMonth's re-point defaults are the settled mapping", () => {
 	});
 
 	test("the Anthers-side charge agrees with the wiki's generated case rows", () => {
-		// The wiki's five cases are the tool's fixed ancestors: with the reader's
+		// The wiki's five cases are the tool's fixed ancestors: with the user's
 		// lines set to each case's two numbers, the flows must reproduce the
 		// generated table to the cent. Jane: 3 + 7 → pays 10.65, reaches 8.09.
 		for (const c of userCases()) {
@@ -161,7 +161,7 @@ describe("the honest-null and losing cases", () => {
 		expect(m.today.rows).toHaveLength(1);
 		expect(m.today.rows[0].creator).toBe(null);
 		expect(m.today.rows[0].platform).toBe(null);
-		// The gap is carried in the totals, in the reader's own dollars: the whole
+		// The gap is carried in the totals, in the user's own dollars: the whole
 		// paid line rides a split nobody publishes.
 		expect(m.today.notPublished).toBe(m.today.paid);
 	});
@@ -184,7 +184,7 @@ describe("the honest-null and losing cases", () => {
 		// the paid lines' spend, and nothing is estimated between them.
 		expect(cent(m.today.rows.reduce((a, r) => a + (r.pay ?? 0), 0))).toBe(m.today.paid);
 		expect(m.today.knownByName).toBeLessThanOrEqual(m.today.paid);
-		// The Anthers side: the reader's same charges, itemized exactly.
+		// The Anthers side: the user's same charges, itemized exactly.
 		expect(cent(m.anthers.breakdown.chargedWithTax + m.anthers.purchasesPay)).toBe(
 			m.anthers.paid as number,
 		);

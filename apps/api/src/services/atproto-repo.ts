@@ -109,7 +109,7 @@ export function rkeyFromAtUri(uri: string, collection: string): string | null {
  * Where a record's link points, for people: Taproot, the public record explorer at
  * `atproto.at`, with the record's own address as its path — `https://atproto.at/uri/at://…`
  * (Parker, 2026-10-10). The records are public, so this exposes nothing, and it is the one
- * form of the link that a reader can follow. Null without a well-formed address.
+ * form of the link that a user can follow. Null without a well-formed address.
  *
  * ⚠️ This replaces the 2026-09-18 decision that the link named the creator's own server. The
  * raw-JSON reading Anthers itself does is still that address — {@link recordFetchUrlFor}, the

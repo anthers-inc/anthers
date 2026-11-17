@@ -134,7 +134,7 @@ describe("replies", () => {
 		// No record — the ordinary case, never an error: the thread renders nothing for it.
 		expect((await thread(slug)).find((e) => e.id === chain.a)?.recordUrl ?? null).toBeNull();
 
-		// With one: the comment's own address, pointed at Taproot — the form a reader can
+		// With one: the comment's own address, pointed at Taproot — the form a user can
 		// follow, carried for the author and for a stranger alike.
 		const uri = `at://did:plc:${RUN}/${COMMENT_COLLECTION}/${RUN}key`;
 		await db.update(comments).set({ atprotoUri: uri }).where(eq(comments.id, chain.a));

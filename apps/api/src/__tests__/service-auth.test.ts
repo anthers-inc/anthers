@@ -2,7 +2,7 @@
 /**
  * Service-auth verification: the one thing standing between the network and the space gate.
  *
- * The cases worth having are the ones where a plausible token is wrong in a way a reader
+ * The cases worth having are the ones where a plausible token is wrong in a way a user
  * would not see: a token addressed to another service, one minted for another method, one
  * that expired a minute ago, and one signed by a key the issuer no longer publishes. Each
  * must be refused for its own reason, and a rotation must be survivable — the protocol's own

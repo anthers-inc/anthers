@@ -9,12 +9,12 @@
  * for. It sits **above** the top bar, so it is the first thing the window paints, and its
  * sentence is centered with the close at the right.
  *
- * ⚠️ **It goes away only when the reader closes it, and then it stays away on this browser**
+ * ⚠️ **It goes away only when the user closes it, and then it stays away on this browser**
  * (`lib/alpha-notice.ts` holds the answer). It has no timer and no scroll-away, since a notice
  * that disappears on its own is a notice somebody can miss having read.
  *
  * It is mounted in `LoggedInLayout`, so it belongs to the app chrome: the marketing pages a
- * signed-in reader consults, and every page signed out, carry their own chrome and not this.
+ * signed-in user consults, and every page signed out, carry their own chrome and not this.
  */
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";

@@ -8,7 +8,7 @@
  * than replacing it, so the box the creator was looking at keeps its proportions. What
  * can only be proven in a browser is that the shaped box actually stands in both
  * surfaces a Work page has — the creator's editor and a viewer's read view — and that
- * the progress is inside the box, not a different shape where the reader was.
+ * the progress is inside the box, not a different shape where the user was.
  *
  * The walk builds a comic mid-processing by the `work-upload` DB pattern (a sourceKey
  * and a processing job row; no worker runs in these sessions) and releases the row by
@@ -90,6 +90,6 @@ test("a Work mid-processing holds its shape on both surfaces", async ({ page, co
 
 	// And the shape the finished Work becomes is the same box: the status block was
 	// riding inside the deliverable's proportions, so the reader that replaces it
-	// cannot shift anything beneath it. (The reader itself is the paged kinds' walks'
-	// subject; here the box's going, not the reader's arrival, is the point.)
+	// cannot shift anything beneath it. (The user itself is the paged kinds' walks'
+	// subject; here the box's going, not the user's arrival, is the point.)
 });

@@ -11,7 +11,7 @@
  * courtesy Discord's spoiler tag extends, and the reason this task borrowed its spelling.
  *
  * ⚠️ **The words stay in the served text.** This is a courtesy convention, not access
- * control: the server sends the hidden words, and the reader's own renderer withholds them
+ * control: the server sends the hidden words, and the user's own renderer withholds them
  * until they ask. A gate is the mechanism for keeping something from somebody; this is the
  * mechanism for not printing an ending above the fold.
  *

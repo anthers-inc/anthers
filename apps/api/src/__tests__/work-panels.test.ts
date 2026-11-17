@@ -177,11 +177,11 @@ describe("/works/:id/panels", () => {
 		}
 	});
 
-	it("gives the owner's own Work page the counts its reader branches on", async () => {
+	it("gives the owner's own Work page the counts its user branches on", async () => {
 		// The owner's short-circuit serializes a different shape from the user path, and it
 		// is the shape a creator's own Work page renders. Without these counts the comic
-		// reader reads `pageCount` as 0 and says the book has no pages, while every other
-		// reader sees it.
+		// user reads `pageCount` as 0 and says the book has no pages, while every other
+		// user sees it.
 		const ownerRes = await call("GET", `/api/content/works/${workId}`, undefined, cookie);
 		expect(ownerRes.status).toBe(200);
 		const { work: ownerWork } = (await ownerRes.json()) as {
@@ -224,9 +224,9 @@ describe("/works/:id/panels", () => {
 		expect(pageOne[0].auto).toBe(false);
 	});
 
-	it("gives a reader no geometry while every page is off, however many proposals exist", async () => {
+	it("gives a user no geometry while every page is off, however many proposals exist", async () => {
 		// Page 1 was confirmed by the PATCH above, but nobody turned guided view on, so a
-		// reader gets nothing and the whole Work reads as pages. This is the state a comic
+		// user gets nothing and the whole Work reads as pages. This is the state a comic
 		// publishes in.
 		const user = await createAccount(`panels_reader_${RUN}`);
 		try {
@@ -243,7 +243,7 @@ describe("/works/:id/panels", () => {
 		}
 	});
 
-	it("turns a page's guided view on, and gives a reader that page's confirmed panels", async () => {
+	it("turns a page's guided view on, and gives a user that page's confirmed panels", async () => {
 		const enabled = await call(
 			"PATCH",
 			`/api/content/works/${workId}/panels`,

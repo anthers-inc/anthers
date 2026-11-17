@@ -3,7 +3,7 @@
  * "Add a New Version…" for a set-kind Work — a comic, a book or an image gallery.
  *
  * 🚨 **A released Work's set does not change in place.** Append, reorder and remove edit the
- * version a reader is looking at, so the server refuses them once the Work is released. A new
+ * version a user is looking at, so the server refuses them once the Work is released. A new
  * version is a whole new set: the current one becomes a version in the Work's history, the
  * new set's pages are rendered in its place, and only the current version keeps those
  * rendered pages. The dialog is where the creator agrees to that trade before picking.

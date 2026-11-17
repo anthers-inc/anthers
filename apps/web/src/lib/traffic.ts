@@ -84,7 +84,7 @@ function sendPageView(path: string, previousPath: string | null): void {
 			// The browser's own record of how this tab arrived. Sent only with the
 			// entry beacon: a `document.referrer` read later in a session still names
 			// the entry page, and attaching it to every view would mislabel where
-			// readers came from.
+			// users came from.
 			...(entry ? { referrer: document.referrer || null } : {}),
 			...(previousPath ? { previousPath } : {}),
 			sessionId: sessionId(),
@@ -189,7 +189,7 @@ export function trackCardDisplay(
 	};
 }
 
-/** Flush anything pending when the page is going away — the events a reader generated but the timer never drained. */
+/** Flush anything pending when the page is going away — the events a user generated but the timer never drained. */
 if (typeof window !== "undefined") {
 	window.addEventListener("pagehide", () => {
 		if (cardFlusher != null) {

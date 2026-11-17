@@ -4,13 +4,13 @@
  * their dismissal timestamps.
  *
  * ⭐ **The checklists are orientation, not gates, and these are the facts their rows
- * stand on.** The reader's checklist points somebody at the app's parts and the creator's
+ * stand on.** The user's checklist points somebody at the app's parts and the creator's
  * follows the publishing gate with the steps that make a catalog; neither may claim a row
  * is done because a button was clicked, so each answer here is a count of the thing
  * itself. `SetupChecklist`'s docblock carries the same rule from the component's side.
  *
  * ⚠️ **Saving is not the Library's row count.** A creator's own Works join the Library at
- * creation (`services/library.ts`), so counting every row would check the reader's "save
+ * creation (`services/library.ts`), so counting every row would check the user's "save
  * something" on an account that has only ever made something. The saved count excludes
  * Works whose `creatorId` is the account, which is exactly the set that arrives without a
  * save; a Post or a Project in the Library was saved by the person, since nothing inserts

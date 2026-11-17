@@ -21,7 +21,7 @@ import { API_URL, expect, signInAsCreator, test, trackErrorsStrict, WEB_ORIGIN }
 
 const RUN = Date.now().toString(36);
 
-/** The description the insertion flow is answered with, asserted all the way to the reader. */
+/** The description the insertion flow is answered with, asserted all the way to the user. */
 const DESCRIPTION = `A colored checkered pattern ${RUN}`;
 
 let token = "";
@@ -160,7 +160,7 @@ test("a picked file becomes an image in the editor and a gap a return drew survi
 	await page.goto(`/posts/${slug}-${(stored.post as { publicId: number }).publicId}`);
 	const rendered = page.locator("article .prose");
 	await expect(rendered.locator("p").first()).toBeVisible();
-	// The description reaches the reader's DOM unchanged — what a screen reader announces.
+	// The description reaches the user's DOM unchanged — what a screen reader announces.
 	await expect(rendered.locator("img").first()).toHaveAttribute("alt", `${DESCRIPTION}, edited`);
 	const margins = await rendered
 		.locator("p")

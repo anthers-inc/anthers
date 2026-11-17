@@ -14,7 +14,7 @@
 
 const DISMISSED_KEY = "anthers_alpha_notice_dismissed";
 
-/** Whether the reader has already closed the alpha notice on this browser. */
+/** Whether the user has already closed the alpha notice on this browser. */
 export function readAlphaNoticeDismissed(): boolean {
 	try {
 		return globalThis.localStorage?.getItem(DISMISSED_KEY) === "1";
@@ -23,7 +23,7 @@ export function readAlphaNoticeDismissed(): boolean {
 	}
 }
 
-/** Remember that the reader closed the alpha notice on this browser. */
+/** Remember that the user closed the alpha notice on this browser. */
 export function dismissAlphaNotice(): void {
 	try {
 		globalThis.localStorage?.setItem(DISMISSED_KEY, "1");

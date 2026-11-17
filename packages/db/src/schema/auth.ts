@@ -56,7 +56,7 @@ export const users = pgTable("users", {
 	 * 🚨 **The old name was `is_creator`, and the name was the bug.** Discovery, creator
 	 * search and the post gate all read it as though it answered "is a creator", so anybody
 	 * who flipped the switch was listed and treated as one. The column was renamed with the
-	 * predicate so a reader cannot make that mistake from the name alone.
+	 * predicate so a user cannot make that mistake from the name alone.
 	 */
 	creatorMode: boolean("creator_mode").default(false),
 	avatar: text("avatar").default(""),
@@ -139,7 +139,7 @@ export const users = pgTable("users", {
 	 */
 	atprotoExportedAt: timestamp("atproto_exported_at", { withTimezone: true }),
 	/**
-	 * Which copy of the reader's state is canonical: the database (`db`) or the user's space
+	 * Which copy of the user's state is canonical: the database (`db`) or the user's space
 	 * (`space`).
 	 *
 	 * 🚨 **A cutover switch, not a feature flag.** `db` is the state before the migration and

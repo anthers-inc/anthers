@@ -37,7 +37,7 @@
 // the Library, which replaced its private card so the three tabs and a
 // creator's page show one shape for the same item. A Project renders here too
 // as its own entry kind, because a creator page and the Library both mix
-// Projects in with Works and posts; the old column ProjectCard had no reader
+// Projects in with Works and posts; the old column ProjectCard had no user
 // left once that landed and is gone. WorkCard and PostCard stay the column
 // cards the project and post pages render. The tile stays where it is while
 // every consumer is in this app; if a different package wants this shape, move
@@ -254,7 +254,7 @@ function ContentBand({ text }: { text: string }) {
  * the cover rather than the card body because it describes the lock — a body
  * that repeated the same ask read as a second gate.
  *
- * A takedown or a quarantine is locked to the reader too, but it asks nothing,
+ * A takedown or a quarantine is locked to the user too, but it asks nothing,
  * so it gets no chip: naming a price there would offer what cannot be bought.
  */
 function LockAskChip({ access }: { access: AccessResult | null }) {
@@ -277,7 +277,7 @@ function ReleaseBand({
 }: {
 	work: FeedWork;
 	access: AccessResult | null;
-	/** The Work presents as gated to this reader — the tile computes it once. */
+	/** The Work presents as gated to this user — the tile computes it once. */
 	locked: boolean;
 	/** The tile's hover preview is playing — the band hosts the in-place player. */
 	previewing?: boolean;
@@ -416,7 +416,7 @@ function TitleRow({ title, menu }: { title?: string | null; menu?: ReactNode }) 
 /**
  * The second body row, in the order the design settled on (Parker, 2026-11-06):
  * who made it, what it is, when it came out — then anything the kind owes the
- * reader, which trails the date rather than competing with the three.
+ * user, which trails the date rather than competing with the three.
  */
 function MetaRow({
 	avatar,

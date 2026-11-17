@@ -3,7 +3,7 @@
  * The image Work's own description — authored beside the picture in the Studio and
  * announced on the Work page.
  *
- * 🚨 **What this walk pins is the reader side of the pipe.** An image Work's picture is
+ * 🚨 **What this walk pins is the user side of the pipe.** An image Work's picture is
  * its whole deliverable, so the alt text the creator writes in the Studio is the only
  * sentence a screen reader gets for it; the API's gated-blanks cases live under the
  * delivery-access suite (it blanks a locked image's description beside the picture),
@@ -94,7 +94,7 @@ test("an image Work's description is authored in the Studio and announced by the
 		})
 		.where(eq(works.id, detail.work.id));
 
-	// The reader's end: the picture announces what the creator wrote, not the title.
+	// The user's end: the picture announces what the creator wrote, not the title.
 	await page.goto(`/works/${detail.work.slug}-${detail.work.publicId}`);
 	const picture = page.getByRole("img", { name: DESCRIPTION });
 	await expect(picture).toBeVisible();

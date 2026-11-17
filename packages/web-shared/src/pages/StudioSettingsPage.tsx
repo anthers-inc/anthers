@@ -402,7 +402,7 @@ function money(amount: string | number): string {
  * What the creator earned this cycle, and where the money stands.
  *
  * ⚠️ **This card used to sit on the supporter's Badges tab**, where it answered a
- * question that page's reader was not asking: the account holder's takings as a creator,
+ * question that page's user was not asking: the account holder's takings as a creator,
  * beside the money they give. Creator Settings is the surface for a person acting as a
  * creator, so it lives here now.
  */

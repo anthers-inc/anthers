@@ -54,7 +54,7 @@ export interface ReleaseScheduledResult {
  * Queue the public listing for every Work whose pre-release date has arrived.
  *
  * ⭐ **The page is public without this; the listing is what this adds.** `isPreRelease`
- * derives the page state from the date, so a reader can already reach it. This sweep writes
+ * derives the page state from the date, so a user can already reach it. This sweep writes
  * the network record at the moment the page opens, which is the half of pre-release that
  * reaches an audience beyond Anthers.
  *

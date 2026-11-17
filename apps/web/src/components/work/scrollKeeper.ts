@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * A toggle that changes how tall the page is — opening a field for edit, closing it
- * again — must never cost the reader their place in the page.
+ * again — must never cost the user their place in the page.
  *
  * ⚠️ **Tab switches are not this module's ground any more** (Parker, 2026-10-17):
  * the Work page's tab groups hold a stable height (`TabPanels` stacks every panel
@@ -26,9 +26,9 @@
  *   itself causes, a browser's own compensation — each can move the container a frame
  *   after the restore. The reassertion guard in `keepScroll` answers them: it reasserts
  *   the captured offset on any move off it until the scrolls go quiet a moment or the
- *   hard cap passes, then hands scrolling back to the reader.
+ *   hard cap passes, then hands scrolling back to the user.
  *
- * ⚠️ A harness click is NOT a reader's click: Playwright scrolls a target it finds
+ * ⚠️ A harness click is NOT a user's click: Playwright scrolls a target it finds
  * below the fold into view before activating it, so a toggle's captured offset already
  * carries that pre-scroll, and no keeper can hold a place the harness itself moved.
  * The e2e walk for this module drives raw `page.mouse` clicks on measured positions
@@ -58,7 +58,7 @@ export function keepScroll<T>(anchor: HTMLElement | null, commit: () => T): T {
 	// The instant restore, ahead of the paint, and the reassertion guard behind it —
 	// every move off the captured offset is answered with the offset itself, until the
 	// scrolls go quiet for a moment (the change's own are done) or the cap passes, at
-	// which point the reader's own scrolling, which is theirs, is never pulled back. A
+	// which point the user's own scrolling, which is theirs, is never pulled back. A
 	// page too short to honor the offset clamps each reassertion to its real bottom, as
 	// above.
 	let quiet: ReturnType<typeof setTimeout> | undefined;
@@ -70,7 +70,7 @@ export function keepScroll<T>(anchor: HTMLElement | null, commit: () => T): T {
 		clearTimeout(quiet);
 		if (holder.scrollTop !== top) holder.scrollTop = top;
 		// Quiet a moment and the change's own scrolls are done — the page is the
-		// reader's again.
+		// user's again.
 		quiet = setTimeout(detach, 250);
 	};
 	holder.addEventListener("scroll", reassert, { passive: true });

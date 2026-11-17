@@ -148,7 +148,7 @@ describe("asking for an account writes it down", () => {
 
 	it("reads a stored handle-only pick as the lowest rung, the convention it was written by", async () => {
 		// A pending row written before per-rung picks existed carries bare handles in
-		// `badges` — and normalization never drops a choice a reader can still honor.
+		// `badges` — and normalization never drops a choice a user can still honor.
 		const { res, token } = await begin({
 			email: addr("legacy-picks"),
 			picks: { badge: "root", follow: ["carol"], badges: ["carol"] },

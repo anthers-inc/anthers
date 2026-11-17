@@ -12,13 +12,13 @@
 //
 // **Everything renders at once — no tabs, no accordions, no lazy sections**, the same
 // rule the release-notes page carries: a status page in an incident is skimmed,
-// and hiding half of it behind a control is how a reader misses the line that mattered.
+// and hiding half of it behind a control is how a user misses the line that mattered.
 //
 // **The page says what the data can support and no more.** The standalone status page at
 // status.anthers.org is served by the droplet the outside check runs on, a failure domain
 // apart from the hub, and stays up when the hub — and this page with it — is down; the
-// lede hands readers there in one sentence, without an explanation of why it exists,
-// because the reader who needs the reason is having the outage and that page's own copy
+// lede hands users there in one sentence, without an explanation of why it exists,
+// because the user who needs the reason is having the outage and that page's own copy
 // is what they will be reading. Days nothing was recorded for render as empty cells in a
 // bar rather than as green: coverage is shown, never faked.
 
@@ -239,7 +239,7 @@ function IncidentsSection({ incidents }: { incidents: IncidentFeedEntry[] }) {
 	const todayKey = new Date().toISOString().slice(0, 10);
 	const groups = new Map<string, IncidentFeedEntry[]>();
 	for (const incident of incidents) {
-		// An ongoing window's day is "now", wherever it opened: the reader's question is
+		// An ongoing window's day is "now", wherever it opened: the user's question is
 		// what is wrong today, and the group heading is the answer.
 		const day = incident.resolvedAt === null ? todayKey : incident.openedAt.slice(0, 10);
 		if (!groups.has(day)) groups.set(day, []);

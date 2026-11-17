@@ -4,7 +4,7 @@
  *
  * The editor sets a date before the release; at that date the page, its preview media and
  * its listing become public, while buying, downloading, streaming and reviews stay closed.
- * The walk proves the three things a reader would notice: the coming-soon card instead of a
+ * The walk proves the three things a user would notice: the coming-soon card instead of a
  * buy door, the release date when one is scheduled, and a 404 once the date is cleared.
  */
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
@@ -43,7 +43,7 @@ test.afterAll(async () => {
 	}
 });
 
-test("a creator opens a pre-release page, and a reader meets a coming-soon Work", async ({
+test("a creator opens a pre-release page, and a user meets a coming-soon Work", async ({
 	page,
 	context,
 	browser,
@@ -88,7 +88,7 @@ test("a creator opens a pre-release page, and a reader meets a coming-soon Work"
 	// The read line now says the page is coming soon, rather than unreleased.
 	await expect(page.getByText(/Coming soon/)).toBeVisible({ timeout: 15_000 });
 
-	// A reader with no session meets the page and the coming-soon card, not a buy door.
+	// A user with no session meets the page and the coming-soon card, not a buy door.
 	const visitorContext = await browser.newContext();
 	const visitor = await visitorContext.newPage();
 	try {

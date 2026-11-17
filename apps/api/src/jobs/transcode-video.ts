@@ -268,7 +268,7 @@ async function ffprobe(source: string) {
 /**
  * Pipe ffmpeg's `-progress pipe:1` output into `onTick` as (encoded position, speed).
  *
- * Detached on purpose: the caller awaits the process, and this reader keeps draining what
+ * Detached on purpose: the caller awaits the process, and this user keeps draining what
  * ffmpeg buffered even after the exit resolves. The caller's own reporting flag is what
  * stops those late ticks from writing to the row.
  */
@@ -886,7 +886,7 @@ async function runTranscode(
 		 *
 		 * ⚠️ **The reporting flag is flipped before the pass's post-encode writes**, because
 		 * a tick arriving after its ffmpeg has exited is stale by definition and must queue
-		 * NOTHING. The reader in `streamFfmpegProgress` is detached and keeps draining the
+		 * NOTHING. The user in `streamFfmpegProgress` is detached and keeps draining the
 		 * dead process's buffered stdout after the await resolves, so without the flip its
 		 * late ticks re-enqueue writes with no one waiting on them — landing through the
 		 * estimate-clear and completion writes, where a final row reading a mid-ladder

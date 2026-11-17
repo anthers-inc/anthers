@@ -294,7 +294,7 @@ export const QUEUES = {
 	// Extract a reflow ebook Work's EPUB source set into private chapters and their
 	// referenced assets (`work_sections` + `work_section_assets`), one row per component
 	// in reading order. Separate queue from RENDER_PAGED because the design keeps the two
-	// shapes apart (the reader picks by what the ingest produced) and because a job that
+	// shapes apart (the user picks by what the ingest produced) and because a job that
 	// unzips is not a job that rasterizes. See ingest-ebook.ts.
 	INGEST_EBOOK: "ingest-ebook",
 	// Take a video Work's thumbnail from one frame of its stored original. Its own queue
@@ -345,7 +345,7 @@ export const QUEUES = {
 	// stopped being a creator months ago and the grant Discord refused on a bad night. See
 	// services/discord.ts.
 	DISCORD_RECONCILE: "discord-reconcile",
-	// Carry a reader's queued state into the reader's own space, and clear each row only after
+	// Carry a user's queued state into the user's own space, and clear each row only after
 	// the write reads back verified. A cron rather than a per-write enqueue: the queue is the
 	// durable record of what is owed, the sweep is what guarantees it moves, and a missed
 	// enqueue costs a minute rather than the write. See services/space-outbox.ts.
@@ -353,7 +353,7 @@ export const QUEUES = {
 	// The logical backup: a STAR, the blob bytes and the registry entry per registered space,
 	// plus the retention sweep beside it. See services/space-backup.ts.
 	SPACE_BACKUP: "space-backup",
-	// Write the signed receipt a settled purchase or refund owes the reader's own space.
+	// Write the signed receipt a settled purchase or refund owes the user's own space.
 	// The `purchase_receipts` row is the worklist — a webhook inserts it and this drains it —
 	// so a PDS that is briefly down costs a minute of latency, not the record. See
 	// services/access-receipts.ts and jobs/access-receipts.ts.
@@ -539,7 +539,7 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryDelay: 300,
 		expireInMinutes: 60,
 	},
-	// One small record per reader and a bounded pass; the row's own attempts are the retry
+	// One small record per user and a bounded pass; the row's own attempts are the retry
 	// clock, and this budget covers a crash in the middle of a pass. A receipt delayed a
 	// minute is invisible, so the delay is short.
 	[QUEUES.ACCESS_RECEIPTS]: {
@@ -756,7 +756,7 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// 3 AM on the 2nd, AFTER settle-cycle's 2 AM: the ledger's actual rows are published
 	// behind the settled books they restate from, and the commitment for next month
 	// reads the current holdings, not the books — so the hour's ordering is about the
-	// actuals arriving settled rather than about any reader of theirs.
+	// actuals arriving settled rather than about any user of theirs.
 	[QUEUES.PUBLISH_POOL_FUND, "0 3 2 * *"],
 	// 4 AM daily, deliberately AFTER settle-cycle's 2 AM on the 2nd — the money this job
 	// moves is the money settlement credited, so a settlement that lands at 2 AM is

@@ -122,7 +122,7 @@ test("a creator leaves the stream and waits in her own list", async ({ page }) =
 	);
 
 	// The card's copy is the whole difference between a hide and a block, so it is asserted
-	// rather than assumed: a reader who expected a block has to be told what this is.
+	// rather than assumed: a user who expected a block has to be told what this is.
 	await expect(settingsCard(page)).toContainText(/isn't a block/i);
 
 	await listed.getByRole("button", { name: "Show again" }).click();

@@ -170,7 +170,7 @@ export async function readCensus(): Promise<ConnectionCensus> {
 	`;
 	const byPool: Record<string, number> = {};
 	for (const row of rows) {
-		// Another copy of this census — and any other pg_stat_activity reader — still holds a
+		// Another copy of this census — and any other pg_stat_activity user — still holds a
 		// real slot and counts toward `used`, but reads as machinery rather than a pool.
 		const pool = /pg_stat_activity/.test(row.query)
 			? "pg_stat_activity readers"

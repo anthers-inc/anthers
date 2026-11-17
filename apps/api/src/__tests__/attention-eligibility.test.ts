@@ -279,7 +279,7 @@ describe("attention eligibility is decided server-side", () => {
 	});
 
 	it("refuses time against a download-only Work whose page is a storefront", async () => {
-		// The Work is free and released, and its page is all a reader meets — but the page
+		// The Work is free and released, and its page is all a user meets — but the page
 		// carries the download card rather than a medium, so a `play` range there says a
 		// person played something they never opened. This is the record Parker's activity
 		// history showed for a downloadable title.

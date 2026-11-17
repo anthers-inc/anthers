@@ -10,8 +10,8 @@
  * nothing else changes shape.
  *
  * ⭐ **Buying is direct, one button per card** (Parker, 2026-11-06). There is no selection
- * step and no cart pair: a card above the rung the reader holds says **Upgrade**, one
- * below says **Downgrade**, and the rung they hold says **Cancel**. A reader with no Badge
+ * step and no cart pair: a card above the rung the user holds says **Upgrade**, one
+ * below says **Downgrade**, and the rung they hold says **Cancel**. A user with no Badge
  * sees Upgrade on every card. The action opens the one subscription-change modal, which
  * prorates a raise and holds a decrease until the first of the month; the first Badge on an
  * account with no subscription takes a card and address there like any first subscription.
@@ -46,7 +46,7 @@ import SubscriptionPaymentModal, {
 	type SubscriptionPreview,
 } from "../subscribe/SubscriptionPaymentModal";
 
-/** Which way one card moves the reader's support. */
+/** Which way one card moves the user's support. */
 type BadgeAction = "upgrade" | "downgrade" | "cancel";
 
 /** What the one subscription-change modal needs, built from the account and this ladder. */
@@ -80,9 +80,9 @@ function BadgeCard({
 	rung: CreatorBadge;
 	/** The rung's display position, for the fallback mark. */
 	index: number;
-	/** Whether this is the rung the reader's monthly amount currently holds. */
+	/** Whether this is the rung the user's monthly amount currently holds. */
 	current: boolean;
-	/** What the reader gives this Badge's publisher each month, for the direction. */
+	/** What the user gives this Badge's publisher each month, for the direction. */
 	held: number;
 	busy: boolean;
 	onAction?: (action: BadgeAction) => void;
@@ -92,7 +92,7 @@ function BadgeCard({
 	profileCreatorId?: number;
 	/** More than one owner — the card wears the collab mark and names the others. */
 	shared?: boolean;
-	/** A Collab Badge the reader's existing support already reaches; no action to take. */
+	/** A Collab Badge the user's existing support already reaches; no action to take. */
 	included?: boolean;
 }) {
 	const target = Number(rung.threshold);

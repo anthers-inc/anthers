@@ -20,7 +20,7 @@
  *
  * ⚠️ **The recipe pair is a `Ctrl` chord rather than `Mod`** (Parker, 2026-10-24). A bare
  * `Tab` was the first instinct and cannot work: `Tab` is keyboard focus traversal, so
- * taking it would remove the way every reader moves through the page, and it is not a
+ * taking it would remove the way every user moves through the page, and it is not a
  * modifier limitation to route around — it is the accessibility boundary the grammar
  * encodes. `Ctrl+[` and `Ctrl+]` need no grammar change, since `sidebar` already proves a
  * `Ctrl` chord is valid there.
@@ -212,7 +212,7 @@ export function keyFromEvent(event: Pick<ChordEvent, "key">): string | null {
  * Whether a keyboard event is this chord on this platform.
  *
  * Every modifier must match exactly: a chord without Shift does not fire while Shift is
- * held, because that is a different combination the reader may have bound elsewhere.
+ * held, because that is a different combination the user may have bound elsewhere.
  * Auto-repeat is ignored — holding a key down should not reopen the panel repeatedly.
  */
 export function matchesChord(event: ChordEvent, chord: string, apple: boolean): boolean {

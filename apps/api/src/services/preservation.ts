@@ -39,7 +39,7 @@
  *
  * ⚠️ **Preserved bytes leave every allowance.** They are the program's own cost and appear
  * in no account's meter — the storage sweep excludes preserved Works from the per-account
- * figures it writes. Charging a creator or a reader for the bytes Anthers keeps on the
+ * figures it writes. Charging a creator or a user for the bytes Anthers keeps on the
  * public's behalf would be charging them for the program.
  */
 
@@ -62,7 +62,7 @@ import { workOwnedBy } from "./work-owners.js";
  * to be the keeper, so a later save still counts.
  *
  * ⚠️ **Called from every door that writes a Library entry for a Work** — a person pressing
- * Save, a purchase completing, and a reader's space projecting its Library. A fourth door that
+ * Save, a purchase completing, and a user's space projecting its Library. A fourth door that
  * forgets this call creates a Work whose current version a buyer can lose, so the door
  * belongs beside the save it follows rather than anywhere else.
  */

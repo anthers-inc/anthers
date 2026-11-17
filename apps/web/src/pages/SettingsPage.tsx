@@ -125,7 +125,7 @@ function StartingTabSection() {
 					It's saved to your account, so every device starts in the same place.
 				</p>
 				{/* The merged tab remembers its own recipe separately (Discovery's recipe
-				    bar), so this card deliberately says nothing about which stream a reader
+				    bar), so this card deliberately says nothing about which stream a user
 				    sees once they land — that would be a second setting wearing this one's
 				    clothes. */}
 
@@ -702,7 +702,7 @@ function DisplayChoice({
 	disabled: boolean;
 	/** The rung cannot be changed until something outside this control changes. The
 	 *  buttons keep their selected fill — a dimmed fieldset that erases which value is
-	 *  chosen tells the reader less than one that shows it — and a click opens the door
+	 *  chosen tells the user less than one that shows it — and a click opens the door
 	 *  that unlocks them rather than silently doing nothing. */
 	locked?: boolean;
 	onLocked?: () => void;
@@ -738,7 +738,7 @@ function DisplayChoice({
  * The (i) beside the Adult warning: a hoverable and focusable explanation.
  *
  * ⚠️ **The text is in the DOM rather than only in a `title`**, so a keyboard or screen
- * reader reaches the same sentences a mouse does, and the copy can be selected instead of
+ * user reaches the same sentences a mouse does, and the copy can be selected instead of
  * vanishing the moment the pointer moves.
  */
 function InfoHint({ text }: { text: string }) {
@@ -804,7 +804,7 @@ function useContentDisplayWriter() {
  *
  * ⭐ **Both lists sit in one card because they answer one question** — what have I asked the
  * stream not to show me — and because the difference between a hide and a block is the
- * copy's job. A reader who expects a block and gets a feed filter is owed that difference in
+ * copy's job. A user who expects a block and gets a feed filter is owed that difference in
  * words, so the card says what a hide does *not* do: the Work and the profile still open
  * from a link, still turn up in search, and hiding a creator moves no follow, no Badge and
  * no purchase.
@@ -2953,7 +2953,7 @@ export default function SettingsPage() {
 					<RatingControlsSection />
 					<ContentControlsSection />
 
-					{/* The reader's own hide lists — the two *Don't Show* rows on a Discovery
+					{/* The user's own hide lists — the two *Don't Show* rows on a Discovery
 					    tile, and the only route back to a hidden entry. */}
 					<HiddenFromDiscoverySection />
 

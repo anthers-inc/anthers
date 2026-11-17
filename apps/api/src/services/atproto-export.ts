@@ -112,7 +112,7 @@ export async function buildAtprotoExport(
 	];
 
 	if (session) {
-		// ⚠️ **A listing failure must not cost the reader the bundle.** The public repository and
+		// ⚠️ **A listing failure must not cost the user the bundle.** The public repository and
 		// the JSON export are still theirs; a creator space the server would not list is reported
 		// as a gap rather than turning the whole export into an error.
 		let registries: OwnedSpace[];

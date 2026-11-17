@@ -3,9 +3,9 @@
  * The collaborators list behind a {@link ComboAvatar}.
  *
  * It is deliberately the app's ordinary person card, not a bespoke row: the same avatar,
- * name, handle, follower count, Follow control and profile link a reader meets on a
+ * name, handle, follower count, Follow control and profile link a user meets on a
  * creator listing. A shared Badge's co-owner is a creator to meet, and the modal is the
- * place the reader chooses which of them to follow or visit.
+ * place the user chooses which of them to follow or visit.
  */
 import type { BadgeOwner } from "../../lib/types";
 import Modal from "../ui/Modal";

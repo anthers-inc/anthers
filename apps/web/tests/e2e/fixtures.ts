@@ -221,15 +221,15 @@ export async function createDraftWork(
 }
 
 /**
- * Reset the reading-position row for one Work, through the route the readers write
- * through — the precondition every fresh-open assertion in the reader walks stands on.
+ * Reset the reading-position row for one Work, through the route the users write
+ * through — the precondition every fresh-open assertion in the user walks stands on.
  *
  * Rows are per-USER state, and every browser walk here shares one account, so a spec
  * that turns a page leaves the Work's row where *it* left it: without the reset, the
  * next walk in line adopts that row and opens mid-book (retries included — a failed
  * attempt's own clicks come home to its retry through the row, with localStorage no
  * longer the only store). The reset is progress 0 with an empty pointer: enough to
- * answer the rail's membership test "never opened" and to write nothing the readers
+ * answer the rail's membership test "never opened" and to write nothing the users
  * resume from, because the pointer carries neither page, panel, nor CFI.
  */
 export async function resetReadingPosition(

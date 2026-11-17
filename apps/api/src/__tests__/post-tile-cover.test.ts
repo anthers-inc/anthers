@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A post's tile shows the cover of a Work the reader may see, and of no other.
+ * A post's tile shows the cover of a Work the user may see, and of no other.
  *
  * 🚨 **The cover is part of what the Adult rung withholds.** `maturityHiddenFrom` keeps an
- * Adult Work's existence, title and cover art out of every listing for a reader who has not
+ * Adult Work's existence, title and cover art out of every listing for a user who has not
  * opted in and verified, and a post's grid tile is a listing: it renders the first embedded
  * Work's thumbnail in place of artwork the post does not have. A query that read `works`
  * directly for that image answered the tile with a cover the rest of the page withheld.
  *
  * The allow-list is the one a title's `@` mention already resolves through, so the assertion
- * that matters most is the pair: the same post reads differently to two readers, and the
+ * that matters most is the pair: the same post reads differently to two users, and the
  * anonymous one matches the unverified one rather than the verified one.
  */
 

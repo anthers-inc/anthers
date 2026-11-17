@@ -15,7 +15,7 @@
  *
  * ⭐ **Text is optional and a verdict can stand alone** (Parker, 2026-10-19). A
  * textless review counts in the recommended share and does not appear in the
- * list — nothing there for a reader to read. The limit is shared so the
+ * list — nothing there for a user to read. The limit is shared so the
  * textarea's `maxLength` and the server's validator cannot drift.
  */
 export const REVIEW_MAX = 5000;
@@ -205,7 +205,7 @@ export function isBuildType(type: string): boolean {
 
 /**
  * The Work kinds that carry an ordered set of source files in `work_source_files`: the
- * paged kinds, whose set renders into the pages a reader turns, and the image kind,
+ * paged kinds, whose set renders into the pages a user turns, and the image kind,
  * whose set IS the gallery the Work displays. The set routes and the Studio's set
  * editor are shared by both families; what differs is what the set becomes.
  */
@@ -421,7 +421,7 @@ export function deliverableIsEmpty(work: {
  * 🚨 **A build Work with only downloadable files has none, and its page is then a
  * storefront rather than a medium.** That distinction decides more than rendering:
  * the page raises no Time Pool claim, the intake records no timed range, and
- * `review-eligibility` asks its reader for the download rather than for time on the
+ * `review-eligibility` asks its user for the download rather than for time on the
  * page. Downloadable builds live on `works.assets` and never answer this question —
  * an entitlement to a file is not a way to play it here.
  */
@@ -547,7 +547,7 @@ export function deliveryModeOf(
 /**
  * The delivery modes a type can actually honor today.
  *
- * A downloadable comic or book is a packaging question that is not built (the reader serves
+ * A downloadable comic or book is a packaging question that is not built (the user serves
  * pages one at a time), so those offer streaming only rather than a download switch that
  * produces no download. Video, music, audio, games and software have both doors.
  */

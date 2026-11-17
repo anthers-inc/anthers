@@ -170,7 +170,7 @@ describe("published legal documents", () => {
 	it("🚨 keeps the permanent facts of the anthers.run boundary beside the temporary one", () => {
 		/*
 		 * The disclosure above must never be the only thing the policy says about
-		 * `anthers.run`, for the reason the test above it under-claims too: a reader
+		 * `anthers.run`, for the reason the test above it under-claims too: a user
 		 * deciding whether to play a build needs the limitation AND the facts that hold
 		 * regardless of it. Session isolation, per-Work saves and per-request access
 		 * checks are properties of the design rather than of a PSL entry, so they hold

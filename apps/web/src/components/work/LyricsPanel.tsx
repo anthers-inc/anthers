@@ -21,7 +21,7 @@
  * arrived.
  */
 
-/** The Studio's lyrics editor surface — the textarea's own box, not the reader's. */
+/** The Studio's lyrics editor surface — the textarea's own box, not the user's. */
 export const WORK_LYRICS_CLASS = "rounded-lg bg-base-200/60 p-4";
 export const WORK_LYRICS_HEADING_CLASS =
 	"text-xs font-semibold uppercase tracking-wider text-base-content/50";

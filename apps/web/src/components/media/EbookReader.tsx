@@ -147,7 +147,7 @@ export default function EbookReader({
 
 	// One open attempt per mount. The element is created, wired, then opened against the
 	// manifest-built book; the persisted position restores through `init` before the
-	// first paint of pages, so a reader returns to where they left off. The whole open —
+	// first paint of pages, so a user returns to where they left off. The whole open —
 	// manifest, book build, `open`, and the first-turning `init` — is itself the turn
 	// chain's first link, so nothing the reader surface queues can be dropped by the
 	// paginator's lock while the opening turn is still in flight.

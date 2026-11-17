@@ -34,7 +34,7 @@ const HANDLE_PREFIX = "@";
  * two have to agree. Together they are the only writers of the prefix, one per side: `/name`
  * is a page and `/@name` is a person, so a path built with the wrong one typechecks,
  * matches a real route, and renders the wrong page — which is how every follower
- * notification addressed `/parkerhdavis.com` until a reader noticed.
+ * notification addressed `/parkerhdavis.com` until a user noticed.
  */
 const PROFILE_PREFIX = `/${HANDLE_PREFIX}`;
 

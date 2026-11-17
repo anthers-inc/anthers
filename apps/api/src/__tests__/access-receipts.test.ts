@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The signed access receipt: immutable proof in the reader's own space.
+ * The signed access receipt: immutable proof in the user's own space.
  *
  * What only this suite holds is the split's behavior rather than its prose: a completed
  * purchase writes one signed record, a second write leaves it exactly as it was, a refund
@@ -109,7 +109,7 @@ function publicKey(): Uint8Array {
 }
 
 describe("the access receipt", () => {
-	it("writes a signed, money-free receipt into the reader's space", async () => {
+	it("writes a signed, money-free receipt into the user's space", async () => {
 		const { ctx, fixture: f } = await fixture();
 		const receiptId = receiptIdFor(f.purchaseId, "purchase");
 		const written = await writeAccessReceipt(f.purchaseId, "purchase", {
@@ -224,7 +224,7 @@ describe("the access receipt", () => {
 		expect(verifyAccessReceiptRecord(after.value, { publicKey: publicKey() }).ok).toBe(true);
 	});
 
-	it("writes nothing for a purchase that never settled, or a reader Anthers cannot write for", async () => {
+	it("writes nothing for a purchase that never settled, or a user Anthers cannot write for", async () => {
 		const { ctx, fixture: f } = await fixture();
 		await db.update(purchases).set({ status: "pending" }).where(eq(purchases.id, f.purchaseId));
 		expect(
@@ -270,7 +270,7 @@ describe("the access receipt", () => {
 		expect(verifyAccessReceiptRecord(stored.value, { publicKey: publicKey() }).ok).toBe(true);
 	});
 
-	it("marks a reader with no hosted identity as skipped rather than failing", async () => {
+	it("marks a user with no hosted identity as skipped rather than failing", async () => {
 		const { ctx, fixture: f } = await fixture();
 		await oweAccessReceipt(f.purchaseId, "purchase");
 		await accessReceiptsJob(
