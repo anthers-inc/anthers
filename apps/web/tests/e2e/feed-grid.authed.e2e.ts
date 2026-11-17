@@ -27,7 +27,7 @@
 import { db } from "@anthers/db/client";
 import { users, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
-import type { BrowserContext, Locator } from "@playwright/test";
+import type { BrowserContext, Locator, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { eq } from "drizzle-orm";
 import { API_URL, signInAsMediaFixture, WEB_ORIGIN } from "./fixtures";
@@ -44,6 +44,37 @@ const BODY_TEXT =
  * the tint.
  */
 const tileRoot = (overlay: Locator): Locator => overlay.locator("xpath=..");
+
+/**
+ * The reader's orientation card floats over the grid's lower-right corner, and a
+ * tile can sit under it — the video fixture did on CI's wider window, where a press
+ * on the scrub strip landed on the card instead. Collapsing is a per-page state
+ * rather than a dismissal, so it gets the card out of the way without changing the
+ * account other specs read.
+ */
+async function collapseOrientationCard(page: Page): Promise<void> {
+	const collapse = page.getByRole("button", { name: "Collapse the Getting Around Anthers" });
+	// The card waits on the account's onboarding facts, so it can land a beat after
+	// the feed; a short wait is enough to catch it, and an account without one pays
+	// only the wait.
+	await collapse.waitFor({ state: "visible", timeout: 1_000 }).catch(() => {});
+	if (await collapse.isVisible().catch(() => false)) await collapse.click();
+}
+
+/**
+ * Hold a preview at a stable position before a scrub walk. The fixture clips are
+ * seconds long, and a pause can land before HLS's manifest handler calls `play()`,
+ * which would let the clip run to its end and return the tile to its poster. Waiting
+ * for the duration first means the player has started; the paused read proves the
+ * hold took.
+ */
+async function holdPreview(media: Locator): Promise<void> {
+	await expect
+		.poll(() => media.evaluate((el) => (el as HTMLMediaElement).duration), { timeout: 5_000 })
+		.toBeGreaterThan(0);
+	await media.evaluate((el) => (el as HTMLMediaElement).pause());
+	await expect.poll(() => media.evaluate((el) => (el as HTMLMediaElement).paused)).toBe(true);
+}
 
 /**
  * A deliberately PORTRAIT mockup (200x700): a band that sizes itself to its artwork
@@ -411,6 +442,109 @@ test("an audio preview carries the same speaker button and the same remembered a
 		await page.evaluate(() => localStorage.getItem("anthers_tile_preview_audio")),
 		"the button writes the persistent answer",
 	).toBe("1");
+});
+
+test("a video preview's scrub strip seeks without opening the Work", async ({ page }) => {
+	test.setTimeout(60_000);
+	const videoName = /A short film that really plays/;
+
+	await page.setViewportSize({ width: 2000, height: 1100 });
+	await page.goto(DISCOVERY);
+	const tile = page.getByRole("link", { name: videoName });
+	await expect(tile).toBeVisible();
+	await collapseOrientationCard(page);
+	const urlBefore = page.url();
+	await tile.hover();
+	const video = tileRoot(tile).locator("video");
+	await expect(video, "the default preview mounts").toBeAttached({ timeout: 3_000 });
+
+	// The strip is the preview's own control, and it exists on the mounted player
+	// rather than only after some later hover state.
+	const strip = tileRoot(tile).getByRole("slider", { name: "Seek preview" });
+	await expect(strip, "the preview carries its scrub strip").toBeVisible();
+
+	// Hold the clip before the press: this walk is about the strip rather than about
+	// racing the end of a three-second work.
+	await holdPreview(video);
+
+	// A press three-quarters along the rail seeks the element there — the strip's
+	// whole reason for existing, since a preview always starts at the top.
+	const box = await strip.boundingBox();
+	expect(box, "the strip has a box").not.toBeNull();
+	await page.mouse.click(
+		(box?.x ?? 0) + (box?.width ?? 0) * 0.75,
+		(box?.y ?? 0) + (box?.height ?? 0) / 2,
+	);
+	const seeked = await video.evaluate((el) => (el as HTMLVideoElement).currentTime);
+	expect(seeked, "a press on the strip seeks the preview").toBeGreaterThan(1.5);
+
+	// The strip rides above the tile's stretched link, so that same press must not
+	// have opened the Work.
+	expect(page.url(), "seeking never opens the Work").toBe(urlBefore);
+});
+
+test("a drag on the scrub strip keeps seeking when it leaves the tile", async ({ page }) => {
+	test.setTimeout(60_000);
+	const videoName = /A short film that really plays/;
+
+	await page.setViewportSize({ width: 2000, height: 1100 });
+	await page.goto(DISCOVERY);
+	const tile = page.getByRole("link", { name: videoName });
+	await expect(tile).toBeVisible();
+	await collapseOrientationCard(page);
+	await tile.hover();
+	const video = tileRoot(tile).locator("video");
+	await expect(video, "the default preview mounts").toBeAttached({ timeout: 3_000 });
+	await holdPreview(video);
+
+	// 🚨 The strip sits at the band's bottom edge, so a drag leaves the tile almost
+	// immediately. The preview tears down on the tile's pointerleave, and a strip
+	// that loses the pointer to that teardown cannot scrub at all: the capture on
+	// the range input is what keeps the gesture whole until the button is released.
+	const strip = tileRoot(tile).getByRole("slider", { name: "Seek preview" });
+	const box = await strip.boundingBox();
+	expect(box, "the strip has a box").not.toBeNull();
+	await page.mouse.move(
+		(box?.x ?? 0) + (box?.width ?? 0) * 0.2,
+		(box?.y ?? 0) + (box?.height ?? 0) / 2,
+	);
+	await page.mouse.down();
+	// Horizontally to 80%, vertically out of the tile, with the button still held.
+	await page.mouse.move((box?.x ?? 0) + (box?.width ?? 0) * 0.8, 20);
+
+	await expect(video, "the preview survives the drag while it is held").toBeAttached();
+	const dragged = await video.evaluate((el) => (el as HTMLVideoElement).currentTime);
+	expect(dragged, "the captured pointer kept the drag seeking").toBeGreaterThan(1.5);
+	await page.mouse.up();
+});
+
+test("an audio preview carries the same scrub strip", async ({ page }) => {
+	test.setTimeout(60_000);
+	const audioName = /Track 1/;
+
+	await page.setViewportSize({ width: 2000, height: 1100 });
+	await page.goto(DISCOVERY);
+	const tile = page.getByRole("link", { name: audioName });
+	await expect(tile).toBeVisible();
+	await collapseOrientationCard(page);
+	await tile.hover();
+	const audio = tileRoot(tile).locator("audio");
+	await expect(audio, "the listened preview mounts").toBeAttached({ timeout: 3_000 });
+
+	// For a listened preview the strip is the one visible sign of where it is, so
+	// it is not a video-only nicety.
+	const strip = tileRoot(tile).getByRole("slider", { name: "Seek preview" });
+	await expect(strip, "the listened preview carries its scrub strip").toBeVisible();
+	await holdPreview(audio);
+
+	const box = await strip.boundingBox();
+	expect(box, "the strip has a box").not.toBeNull();
+	await page.mouse.click(
+		(box?.x ?? 0) + (box?.width ?? 0) * 0.5,
+		(box?.y ?? 0) + (box?.height ?? 0) / 2,
+	);
+	const seeked = await audio.evaluate((el) => el.currentTime);
+	expect(seeked, "a press on the strip seeks the listened preview").toBeGreaterThan(1);
 });
 
 test("the grid fills the content area and flexes as the window narrows", async ({ page }) => {
