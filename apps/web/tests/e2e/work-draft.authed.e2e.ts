@@ -68,7 +68,7 @@ test("a Work is drafted from a kind and a name, and its kind changes on its page
 	await page.getByRole("button", { name: "Cancel editing Title and Dates" }).click();
 
 	// The kind control is the chip in the byline now (Parker, 2026-10-29): the chip a
-	// reader reads is the door a draft's kind is changed through, the same shape as the
+	// user reads is the door a draft's kind is changed through, the same shape as the
 	// access chip beside it, and no Kind select stands anywhere else on the page — a
 	// page-level count pins that the control left rather than only that it exists
 	// elsewhere. The dialog saves at once and the row answers, so the page follows the

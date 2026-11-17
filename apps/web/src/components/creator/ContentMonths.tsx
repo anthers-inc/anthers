@@ -7,7 +7,7 @@
 //
 // The heading is the month, the rule beside it separates one month from the next, and
 // a vertical ellipsis stands where a run of months had nothing. The spacer is a
-// `separator` with the skipped span in its accessible name, so a reader who never sees
+// `separator` with the skipped span in its accessible name, so a user who never sees
 // the glyph is still told that the creator went quiet rather than that the timeline
 // jumped.
 

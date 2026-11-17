@@ -3,7 +3,7 @@
 // Resource: "Your Media Month" — the spend calculator, the user-facing flagship of
 // the resources revamp, and the interactive form of the wiki's *What It Costs,
 // Against What You Pay Now* (11.05): that page's five fixed cases become the
-// reader's own month, built line by line, and it answers the two things a fixed
+// user's own month, built line by line, and it answers the two things a fixed
 // table cannot — modeling a whole media life, and personalizing it. Then it
 // re-points the same money on Anthers, computed exactly, and shows the parts it
 // cannot compute as published gaps rather than estimates. When Anthers loses a
@@ -12,12 +12,12 @@
 // The comparison is **exact against lower bound**: "your money today" carries
 // "not published" wherever a platform does not disclose its per-user split (an
 // unknown stated as an unknown — the gap is a finding, and it lives in the
-// reader's own totals), against "the same money on Anthers", computed to the
+// user's own totals), against "the same money on Anthers", computed to the
 // cent.
 //
 // The mapping, settled 2026-10-15: the Anthers side by default takes the Public
 // Access price, everything past it is directed at the creators, and both sides
-// are editable — the directed side follows the month until the reader edits it
+// are editable — the directed side follows the month until the user edits it
 // by hand. Purchases stay purchases: the same goods at the same price, with
 // everything past the at-cost card line reaching the creator.
 //
@@ -161,7 +161,7 @@ function Calculator() {
 	const [lines, setLines] = useState(startLines);
 	// The re-point, settled 2026-10-15: the Anthers side starts at the Public
 	// Access price, and everything past it is directed at the creators. The
-	// directed side follows the month until the reader types a number of their
+	// directed side follows the month until the user types a number of their
 	// own.
 	const [anthersAmt, setAnthersAmt] = useState(PUBLIC_ACCESS_PRICE);
 	const [directedAmt, setDirectedAmt] = useState(0);

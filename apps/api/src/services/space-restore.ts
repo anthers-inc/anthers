@@ -153,7 +153,7 @@ export async function restoreSpace(
 
 	// 4. The media the records point at. A `files[].key` is a storage pointer, not a blob, so
 	// nothing in the capture carries its bytes; asking storage is the only way to know the
-	// restored record still describes something a reader can be served.
+	// restored record still describes something a user can be served.
 	const fileKeys = new Set<string>();
 	for (const record of records.records) {
 		const files = (record.value as { files?: unknown }).files;

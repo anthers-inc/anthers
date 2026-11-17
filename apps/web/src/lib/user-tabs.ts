@@ -55,7 +55,7 @@ export const DEFAULT_USER_TAB: UserTabId = "discovery";
 /**
  * Where a tab id points. Null — an account that never chose — reads as the default, and
  * so does an id this build's nav no longer has, so a stale payload can only ever land a
- * reader on a real tab. A stored `"network"` from before the merge is exactly that case,
+ * user on a real tab. A stored `"network"` from before the merge is exactly that case,
  * and it lands here rather than on a route that no longer renders.
  */
 export function userTabPath(id: string | null | undefined): string {

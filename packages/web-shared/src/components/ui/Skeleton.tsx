@@ -9,7 +9,7 @@
  * the page already knows what it is about to draw.
  *
  * The pulse is Tailwind's, and the global reduced-motion contract pauses it without
- * removing the block, so a reduced-motion reader still sees the reserved space.
+ * removing the block, so a reduced-motion user still sees the reserved space.
  */
 
 export default function Skeleton({ className = "" }: { className?: string }) {

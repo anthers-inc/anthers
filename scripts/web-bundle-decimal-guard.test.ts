@@ -25,7 +25,7 @@
  *
  * `Bun.Transpiler.scanImports` is why the walk is sound: it drops `import type` (erased at
  * build, nothing in the bundle), follows dynamic `import()` (the route-level chunks the
- * bundler splits, without which eight React.lazy authoring pages ship to every reader), and
+ * bundler splits, without which eight React.lazy authoring pages ship to every user), and
  * lists bare specifiers straight, where `decimal.js` is caught by name.
  */
 import { describe, expect, it } from "bun:test";

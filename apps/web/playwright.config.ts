@@ -140,8 +140,8 @@ export default defineConfig({
 		//
 		// 🚨 **Three specs write the shared walker's own account preferences** (`homeRecipe`
 		// and `savedRecipes`, the starting tab, the keyboard shortcut map) and every other
-		// authed spec reads that account. Run beside the readers, a writer's mid-test state
-		// is what a reader sees: a chip walk left "what you saved" selected and a feed spec
+		// authed spec reads that account. Run beside the users, a writer's mid-test state
+		// is what a user sees: a chip walk left "what you saved" selected and a feed spec
 		// drew an empty stream, and a shortcut walk's rebound chord was read by a header spec
 		// as the stored map. Each file restores what it touches, so the ordering is what makes
 		// the restore the last word rather than a race with a sibling.
@@ -150,7 +150,7 @@ export default defineConfig({
 		// three `testMatch`es.** Playwright schedules files in different workers even inside a
 		// single project, so a shared project would put these writers beside each other; a
 		// dependency chain is the only thing that makes "finished" mean finished. The chain
-		// ends with `authed` depending on the last of them, so readers start after every
+		// ends with `authed` depending on the last of them, so users start after every
 		// restore, and a new preference-writer joins by extending the chain.
 		{
 			name: "prefs-recipes",

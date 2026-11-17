@@ -614,7 +614,7 @@ describe("reductionFor", () => {
  *
  * 🚨 **This is the defect the ladder was rebuilt for** (Parker, 2026-10-25). It used to publish
  * a Time Pool figure and a Sticker figure where one contained the other, so the rows added up
- * to more than the price and a reader's first question was *how are you giving me more than I
+ * to more than the price and a user's first question was *how are you giving me more than I
  * pay for*. The two are now separate lines of the creator half, storage is a reserved line
  * rather than an invisible expense out of the remainder, and Anthers Support is what is left.
  */

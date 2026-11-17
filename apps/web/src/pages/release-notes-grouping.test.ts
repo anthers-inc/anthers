@@ -104,13 +104,13 @@ describe("groupedByMonth folds the release notes into months, newest first", () 
 	});
 });
 
-describe("fullDate writes the release date the way a reader reads it", () => {
+describe("fullDate writes the release date the way a user reads it", () => {
 	it("spells the month and does not pad the day", () => {
 		expect(fullDate("2026-10-23")).toBe("October 23, 2026");
 		expect(fullDate("2026-01-05")).toBe("January 5, 2026");
 	});
 
-	it("is the reader's date, not the ISO field", () => {
+	it("is the user's date, not the ISO field", () => {
 		// A UTC-midnight parse would print the day before in a negative-offset timezone;
 		// the parts are read directly so the printed date is the entry's own.
 		expect(fullDate("2026-12-31")).toBe("December 31, 2026");

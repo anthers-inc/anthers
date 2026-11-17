@@ -384,7 +384,7 @@ export const workCollaboratorRoutes = new Hono()
 		}
 
 		// This was the last owner. The existing delete rules decide whether the Work may go:
-		// a sold Work is withdrawn rather than destroyed, and a preserved Work is a reader's
+		// a sold Work is withdrawn rather than destroyed, and a preserved Work is a user's
 		// Library entry. Both are the Studio delete's business, not a collaboration leave's.
 		const [sold] = await db
 			.select({ count: sql<number>`count(*)::int` })
@@ -406,7 +406,7 @@ export const workCollaboratorRoutes = new Hono()
 		if (work.preserved) {
 			return c.json(
 				{
-					error: "This Work is in a reader's Library. Delete it from the Studio to withdraw it.",
+					error: "This Work is in a user's Library. Delete it from the Studio to withdraw it.",
 					code: "work_preserved",
 				},
 				409,

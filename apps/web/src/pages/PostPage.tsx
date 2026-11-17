@@ -495,7 +495,7 @@ export default function PostPage() {
 
 			{/* The card: the body only. Always visible — a post is an announcement, and an
 			    announcement nobody can read is not one. The body is the pencil's field only
-			    for the creator editing; every other reader gets the read alone — the embeds
+			    for the creator editing; every other user gets the read alone — the embeds
 			    under it refresh with each save (they derive from the body; the save re-reads
 			    them). */}
 			<article className="rounded-xl border border-base-300 bg-base-100 p-6 sm:p-8 mb-8">

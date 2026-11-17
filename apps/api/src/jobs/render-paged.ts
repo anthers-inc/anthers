@@ -17,7 +17,7 @@
  * path) *is* one page — it normalizes rather than renders; a PDF renders with one
  * `pdftoppm` invocation per file, never per page, because one invocation parses the
  * document once. A download, where enabled, hands over the source files rather than these;
- * the hosted pages are the reader's artifact, the sources the provenance.
+ * the hosted pages are the user's artifact, the sources the provenance.
  *
  * Uses **poppler** (`pdfinfo` + `pdftoppm`), a system dependency alongside ffmpeg, and
  * `sharp` for the image path. Absent poppler, this fails the job with a legible message
@@ -61,7 +61,7 @@ const MAX_PAGES = 2000;
 /**
  * The longest side a hosted page image may have. An image leaf arrives at whatever
  * dimensions its creator's export wrote; without a bound, one 200-megapixel upload would
- * pay for its own decode forever in every reader's bandwidth. 4096 answers more detail
+ * pay for its own decode forever in every user's bandwidth. 4096 answers more detail
  * than a retina reading surface shows, and `withoutEnlargement` leaves anything smaller
  * alone — the bound is a ceiling on the pathological, never a downscaler of the honest.
  */
@@ -321,7 +321,7 @@ async function runPagedRender(jobId: number) {
 				/*
 				 * An image leaf IS its page, so it normalizes rather than renders: one `sharp`
 				 * pass, then straight into the pages. What the pass is for — the hosted page is
-				 * the artifact the reader gets, so it must not come out dependent on how the
+				 * the artifact the user gets, so it must not come out dependent on how the
 				 * creator's camera or export tool happened to write it: orientation baked in
 				 * and its metadata (which reads orientation, location, sometimes the tool's
 				 * profile) stripped, decoded dimensions bounded so a pathological upload costs

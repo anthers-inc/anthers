@@ -3,7 +3,7 @@
  * The merged Discovery tab's recipe memory (Parker, 2026-10-24).
  *
  * 🚨 **The account is the default layer and the URL is the override.** That two-layer
- * rule is the whole reason Network could retire: a reader who wants the chronological
+ * rule is the whole reason Network could retire: a user who wants the chronological
  * feed chooses My Network once and keeps it across devices and sessions, while a link
  * that names a recipe answers that visit alone. A regression in either direction is
  * invisible to a source-text guard — one makes a stranger's shared link rewrite what
@@ -93,7 +93,7 @@ test("a chosen recipe is remembered, and a link is only an override", async ({ p
 	await page.getByLabel("Window").selectOption("week");
 	await expect(chip(page, "Across Anthers")).toHaveAttribute("aria-pressed", "false");
 	await expect(chip(page, "My Network")).toHaveAttribute("aria-pressed", "false");
-	// That change is the reader's, so it is the one that reaches the account.
+	// That change is the user's, so it is the one that reaches the account.
 	await page.goto(`${WEB_ORIGIN}/discovery`);
 	await expect(page.getByLabel("Window")).toHaveValue("week");
 });
@@ -115,7 +115,7 @@ test("a saved recipe is named, colored, renamed and remembered", async ({ page }
 	await expect(name).toHaveValue("Creators I follow");
 	await name.fill("Close friends");
 	// The control is `sr-only` inside its swatch label, so the visible circle — the label
-	// carrying the color's name — is what a reader clicks.
+	// carrying the color's name — is what a user clicks.
 	await dialog.getByTitle("Rose").click();
 	await dialog.getByRole("button", { name: "Save recipe" }).click();
 
@@ -163,7 +163,7 @@ test("saved recipes reorder, delete and join the keyboard cycle", async ({ page 
 	await dialog.getByRole("button", { name: "Save recipe" }).click();
 	await expect(chip(page, "Saved collection")).toHaveAttribute("aria-pressed", "true");
 
-	// Built-ins first, then the reader's own in their order.
+	// Built-ins first, then the user's own in their order.
 	await expect(chips(page)).toHaveText([
 		"My Network",
 		"Across Anthers",

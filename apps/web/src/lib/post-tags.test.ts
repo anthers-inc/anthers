@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Tags derive from the body's own text, and a spoiler's text is withheld from readers — so a
+ * Tags derive from the body's own text, and a spoiler's text is withheld from users — so a
  * `#hashtag` typed inside one must not become a public tag.
  */
 import { describe, expect, it } from "bun:test";

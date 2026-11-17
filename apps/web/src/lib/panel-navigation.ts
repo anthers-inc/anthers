@@ -9,9 +9,9 @@
  *
  * ⭐ **Panel guidance is additive, page by page, and never a precondition.** Guided view is
  * off on every page until a creator turns it on for that page, and the endpoint gives a
- * reader geometry only where that happened and the creator confirmed it. A page carrying
+ * user geometry only where that happened and the creator confirmed it. A page carrying
  * none is a whole page. {@link guidedPages} fills those pages in as one whole-page panel so
- * turning through them still works, and {@link hasGuidedView} is what the reader asks before
+ * turning through them still works, and {@link hasGuidedView} is what the user asks before
  * it offers panel mode at all — a Work whose creator has touched nothing reads as plain pages.
  */
 
@@ -63,7 +63,7 @@ export function guidedPages(pages: PanelPage[]): PanelPage[] {
 }
 
 /**
- * The pages as a reader sees them: geometry only where guided view is on and a creator
+ * The pages as a user sees them: geometry only where guided view is on and a creator
  * confirmed it, and no panels everywhere else.
  *
  * The server already applies this for anyone but the Work's owner; applying it here too is

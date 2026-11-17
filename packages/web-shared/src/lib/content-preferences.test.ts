@@ -74,7 +74,7 @@ describe("coverFor", () => {
 			creatorId: 7,
 		};
 		const prefs = asking({ horror: "hide" });
-		// The creator's own Work is theirs to see; the same Work is another reader's to hide.
+		// The creator's own Work is theirs to see; the same Work is another user's to hide.
 		expect(coverFor(prefs, ownHorror, 7)).toBeNull();
 		expect(coverFor(prefs, ownHorror, 8)).toEqual({ byRung: true, byNotes: ["horror"] });
 	});

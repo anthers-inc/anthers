@@ -64,7 +64,7 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 	const [rows, setRows] = useState<WorkSourceFile[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
-	// A released Work's set is the version its readers have. It is read here, never edited
+	// A released Work's set is the version its users have. It is read here, never edited
 	// in place: the only act is a whole new set.
 	const released = work.visibility === "released";
 
@@ -154,7 +154,7 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 		<FormField label="Pages">
 			<p className="mb-2 text-xs text-base-content/50">
 				{released
-					? "This Work is released, so its pages are the version readers have. Adding a new version replaces the whole set and keeps the current one in the Work's history."
+					? "This Work is released, so its pages are the version users have. Adding a new version replaces the whole set and keeps the current one in the Work's history."
 					: work.type === "comic"
 						? "One page image per page (JPG or PNG). Each file becomes a run of this Work's pages, in the order listed here. Adding, removing or reordering re-renders the book."
 						: "JPG or PNG page images, a PDF, or an EPUB. Each page set becomes a run of this Work's pages, in the order listed here; an EPUB reflows on its own and can't mix with page files. Adding, removing or reordering re-renders the book."}

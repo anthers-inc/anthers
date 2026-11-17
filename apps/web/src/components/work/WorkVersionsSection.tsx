@@ -5,7 +5,7 @@
  *
  * ⭐ **A version's name and date are public once it was added after release.** The current
  * version's name is set here and carried into its archived row when a replacement takes
- * over; readers see the pair in the byline and the Details tab. Files, sizes, downloads and
+ * over; users see the pair in the byline and the Details tab. Files, sizes, downloads and
  * every version uploaded before release stay owner-only. Removing a version therefore
  * removes its entry from that public history as well as its originals.
  *
@@ -287,7 +287,7 @@ export default function WorkVersionsSection({
 					<p className="mt-1 text-sm text-base-content/70">
 						This deletes the original files this version holds. The current version, and anything
 						anyone has already downloaded, are untouched. If the version was added after the Work
-						was released, its entry also leaves the version history readers see.
+						was released, its entry also leaves the version history users see.
 					</p>
 					{removeTarget && (
 						<p className="mt-2 text-xs text-base-content/50">

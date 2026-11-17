@@ -79,7 +79,7 @@ export function managingAppForRequest(requestUrl: string): ManagingAppIdentity {
  * has to be the same address the network will resolve the DID document at. `deploymentOrigin`
  * answers that for a deployed process and for a checkout with `FRONTEND_URL` set; null means
  * the process has no configured address and a caller must not invent one, because a space
- * created against a guess would point at nothing a reader could resolve.
+ * created against a guess would point at nothing a user could resolve.
  */
 export function managingAppIdentity(): ManagingAppIdentity | null {
 	const origin = deploymentOrigin();

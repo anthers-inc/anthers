@@ -65,7 +65,7 @@ export default function WorkMediaFrame({
 	 * shared-with affordance, which belongs on the media rather than below the player.
 	 *
 	 * It rides the stage itself, not the medium's slot, so a scrolling composition (the
-	 * readers, a piece of writing) scrolls under it instead of carrying it away, and the
+	 * users, a piece of writing) scrolls under it instead of carrying it away, and the
 	 * stage's `overflow-hidden` keeps a popover from escaping the media card. The stage also
 	 * carries `group` and `data-media-stage` for it: an embed reveals the affordance on hover
 	 * through those two, with no pointer tracking in JavaScript.

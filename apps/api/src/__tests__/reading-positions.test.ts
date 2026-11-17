@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Reading positions: where a reader got to, one row per account and Work.
+ * Reading positions: where a user got to, one row per account and Work.
  *
  * 🚨 **Only the caller's rows, ever.** These routes are the single place a person's
  * reading positions enter or leave the server, and the property that governs every
@@ -11,7 +11,7 @@
  * The rest is the three rules the upsert contract promises:
  *
  *   - **Newest-write-wins.** A second push replaces the row whole — resume means where
- *     the reader most recently actually was, never the high-water mark.
+ *     the user most recently actually was, never the high-water mark.
  *   - **Clamped, not refused.** A fraction a hair outside 0–1 (a reflow renderer's
  *     1.0000001) writes a clamped position rather than bouncing.
  *   - **Access-gated at the write.** You record a position only in a Work you can
@@ -208,7 +208,7 @@ describe("reading positions", () => {
 		for (let i = 0; i < 400; i += 1) wide[`k${i}`] = i;
 		expect((await put(freeWorkId, { progress: 0.5, position: wide }, aAuth)).status).toBe(400);
 
-		// A pointer the readers actually write — pages, panels, a CFI — passes.
+		// A pointer the users actually write — pages, panels, a CFI — passes.
 		expect(
 			(await put(freeWorkId, { progress: 0.5, position: { page: 3, panel: 7 } }, aAuth)).status,
 		).toBe(200);

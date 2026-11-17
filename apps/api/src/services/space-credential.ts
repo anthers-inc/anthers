@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The reader's side of a gated space read, from the delegation token to a MAC-verified record.
+ * The user's side of a gated space read, from the delegation token to a MAC-verified record.
  *
- * The order is the protocol's and none of it can be skipped: the reader's own server mints a
+ * The order is the protocol's and none of it can be skipped: the user's own server mints a
  * single-use delegation token for the space, the space's authority exchanges it (with the app's
  * attestation) for a credential bound to an ephemeral P-256 key, that key signs the record
  * request, and the request carries a key share the authority uses to MAC the answer for the
  * author's KEM key. A read that skips a step is not a read with less proof; it is a different
  * request the authority refuses.
  *
- * ⚠️ **The credential request goes to the creator's PDS, not the reader's.** The reader's
- * server knows the reader's DID and can sign a delegation because the token names the space's
+ * ⚠️ **The credential request goes to the creator's PDS, not the user's.** The user's
+ * server knows the user's DID and can sign a delegation because the token names the space's
  * authority; the authority is the one that asks the managing app and issues the credential.
  * Two servers, two different calls.
  */
@@ -30,7 +30,7 @@ import {
 	WANT_MAC_HEADER,
 } from "./space-crypto.js";
 
-/** Everything the reader's session has to know: whose server, and the bearer it answers to. */
+/** Everything the user's session has to know: whose server, and the bearer it answers to. */
 export interface SpaceReaderSession {
 	did: string;
 	pdsUrl: string;
@@ -124,7 +124,7 @@ export async function readSpaceRecord(input: SpaceReadInput): Promise<SpaceReadR
  * Read one record with a credential already in hand, and verify its MAC.
  *
  * ⭐ **The credential outlives the delegation that made it, and this is the function that says
- * so.** A reader who is removed from a space loses the next credential immediately, but the one
+ * so.** A user who is removed from a space loses the next credential immediately, but the one
  * already issued keeps reading until it expires — the tail the design promises and the lab's 05
  * measures. It is also the seam a test uses to read with the credential it already holds.
  */

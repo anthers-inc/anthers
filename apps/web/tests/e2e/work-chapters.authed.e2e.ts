@@ -72,7 +72,7 @@ const timeWrites = async (page: Page): Promise<number[]> =>
 /**
  * Give the signed-in walker the consumption evidence a page visit would produce.
  *
- * The review composer is locked for a reader who has not spent recorded time with the
+ * The review composer is locked for a user who has not spent recorded time with the
  * Work, and the player's attention flushes on its own schedule — too late for a review
  * posted in the same walk. The API is the same one the player flushes to.
  */

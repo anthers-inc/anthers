@@ -201,7 +201,7 @@ describe("votes", () => {
 		expect(own.score).toBe(own.up - own.down);
 	});
 
-	it("🚨 the single-subject read carries the counts to every reader", async () => {
+	it("🚨 the single-subject read carries the counts to every user", async () => {
 		// The numbers ride the boxed buttons now (Parker, 2026-10-16), so this read is
 		// what a post page asks and the figures behind both directions go out to anybody
 		// who can see the thing. The thread payload's author-only spread above is the

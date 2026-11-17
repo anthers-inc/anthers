@@ -3,7 +3,7 @@
  * Content preferences — the only writer of what a user has asked to meet: the Adult opt-in,
  * the adulthood verification behind it, the per-rung display setting for each of them, the
  * display setting for each kind of content a Work may contain, whatever its rating, and the
- * two lists of Works and Creators a reader has asked Discovery not to show.
+ * two lists of Works and Creators a user has asked Discovery not to show.
  *
  * Follows the one-writer pattern `services/content-rating.ts`, `services/moderation.ts` and
  * `services/quarantine.ts` establish. Every door into this state comes through here, so an
@@ -356,7 +356,7 @@ export async function adultVisibility(userId: number | null): Promise<{
 }
 
 /**
- * The reader's own hide lists, as one listing condition: a Work whose row is in
+ * The user's own hide lists, as one listing condition: a Work whose row is in
  * `hidden_works`, or whose creator is in `hidden_creators`, is not in the stream.
  *
  * ⭐ **The stream is the whole scope, and that is the feature rather than an omission.**
@@ -368,18 +368,18 @@ export async function adultVisibility(userId: number | null): Promise<{
  * somebody has one; that is exactly what separates hiding from a block, which is why there
  * is a test on each of those surfaces rather than a comment here.
  *
- * 🚨 **Not a deny-list, and it cannot be**: the rows are the reader's own, so the question
+ * 🚨 **Not a deny-list, and it cannot be**: the rows are the user's own, so the question
  * is whether *this* row exists, not whether some value is absent from a set of known values.
- * `NOT EXISTS` over the reader's own row is the same shape `notBlockedBy` uses, for the same
+ * `NOT EXISTS` over the user's own row is the same shape `notBlockedBy` uses, for the same
  * reason — it applies before the query's `LIMIT`, where filtering a page after the fact
  * would silently return short pages. Unlike a block, the read is one-directional: only the
- * reader's own row decides what the reader meets.
+ * user's own row decides what the user meets.
  *
  * ⚠️ **`workId` is optional and `creatorId` is not**, because a post is not a Work: a
  * creator's posts and releases both answer to the creator list, and only the release answers
  * to the Work list.
  *
- * `undefined` for a signed-out reader, so it drops into `and()` without branching.
+ * `undefined` for a signed-out user, so it drops into `and()` without branching.
  */
 export function notHiddenFrom(
 	user: number | null,
@@ -488,10 +488,10 @@ export interface HiddenCreator {
 }
 
 /**
- * Both of the reader's lists, oldest first.
+ * Both of the user's lists, oldest first.
  *
  * ⚠️ **Read without any listing condition on the Works themselves**, deliberately: this is
- * the one surface that must show a Work the reader has hidden, because it is how they
+ * the one surface that must show a Work the user has hidden, because it is how they
  * un-hide it. A removed or quarantined Work is a different matter and is not filtered here
  * either — the row still names it, and the settings row's title is what lets somebody
  * recognize what they hid years afterwards.

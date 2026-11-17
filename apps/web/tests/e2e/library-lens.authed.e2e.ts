@@ -303,7 +303,7 @@ test("the chosen lens survives a switch between Library and Discovery", async ({
 	await page.goto("/library?lens=music");
 
 	// The lens is a view over both corpora, so the nav carries it from one tab to the
-	// other rather than resetting the reader to No Lens on arrival (Parker, 2026-11-06).
+	// other rather than resetting the user to No Lens on arrival (Parker, 2026-11-06).
 	const nav = page.getByRole("navigation", { name: "Anthers" });
 	await nav.getByRole("link", { name: "Discovery" }).click();
 	await expect(page).toHaveURL(/\/discovery\?lens=music/);
@@ -415,7 +415,7 @@ async function saveFixtureWork(page: Page, key: string) {
 
 test("the Bookshelf lens stands the saved comic up as a spine", async ({ page }) => {
 	// The ribbon reads the further-along of the device's keys and the user's row, and
-	// this file's walks share the media fixture user with every reader walk — whose
+	// this file's walks share the media fixture user with every user walk — whose
 	// legitimate page turns write rows past this walk's local seed. So the assertion
 	// runs on its own throwaway account, whose comic row nothing else writes, and the
 	// seeded device keys are the only position the account carries.
@@ -464,10 +464,10 @@ test("the Bookshelf lens stands the saved comic up as a spine", async ({ page })
 });
 
 /**
- * Push one real position row through the routes the readers write through.
+ * Push one real position row through the routes the users write through.
  *
  * The rail's rows are per-user value state, and this file's walks share the media
- * fixture user with every reader walk in the project — so the rail assertions run
+ * fixture user with every user walk in the project — so the rail assertions run
  * against their own throwaway account, whose rows nothing else writes:
  * `makeRailAccount` makes it, `/login` signs it, and it is purged before the test
  * ends, its rows cascading with it.

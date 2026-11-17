@@ -269,7 +269,7 @@ describe("what the record must never carry", () => {
 
 	it("names every medium the platform actually has a consumption mode for", async () => {
 		// 🚨 The first draft of this list came from a stale comment in `content.ts` and was
-		// missing `ebook` — a real medium with its own reader, added the week before. The
+		// missing `ebook` — a real medium with its own user, added the week before. The
 		// authority is `CONSUMPTION` in `attention.ts`, because a type absent from there
 		// earns its creator nothing; a type absent from here merely reads oddly.
 		//
@@ -447,7 +447,7 @@ describe("a gated listing's space pointers", () => {
 
 	it("never points an open Work at a space", () => {
 		// A Work that used to be gated keeps its space on disk; the listing must not point at it
-		// once nobody is being asked to pay, or a reader would follow a door that no longer means
+		// once nobody is being asked to pay, or a user would follow a door that no longer means
 		// anything.
 		const record = workToRecord(openWork(), {
 			baseUrl: BASE,

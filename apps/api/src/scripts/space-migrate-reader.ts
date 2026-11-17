@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Migrate one account's reader state into its space, or return it to the database.
+ * Migrate one account's user state into its space, or return it to the database.
  *
  * The cutover is reversible by design, so the rollback is a first-class verb rather than a
  * manual SQL statement. Run the migration, verify the Library, then move the first account;
  * `--rollback` puts it back without deleting the space.
  *
  * Usage:
- *   bun run space:migrate-reader --user 12
- *   bun run space:migrate-reader --user 12 --rollback
+ *   bun run space:migrate-user --user 12
+ *   bun run space:migrate-user --user 12 --rollback
  */
 import {
 	migrateReaderState,

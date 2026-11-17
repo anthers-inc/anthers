@@ -82,7 +82,7 @@ describe("statusReport", () => {
 		const names = report.components.map((c) => c.name);
 		expect(names).toContain("Database");
 		// The public-copy line: no numbers on the public answer. A `since` timestamp is
-		// allowed — how long a condition has continued is a fact a reader acts on, and it
+		// allowed — how long a condition has continued is a fact a user acts on, and it
 		// changes nothing about load; but a probe's milliseconds or a queue's depth are
 		// never present.
 		for (const component of report.components) {

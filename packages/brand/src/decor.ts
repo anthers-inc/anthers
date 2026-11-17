@@ -365,7 +365,7 @@ export function pollenDataUri(color: string, opacityScale = 1): string {
  * why the decor travels inline rather than from the CDN, everything here stays a
  * committed string builder with no build-time fetch, and the payload budget
  * (each builder well under 10 KB encoded) is part of the contract these carry.
- * SVG does not render in Outlook, whose reader sees the plain card the decor
+ * SVG does not render in Outlook, whose user sees the plain card the decor
  * sits behind — decoration may vanish, content may not.
  */
 

@@ -179,7 +179,7 @@ export const purchases = pgTable(
 		 *
 		 * 🚨 **The goods price is `amount`, the count is here, and neither is derived from
 		 * the other.** `amount` is what the buyer paid for the goods on this row already
-		 * multiplied out, so every existing reader — earnings, refunds, the tax
+		 * multiplied out, so every existing user — earnings, refunds, the tax
 		 * apportionment — keeps working without knowing a count exists. The count is what
 		 * the creator reads when packing, and what a stock release puts back.
 		 */
@@ -300,11 +300,11 @@ export const purchaseSplits = pgTable(
  * period ÷ successful payments in that period, and the `disputes` rows here are its numerator
  * — see `disputeActivityRatio` in `services/disputes.ts` for the denominator's caveats.
  */
-// org — what Anthers owes the reader's own space after a purchase or a refund: the row is
+// org — what Anthers owes the user's own space after a purchase or a refund: the row is
 // the worklist, and the space holds the signed record.
 //
 // ⭐ **The row is an issuance log, not a second entitlement.** `purchases` stays the live
-// entitlement; this table answers only "was the receipt record written into the reader's
+// entitlement; this table answers only "was the receipt record written into the user's
 // space, and if not why". That is what lets the write be a background job rather than
 // something the payment webhook blocks on: a completion inserts a `pending` row inside the
 // same request that flips the purchase, and a sweep drains it a minute later. A row whose
@@ -331,7 +331,7 @@ export const purchaseReceipts = pgTable(
 		receiptId: text("receipt_id").notNull(),
 		/**
 		 * `pending` → `written`, or `failed` once the attempts run out. `skipped` is a
-		 * normal resting state: the reader has no hosted identity to write with, so the
+		 * normal resting state: the user has no hosted identity to write with, so the
 		 * row waits for a reissue rather than consuming retries.
 		 */
 		state: text("state").notNull().default("pending"),

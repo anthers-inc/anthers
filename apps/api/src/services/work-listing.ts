@@ -124,7 +124,7 @@ export async function syncWorkListing(
 	if (work.creatorId === null) return { status: "skipped", reason: "no_creator" };
 
 	// ⭐ **The manifest is written before the listing that points at it.** A gated listing is
-	// public the moment it lands, so a pointer written first would be the first thing a reader
+	// public the moment it lands, so a pointer written first would be the first thing a user
 	// followed to nothing. The draft rides along because it is the same Work and the same call.
 	// ⚠️ A failure here does not stop the public listing: the listing is still truthful without
 	// the pointer, and the reconciling sweep retries the space write. What it must never do is

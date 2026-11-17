@@ -208,7 +208,7 @@ describe("the request is scheduled, informed, and reversible", () => {
 		// these, and "3 Works deleted, 1 withdrawn because somebody kept it" is a
 		// decision where "your content will be deleted" is a sentence people click past.
 		// 🚨 The saved Work is one of the withdrawn ones: a preview that counted it as
-		// deleted would be telling the creator their readers' copy is about to be destroyed.
+		// deleted would be telling the creator their users' copy is about to be destroyed.
 		expect(preview.posts).toBe(1);
 		expect(preview.comments).toBe(1);
 		expect(preview.reviews).toBe(1);

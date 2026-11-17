@@ -8,7 +8,7 @@
  * card — so presence there is a visit, not consumption. The intake stops writing such
  * ranges now (`workEarnsTime` in `@anthers/shared/attention`) and the page raises no
  * claim (`pageShowsDeliverable`), but ranges written before that fix are still in
- * `attention_events`: they show in every reader's activity history as *Played … for N
+ * `attention_events`: they show in every user's activity history as *Played … for N
  * min* and, for a Work marked streaming, they are Public Access seconds the Time Pool
  * pays from. This script removes them. The daily `distribute-pool` run recomputes an
  * unsettled cycle from the raw rows, so deleting before the cycle settles is what makes

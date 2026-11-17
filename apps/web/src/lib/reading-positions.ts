@@ -5,7 +5,7 @@
  *
  * 🚨 **This module is the only writer of the four keys, and the readers reach their
  * reads and writes through here rather than owning their own copies.** It was extracted
- * from the reader so a shelf-level view of "how far you got" (the Bookshelf lens's spine
+ * from the user so a shelf-level view of "how far you got" (the Bookshelf lens's spine
  * markers) can read the same data without a component's private helpers becoming a
  * second surface's API.
  *
@@ -13,7 +13,7 @@
  *
  * **The local keys are the device store; the server row (`user_reading_positions`) is the
  * user's.** Every write lands locally first and is pushed behind it, throttled, as an
- * upsert — **newest-write-wins**, so the row says where the reader most recently
+ * upsert — **newest-write-wins**, so the row says where the user most recently
  * actually was, never the furthest they once got (a high-water rule would refuse a
  * re-read by dragging the opening back). Reads split by purpose:
  *
@@ -25,12 +25,12 @@
  * - **The shelf** (the rail and ribbons): the *further-along* of the device's keys and
  *   the row — the shelf's marker never goes backwards on one device (the page-over-panel
  *   reconciliation), so it does not go backwards across the two stores either, and a
- *   device that has never read the Work shows the row. Signed-out readers keep
+ *   device that has never read the Work shows the row. Signed-out users keep
  *   exactly what this device knows, which this module answers for.
  *
  * Nothing here carries a clock comparison: which device pushed last is the server's
  * fact, and the adoption rule only fires on absence, so the stores never disagree about
- * the device the reader is actually holding.
+ * the device the user is actually holding.
  *
  * Deliberately unlike `listen-positions.ts` in two respects, both because a book shelf is
  * not a listening meter:
@@ -65,7 +65,7 @@ export interface PanelPosition {
 	panel: number;
 }
 
-/** Where a reader got to in a reflow book, kept per Work on this device. */
+/** Where a user got to in a reflow book, kept per Work on this device. */
 export interface ReflowPosition {
 	/**
 	 * A foliate CFI — a fake one, since reflow sections carry no OPF-derived CFIs, which
@@ -106,7 +106,7 @@ function publish(): void {
 }
 
 /**
- * The server store's version — the number that changes when a load lands, so a reader
+ * The server store's version — the number that changes when a load lands, so a user
  * that initialized from a device-less state can re-read what adoption wrote. Bumping in
  * one place keeps the module's one rule (server row + local keys) the only thing a
  * consumer needs to watch.
@@ -157,7 +157,7 @@ async function load(): Promise<void> {
 		} else {
 			const data = (await res.json()) as { positions: ServerPosition[] };
 			rows = new Map(data.positions.map((p) => [p.workId, p]));
-			// Adopt before publishing: a reader re-reading after the version bump must
+			// Adopt before publishing: a user re-reading after the version bump must
 			// find what the adoption wrote, not a version bump that wrote nothing yet.
 			for (const row of rows.values()) adopt(row);
 		}
@@ -218,7 +218,7 @@ let pagehideBound = false;
 function bindPagehide(): void {
 	if (pagehideBound || typeof window === "undefined") return;
 	pagehideBound = true;
-	// The flush point: a reader closing the tab mid-throttle pushes what it was about
+	// The flush point: a user closing the tab mid-throttle pushes what it was about
 	// to lose. Total under failure, like everything else here.
 	window.addEventListener("pagehide", () => {
 		const entries = [...pending.entries()];
@@ -312,7 +312,7 @@ export function readPage(workId: number): number {
 }
 
 /**
- * Persist which page a reader is on. Written only on real navigation, never on mount.
+ * Persist which page a user is on. Written only on real navigation, never on mount.
  * `pageCount` turns the write into a server push as well — the readers always know it,
  * and the row's fraction is page over count.
  */
@@ -323,7 +323,7 @@ export function writePage(workId: number, page: number, pageCount?: number): voi
 	}
 }
 
-/** Persist where within panel mode a reader got to, page and panel both. */
+/** Persist where within panel mode a user got to, page and panel both. */
 export function writePanel(workId: number, position: PanelPosition, pageCount?: number): void {
 	persistPanel(workId, position);
 	if (pageCount != null && pageCount > 0) {
@@ -335,12 +335,12 @@ export function writePanel(workId: number, position: PanelPosition, pageCount?: 
 }
 
 /**
- * How far into a Work a reader got, as a 0–1 fraction of its pages, or `null` when the
+ * How far into a Work a user got, as a 0–1 fraction of its pages, or `null` when the
  * shelf should show a spine without a marker: never opened, a `pageCount` the Work does
  * not carry (`text` Works, for instance, are not paged), or a position clamped past a
  * page count that changed.
  *
- * Both keys are read and the further-along page wins, because a reader may finish a
+ * Both keys are read and the further-along page wins, because a user may finish a
  * comic in page mode and later page a few panels in panel mode — the shelf marker has
  * to keep up with whichever mode they were last reading in.
  */
@@ -378,7 +378,7 @@ export function readStoredReflow(workId: number): ReflowPosition | null {
 	return null;
 }
 
-/** Persist where inside a reflow book a reader got to, CFI and book-wide fraction both. */
+/** Persist where inside a reflow book a user got to, CFI and book-wide fraction both. */
 export function writeReflow(workId: number, position: ReflowPosition): void {
 	persistReflow(workId, position);
 	schedulePush(workId, { progress: position.fraction, position: { cfi: position.cfi } });
@@ -425,7 +425,7 @@ export function readScrollFraction(workId: number): number | null {
 }
 
 /**
- * Persist how deep into a text Work a reader has scrolled, as a 0–1 fraction of the
+ * Persist how deep into a text Work a user has scrolled, as a 0–1 fraction of the
  * article. The device always records; the row takes it only past
  * {@link SCROLL_OPEN_FLOOR} — a sliver of scroll is a nudge, not an opening.
  */

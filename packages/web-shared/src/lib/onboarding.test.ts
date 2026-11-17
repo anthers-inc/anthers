@@ -4,7 +4,7 @@
  *
  * 🚨 **What this suite protects is that a row cannot be done without its fact.** The
  * server answers the counts and the boot payload carries the rest; the card only draws
- * what these return, so a reader who never saved anything cannot meet a checked "Save a
+ * what these return, so a user who never saved anything cannot meet a checked "Save a
  * Work" row. The reverse matters as much: each row has to open the place it names, so a
  * done row still has a destination and a todo row is never a dead end.
  */
@@ -87,7 +87,7 @@ describe("readerChecklistItems", () => {
 
 	// The follow row is deliberately the one with no door: the card stands on Discovery,
 	// where following happens, and a link back to the same page would be a control that
-	// does nothing. The other three each open a part of the app the reader is not on.
+	// does nothing. The other three each open a part of the app the user is not on.
 	it("opens the parts of the app the card is not standing on", () => {
 		const items = readerChecklistItems(NO_FACTS, BARE);
 		const hrefs = Object.fromEntries(items.map((item) => [item.key, item.href ?? null]));
@@ -99,8 +99,8 @@ describe("readerChecklistItems", () => {
 		});
 	});
 
-	// The row Parker asked for by name: every creator starts as a reader, so the door has
-	// to be on the reader's list, and it must be the Studio's own gate rather than a
+	// The row Parker asked for by name: every creator starts as a user, so the door has
+	// to be on the user's list, and it must be the Studio's own gate rather than a
 	// settings page the person has to interpret.
 	it("opens the Studio for somebody who wants to make something", () => {
 		const studio = readerChecklistItems(NO_FACTS, BARE).find((item) => item.key === "studio");

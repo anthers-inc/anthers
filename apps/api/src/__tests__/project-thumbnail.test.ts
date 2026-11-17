@@ -218,7 +218,7 @@ describe("a Project's thumbnail chosen from one of its Works", () => {
 		expect(res.status).toBe(400);
 	});
 
-	it("keeps an Adult Work's thumbnail away from readers who have not opted in", async () => {
+	it("keeps an Adult Work's thumbnail away from users who have not opted in", async () => {
 		const adult = await insertWork({
 			creatorId: creator.id,
 			type: "image",
@@ -236,7 +236,7 @@ describe("a Project's thumbnail chosen from one of its Works", () => {
 				thumb("adult"),
 			);
 
-			// Anonymous and unverified readers get the uploaded image, never the thumbnail the
+			// Anonymous and unverified users get the uploaded image, never the thumbnail the
 			// rating withholds — the Project itself stays listed because it holds other Works.
 			expect((await detail()).thumbnail).toBe(uploadedThumbnail);
 			const publicList = await req(`/api/content/projects`);

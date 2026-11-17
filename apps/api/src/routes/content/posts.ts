@@ -3,7 +3,7 @@
  * Content routes: posts, comments, votes and reviews.
  *
  * The announcement half of the surface. A post is prose that announces; the Works it links
- * are inert embeds resolved at read time. Comments, votes and reviews are the reader's
+ * are inert embeds resolved at read time. Comments, votes and reviews are the user's
  * responses, with their own moderation filters.
  *
  * Split out of `routes/content.ts` on 2026-10-28; docblocks moved with their code.
@@ -315,10 +315,10 @@ const postsRoutes = new Hono()
 		// the bodies the rows already carry (nothing is stored; see `lib/post-work-links.ts`).
 		// Deliberately NOT resolved for access here: the feed lists announcements, and a
 		// post's readability has nothing to do with whether the Works it embeds are open.
-		// The Works each post embeds, resolved for this reader through the same allow-list a
+		// The Works each post embeds, resolved for this user through the same allow-list a
 		// title's mention uses: a tile's image reaches whoever the listing reaches, so an
 		// Adult Work's thumbnail must not arrive here by a query that never asked whether this
-		// reader may see the Work at all.
+		// user may see the Work at all.
 		const allPublicIds = [...new Set(result.flatMap((r) => workPublicIdsFromBody(r.post.body)))];
 		const mentionable = await mentionableWorks(allPublicIds, viewerId);
 
@@ -347,7 +347,7 @@ const postsRoutes = new Hono()
 						displayName: r.creatorDisplayName,
 						avatar: r.creatorAvatar,
 					}),
-					// A card image, if the post embeds a Work this reader may see. A locked
+					// A card image, if the post embeds a Work this user may see. A locked
 					// Work's thumbnail is the preview it is supposed to show; an Adult Work's
 					// is part of the existence its rung withholds, so it is not here.
 					thumbnail: mentionable.get(embedded[0])?.thumbnail ?? null,
@@ -564,7 +564,7 @@ const postsRoutes = new Hono()
 				recordUrl: recordUrlFor(post.atprotoUri),
 				creator: { ...creator, hasStripe: creatorHasStripe },
 				linkedWorks,
-				// The title as a reader sees it, and the Works behind its mentions so the
+				// The title as a user sees it, and the Works behind its mentions so the
 				// heading links each `@` name to the Work it names.
 				displayTitle,
 				mentionedWorks: mentionedWorks.map(({ publicId, slug, title }) => ({
@@ -842,7 +842,7 @@ const postsRoutes = new Hono()
 	 * still gets its scores inline, because the list already fetches them in one grouped
 	 * query and a request per comment would not be a trade at all.
 	 *
-	 * ⭐ **The counts go to every reader (Parker, 2026-10-16 — the numbers ride the
+	 * ⭐ **The counts go to every user (Parker, 2026-10-16 — the numbers ride the
 	 * buttons).** The post page's vote buttons carry the up and down counts themselves,
 	 * YouTube-style, so this read serves the figures behind both to anybody who asks.
 	 * That revises the earlier author-only read: a creator's full visibility on their own
@@ -881,7 +881,7 @@ const postsRoutes = new Hono()
 		}
 
 		// 🚨 **A creator does not vote on reviews of their own Work.** Reviews exist to be
-		// the reader's side of a Work; the creator's say is the Work itself, and a helpful
+		// the user's side of a Work; the creator's say is the Work itself, and a helpful
 		// mark from its maker would be the author moderating their own reception. Read the
 		// review's Work before accepting the vote, because the subject is the review rather
 		// than the Work. Withdrawing a vote is never refused, above this branch.
@@ -928,7 +928,7 @@ const postsRoutes = new Hono()
 		// ⚠️ The counts come back from a WRITE too, not only from the read. A user reacting
 		// to a subject with a buttoned control would otherwise watch the numbers sit still
 		// until a reload — two figures on screen disagreeing, which is worse than either
-		// being absent. They go to every reader now, as on the read above (Parker,
+		// being absent. They go to every user now, as on the read above (Parker,
 		// 2026-10-16).
 		return c.json({
 			score: commentScore(tally),
@@ -971,7 +971,7 @@ const postsRoutes = new Hono()
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
 			userVote: null,
-			// The counts go to every reader, as on the read and the write above (Parker,
+			// The counts go to every user, as on the read and the write above (Parker,
 			// 2026-10-16 — the numbers ride the buttons).
 			up: tally.up,
 			down: tally.down,
@@ -1016,12 +1016,12 @@ const postsRoutes = new Hono()
 			// ── The current media version as a cutoff for reviews ──
 			//
 			// A Work can carry more than one media version, and a review left on the first
-			// release reads beside one left on the build in front of the reader today. So a
-			// reader may ask for the reviews written since the current version arrived, and
+			// release reads beside one left on the build in front of the user today. So a
+			// user may ask for the reviews written since the current version arrived, and
 			// the cutoff is `reviews.createdAt >= works.versionAddedAt`.
 			//
 			// ⚠️ **That is a proxy, and it leaks in both directions.** A review written after
-			// the new version can still be about the old build — a reader who played the 2019
+			// the new version can still be about the old build — a user who played the 2019
 			// cut and posts in 2026 is counted as reviewing the current one. And an edited
 			// review keeps its original `createdAt`: the POST route's conflict branch rewrites
 			// `verdict` and `body` only, so somebody who replayed the current build and edited
@@ -1106,7 +1106,7 @@ const postsRoutes = new Hono()
 			//
 			// ⭐ **A textless review counts but does not list** (Parker, 2026-10-19). The
 			// aggregate above includes every visible verdict; here only rows with words
-			// appear, because a list of bare verdicts is nothing a reader can read. New
+			// appear, because a list of bare verdicts is nothing a user can read. New
 			// writes normalize whitespace-only text to NULL, and the trim guards rows
 			// written outside that path.
 			const reviewRows = await db
@@ -1146,7 +1146,7 @@ const postsRoutes = new Hono()
 			let userVerdict: string | null = null;
 			let userReview: string | null = null;
 			// The composer's answer, read once here rather than discovered by a refused
-			// post. Anonymous readers get null: there is no composer to open.
+			// post. Anonymous users get null: there is no composer to open.
 			const eligibility = currentUserId
 				? await reviewEligibilityFor(currentUserId, work, await workAccessFor(c, work))
 				: null;
@@ -1196,7 +1196,7 @@ const postsRoutes = new Hono()
 						body: r.body ?? "",
 						// The scorer hides nothing. A reviewer's net shows like a commenter's does,
 						// and the exact figures behind it ride the single-subject read for every
-						// reader now (Parker, 2026-10-16 — the numbers ride the buttons).
+						// user now (Parker, 2026-10-16 — the numbers ride the buttons).
 						score: commentScore(tallies.get(r.id) ?? NO_VOTES),
 						userVote: mine.get(r.id) ?? null,
 						/** The review's public record link (the widening task, 2026-10-10); null while there is none, which is ordinary. */
@@ -1232,7 +1232,7 @@ const postsRoutes = new Hono()
 		// ⭐ **An existing review is its author's to change and take back.** The eligibility
 		// gate below decides whether a NEW review may be written; an edit stays available
 		// after the raw attention evidence ages out or access lapses, because the words are
-		// already the reader's.
+		// already the user's.
 		const existing = await db
 			.select({ id: reviews.id })
 			.from(reviews)
@@ -1362,7 +1362,7 @@ const postsRoutes = new Hono()
  *
  * ── The access artifacts ──────────────────────────────────────────────────────
  *
- * A receipt is written into the reader's space by the job, not here. What lives on this
+ * A receipt is written into the user's space by the job, not here. What lives on this
  * router is the key a third party checks it with, and the grant file delivery needs.
  *
  * 🚨 **The issuer document is the public half of the signing key, and nothing else.** It
@@ -1654,8 +1654,8 @@ export async function unpinOtherPosts(creatorId: number, keepPostId: number): Pr
  * embed a Work they cannot open.
  *
  * 🚨 **The cards are a listing of Works, so `maturityHiddenFrom` belongs in the query.**
- * A reader who set a kind of content to Hide meets no card for a Work carrying it, and an
- * Adult Work is absent to a reader who has not opted in and verified — the same rule every
+ * A user who set a kind of content to Hide meets no card for a Work carrying it, and an
+ * Adult Work is absent to a user who has not opted in and verified — the same rule every
  * other listing composes. Without it the browser's veil was the only thing left applying
  * the preference, which turns a Hide into a Blur. The body still carries the link, because
  * hiding is not an access rule and a direct link still opens the Work.

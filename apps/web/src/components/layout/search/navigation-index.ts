@@ -8,13 +8,13 @@
  * the definitions the pages already hold — `NAV_LINKS` in `LoggedInLayout`, `LENSES` in
  * `SharedLensesSection`, `TAB_LABELS` in `SettingsPage` — and it is deliberately explicit
  * rather than importing those components into the layout: importing a page into its own
- * header is a dependency cycle, and the copy below is what a reader would say anyway.
+ * header is a dependency cycle, and the copy below is what a user would say anyway.
  *
  * ⚠️ **The tabs are Library and Discovery** (2026-10-24, when Network retired into
  * Discovery as a recipe preset), and Discovery carries no modes of its own: its one
  * stream is the page, not a destination inside it. A mode that is removed or renamed
  * belongs in this list in the same change: a result that names a mode the page no longer
- * has is a dead link the reader cannot tell from a live one.
+ * has is a dead link the user cannot tell from a live one.
  *
  * ⚠️ **A Settings section's deepest addressable destination is its tab.** The cards have
  * no anchors today, so a result for "Notifications" lands on Activity & Data rather than

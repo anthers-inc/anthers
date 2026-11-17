@@ -60,7 +60,7 @@ export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: 
 	// The gap under the tab bar is the Info tabs' `gap-6` (Parker, 2026-10-16): the
 	// panel's first heading kept sitting too close to the bar. The labels name the
 	// column rather than any tab set, because the shell hands different tabs to
-	// different readers.
+	// different users.
 	return (
 		<aside aria-label="The Work's side tabs" className="flex flex-col gap-6">
 			<div
@@ -91,7 +91,7 @@ export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: 
 
 /**
  * Where this Work has been announced — the posts about it. It lives at the column's foot
- * so announcements never push the reviews a reader came for upward.
+ * so announcements never push the reviews a user came for upward.
  */
 function PostedAbout({ work }: { work: WorkDetail }) {
 	return (

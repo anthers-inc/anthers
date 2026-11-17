@@ -87,7 +87,7 @@ async function indexHtml(): Promise<string> {
 }
 
 /**
- * The build's reader bodies, by page address, read once.
+ * The build's user bodies, by page address, read once.
  *
  * `build.ts` writes `dist/prerender.json` from the standing pages; a server started
  * against an older build simply has no file, and the document ships as the shell. That is

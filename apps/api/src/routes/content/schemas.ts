@@ -203,7 +203,7 @@ export const workBaseSchema = z
 		// own words. Creator-only; the public serializer never sends it.
 		note: z.string().max(2000).optional().default(""),
 		/**
-		 * The name of the CURRENT media version, empty to leave it unnamed. A reader sees it
+		 * The name of the CURRENT media version, empty to leave it unnamed. A user sees it
 		 * beside the version's date once the version was added after the Work was released;
 		 * the archived row carries it into history when a replacement takes over.
 		 */
@@ -457,7 +457,7 @@ export const createProjectSchema = z.object({
 	pageConfig: z.record(z.unknown()).optional(),
 	// The Project's two sort settings (2026-10-19). A creator saves these from the sort
 	// dropdown on the Project page; the detail route applies them when it serializes
-	// members, so the choice governs what readers see. `manual` leaves the stored drag
+	// members, so the choice governs what users see. `manual` leaves the stored drag
 	// order alone (the column default).
 	worksSortMode: z.enum(PROJECT_SORT_MODES).optional(),
 	worksSortDirection: z.enum(PROJECT_SORT_DIRECTIONS).optional(),

@@ -54,7 +54,7 @@ function post(path: string, cookie: string, body: unknown) {
 /**
  * A fresh account that has watched the fixture Work, so the review gate sees the same
  * evidence a real page does. Accounts made before the Work exists (its creator) are left
- * alone; a test that needs an unconsumed reader uses `createAccount` directly.
+ * alone; a test that needs an unconsumed user uses `createAccount` directly.
  */
 async function consume(userId: number): Promise<void> {
 	const [work] = await db
@@ -312,7 +312,7 @@ describe("A verdict written without text", () => {
 
 describe("Helpfulness — reviews sort by it and are never weighted by it", () => {
 	it("carries a floored net and the user's own vote on every review", async () => {
-		// A textless review is not listed, so it is not what a reader can vote on. Give
+		// A textless review is not listed, so it is not what a user can vote on. Give
 		// this block a written review of its own: three fresh users vote on it — two up
 		// and one down lands it at 1 — and the author's own upvote is absent because the
 		// row is inserted directly rather than posted through the route.
@@ -357,7 +357,7 @@ describe("Helpfulness — reviews sort by it and are never weighted by it", () =
 		expect(asVoter.recommendedPercent).toBe(100);
 		expect(asVoter.count).toBe(2);
 
-		// The reviewer sees the figures behind it — and so does every reader now: the
+		// The reviewer sees the figures behind it — and so does every user now: the
 		// single-subject read serves the counts to whoever can see the thing (Parker,
 		// 2026-10-16 — the numbers ride the buttons).
 		for (const cookie of [_userB, cookies[0]]) {
@@ -502,7 +502,7 @@ describe("the record link beside a review", () => {
 		for (const review of list.reviews) expect(review.recordUrl ?? null).toBeNull();
 	});
 
-	it("is the record's own address on Taproot once a record exists, for any reader", async () => {
+	it("is the record's own address on Taproot once a record exists, for any user", async () => {
 		// Every review of the fixture Work gets its own address (the column is unique),
 		// keyed by the row's id so each entry in the list can be matched to it. The list
 		// withholds hidden rows entirely (an earlier describe left one hidden) — a row
@@ -520,7 +520,7 @@ describe("the record link beside a review", () => {
 		}
 		try {
 			// Signed out — the link is not the author's alone: the record is public no
-			// matter who reads, so every reader who can see a review carries it.
+			// matter who reads, so every user who can see a review carries it.
 			const list = await readReviews();
 			expect(list.reviews.length).toBeGreaterThan(0);
 			for (const review of list.reviews) {
@@ -600,7 +600,7 @@ describe("Narrowing the reviews to the current media version", () => {
 			.from(works)
 			.where(eq(works.id, workId));
 
-		// One visible written review belongs to the old build, and the reader's own review
+		// One visible written review belongs to the old build, and the user's own review
 		// (hidden earlier in this suite) does too. Both are given the first version's date;
 		// everything else on this Work was written this run and is the current build's.
 		const oldBuildBodies = ["worth the hour", "actually I have changed my mind again"];
@@ -643,7 +643,7 @@ describe("Narrowing the reviews to the current media version", () => {
 			expect(current.recent.count).toBe(3);
 			expect(current.recent.recommendedPercent).toBe(67);
 
-			// The reader's own verdict and words are not narrowed with the rest: the composer
+			// The user's own verdict and words are not narrowed with the rest: the composer
 			// opens on what they said whatever date it carries.
 			const asAuthor = await readAs("version=current", userA);
 			expect(asAuthor.userVerdict).toBe("recommended");
@@ -679,7 +679,7 @@ describe("Who may write a review", () => {
 			body: "a verdict from somebody who never opened it",
 		});
 
-	it("refuses a reader who has not consumed the Work, and says so before the button", async () => {
+	it("refuses a user who has not consumed the Work, and says so before the button", async () => {
 		const fresh = await createAccount(`rv_unseen_${id}`);
 		const list = await readReviews(fresh.cookie);
 		expect(list.eligibility).toEqual({
@@ -695,7 +695,7 @@ describe("Who may write a review", () => {
 		expect(body.eligibility?.code).toBe("unconsumed");
 	});
 
-	it("asks a downloadable-only Work's reader for the download rather than for time on the page", async () => {
+	it("asks a downloadable-only Work's user for the download rather than for time on the page", async () => {
 		const [original] = await db
 			.select({
 				streamEnabled: works.streamEnabled,
@@ -720,7 +720,7 @@ describe("Who may write a review", () => {
 		}
 	});
 
-	it("opens the composer once the reader has spent time with it", async () => {
+	it("opens the composer once the user has spent time with it", async () => {
 		const account = await createAccount(`rv_seen_${id}`);
 		await consume(account.userId);
 		const list = await readReviews(account.cookie);
@@ -728,7 +728,7 @@ describe("Who may write a review", () => {
 		expect((await write(account.cookie)).status).toBe(201);
 	});
 
-	it("states the gate before the consumption question on a Work the reader cannot unlock", async () => {
+	it("states the gate before the consumption question on a Work the user cannot unlock", async () => {
 		const fresh = await createAccount(`rv_locked_${id}`);
 		const [original] = await db
 			.select({ access: works.access })

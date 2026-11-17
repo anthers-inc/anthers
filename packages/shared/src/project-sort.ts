@@ -3,7 +3,7 @@
  * Sorting for a Project page's two ordered lists — the Works a project holds and the posts
  * announcing them, both carried as arrays keyed by `sortOrder`.
  *
- * ⭐ **A Project's sort is a setting, and it governs what readers see** (Parker,
+ * ⭐ **A Project's sort is a setting, and it governs what users see** (Parker,
  * 2026-10-19, replacing the 2026-10-17 ruling that a non-manual mode was a read-only
  * view). The creator chooses a mode in the list's dropdown; the choice is stored on the
  * Project row (`worksSortMode` / `worksSortDirection` and their posts counterparts) and
@@ -13,7 +13,7 @@
  *
  * This module is shared by both ends of that arrangement: the API sorts a detail response
  * with it, and the owner's editor renders with it, so what the editor shows and what a
- * reader receives cannot drift apart. `sortProjectItems` copies and never writes: a sort choice
+ * user receives cannot drift apart. `sortProjectItems` copies and never writes: a sort choice
  * changes the Project's reading order, never the membership's stored `sortOrder`.
  *
  * The member shape both serializations meet: the works of a project (`ProjectWork`) carry

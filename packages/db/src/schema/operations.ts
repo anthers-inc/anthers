@@ -318,7 +318,7 @@ export const statusIncidents = pgTable(
 	],
 );
 
-// org — one recorded transition inside an incident window, the dated timeline a reader
+// org — one recorded transition inside an incident window, the dated timeline a user
 // scrolls under the incident's title. Written only beside the window's own transitions by
 // the same writer `status_incidents` has, never after the fact.
 export const statusIncidentUpdates = pgTable(

@@ -114,7 +114,7 @@ const ANTHERS_BADGE_KEYS = new Set<string>(ANTHERS_BADGES.map((b) => b.name));
  * ⭐ **The cover is washed as well as blurred** (Parker, 2026-11-06): a medium-strength
  * desaturation on the picture, so a locked card settles back beside its unlocked
  * neighbors at a glance. A badge alone was too easy to read past on a busy grid, and
- * the wash is the part of the signal a reader sees before reading anything.
+ * the wash is the part of the signal a user sees before reading anything.
  */
 export function LockedCover({
 	thumbnail,

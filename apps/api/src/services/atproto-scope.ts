@@ -183,7 +183,7 @@ export function scopeCoversCollection(
  *
  * The forms and their defaults follow the permissioned-data branch's
  * `@atproto/oauth-scopes`, which is where the protocol defines them. `space:` is
- * deliberately not folded into the `repo:` reader: a space permission names a
+ * deliberately not folded into the `repo:` user: a space permission names a
  * type, an authority and a space key as well as a collection, and reading it as
  * a repo grant would answer a different question than the one that was asked.
  */
@@ -249,7 +249,7 @@ function readSingleParam(params: URLSearchParams, key: string): string | undefin
  * Read one `space:` token, or return null when it is not one we can honor.
  *
  * 🚨 **Every parameter is checked, and anything unknown is refused.** A token is
- * a grant of authority, so a spelling this reader does not recognize must not
+ * a grant of authority, so a spelling this user does not recognize must not
  * fall back to the protocol's broad default. The type, authority, space key and
  * collection validate against the same shapes the protocol uses.
  */

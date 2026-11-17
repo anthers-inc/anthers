@@ -2,19 +2,19 @@
 /**
  * The Your Review section's three modes, walked in a browser.
  *
- * A reader who has not met the Work is told what would open the composer; one who has
+ * A user who has not met the Work is told what would open the composer; one who has
  * met it writes a review; and what they wrote then replaces the composer rather than
  * joining the list below. **The card holds one height through all three**, which is the
  * point of walking it rather than asserting the pieces separately: a section that grew
- * only when a review landed would move the tab under the reader's cursor.
+ * only when a review landed would move the tab under the user's cursor.
  *
  * ⭐ **Playing is the transition the brief names.** The episode is playback-mode, so
- * nothing credits until the reader presses a chapter row; the attention engine's first
+ * nothing credits until the user presses a chapter row; the attention engine's first
  * earned tick is flushed and the section re-reads at once, rather than waiting out the
  * thirty-second cadence or a poll. Asserting the composer appears after the click is
  * therefore asserting the live path, not a seeded row.
  *
- * ⚠️ **The reader is this spec's own throwaway account.** Every authed spec shares the
+ * ⚠️ **The user is this spec's own throwaway account.** Every authed spec shares the
  * gauntlet walker, whose attention rows outlive a run; a section about the INELIGIBLE
  * state cannot be walked as somebody another spec may have just credited. The account
  * is minted the canonical way (`db:local-account`) and purged in `afterAll`.
@@ -53,7 +53,7 @@ test.afterAll(async () => {
 	await purgeAccountIds([readerId]);
 });
 
-/** A browser context whose only state is this spec's reader, signed in. */
+/** A browser context whose only state is this spec's user, signed in. */
 async function readerPage(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
 	const context = await browser.newContext({
 		// Empty beyond the cookie, and stated: the project's own storageState would carry
@@ -84,7 +84,7 @@ test("the Your Review section holds one shape from ineligible through reviewed",
 	try {
 		await page.goto(`${WORK_PATH}#reviews`);
 
-		// ── Mode one: the reader cannot review yet ─────────────────────────────
+		// ── Mode one: the user cannot review yet ─────────────────────────────
 		const card = page.getByTestId("your-review");
 		await expect(page.getByRole("heading", { name: "Your Review" })).toBeVisible();
 		await expect(card).toContainText(
@@ -123,7 +123,7 @@ test("the Your Review section holds one shape from ineligible through reviewed",
 		).toBe(closedHeight);
 
 		// ⭐ **Their own words are not repeated among other people's.** The list below is
-		// Other Reviews, and a reader's review is theirs to manage above it.
+		// Other Reviews, and a user's review is theirs to manage above it.
 		await expect(page.getByText(body)).toHaveCount(1);
 	} finally {
 		await context.close();

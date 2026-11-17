@@ -2,7 +2,7 @@
 /**
  * The creator profile's month grouping.
  *
- * The two rules a reader notices are the ones pinned here: a month with nothing in it
+ * The two rules a user notices are the ones pinned here: a month with nothing in it
  * gains no heading, and a stretch of empty months is one spacer rather than one per
  * month. The renderer draws what this returns, so a defect here is a timeline that
  * says the wrong thing about when a creator published.

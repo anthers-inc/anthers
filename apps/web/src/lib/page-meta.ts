@@ -11,7 +11,7 @@
  * 🚨 **A route with no entry keeps the site card**, which is correct for the homepage (the
  * shell's block already names it) and for every page nobody would paste. The doors that exist
  * and must NOT be previewed are listed as an explicit set below rather than left out, so a
- * later reader can tell "considered and refused" from "forgotten".
+ * later user can tell "considered and refused" from "forgotten".
  *
  * Descriptions are user-facing copy, written under *How Anthers Talks About Itself*: one
  * complete sentence each, no figure a generator should own, and no claim the page itself does
@@ -78,7 +78,7 @@ const PAGES: Record<string, PageMeta> = {
 	"/resources": {
 		title: "Resources",
 		description:
-			"The arithmetic behind Anthers, in the open: what a reader's money does, what a creator keeps, and where the organization's share goes.",
+			"The arithmetic behind Anthers, in the open: what a user's money does, what a creator keeps, and where the organization's share goes.",
 	},
 	"/resources/pay-comparison": {
 		title: "How Our Pay Compares",
@@ -160,7 +160,7 @@ export function pageMeta(pathname: string): PageMeta | null {
  * The homepage is included here though `pageMeta` answers null for it, because it is the one
  * route that needs no card of its own and is still the page a sitemap exists to name.
  *
- * 🚨 **This list is also the prerender list.** `pages/standing-pages.tsx` renders one reader
+ * 🚨 **This list is also the prerender list.** `pages/standing-pages.tsx` renders one user
  * body per address here, so a page added to the sitemap without a body — or rendered without
  * a sitemap entry — is a failing test rather than a quiet gap between two lists.
  */

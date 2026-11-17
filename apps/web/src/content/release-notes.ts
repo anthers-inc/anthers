@@ -16,7 +16,7 @@
 //   GitHub release on the tag (`scripts/release-notes.sh`). They are the audit trail.
 //   **Never edit them to match this file, and never derive this file from them
 //   mechanically** — the pass is a person's judgment, which is the point of having one.
-// - **This module is that judgment's output**: the reader-facing entries, grouped into
+// - **This module is that judgment's output**: the user-facing entries, grouped into
 //   arcs rather than commits, filtered of what a user cannot see (test machinery,
 //   contributor tooling, internal rewrites), in Anthers' public voice.
 //
@@ -73,11 +73,11 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
 		version: "2026.11.18",
 		date: "2026-11-14",
-		lede: "A reader touring the app and a creator building a catalog now each meet a checklist that follows what the account has done rather than what was clicked.",
+		lede: "A user touring the app and a creator building a catalog now each meet a checklist that follows what the account has done rather than what was clicked.",
 		entries: [
-			"Discovery carries a reader's orientation card called Getting Around Anthers, with four things to try: follow a creator, save a Work or a post to the Library, give a profile a picture and a line about them, and open the Studio to make something. A row is answered by what the account has done, not by a click; the card leaves once every row is answered, and I know my way around puts it away for good.",
+			"Discovery carries a user's orientation card called Getting Around Anthers, with four things to try: follow a creator, save a Work or a post to the Library, give a profile a picture and a line about them, and open the Studio to make something. A row is answered by what the account has done, not by a click; the card leaves once every row is answered, and I know my way around puts it away for good.",
 			"The Studio's Works page carries the creator's checklist in its lower-right corner rather than across the top, in two phases. Until the ATProto creator permissions are granted and Stripe Payout Setup is complete it is those two rows, which cannot be dismissed; once both are answered the same card becomes Creator First Steps: a picture and a line, a first Work, a release, a first post, and Badges.",
-			"Each checklist links to the wiki walkthrough that covers the whole sequence, Your First Visit for a reader and Releasing Your First Work for a creator, in the required phase as well as the follow-up one. The card is the short form of the same path.",
+			"Each checklist links to the wiki walkthrough that covers the whole sequence, Your First Visit for a user and Releasing Your First Work for a creator, in the required phase as well as the follow-up one. The card is the short form of the same path.",
 			"The credits editor's link to the credits policy now opens the page where crediting a Work lives, after that page moved to the credits section of the wiki.",
 		],
 	},
@@ -99,13 +99,13 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
 		version: "2026.11.16",
 		date: "2026-11-14",
-		lede: "A Badge can now be owned by several creators, and a post, comment, or reply can carry a spoiler that stays hidden until a reader opens it.",
+		lede: "A Badge can now be owned by several creators, and a post, comment, or reply can carry a spoiler that stays hidden until a user opens it.",
 		entries: [
 			"A Badge can now be co-owned by several creators. One creator publishes it and the others accept an invitation; the Badge stays on the publisher's page until an invitation is accepted, and a pending invitation gives the invitee nothing until then. Every owner edits the Badge.",
 			"A supporter's held Collab Badge clears every owner's gates. The first month and each renewal split evenly across the owners in whole cents, and the checkout line names every owner.",
 			"The publisher role is not a rank: an owner can leave once none of their Works still gates on the Badge, and a two-step handover moves the role when the current publisher asks and the target accepts.",
 			"The Badges surfaces carry the shared ownership: a combo avatar and collaborators list on the Badge, a Collab Badges section on each co-owner's profile, a Collaborators tab in the Badge Maker, a shared-support line in checkout, and invitations and handover requests in Creator Settings' Collabs tab.",
-			"Posts, comments, and replies can hide a run of words as a spoiler with double pipes around it. The words are blurred behind a control labeled Spoiler until a reader opens it. A post's feed excerpt and link preview leave the hidden words out, and a hashtag inside one does not become a tag. This is a reading convention, not access control; the words remain in the served text.",
+			"Posts, comments, and replies can hide a run of words as a spoiler with double pipes around it. The words are blurred behind a control labeled Spoiler until a user opens it. A post's feed excerpt and link preview leave the hidden words out, and a hashtag inside one does not become a tag. This is a reading convention, not access control; the words remain in the served text.",
 			"The Bookshelf draws every book as a titled spine with its title running down the binding, and packs the spines onto shelf boards whose labels come from the books on that row. A book's thickness, height, and shade come from a stable hash, so a shelf keeps its shape between visits.",
 			"The video player's play button shows a spinner while it waits for a picture, its controls sit twelve pixels above the bottom edge, and the settings menu opens at full height rather than scrolling inside a one-line box.",
 			"The nineteen standing pages now carry their words in the served document as well as in the bundle, so a reader service, an archiver, or an agent that does not run JavaScript gets the prose instead of an empty shell. Work pages, posts, and creator profiles still answer with the app shell, because their words come from an API read.",
@@ -308,13 +308,13 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 		date: "2026-10-29",
 		lede: "A physical good's page is the storefront now, and its creator edits the good where a buyer meets it.",
 		entries: [
-			"A physical good's page shows its pictures as a gallery now: up to eight of them, each shown whole inside a square frame, moved through with arrows or the thumbnails beneath, and each carrying the description its creator wrote for readers who cannot see it.",
+			"A physical good's page shows its pictures as a gallery now: up to eight of them, each shown whole inside a square frame, moved through with arrows or the thumbnails beneath, and each carrying the description its creator wrote for users who cannot see it.",
 			"The page is composed around those pictures, with the variants and the price box beside them and the buy buttons at the foot beneath both. A catalog card takes the gallery's first picture as the good's art, so a good's pictures are chosen in one place rather than two.",
 			"A creator's own view of the page is the editor now: each variant row and the picture gallery carry a pencil, and shipping, handling time, and tax category sit under the price box as the facts a buyer reads. The Goods Management area is gone from the Manage tab, because a good no longer opens a media manager.",
 			"A visitor who is not signed in reads the price as a breakdown now: the good's price, its shipping, and sales tax marked as calculated at checkout, with a note that an account is what shows the total with tax, because the estimate resolves from a saved billing address.",
 			"A good's page adds the smallest number its listing will take to the basket, and the count is changed there now, where the line's quantity already lived, rather than in a stepper beside the buy buttons.",
 			"A creator's own draft reads in its storefront before it has a price, saying the good is not priced yet and naming the Access row as where to set one, where the page answered that the good was not priced for sale.",
-			"A draft's kind is changed from the chip under the Work's title, the one that already names the kind to a reader: it carries a pencil and saves on the choice, the way the access chip beside it works. Only a draft whose kind could still change carries the pencil, and a released Work's chip is read-only.",
+			"A draft's kind is changed from the chip under the Work's title, the one that already names the kind to a user: it carries a pencil and saves on the choice, the way the access chip beside it works. Only a draft whose kind could still change carries the pencil, and a released Work's chip is read-only.",
 		],
 	},
 	{
@@ -459,11 +459,11 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 		date: "2026-10-21",
 		lede: "Guided view became a per-page choice for a comic's creator, the Creator Terms state the credits policy, and the feed's music and book lenses went live.",
 		entries: [
-			"Guided view is a per-page setting on a comic now, off by default: a page with it off shows no detected regions, asks for nothing, and reads whole to every reader. Turning it on shows that page's proposals and the controls that define them, and only an enabled page can require its panels. Releasing never waited on a confirmation and still does not, and a creator's preview now matches a reader's.",
+			"Guided view is a per-page setting on a comic now, off by default: a page with it off shows no detected regions, asks for nothing, and reads whole to every user. Turning it on shows that page's proposals and the controls that define them, and only an enabled page can require its panels. Releasing never waited on a confirmation and still does not, and a creator's preview now matches a user's.",
 			"The Creator Terms state the credits policy now: every Work a creator releases carries credits, at least one has to name a human, Created and Generated are defined, and a false credit is the violation. The terms also say Anthers does not run AI detection.",
 			"The Music Player and Bookshelf lenses read the Network feed now. A track arriving there groups under the Project it was released on, and the lens opens that record whole with its own track count, while the rows a lens does not draw gray out rather than narrowing the feed it reads. The Channel Guide stays grayed on the feed, because its programs play inline and a feed entry has nothing to play.",
 			"The Channel Guide draws itself like a schedule now: fixed-height channel bugs at the top, program blocks aligned row for row, and a rank ruler down the left naming positions from the newest. The playing view carries that ruler into its rail, marking the row above the current one Up next, and the up-next control became a directional pill that names the next program or says that nothing sits above.",
-			"A Work's owner sees the page and section counts its readers see now: a comic a creator opened no longer says the book has no pages yet, and an ebook owner is sent to the reflow reader rather than the page one.",
+			"A Work's owner sees the page and section counts its users see now: a comic a creator opened no longer says the book has no pages yet, and an ebook owner is sent to the reflow reader rather than the page one.",
 			"The sidebar's Library, Network, and Discovery rows keep one order now, and the drag-to-reorder control is gone. A session opens on a starting tab instead, an account setting that defaults to Network and is chosen from a Where You Start card in Settings; an account that had rearranged its tabs lands on the tab it had put first, and the desktop app opens its user side on that tab.",
 			"The player bar enters and leaves rather than appearing in one frame, and the page's bottom padding moves on the same duration, so pressing play no longer shifts the content under the pointer. A track change cross-fades the cover and lifts the title and creator a few pixels, the queue and lyrics panels enter and leave the same way, and a bar on its way out still shows what it was playing.",
 			"The share sheets, the post page's confirmations, the profile block confirmation, and the three Studio delete dialogs rise a few pixels, settle, and stay through their overlay's fade, keeping the name of what is going away on the box until it is gone.",
@@ -575,7 +575,7 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 			"The music on a Work's page got the transport it was missing: skip back and forward around a large play button, keyboard shortcuts, a waveform drawn to match its space rather than stretched fat, and a lyrics card that folds away when it is not wanted.",
 			"A track can be heard while it still processes now, served as its original behind the same access check and metering every stream runs; and where no player can fill the Work's place yet, the place itself holds a shaped placeholder, so the page stops jumping when the file lands and processing starts.",
 			"The desktop app signs people in without leaving the window now: the address is typed, the emailed code is spent in the app, and the session it opens is revocable per device from Settings. The handoff to a browser remains for signing in with Bluesky.",
-			"A credit's kind states the copyright boundary it draws now: a creator's editor offers Created and Generated, the retired Licensed type is rewritten where it named somebody and dropped where it named nobody, and the badges a reader sees on a Work keep AI as the word for machine-made contribution.",
+			"A credit's kind states the copyright boundary it draws now: a creator's editor offers Created and Generated, the retired Licensed type is rewritten where it named somebody and dropped where it named nobody, and the badges a user sees on a Work keep AI as the word for machine-made contribution.",
 			"The sticker picker opens over the page now rather than pushing it down: a pill beside the votes opens it, the rows run smallest to largest, and each row names what the Sticker directs and how many of that denomination the account's allowance still affords, so the giver no longer divides a remaining balance in their head.",
 			"Every field on a Work's page shows its full structure at every value now, an unfilled one wearing a fitting placeholder, so the layout is the same from Work to Work and nothing hides a place worth editing; and the Rating tab is the rating table itself in both views, answered in one act, with its two grid answers named None and General.",
 			"The topbar's light and dark switch became a theme picker: an icon dropdown in the corner utilities, grouped into Light and Dark, with the catalog's one theme named and the active choice marked. The logged-out navigation's two doors changed order, Log In leading and Sign Up Free closing the corner.",
@@ -594,13 +594,13 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 			"Anthers measures its traffic with its own first-party analytics now: page views and feed-card impressions are counted in Anthers' own tables, apart from the attention pipeline that pays the Time Pool, so a page view and a play are different figures and stay that way.",
 			"The measurement carries no cookies, no account, no identity, and no IP address: a session's visits ride a random label generated per tab, which is never sent as a cookie and is gone when the tab closes, and raw rows are deleted after thirty days into page-level totals. The Privacy Policy describes exactly this now, and its Cookies section names the label the measurement rides.",
 			"Creators see where their traffic comes from in the Studio now: visits per day across their own pages, split into direct, search, social, and other referrers, read from the same tables with no new collection of any kind.",
-			"The media month calculator is live at /resources/media-month: a reader assembles a month from a video subscription, a music one, storefront purchases, direct support, and the free ad-supported line, and reads two itemized receipts side by side, what their money does today beside what it would do on Anthers, with a marker wherever a platform's figure is not published.",
+			"The media month calculator is live at /resources/media-month: a user assembles a month from a video subscription, a music one, storefront purchases, direct support, and the free ad-supported line, and reads two itemized receipts side by side, what their money does today beside what it would do on Anthers, with a marker wherever a platform's figure is not published.",
 			"How money moves through Anthers is drawn as a resource now, in percentages: the three ways a person's money arrives and every way it leaves, card processing at cost, half of an Anthers subscription to the Time Pool, the remainder to the charitable programs, and creator money passing through in full. It replaces the projections resource, which left the public site while the plan is still settling.",
-			"A Work's page became the one surface for every kind now: a creator edits the Work at its own address, with the mode banner, the centered byline strip and the two-column record, a video carries Info and Showings tabs, and a reader's page of any kind is the same tabbed record, with the per-kind linear pages and the goods two-up retired.",
+			"A Work's page became the one surface for every kind now: a creator edits the Work at its own address, with the mode banner, the centered byline strip and the two-column record, a video carries Info and Showings tabs, and a user's page of any kind is the same tabbed record, with the per-kind linear pages and the goods two-up retired.",
 			"A video, spoken audio, or music carries creator-authored chapters now: every timestamp the creator typed into the description is a cue, the timestamps render as links that seek the player, spoken audio and music list the chapters in the transport, and video adds a segmented seek bar. A timestamp in a review body renders the same way, and a ?t address opens the Work at that moment.",
 			"A basket holds items from several creators now: the rule that wiped it when a second creator's Work went in is gone, the charge settles the creators together, and each creator's share moves out at completion.",
 			"A merch order quotes itself in the store panel now: with a color and size picked while signed in, the panel names the discounted goods, the shipping, and, from the buyer's saved billing zip, the tax-inclusive total. A buyer without a saved address sees goods and shipping with tax calculated at checkout, and a signed-out buyer sees no quote, since the quote prices account facts.",
-			"The Bookshelf carries its continue-reading rail now: where a reader stopped is kept as they read, so the rail surfaces each unfinished book, comic or text at the place to pick up, and the spines' progress ribbons read the same record.",
+			"The Bookshelf carries its continue-reading rail now: where a user stopped is kept as they read, so the rail surfaces each unfinished book, comic or text at the place to pick up, and the spines' progress ribbons read the same record.",
 			"Hover previews gained their stops now: a Media & Play settings row turns the inline playback off entirely, and sound is the viewer's gesture rather than the hover's, a preview always beginning muted, with a speaker button on the preview and a remembered setting for audio on hover previews, default off.",
 			"The status page was rebuilt with a memory: an overall state banner, uptime bars sampled every five minutes, and an incident log, where it used to answer only about this moment.",
 			"The Activity & Data tab's history answers in a picture now: one bar per day of the billing period, stacked by creator, above the row record the Privacy Policy points at.",
@@ -719,7 +719,7 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 			"Printful prints each shirt on demand and ships it straight to the buyer; the purchase keeps the order's record, and the tracking arrives there as Printful reports it. A returned shirt cancels its print order wherever Printful's own states still allow the cancellation.",
 			"A creator's storage reads on the dashboard now: how much the catalog and the kept files hold against the held rung's allowance, for every account. Keeping files past a storage obligation's end is an election the creator states, and the claim-aware sweep watches the deadline.",
 			"A renewal's invoice carries the month's metered overflow at the object store's own rate, with no mark-up, so the ruled shape the pricing copy describes is the one the money follows.",
-			"Notifications arrived as a feed and a bell: engagement with a creator's own works, and publishing from creators a reader follows, with the kinds of notices a creator receives chosen per group rather than fixed. Money keeps its own receipts instead.",
+			"Notifications arrived as a feed and a bell: engagement with a creator's own works, and publishing from creators a user follows, with the kinds of notices a creator receives chosen per group rather than fixed. Money keeps its own receipts instead.",
 			"A payout that left Anthers now emails the creator it reached, naming the amounts, at the moment the transfer landed.",
 			"The credits a creator gives a contributor have their own Studio panel, and its identity field suggests handles as the creator types.",
 			"The signup page wears the dark palette and the banded rhythm the site's other top-level pages read as.",
@@ -745,7 +745,7 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 		date: "2026-10-07",
 		lede: "The emails keep their palette on a phone set to dark.",
 		entries: [
-			"Email from Anthers keeps the palette it was written in on a phone set to dark mode. The messages were written entirely in the light theme, and the mail clients that re-theme mail for a dark reader setting were washing them out; the messages now say so, and the clients that honor it leave them alone.",
+			"Email from Anthers keeps the palette it was written in on a phone set to dark mode. The messages were written entirely in the light theme, and the mail clients that re-theme mail for a dark reading setting were washing them out; the messages now say so, and the clients that honor it leave them alone.",
 		],
 	},
 	{

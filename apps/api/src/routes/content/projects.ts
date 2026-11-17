@@ -381,7 +381,7 @@ const projectsRoutes = new Hono()
 
 		/**
 		 * A Project whose thumbnail is one of its Works reads that Work's thumbnail here too,
-		 * filtered by what this reader may see — the owner's `mine` listing sees every
+		 * filtered by what this user may see — the owner's `mine` listing sees every
 		 * Work of theirs, a public listing only the ones it could open.
 		 */
 		const projectThumbnails = await resolveProjectThumbnails(
@@ -547,7 +547,7 @@ const projectsRoutes = new Hono()
 		]);
 		await Promise.all(itemRows.map((r) => resolveWorkThumbnail(r.work)));
 
-		// The thumbnail chosen from a Work is resolved from the list this reader already sees:
+		// The thumbnail chosen from a Work is resolved from the list this user already sees:
 		// a Work hidden from them contributes nothing and the uploaded image stands in.
 		const thumbnailWork = itemRows.find((m) => m.work.id === row.project.thumbnailWorkId)?.work;
 		/*

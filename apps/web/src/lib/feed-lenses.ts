@@ -9,7 +9,7 @@
  *
  * ⭐ **Only releases are items.** A lens organizes Works; a post is not a Work and has no
  * shape in one, exactly as it sits out the Library's lenses. A feed post announcing an
- * album is how a reader hears about it, not a second copy of the record.
+ * album is how a user hears about it, not a second copy of the record.
  *
  * 🚨 **The feed ships no payload, so the lens composes the delivery address.** A feed
  * entry carries the card and the access verdict, never a transcode URL — the rule the
@@ -62,7 +62,7 @@ function creatorOf(value: unknown): {
  * The feed's releases as the lenses' corpus, in feed order.
  *
  * Each entry becomes an unsaved, unhidden item — the Network is what arrived, not what a
- * reader kept, so `purchased` and `hidden` have no meaning here and stay false. The
+ * user kept, so `purchased` and `hidden` have no meaning here and stay false. The
  * creator's display surface is flattened onto the Work because that is the shape the
  * lenses read a channel or an artist from.
  */

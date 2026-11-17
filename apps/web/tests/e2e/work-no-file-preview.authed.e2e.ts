@@ -114,7 +114,7 @@ test("a fileless draft's preview draws the same silhouette instead of nothing", 
 		// Unlocked is the preview this task was written from: the user's Record, whose
 		// deliverable slot holds the same silhouette the editor drew a moment ago —
 		// silent (no editor note, no picker), keeping both surfaces honest without
-		// teaching a Record whose reader it cannot know.
+		// teaching a Record whose user it cannot know.
 		await page.getByRole("button", { name: "User (Unlocked)" }).click();
 		await expect(page).toHaveURL(/\?previewAs=unlocked$/, { timeout: 15_000 });
 		await expect(page.getByRole("button", { name: "User (Unlocked)" })).toHaveAttribute(

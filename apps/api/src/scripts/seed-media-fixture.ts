@@ -690,13 +690,13 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 			await renderPaged({ jobId: job.id });
 			if (spec.media === "comic") {
 				// The fixture is a comic whose creator has turned guided view on and
-				// confirmed the detected layout: a reader is sent geometry only for pages
+				// confirmed the detected layout: a user is sent geometry only for pages
 				// that are both enabled and confirmed, and the panel-mode specs walk these
 				// regions. Leaving it off would make the fixture read as a Work nobody has
 				// looked at, which is a different state.
 				await db.update(workPages).set({ guidedView: true }).where(eq(workPages.workId, workId));
 				// Confirm the detector's proposals: a creator save clears `auto` on every
-				// region, which is what makes them geometry a reader may use.
+				// region, which is what makes them geometry a user may use.
 				const pages = await db
 					.select({ id: workPages.id, panels: workPages.panels })
 					.from(workPages)

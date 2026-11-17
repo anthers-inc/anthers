@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The version history a reader sees on a Work's page.
+ * The version history a user sees on a Work's page.
  *
  * ⭐ **Names and dates of versions added after release, and nothing else.** The public read
  * filters on `uploadedAt >= releasedAt`, so the build the Work was released with is the

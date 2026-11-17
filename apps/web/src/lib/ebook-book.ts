@@ -58,7 +58,7 @@ export interface SectionManifest {
 }
 
 /**
- * A ladder fetch that said no for a reason a reader should answer politely: an expired
+ * A ladder fetch that said no for a reason a user should answer politely: an expired
  * allowance (402 — the Public Access meter), an access failure (403), the household
  * limit. The chrome renders this rather than a stack trace.
  */
@@ -171,7 +171,7 @@ function hardenSectionDocument(str: string): string {
 	// pointed every reference the manifest holds at a blob of its own making; what is left
 	// pointing at an absolute external address is content the ladder never delivered, and
 	// Chromium's preload scanner can issue for it BEFORE the document's own CSP attaches —
-	// a request whose failure itself is a leak (it tells the far host a reader opened this
+	// a request whose failure itself is a leak (it tells the far host a user opened this
 	// book). So an absolute http(s) subresource loses its attribute outright: no request
 	// event, no failure event, nothing to enforce. A relative path that resolves to
 	// nothing stays — it can only 404 against this origin, read nothing, and leak nothing.
@@ -323,7 +323,7 @@ export function buildEbookBook(
 			const index = indexByHref.get(path);
 			if (index == null) {
 				// Nowhere — the view's own go-to catch logs it rather than landing the
-				// reader somewhere real. A broken internal link must not mean "go to the
+				// user somewhere real. A broken internal link must not mean "go to the
 				// start of the book".
 				return { index: -1, anchor: () => null };
 			}

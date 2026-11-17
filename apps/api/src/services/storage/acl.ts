@@ -42,7 +42,7 @@ export const PUBLIC_MEDIA_TYPES: ReadonlySet<string> = new Set([
  *
  * `image`, `gallery` and `screenshot` are deliberately absent: an image Work's source set
  * is its gallery, and a gallery is the deliverable, not the storefront. They are stored
- * private under `source-images/` and reach a reader only through an access-checked route.
+ * private under `source-images/` and reach a user only through an access-checked route.
  */
 export const IMAGE_MEDIA_TYPES: ReadonlySet<string> = new Set([
 	"avatar",

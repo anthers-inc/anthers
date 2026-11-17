@@ -17,7 +17,7 @@ export function htmlTextOf(html: string, doc: Document = document): string {
 	if (!html) return "";
 	const tmp = doc.createElement("div");
 	tmp.innerHTML = html;
-	// 🚨 A tag is a public label, and a spoiler's words were withheld from the reader on
+	// 🚨 A tag is a public label, and a spoiler's words were withheld from the user on
 	// purpose — a `#hashtag` typed inside one must not mint one. The element is removed
 	// rather than its text filtered, so the words are gone before parsing ever sees them.
 	for (const hidden of tmp.querySelectorAll(".spoiler")) hidden.remove();

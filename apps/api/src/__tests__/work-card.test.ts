@@ -12,7 +12,7 @@
  *    thumbnail back to the exact audience the rating withholds them from.
  * 3. **A rating above General serves the site card, not the Work's.** The endpoint answers
  *    `preview: null` for Mature rather than the facts, because the preview lands somewhere
- *    the reader never chose to meet the work.
+ *    the user never chose to meet the work.
  */
 
 import { beforeAll, describe, expect, it } from "bun:test";

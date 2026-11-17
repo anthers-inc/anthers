@@ -612,7 +612,7 @@ describe("the Stickers on a page", () => {
 		const work = await insertWork({ creatorId, type: "text", title: `Grouped ${RUN}` });
 		// Two of one denomination and one of another: the decoration reports two levels. The
 		// counts that the old payload published would have said three Stickers, and the art
-		// grouping would have let a reader add up what they cost.
+		// grouping would have let a user add up what they cost.
 		for (const artKey of ["butterfly-small", "butterfly-small", "butterfly-medium"]) {
 			const res = await give(cookie, { subjectType: "work", subjectId: work.id, artKey });
 			expect(res.status).toBe(201);

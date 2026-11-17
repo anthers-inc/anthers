@@ -13,7 +13,7 @@
  *
  * 🚨 **The record is written before the listing that points at it.** A listing is public the
  * moment it lands, so a gated listing that names a space whose manifest has not been written
- * yet is the first thing a reader follows to nothing. This module puts the draft and the
+ * yet is the first thing a user follows to nothing. This module puts the draft and the
  * manifest, verifies both, and only then lets `work-listing.ts` build the record; the one
  * pointer it cannot know until the listing exists — the draft's `publishedAs` and the
  * manifest's `work` — is filled by {@link linkCreatorSpace} immediately afterwards.
@@ -21,7 +21,7 @@
  * ⚠️ **The database is the outbox and the creator owns the record.** The Studio still writes
  * the Work row, and the job mirrors it here; a failed space write leaves the row as the
  * backlog and the job's retry converges. The outbox table is not reused because it is shaped
- * for a user's space — one row per reader state, drained against the account's own space —
+ * for a user's space — one row per user state, drained against the account's own space —
  * while a creator-space write is one idempotent record per publish, already inside a retrying
  * job.
  *

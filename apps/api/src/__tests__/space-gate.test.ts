@@ -4,9 +4,9 @@
  *
  * The staging test proves the protocol path — a space authority, a service-auth token, and a
  * credential issued or refused. This proves the part the protocol never sees: which Work a
- * space names, who owns it, and what `resolveAccess` says about the reader. The cases are the
+ * space names, who owns it, and what `resolveAccess` says about the user. The cases are the
  * product's existing distinctions rather than new ones — owner, purchase, unpublished — plus
- * the two the network adds, a space that is not the creator's and a reader with no account.
+ * the two the network adds, a space that is not the creator's and a user with no account.
  */
 import { afterAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
@@ -68,7 +68,7 @@ describe("parseCreatorSpace", () => {
 });
 
 describe("authorizeSpaceAccess", () => {
-	it("authorizes the owner, an entitled reader and the refusals in between", async () => {
+	it("authorizes the owner, an entitled user and the refusals in between", async () => {
 		const creator = await createAccount(`gate-creator-${Date.now().toString(36)}`);
 		const reader = await createAccount(`gate-reader-${Date.now().toString(36)}`);
 		const outsider = await createAccount(`gate-outsider-${Date.now().toString(36)}`);
@@ -147,7 +147,7 @@ describe("authorizeSpaceAccess", () => {
 		expect(ownerWrite).toEqual({ authorized: true, reason: "owner" });
 	});
 
-	it("keeps a private Work out of reach even for a reader who paid for it", async () => {
+	it("keeps a private Work out of reach even for a user who paid for it", async () => {
 		const creator = await createAccount(`gate-private-creator-${Date.now().toString(36)}`);
 		const reader = await createAccount(`gate-private-reader-${Date.now().toString(36)}`);
 		const work = await insertWork({

@@ -18,7 +18,7 @@ interface EditorToolbarProps {
 	 * Whether the toolbar carries the Spoiler mark. The post editor does; a text Work's
 	 * article editor does not, because the Work's read renders its stored HTML directly and
 	 * has no reveal to hide the words behind — a Spoiler button there would mark text the
-	 * reader still sees. The editor is shared, so the scope is a prop rather than a variant
+	 * user still sees. The editor is shared, so the scope is a prop rather than a variant
 	 * check inside the toolbar.
 	 */
 	spoiler?: boolean;

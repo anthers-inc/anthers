@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Drain the receipts Anthers owes readers' spaces.
+ * Drain the receipts Anthers owes users' spaces.
  *
  * ⭐ **The `purchase_receipts` row is the worklist, and the sweep is the guarantee.** A payment
  * webhook inserts a `pending` row when it stamps a purchase; this job writes the signed
- * record into the reader's space and marks the row. That is the same split the space outbox
+ * record into the user's space and marks the row. That is the same split the space outbox
  * uses: the database says what is owed, the sweep is what moves it, and a missed enqueue
  * costs a minute rather than the write.
  *
  * ⚠️ **The sweep is bounded and sequential on purpose.** One receipt is one small record to
- * another server; fifty of them at once would spend the reader's PDS login budget and this
+ * another server; fifty of them at once would spend the user's PDS login budget and this
  * worker's attention for no gain. A failure leaves the row `pending` with its attempts
  * counted, and only an exhausted row is marked `failed` — a state a person reads, not one
  * another retry silently papers over.
  *
- * A reader with no hosted identity is `skipped`, not failed: Anthers has no credential for
+ * A user with no hosted identity is `skipped`, not failed: Anthers has no credential for
  * that space, so the receipt waits for a reissue after the same choice every other space
  * write waits on.
  */

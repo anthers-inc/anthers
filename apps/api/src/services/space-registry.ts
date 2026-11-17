@@ -101,7 +101,7 @@ export interface OwnedSpace {
 /**
  * The policies a user space is created with.
  *
- * ⭐ **Member-list read and write, open app access.** The reader's own state is not public:
+ * ⭐ **Member-list read and write, open app access.** The user's own state is not public:
  * only the owner and the members the design adds later may read it. App access stays open
  * until the app perimeter lands, which is the documented staging state rather than the end
  * state; a closing of it is a policy change on the space, not a new space.
@@ -249,7 +249,7 @@ interface FoundSpace {
  * ⚠️ **`listSpaces` is filtered by the type and then the address is matched by its key.** The
  * listing carries only the URI today, so a space of another type under the same owner is not
  * this one; matching on the type in the path keeps the registry from adopting a creator space
- * as the reader's Library.
+ * as the user's Library.
  */
 async function spaceOnPds(
 	session: SpaceSession,
@@ -462,7 +462,7 @@ export async function ownedSpacesFor(
  * ⚠️ **The two sources are deliberately different questions.** A registry row is a space this
  * deployment knows it created; a Work with a draft or gated address is a creator whose space
  * the Studio has written into. Neither alone reaches every owner — a creator who never saved
- * anything has no registry row, and a reader who saved but published nothing has no Work. The
+ * anything has no registry row, and a user who saved but published nothing has no Work. The
  * union is the smallest set that can hold an owned space, and `ownedSpacesFor` decides which
  * spaces each account actually has.
  */
