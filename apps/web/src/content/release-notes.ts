@@ -71,6 +71,17 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.19",
+		date: "2026-11-18",
+		lede: "Checkout's card and address fields take their colors from the theme again, and a feed's hover preview can be scrubbed to any point.",
+		entries: [
+			"The card and address fields in checkout take their colors from the theme around them again. They were still styled with variables the theme no longer defines, so on the light theme the fields came out dark green with dark green text, and on the dark theme cream with cream labels. The elements now take the theme's own colors.",
+			"A feed tile's hover preview carries a slim strip along its bottom. The strip shows how far the preview has run and seeks on click or drag, for video and audio Works alike, and it holds the pointer when a drag leaves the tile, so the preview does not disappear mid-gesture.",
+			"Anthers' copy now says user rather than reader wherever the word named a person, across the app's text, the FAQ, the comparison page, the email that tells a creator what sold, and these release notes. A user is every account; a creator is the subset that publishes, and reader stays only where it names a thing that reads, as in a screen reader or an ebook reader.",
+			"The credits editor's link to the credits policy now opens the page under Credits & Collaborators rather than an address it had left behind.",
+		],
+	},
+	{
 		version: "2026.11.18",
 		date: "2026-11-14",
 		lede: "A user touring the app and a creator building a catalog now each meet a checklist that follows what the account has done rather than what was clicked.",
