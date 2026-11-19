@@ -25,7 +25,7 @@ import { AddressElement, Elements } from "@stripe/react-stripe-js";
 import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
 import { useMemo } from "react";
 import { getStripe } from "../../lib/stripe";
-import { stripeAppearance } from "../../lib/stripeCard";
+import { useStripeAppearance } from "../../lib/stripeCard";
 import type { UsAddressInput } from "./UsBillingAddressForm";
 import type { SavedPrefill } from "./useSavedBillingAddress";
 import type { SessionBillingAddress } from "./useSessionBillingAddress";
@@ -67,7 +67,7 @@ export default function CheckoutBillingAddressBlock({
 	prefill: SavedPrefill;
 }) {
 	const { setAddress, accepted, error, updating } = billing;
-	const appearance = useMemo(stripeAppearance, []);
+	const appearance = useStripeAppearance();
 	const options = useMemo(
 		() => ({
 			mode: "billing" as const,

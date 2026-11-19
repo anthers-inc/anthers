@@ -36,9 +36,9 @@ import {
 	PaymentElement,
 	useCheckoutElements,
 } from "@stripe/react-stripe-js/checkout";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getStripe } from "../../lib/stripe";
-import { stripeAppearance } from "../../lib/stripeCard";
+import { useStripeAppearance } from "../../lib/stripeCard";
 import CheckoutBillingAddressBlock from "../payments/CheckoutBillingAddressBlock";
 import CheckoutShippingAddressBlock from "../payments/CheckoutShippingAddressBlock";
 import { formatAddress } from "../payments/UsBillingAddressForm";
@@ -310,7 +310,7 @@ function useCartClientSecret(contentKey: string) {
 
 export default function CartCheckout(props: CartCheckoutProps) {
 	const { secret, failed, fetching, retry } = useCartClientSecret(props.contentKey);
-	const appearance = useMemo(stripeAppearance, []);
+	const appearance = useStripeAppearance();
 	if (failed) {
 		return (
 			<div className="alert alert-warning text-sm">

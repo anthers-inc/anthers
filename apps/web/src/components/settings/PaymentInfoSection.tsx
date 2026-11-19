@@ -23,9 +23,9 @@ import { apiFetch } from "@anthers/web-shared/rpc";
 import type { SavedBillingAddress } from "@anthers/web-shared/types";
 import { AddressElement, Elements, useElements } from "@stripe/react-stripe-js";
 import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getStripe } from "../../lib/stripe";
-import { stripeAppearance } from "../../lib/stripeCard";
+import { useStripeAppearance } from "../../lib/stripeCard";
 import { formatAddress } from "../payments/UsBillingAddressForm";
 
 interface SavedCard {
@@ -183,7 +183,7 @@ export default function PaymentInfoSection() {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [savedJustNow, setSavedJustNow] = useState(false);
-	const appearance = useMemo(stripeAppearance, []);
+	const appearance = useStripeAppearance();
 
 	const load = useCallback(async () => {
 		try {
