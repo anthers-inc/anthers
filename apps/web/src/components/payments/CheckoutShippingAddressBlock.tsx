@@ -13,7 +13,7 @@ import { AddressElement, Elements } from "@stripe/react-stripe-js";
 import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
 import { useMemo } from "react";
 import { getStripe } from "../../lib/stripe";
-import { stripeAppearance } from "../../lib/stripeCard";
+import { useStripeAppearance } from "../../lib/stripeCard";
 import type { UsAddressInput } from "./UsBillingAddressForm";
 import type { SessionShippingAddress } from "./useSessionShippingAddress";
 
@@ -50,7 +50,7 @@ export default function CheckoutShippingAddressBlock({
 	shipping: SessionShippingAddress;
 	billingAddress: UsAddressInput | null;
 }) {
-	const appearance = useMemo(stripeAppearance, []);
+	const appearance = useStripeAppearance();
 	const options = useMemo(
 		() => ({
 			mode: "shipping" as const,

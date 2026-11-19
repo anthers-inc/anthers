@@ -12,9 +12,9 @@ import {
 	useStripe,
 } from "@stripe/react-stripe-js";
 import type { StripeAddressElementChangeEvent } from "@stripe/stripe-js";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { getStripe } from "../../lib/stripe";
-import { stripeAppearance } from "../../lib/stripeCard";
+import { useStripeAppearance } from "../../lib/stripeCard";
 
 /** What the confirmation modal needs — computed server-side by /subscriptions/preview. */
 export interface SubscriptionPreview {
@@ -460,7 +460,7 @@ function PaymentForm({
 
 export default function SubscriptionPaymentModal(props: Props) {
 	const [pending, setPending] = useState<PendingPayment | null>(null);
-	const appearance = useMemo(stripeAppearance, []);
+	const appearance = useStripeAppearance();
 
 	// A closed modal starts fresh; the incomplete subscription, if one was created, is
 	// Stripe's to expire, and the next open begins at the address step.
