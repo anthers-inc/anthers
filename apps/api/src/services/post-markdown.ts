@@ -169,6 +169,25 @@ export function postContentExcerpt(
 }
 
 /**
+ * A stored markdown body as the HTML a page renders.
+ *
+ * ⭐ **The no-JavaScript body and the write boundary share this renderer on purpose.** A
+ * post is stored as markdown and read in the app through `react-markdown`; the served
+ * document has no React, so it renders through the `marked` half of the same round trip that
+ * defines the stored form — including the spoiler extension — and then through
+ * `sanitizePostHtml`, the allowlist the stored form is *defined* by. The two renderers agree
+ * on structure because the round trip is what made the markdown in the first place; what
+ * this must never do is render a second, less careful conversion beside the page.
+ *
+ * Raw HTML in the markdown is not a way around the sanitizer: `marked` passes it through and
+ * the sanitizer strips whatever the editor could not have produced.
+ */
+export function postBodyHtml(md: string | null | undefined): string {
+	if (!md?.trim()) return "";
+	return sanitizePostHtml(String(marked.parse(md, { async: false })));
+}
+
+/**
  * HTML from the editor → the markdown that gets stored.
  *
  * The editor's `getHTML()` output is already sanitized vocabulary (the client cannot be
