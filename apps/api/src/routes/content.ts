@@ -30,6 +30,7 @@ import {
 	projectItems,
 	purchases,
 	reviews,
+	users,
 	votes,
 	workAssets,
 	workBuildFiles,
@@ -566,17 +567,62 @@ export async function resolveProjectThumbnails(
  * writes.
  */
 export async function publicWorkCard(param: string) {
-	const work = await findWorkRow(param);
+	const work = await publicWorkRow(param);
 	if (!work) return null;
-	if (work.visibility !== "released") return null;
-	if (requiresAdultVerification(work.maturity)) return null;
-	if (work.creatorId != null && (await isSuspendedAccount(work.creatorId))) return null;
 	await resolveWorkThumbnail(work);
 	return {
 		title: work.title,
 		description: work.description,
 		thumbnail: work.thumbnail,
 		maturity: work.maturity,
+	};
+}
+
+/**
+ * The Work row a page may be served for, before either the card or the reader body reads
+ * it — or null for the same 404 the page answers.
+ *
+ * 🚨 **Both public reads share this gate.** The card endpoint and the reader-body endpoint
+ * describe one Work to an audience with no session, so an Adult Work, a withdrawn Work and
+ * a suspended creator's Work must be absent from both rather than from whichever one
+ * remembered. `requiresAdultVerification` — never `maturity === "adult"` — is the rating
+ * check, because it answers true for a value this build does not recognize.
+ */
+async function publicWorkRow(param: string): Promise<typeof works.$inferSelect | null> {
+	const work = await findWorkRow(param);
+	if (!work) return null;
+	if (work.visibility !== "released") return null;
+	if (requiresAdultVerification(work.maturity)) return null;
+	if (work.creatorId != null && (await isSuspendedAccount(work.creatorId))) return null;
+	return work;
+}
+
+/**
+ * The reader body a Work's document carries, or null for the page's own 404.
+ *
+ * The same row and the same gate as `publicWorkCard`, with the facts a reader needs rather
+ * than the four fields a link preview has. The creator is read here because the byline is
+ * part of the page the reader came for; a Work whose creator row is gone (a deleted
+ * account's tombstoned Work) still reads, with the byline absent.
+ */
+export async function publicWorkReader(param: string) {
+	const work = await publicWorkRow(param);
+	if (!work) return null;
+	const [creator] = work.creatorId
+		? await db
+				.select({ handle: users.atprotoHandle, displayName: users.displayName })
+				.from(users)
+				.where(eq(users.id, work.creatorId))
+				.limit(1)
+		: [undefined];
+	return {
+		title: work.title,
+		description: work.description,
+		type: work.type,
+		maturity: work.maturity,
+		maturityNotes: work.maturityNotes ?? [],
+		releasedAt: work.releasedAt,
+		author: creator ?? null,
 	};
 }
 
