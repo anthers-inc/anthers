@@ -433,7 +433,7 @@ export default function WorkPage() {
 					access && !access.canAccess && !access.requiresPurchase ? (
 						<WorkMediaFrame>
 							<div className="w-full">
-								<InlineUnlock post={work} access={access} />
+								<InlineUnlock work={work} access={access} />
 							</div>
 						</WorkMediaFrame>
 					) : (

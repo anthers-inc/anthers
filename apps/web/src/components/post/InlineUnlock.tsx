@@ -18,6 +18,12 @@
  * dressed as one; see the `login_required` branch, which reads `isFree` to tell the two
  * apart. It is also the surface that replaced `AnonymousViewerBanner` — the invitation to
  * make an account now stands *instead of* the player rather than underneath one.
+ *
+ * ⭐ **The panel names a Work, because a Work's page is the only place it stands.** It read
+ * "Unlock this post" from the days when `PostPage` rendered it — that stopped on 2026-08-02,
+ * when the Work page was built and PostPage was stripped to an announcement — so the noun
+ * outlived its only post caller. A post surface that needs an unlock panel passes its own
+ * noun rather than this default going generic again.
  */
 
 import { withNextPath } from "@anthers/shared/next-path";
@@ -41,16 +47,16 @@ interface UnlockSubject {
 }
 
 export default function InlineUnlock({
-	post,
+	work,
 	access,
 }: {
-	post: UnlockSubject;
+	work: UnlockSubject;
 	access: AccessResult;
 }) {
 	const location = useLocation();
 
-	const creatorName = post.creator?.displayName || post.creator?.handle || "this creator";
-	const creatorHandle = post.creator?.handle;
+	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
+	const creatorHandle = work.creator?.handle;
 
 	/*
 	 * Not logged in → both doors, and both of them come back here.
@@ -142,7 +148,7 @@ export default function InlineUnlock({
 			blurb={
 				creatorRoute
 					? undefined
-					: `Support ${creatorName} monthly to unlock this post and their other members-only work.`
+					: `Support ${creatorName} monthly to unlock this Work and their other members-only work.`
 			}
 		>
 			{creatorRoute && creatorHandle ? (
@@ -168,7 +174,7 @@ function UnlockCard({
 }: {
 	/** Only for states the action itself doesn't explain (login, or no route at all). */
 	blurb?: string;
-	/** Overrides the default "Unlock this post" — for the states that are not unlocks. */
+	/** Overrides the default "Unlock this Work" — for the states that are not unlocks. */
 	heading?: string;
 	/**
 	 * 🚨 **A padlock is a claim, and on Public Access work it is a false one.** Every state
@@ -186,7 +192,7 @@ function UnlockCard({
 				<div className="w-12 h-12 rounded-full bg-base-300 flex items-center justify-center">
 					<Icon className="w-6 h-6 text-base-content/70" />
 				</div>
-				<h3 className="font-bold text-lg">{heading ?? "Unlock this post"}</h3>
+				<h3 className="font-bold text-lg">{heading ?? "Unlock this Work"}</h3>
 				{blurb ? <p className="text-sm text-base-content/60 max-w-sm">{blurb}</p> : null}
 				{children}
 			</div>
