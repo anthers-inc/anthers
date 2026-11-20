@@ -71,6 +71,16 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.11.20",
+		date: "2026-11-20",
+		lede: "A Work, a post, and a profile now carry their own words for a visitor who runs no JavaScript, and the payment fields are legible in both themes.",
+		entries: [
+			"Without JavaScript, a Work, a post, and a profile now carry their own words: the title, the description, a post's body, and a profile's bio arrive in the document instead of the application's empty shell. The same gates decide what is present, so a withdrawn or Adult Work, a draft post, and a suspended creator's profile stay absent.",
+			"The payment fields in checkout, in the subscription dialog, and in payment settings now sit on their own surface with a border, so each field stands out from the surface around it in both themes. The dark theme gets its own field colors, and the fields repaint when the theme changes rather than keeping the colors they had when the page loaded.",
+			"The panel over a locked Work now names a Work in its heading and in its invitation to support the creator, rather than calling it a post.",
+		],
+	},
+	{
 		version: "2026.11.19",
 		date: "2026-11-18",
 		lede: "Checkout's card and address fields take their colors from the theme again, and a feed's hover preview can be scrubbed to any point.",
