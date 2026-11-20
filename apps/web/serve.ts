@@ -6,10 +6,11 @@
  * still a client-rendered SPA: this server serves the built `dist/` exactly as the static
  * site did, and on a document request it does two things to the shell beside serving it —
  * swaps the neutral share block for the Work's own title, blurb and thumbnail (see
- * `src/lib/share-head.ts`), and puts the standing page's reader body before `</body>` (see
- * `src/lib/reader-body.ts`), which is what a reader that runs no JavaScript gets. Nothing
- * else about the page changes, so the SPA, its routes and its own data fetches are
- * untouched.
+ * `src/lib/share-head.ts`), and puts the page's reader body before `</body>` (see
+ * `src/lib/reader-body.ts`), which is what a reader that runs no JavaScript gets. A standing
+ * page's body is rendered at build time; a Work's, a post's and a profile's comes from the
+ * API because their words are not in the build. Nothing else about the page changes, so the
+ * SPA, its routes and its own data fetches are untouched.
  *
  * 🚨 **A Work's page, a post's permalink, a creator's profile and the share link that points
  * at a Work all carry that card.** A `/s/{token}` link is what the Share button hands a
@@ -44,7 +45,7 @@ import { robotsTxt, SITEMAP_PATH, sitemapXml } from "./src/lib/crawl.js";
 import { devBuildApiOrigin, devBuildPage, servesDevBuildPage } from "./src/lib/dev-build-page.js";
 import { pageMeta } from "./src/lib/page-meta.js";
 import { previewRoute } from "./src/lib/preview-route.js";
-import { injectReaderBody } from "./src/lib/reader-body.js";
+import { injectReaderBody, noscriptBody } from "./src/lib/reader-body.js";
 import { injectShareHead, type LinkCard } from "./src/lib/share-head.js";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -98,12 +99,105 @@ async function indexHtml(): Promise<string> {
 const PRERENDER_FILE = "prerender.json";
 let readerBodies: Promise<Record<string, string>> | null = null;
 
-async function readerBodyFor(pathname: string): Promise<string | null> {
+async function standingReaderBody(pathname: string): Promise<string | null> {
 	readerBodies ??= Bun.file(resolve(DIST, PRERENDER_FILE))
 		.json()
 		.catch(() => ({}) as Record<string, string>);
 	const bodies = await readerBodies;
 	return bodies[pathname] ?? null;
+}
+
+/**
+ * How long a dynamic reader body is reused, and how many pages one process keeps.
+ *
+ * 🚨 **The body read is on the path of every document request, and the card read already
+ * spends 1500 ms of the budget there** — an uncached second round trip would be felt on
+ * exactly the pages that are most shared. A hit is served from memory; a miss still gets the
+ * card's own deadline and fails open to the shell. A failed read is remembered briefly rather
+ * than not at all, so an API that is down is not asked once per visitor, while a Work that
+ * goes public is picked up a few seconds later rather than a process restart later.
+ */
+const READER_BODY_TTL_MS = 5 * 60_000;
+const READER_BODY_MISS_TTL_MS = 30_000;
+const READER_BODY_CACHE_MAX = 500;
+const READER_BODY_TIMEOUT_MS = 1500;
+
+interface ReaderBodyCacheEntry {
+	body: string | null;
+	at: number;
+}
+
+const readerBodyCache = new Map<string, ReaderBodyCacheEntry>();
+/** One read per address in flight, so a burst of requests does not fan out into a burst. */
+const readerBodyPending = new Map<string, Promise<string | null>>();
+
+/** The API path family each document kind's card and reader-body reads live under. */
+const DOCUMENT_FAMILY = {
+	work: "content/works",
+	post: "content/posts",
+	creator: "accounts/users",
+} as const;
+
+async function fetchReaderBody(
+	kind: keyof typeof DOCUMENT_FAMILY,
+	param: string,
+): Promise<string | null> {
+	const signal = AbortSignal.timeout(READER_BODY_TIMEOUT_MS);
+	try {
+		const res = await fetch(
+			`${API_ORIGIN}/api/${DOCUMENT_FAMILY[kind]}/${encodeURIComponent(param)}/reader`,
+			{ headers: { accept: "application/json" }, signal },
+		);
+		if (!res.ok) return null;
+		const body = (await res.json()) as { body?: unknown };
+		return typeof body.body === "string" && body.body !== "" ? body.body : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * The reader body the API holds for a dynamic document, or null for a page it cannot read.
+ *
+ * The three dynamic document families are the ones `previewRoute` names; a share link is a
+ * locator rather than a page of its own, so it keeps its card and takes no body.
+ */
+async function dynamicReaderBody(pathname: string): Promise<string | null> {
+	const route = previewRoute(pathname);
+	if (!route || route.kind === "share") return null;
+
+	const cached = readerBodyCache.get(pathname);
+	if (cached) {
+		const ttl = cached.body === null ? READER_BODY_MISS_TTL_MS : READER_BODY_TTL_MS;
+		if (Date.now() - cached.at < ttl) return cached.body;
+	}
+
+	const pending = readerBodyPending.get(pathname);
+	if (pending) return pending;
+
+	const read = fetchReaderBody(route.kind, route.param)
+		.then((body) => {
+			if (readerBodyCache.size >= READER_BODY_CACHE_MAX) {
+				const oldest = readerBodyCache.keys().next().value;
+				if (oldest !== undefined) readerBodyCache.delete(oldest);
+			}
+			readerBodyCache.set(pathname, { body, at: Date.now() });
+			return body;
+		})
+		.finally(() => readerBodyPending.delete(pathname));
+	readerBodyPending.set(pathname, read);
+	return read;
+}
+
+/**
+ * The block a document carries: the build's own body for a standing page, or the API's
+ * fragment wrapped in the `<noscript>` the standing pages are also wrapped in.
+ */
+async function readerBody(pathname: string): Promise<string | null> {
+	const standing = await standingReaderBody(pathname);
+	if (standing) return standing;
+	const dynamic = await dynamicReaderBody(pathname);
+	return dynamic ? noscriptBody(dynamic) : null;
 }
 
 /** The card a document is served with, and the address it canonically lives at. */
@@ -112,13 +206,6 @@ interface ServedPreview {
 	/** The document's own page, which is what the card and the canonical link name. */
 	canonicalPath: string;
 }
-
-/** The API path family each document kind's card read lives under. */
-const CARD_FAMILY = {
-	work: "content/works",
-	post: "content/posts",
-	creator: "accounts/users",
-} as const;
 
 /**
  * Who a document path is about, as the card endpoint's parameter and the canonical path.
@@ -171,7 +258,7 @@ async function previewFor(pathname: string): Promise<ServedPreview | null> {
 		const target = route.kind === "share" ? await shareTarget(route.token, signal) : route;
 		if (!target) return null;
 		const res = await fetch(
-			`${API_ORIGIN}/api/${CARD_FAMILY[target.kind]}/${encodeURIComponent(target.param)}/card`,
+			`${API_ORIGIN}/api/${DOCUMENT_FAMILY[target.kind]}/${encodeURIComponent(target.param)}/card`,
 			{ headers: { accept: "application/json" }, signal },
 		);
 		if (!res.ok) return null;
@@ -265,11 +352,11 @@ Bun.serve({
 				return url.pathname;
 			}
 		})();
-		const [html, served, readerBody] = await Promise.all([
+		const [html, served, bodyBlock] = await Promise.all([
 			indexHtml(),
 			previewFor(documentPath),
 			// `page-meta.ts` treats a trailing slash as the same page, and so does the body lookup.
-			readerBodyFor(
+			readerBody(
 				documentPath.length > 1 && documentPath.endsWith("/")
 					? documentPath.slice(0, -1)
 					: documentPath,
@@ -282,7 +369,7 @@ Bun.serve({
 		const card = served?.preview ?? pageCard(canonicalPath);
 		const document = injectShareHead(html, card, canonical);
 		return new Response(
-			withDevApiPort(readerBody ? injectReaderBody(document, readerBody) : document),
+			withDevApiPort(bodyBlock ? injectReaderBody(document, bodyBlock) : document),
 			{
 				headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },
 			},

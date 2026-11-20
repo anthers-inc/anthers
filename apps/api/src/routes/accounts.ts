@@ -56,6 +56,7 @@ import {
 	badges,
 	follows,
 	posts,
+	projects,
 	purchases,
 	rightsRequests,
 	userBadges,
@@ -93,7 +94,7 @@ import { searchTerms } from "@anthers/shared/search";
 import { THEME_VALUES } from "@anthers/shared/theme";
 import { isUsState } from "@anthers/shared/us-states";
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, type SQL, sql } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
@@ -139,6 +140,7 @@ import {
 	hideCreator,
 	hideWork,
 	listHiddenContent,
+	maturityHiddenFrom,
 	notHiddenFrom,
 	setMaturityDisplay,
 	unhideCreator,
@@ -162,6 +164,7 @@ import {
 import { dismissChecklist, onboardingFactsFor } from "../services/onboarding.js";
 import {
 	clearParentalControls,
+	parentalHiddenFrom,
 	parentalPolicyFor,
 	parentalVisibility,
 	pinMatches,
@@ -172,6 +175,7 @@ import { payoutStanding } from "../services/payouts.js";
 import { postContentExcerpt } from "../services/post-markdown.js";
 import { releasesByWorkId } from "../services/project-releases.js";
 import { checkRate, clearRate, clientIp, limitResponse } from "../services/rate-limit.js";
+import { profileReaderBody } from "../services/reader-body.js";
 import { matchesFields } from "../services/search-query.js";
 import { storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
@@ -1866,6 +1870,65 @@ const accountRoutes = new Hono()
 				// describe it as one. This names the picture the unfurler is showing.
 				...(preview.image ? { imageAlt: `The profile card for ${preview.title} on Anthers.` } : {}),
 			},
+		});
+	})
+
+	/**
+	 * The words a profile's document carries for a reader that runs no JavaScript.
+	 *
+	 * The same `cardSubject` gate as the card beside it — a moved handle resolves to its
+	 * account and a suspended one is absent — with the bio and the published Projects the
+	 * page shows. The Projects carry the listing's own visibility rule rather than a
+	 * simpler one: a Project whose released Works are all ones an unverified stranger may
+	 * not see is absent, because its title and description disclose what the rung
+	 * withholds (`maturityHiddenFrom`, the rule every listing applies).
+	 */
+	.get("/users/:handle/reader", async (c) => {
+		const handle = c.req.param("handle");
+		const account = await cardSubject(handle);
+		if (!account) return c.json({ error: "User not found" }, 404);
+
+		const [{ prefs }, { policy }] = await Promise.all([
+			adultVisibility(null),
+			parentalVisibility(null),
+		]);
+		const visibleMember = and(
+			maturityHiddenFrom(prefs, null, sql`w.creator_id`, sql`w.maturity`, sql`w.maturity_rows`),
+			parentalHiddenFrom(policy, null, sql`w.creator_id`, sql`w.type`),
+		);
+		const projectRows = await db
+			.select({ title: projects.title, slug: projects.slug, description: projects.description })
+			.from(projects)
+			.where(
+				and(
+					eq(projects.creatorId, account.id),
+					eq(projects.isPublished, true),
+					notTestAccount(projects.creatorId) as SQL,
+					sql`(
+						NOT EXISTS (
+							SELECT 1 FROM project_items pi JOIN works w ON w.id = pi.work_id
+							WHERE pi.project_id = ${projects.id} AND w.visibility = 'released'
+						)
+						OR EXISTS (
+							SELECT 1 FROM project_items pi JOIN works w ON w.id = pi.work_id
+							WHERE pi.project_id = ${projects.id} AND w.visibility = 'released'
+								AND ${visibleMember}
+						)
+					)`,
+				),
+			)
+			.orderBy(desc(projects.createdAt))
+			.limit(100);
+
+		return c.json({
+			body: profileReaderBody({
+				displayName: account.displayName,
+				handle: account.atprotoHandle ?? handle,
+				bio: account.bio,
+				websiteUrl: account.websiteUrl,
+				location: account.location,
+				projects: projectRows,
+			}),
 		});
 	})
 

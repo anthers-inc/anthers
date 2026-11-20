@@ -11,6 +11,7 @@
 import { db } from "@anthers/db/client";
 import {
 	badges,
+	type posts,
 	projectItems,
 	projects,
 	reviews,
@@ -72,6 +73,7 @@ import { saveOwnWork } from "../../services/library.js";
 import { parentalHiddenFrom, parentalVisibility } from "../../services/parental-controls.js";
 import { canBePaid } from "../../services/payouts.js";
 import { postContentExcerpt } from "../../services/post-markdown.js";
+import { postReaderBody, workReaderBody } from "../../services/reader-body.js";
 import { rowsOf } from "../../services/rows.js";
 import { sanitizePostHtml } from "../../services/sanitize.js";
 import {
@@ -106,6 +108,7 @@ import {
 	previewRequest,
 	publicOrigin,
 	publicWorkCard,
+	publicWorkReader,
 	queueTranscodeForWork,
 	RATING_BY_NAME_REFUSAL,
 	REJECTED_CREDIT_REFUSAL,
@@ -613,6 +616,19 @@ const worksRoutes = new Hono()
 	})
 
 	/**
+	 * The words a Work's document carries for a reader that runs no JavaScript.
+	 *
+	 * The same gate as the card beside it, and the same 404: a Work this endpoint describes
+	 * is one the page itself serves. The fragment is wrapped in `<noscript>` by the web
+	 * origin, so this endpoint never has to know how a document is assembled.
+	 */
+	.get("/works/:id/reader", async (c) => {
+		const reader = await publicWorkReader(c.req.param("id"));
+		if (!reader) return c.json({ error: "Work not found" }, 404);
+		return c.json({ body: workReaderBody(reader) });
+	})
+
+	/**
 	 * The card a shared post is unfurled with, for a user who holds no session.
 	 *
 	 * Separate from `GET /posts/:slug` for the same reason the Work card is: that route
@@ -623,6 +639,19 @@ const worksRoutes = new Hono()
 		const card = await publicPostCard(c.req.param("slug"));
 		if (!card) return c.json({ error: "Post not found" }, 404);
 		return c.json({ preview: postPreviewFor(card) });
+	})
+
+	/**
+	 * The words a post's document carries for a reader that runs no JavaScript.
+	 *
+	 * The same gate as the card beside it, and the same 404. A post's own page is readable
+	 * signed out, so this is where the no-JavaScript reader gets the body rather than only
+	 * the title a link preview would carry.
+	 */
+	.get("/posts/:slug/reader", async (c) => {
+		const reader = await publicPostReader(c.req.param("slug"));
+		if (!reader) return c.json({ error: "Post not found" }, 404);
+		return c.json({ body: postReaderBody(reader) });
 	})
 
 	/**
@@ -1288,10 +1317,8 @@ export async function buildFlagsForWork(workId: number): Promise<[boolean, boole
  * title is resolved the same way, so a mention shows the Work's current name.
  */
 export async function publicPostCard(param: string) {
-	const post = await findPostRow(param);
+	const post = await publicPostRow(param);
 	if (!post) return null;
-	if (!post.isPublished) return null;
-	if (post.creatorId != null && (await isSuspendedAccount(post.creatorId))) return null;
 
 	const displayTitle = await displayPostTitle(post.title, null);
 	const embedded = workPublicIdsFromBody(post.body);
@@ -1309,6 +1336,49 @@ export async function publicPostCard(param: string) {
 		displayTitle,
 		excerpt: postContentExcerpt(post.body, POST_PREVIEW_EXCERPT_LIMIT),
 		image,
+	};
+}
+
+/**
+ * The post row a public read may describe, or null for the permalink's own 404.
+ *
+ * 🚨 **The card and the reader body share this gate**, so an unpublished post and a
+ * suspended author's post are absent from both rather than from whichever endpoint
+ * remembered. `GET /posts/:slug` has the creator's own exemption; a read with no session has
+ * no creator to exempt, and that is the whole caller set here.
+ */
+async function publicPostRow(param: string): Promise<typeof posts.$inferSelect | null> {
+	const post = await findPostRow(param);
+	if (!post) return null;
+	if (!post.isPublished) return null;
+	if (post.creatorId != null && (await isSuspendedAccount(post.creatorId))) return null;
+	return post;
+}
+
+/**
+ * The reader body a post's document carries, or null for the permalink's own 404.
+ *
+ * The same row and the same gate as `publicPostCard`, plus the two things a reader needs
+ * that a card does not: the full markdown body (rendered through the write boundary's own
+ * renderer) and the byline. The title resolves mentions exactly as the page's heading does,
+ * so a linked Work reads by its current name rather than as an address.
+ */
+export async function publicPostReader(param: string) {
+	const post = await publicPostRow(param);
+	if (!post) return null;
+	const title = await displayPostTitle(post.title, null);
+	const [creator] = post.creatorId
+		? await db
+				.select({ handle: users.atprotoHandle, displayName: users.displayName })
+				.from(users)
+				.where(eq(users.id, post.creatorId))
+				.limit(1)
+		: [undefined];
+	return {
+		title,
+		body: post.body,
+		publishedAt: post.publishedAt,
+		author: creator ?? null,
 	};
 }
 
