@@ -51,7 +51,7 @@ test.describe("a gated Work, signed out", () => {
 		await expect(page).toHaveURL(new RegExp(`${GATED}-\\d+$`));
 		const here = new URL(page.url()).pathname;
 
-		const card = page.getByText("Unlock this post").locator("..");
+		const card = page.getByText("Unlock this Work").locator("..");
 		await expect(card).toBeVisible();
 
 		const login = page.getByRole("link", { name: /log in to unlock/i });

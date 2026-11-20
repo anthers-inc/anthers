@@ -88,7 +88,7 @@ export default function LockedWorkComposition({
 								workType={work.type}
 							/>
 						) : (
-							<InlineUnlock post={work} access={access} />
+							<InlineUnlock work={work} access={access} />
 						)}
 					</div>
 				)}

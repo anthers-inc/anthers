@@ -119,19 +119,19 @@ async function expectPostUnlocked(page: Page, key: string): Promise<void> {
 	const spec = walkPost(key);
 	await page.goto(`/works/${spec.slug}`);
 	await expect(page.getByText(spec.body)).toBeVisible();
-	await expect(page.getByRole("heading", { name: "Unlock this post" })).toBeHidden();
+	await expect(page.getByRole("heading", { name: "Unlock this Work" })).toBeHidden();
 }
 
 /**
  * A locked post shows the unlock panel, and that panel says what it is locked BY and what
  * to do about it. The heading carries the gate's identity — "Locked · Root" when the gate
- * sits on a Badge, "Unlock this post" when it doesn't — and the CTA carries the *marginal*
+ * sits on a Badge, "Unlock this Work" when it doesn't — and the CTA carries the *marginal*
  * ask, which is the thing a user actually needs: how much more, and to whom.
  */
 async function expectPostLocked(page: Page, key: string): Promise<void> {
 	const spec = walkPost(key);
 	await page.goto(`/works/${spec.slug}`);
-	await expect(page.getByRole("heading", { name: /^(Locked ·|Unlock this post)/ })).toBeVisible();
+	await expect(page.getByRole("heading", { name: /^(Locked ·|Unlock this Work)/ })).toBeVisible();
 	// The ask must be marginal and must name a destination — never a bare "Join to unlock".
 	await expect(
 		page

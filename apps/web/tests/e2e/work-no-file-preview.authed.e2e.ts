@@ -161,9 +161,9 @@ test("a fileless draft's locked and signed-out previews end with a gate or a sil
 		// row, `allow: false`), so a locked user's verdict is `gated`: the unlock card
 		// renders on its cover — the gate treatment, fileless or not.
 		await press("User (Locked)");
-		await expect(page.getByRole("heading", { name: "Unlock this post" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Unlock this Work" })).toBeVisible();
 		await press("Signed-Out");
-		await expect(page.getByRole("heading", { name: "Unlock this post" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Unlock this Work" })).toBeVisible();
 
 		// Un-gate the draft (Public Access: the baseline row, allowed, $0). A locked
 		// user of a FREE work HAS access — a preview must not present free work as
