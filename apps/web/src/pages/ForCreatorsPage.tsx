@@ -35,7 +35,8 @@
 // but "100% to the creator" is RETIRED (2026-08-03) — the at-cost card fee comes out
 // of the price. Where a cut and a price appear together the take-home figure must
 // appear with them, or a user concludes the creator gets the whole list price.
-// "nonprofit", never "501(c)(3)", until the IRS determination letter lands.
+// "nonprofit" is the word this page needs; the 501(c)(3) recognition of 2026-11-13
+// is true and belongs on /about, not in a creator-economics page.
 //
 // Section flow: a brief "The problem" (what's wrong across every kind of platform)
 // sets up "The solution" — an interactive matrix (how a fan supports you × the

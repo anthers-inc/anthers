@@ -22,8 +22,10 @@
 //
 // 🚨 **Claims discipline is load-bearing here** — the page's subject is the
 // organization's own money, so it rides the `about-claims` scan (this file is read
-// by that suite). No federal exemption claim in any form, no dates on it: the wiki's
-// *How Anthers Talks About Itself* § Claims is the authority.
+// by that suite). The IRS recognized the exemption on 2026-11-13, so the status may
+// be stated where it belongs; this page's subject is the mechanism rather than the
+// organization's tax position, and it makes no status claim of its own. The wiki's
+// *How Anthers Talks About Itself* § The Federal Status is the authority.
 //
 // 🚨 **A Badge is a subscription purchase, never a gift** (2026-10-15, recorded in
 // *How Anthers Talks About Itself*'s vocabulary): the user pays a monthly amount

@@ -9,10 +9,10 @@
 //
 // Settled by Parker, 2026-08-21: **what → what that means → what we're for →
 // who's running it**. State the plainest, most fundamental fact first (Anthers,
-// Inc. is a Colorado nonprofit corporation), then what that fact actually binds,
-// then the mission, then the person. An earlier arrangement opened on the mission
-// and reached the organization in section five, which buries the one thing a
-// user came here to establish.
+// Inc. is a Colorado nonprofit corporation and a recognized 501(c)(3) public
+// charity), then what that fact actually binds, then the mission, then the person.
+// An earlier arrangement opened on the mission and reached the organization in
+// section five, which buries the one thing a user came here to establish.
 //
 // ── What this page owns, and what it must not grow back ──────────────────────
 //
@@ -27,12 +27,12 @@
 //
 // Three body sections is the whole scope:
 //
-//   1. What Anthers is ... the corporate facts, then two lists — what binds us
-//                          NOW under the Colorado Act and our own Articles, and
-//                          what federal recognition would ADD. Sourced from the
-//                          Articles' additional-information attachment (51 §
-//                          `Anthers AOI - Additional Information.docx`), not
-//                          from a summary of it.
+//   1. What Anthers is ... one account of what being a nonprofit means now: the
+//                          corporate facts the Articles bind, the federal
+//                          recognition, what monthly support is and is not, the
+//                          annual return, and the gaps that remain. Sourced from
+//                          the Articles' additional-information attachment and the
+//                          determination letter, not from a summary of either.
 //   2. The mission ....... two cards, What We Do and How We Do It, lifted from
 //                          parkerhdavis.com's own structure. The three-card
 //                          indictment of commercial platforms is gone; the case
@@ -48,23 +48,30 @@
 //
 // ── 🚨 Federal status ────────────────────────────────────────────────────────
 //
-// The wiki's *How Anthers Talks About Itself* § Claims owns the rule; this is the
-// part the page implements. The two-list structure below separates what binds the
-// Corporation now from what federal recognition would add, so a user never has to
-// work out which column a sentence belongs in.
+// The wiki's *How Anthers Talks About Itself* § The Federal Status owns the rule;
+// this is the part the page implements, and the letter is published in the wiki's
+// *Filings & Public Records* page so a reader can check the claim rather than take
+// it. The Internal Revenue Service issued its determination on 2026-11-13,
+// recognizing the Corporation under § 501(c)(3) and classifying it as a public
+// charity under § 509(a)(2), effective 2026-08-07. The status, the classification
+// and the deductibility of a gift may all be stated plainly.
 //
-// What `about-claims.test.ts` holds:
+// Two limits survive, and both are cash consequences:
 //
-//   • Anthers may say it applied for 501(c)(3) recognition and that the application
-//     is pending, because the Form 1023-EZ was filed on 2026-11-02. It may never be
-//     CALLED a 501(c)(3) or described as tax-exempt; only the determination letter
-//     makes those true.
-//   • No money given to Anthers may be called deductible **today**. Where the
-//     "soon" column says donations become deductible, the sentence beside it
-//     says they are not yet — same co-presence rule as "free forever" and the
-//     monthly limit, and the guard asserts the pairing.
-//   • ⚠️ **No date.** The Service sets no decision date, so the copy states the
-//     pending status without promising when it ends.
+//   • **Monthly support is program-service revenue, not a gift, and is never
+//     deductible.** The word *donation* stays reserved for a gift; copy must not
+//     slide from "gifts are deductible" to "your support is deductible."
+//   • **No solicitation and no giving channel in any form until Colorado
+//     charitable-solicitation registration is approved.** Registration is in
+//     progress, not filed. A page may state the facts; it may not ask for a
+//     donation, exhort, or add a donate path.
+//
+// What `about-claims.test.ts` holds now: the page may state the Form 990 obligation
+// and its first due date (2027-05-15, for the short year 2026-08-07 → 2026-12-31)
+// but may never claim a return has been filed; no board, audit or impact report is
+// claimed; and a deductibility sentence arrives beside the one naming monthly
+// support as not a gift, so nobody can read their support as a charitable
+// contribution.
 //
 // ── Voice ────────────────────────────────────────────────────────────────────
 //
@@ -127,33 +134,27 @@ const serif = { fontFamily: FONTS.fraunces };
 /*  Data                                                               */
 /* ------------------------------------------------------------------ */
 
-// What the Colorado Act and Anthers' own filed Articles already bind, quoted from
-// the additional-information attachment rather than from anyone's summary of it.
-// Each of these survives the test the wiki's *How Anthers Talks About Itself* § Claims sets — it still holds
-// with one director and no federal recognition — because each is in the filing.
-const BINDING_NOW = [
+// One account of what being a nonprofit means, rather than a state-versus-federal
+// split: the corporate form and the federal recognition bind the same organization,
+// and a user should not have to sort a sentence into a column to know which is which.
+// Each item is in the filed Articles, in the determination letter, or in the tax
+// code's own requirements; the last names what Anthers does not have yet.
+const WHAT_IT_MEANS = [
 	"There are no owners and no shares, and the Articles give Anthers no voting members. Nobody holds a piece of it, so there is nobody to pay a profit to and nothing for anyone to buy.",
 	"Nothing Anthers earns may be paid out to anyone inside it. The Articles bar its net earnings from benefiting a director, an officer, or any private person, and require it to serve public rather than private interests. What it may pay is ordinary compensation for work actually done.",
 	"If Anthers ever dissolves, its assets can only be transferred to another charitable organization or to a government for a public purpose. They don't go to a founder or anyone working here, to shareholders (which we can't have), to any for-profit entity, nothing like that.",
 	"Anthers' purposes are fixed in the Articles, and they are specific: making creative and educational work freely available to the public, releasing the platform's technology under open-source licenses, and enabling creators to host and deliver their own work independently of Anthers.",
-];
-
-// What federal recognition would add, chosen for the three people who actually
-// need to know — someone deciding whether to publish here, someone deciding
-// whether to support a creator here, and someone deciding whether to fund us.
-// ⚠️ The first line carries its own present-tense correction; see the header.
-const BINDING_SOON = [
-	"Donations to Anthers become tax-deductible for the person making them. Until the determination letter arrives, they aren't, and that's why we don't yet solicit donations.",
-	"Anthers becomes eligible for special grants and discounts that foundations and vendors reserve for recognized charities, which is money and service going into the platform rather than out of it.",
-	"Anthers' finances become a matter of public record, published every year, so anyone can check what came in and where it went. We do our best to be transparent already, but that will increase significantly once the determination letter arrives.",
-	"The prohibition on paying insiders, which the filed Articles already bind us to, is entrenched further once federal recognition arrives.",
+	"On November 13, 2026, the Internal Revenue Service recognized Anthers as exempt under § 501(c)(3) and classified it as a public charity under § 509(a)(2), with the exemption effective from August 7, 2026, the day Anthers was incorporated. Gifts to Anthers are deductible under § 170.",
+	"Monthly support is not a gift: it buys something, which makes it program-service revenue rather than a charitable contribution, so it is never deductible. The word donation is reserved for an actual gift, and there is no giving channel yet.",
+	"A Form 990-series return is due every year. The first covers the short first year, from August 7 to December 31, 2026, and is due May 15, 2027. No return has been filed yet.",
+	"Anthers is one person. Parker is its only director. There is no audit, and no board beyond him.",
 ];
 
 /* ------------------------------------------------------------------ */
 /*  Page Component                                                     */
 /* ------------------------------------------------------------------ */
 
-/** One of the two fact columns in § What Anthers Is. */
+/** The fact card in § What Anthers Is. */
 function FactCard({ title, note, items }: { title: string; note: string; items: string[] }) {
 	return (
 		<Card className="flex h-full flex-col text-left">
@@ -215,28 +216,21 @@ export default function AboutPage() {
 					<Eyebrow>The organization</Eyebrow>
 					<H2>What Anthers Is</H2>
 					<Lede>
-						Anthers, Inc. is a Colorado nonprofit corporation, Secretary of State ID 20261969882. We
-						have applied for federal 501(c)(3) recognition, and the application is pending. In case
-						you're not familiar with the terms, there are some differences between the two:
+						Anthers, Inc. is a Colorado nonprofit corporation, Secretary of State ID 20261969882,
+						and the Internal Revenue Service recognizes it as a 501(c)(3) public charity. What
+						matters is not the label but what it binds us to.
 					</Lede>
 				</Reveal>
 
-				<div className="mx-auto mt-12 grid max-w-5xl gap-6 md:grid-cols-2">
-					<Reveal className="h-full">
+				<Reveal>
+					<div className="mx-auto mt-12 max-w-3xl text-left">
 						<FactCard
-							title="What's Already True"
-							note="Since incorporation as a Colorado nonprofit"
-							items={BINDING_NOW}
+							title="What Being a Nonprofit Means"
+							note="The limits the filings set and what Anthers does not have yet"
+							items={WHAT_IT_MEANS}
 						/>
-					</Reveal>
-					<Reveal delay={110} className="h-full">
-						<FactCard
-							title="What That Means Soon"
-							note="Once the IRS determination letter arrives"
-							items={BINDING_SOON}
-						/>
-					</Reveal>
-				</div>
+					</div>
+				</Reveal>
 			</Section>
 
 			{/* ───────────── 2. The mission ───────────── */}
@@ -278,11 +272,11 @@ export default function AboutPage() {
 									users and creators, and our other charitable programs.
 								</p>
 								<p>
-									That's the beauty of being a nonprofit in this space: Whatever money we bring in
+									That's the beauty of being a nonprofit in this space: whatever money we bring in
 									above what's needed to keep the lights on, whether that's through subscriptions to
-									Anthers itself, or purchases of Anthers merch, or donations to our nonprofit (not
-									possible yet), it all goes straight to supporting creators, providing free access,
-									and expanding our other charitable services and programs.
+									Anthers itself or purchases of Anthers merch, goes straight to supporting
+									creators, providing free access, and expanding our other charitable services and
+									programs.
 								</p>
 								<p>
 									Turns out, it's possible to build a place that creators and their audiences can

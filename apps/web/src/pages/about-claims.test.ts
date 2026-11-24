@@ -18,6 +18,14 @@
 // feature to contradict it. Both need a test for the same reason: nothing else in the
 // repo can tell.
 //
+// ⚠️ **The federal-status rows left on 2026-11-13**, in the same commit as the page,
+// when the IRS determination letter arrived: the status and the deductibility of a
+// gift are facts now, not claims waiting on a date. What replaced them is not
+// silence. The page pins the recognized status positively, and the co-presence rule
+// changed sides: a sentence saying a gift is deductible must sit beside the one
+// naming monthly support as program-service revenue that is never deductible,
+// because that is the mistake the letter makes easy.
+//
 // ⚠️ **Every row below becomes sayable on a specific day.** When that day comes, delete
 // the row **in the same commit as the milestone** — deliberately, because the
 // organization changed. Never delete one to make a red test green, and never soften a
@@ -29,14 +37,16 @@
 //
 // Scoped to specific pages on purpose. /about and /resources/how-money-moves are
 // the two pages whose subject is the organization's own money; everything else is
-// the wrong tool, and the wiki roadmap lists the first Form 990 as a **future milestone
-// in its filings checklist**, which is exactly correct there. A repo-wide rule would have
-// to exempt honest copy, which is how a guard becomes noise people route around.
-// A page whose subject is the organization's own money joins this scan the day it
-// ships — the /resources/revenue drawing was the second such page until 2026-10-15,
-// when the mechanism page replaced it.
+// the wrong tool, and the first Form 990's filing belongs on the wiki roadmap rather
+// than in a guard's scope. A repo-wide rule would have to exempt honest copy, which
+// is how a guard becomes noise people route around. A page whose subject is the
+// organization's own money joins this scan the day it ships — the /resources/revenue
+// drawing was the second such page until 2026-10-15, when the mechanism page replaced
+// it.
 //
-// Sources: the wiki's *How Anthers Talks About Itself* § Claims (what may be said), Organizational Structure § Phase 1 (what is true).
+// Sources: the wiki's *How Anthers Talks About Itself* § Claims and § The Federal
+// Status (what may be said), and the filed Articles and determination letter (what
+// is true).
 
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -100,8 +110,21 @@ const PREMATURE: { claim: string; phrases: string[]; sayableWhen: string }[] = [
 		sayableWhen: "never — a real board gets real names, and no board gets an invitation",
 	},
 	{
-		claim: "Anthers files an annual federal return",
-		phrases: ["990"],
+		claim: "Anthers has filed an annual federal return",
+		// Narrowed on 2026-11-13, when the page began stating the obligation and its
+		// first due date. The obligation is real now that the exemption is recognized,
+		// and a page may say so; what it may not do is claim a return exists. These
+		// phrases are the filed-return claim, not the bare number, so the copy can name
+		// the form and the deadline without tripping its own guard.
+		phrases: [
+			"filed its 990",
+			"filed a 990",
+			"filed its form 990",
+			"filed a form 990",
+			"990 is public",
+			"990 is published",
+			"990 on file",
+		],
 		sayableWhen: "the first annual return is filed and public",
 	},
 	{
@@ -113,45 +136,6 @@ const PREMATURE: { claim: string; phrases: string[]; sayableWhen: string }[] = [
 		claim: "Anthers' financials are independently audited",
 		phrases: ["independent audit", "independent auditor"],
 		sayableWhen: "the first audit is complete",
-	},
-	{
-		claim: "Anthers holds federal tax-exempt status",
-		// The Form 1023-EZ was filed on 2026-11-02, so *applied for* and *pending* became
-		// sayable that day and the phrases carrying them left this row in the same commit.
-		// What remains forbidden is the status itself, in every construction a user would
-		// take as present-tense — including "pending 501(c)(3)", which names the status
-		// rather than the application. The positive assertion below pins the filed-and-
-		// pending framing, so re-tensing breaks two tests rather than none.
-		phrases: [
-			"is a 501(c)",
-			"are a 501(c)",
-			"as a 501(c)",
-			"501(c)(3) nonprofit",
-			"501(c)(3) non-profit",
-			"501(c)(3) organization",
-			"501(c)(3) charity",
-			"tax-exempt",
-			"tax exempt",
-			"pending 501(c)",
-		],
-		sayableWhen: "the IRS determination letter arrives",
-	},
-	{
-		claim: "money given to Anthers is deductible today",
-		// The half of the old row that did NOT relax. Deductibility is the claim with a
-		// cash consequence for the user, so only the future form survives, and it is
-		// paired with its own correction — see the co-presence assertion below.
-		phrases: [
-			"is tax-deductible",
-			"are tax-deductible",
-			"is tax deductible",
-			"are tax deductible",
-			"tax-deductible donation",
-			"tax deductible donation",
-			"tax-deductible gift",
-			"tax deductible gift",
-		],
-		sayableWhen: "the IRS determination letter arrives",
 	},
 ];
 
@@ -180,22 +164,26 @@ describe("/about describes the organization as it is", () => {
 		});
 	}
 
-	// The positive half of the federal-status rule, and it is what lets the negative half
-	// above be narrow. The application is filed and the page states it as pending; the
-	// status is what waits for the letter. Rewording is fine — update this line with the
-	// reword rather than dropping it.
-	it("states the application as filed and pending, never the status as held", () => {
-		expect(COPY).toContain("we have applied for federal 501(c)(3) recognition");
+	// The positive half of the federal-status rule, which is now a fact about the
+	// organization rather than something waiting on the Service. The letter arrived on
+	// 2026-11-13, so the page states the recognition as held; the pin is what stops a
+	// future edit from quietly returning to the old pending framing, which would now be
+	// false in the other direction. Rewording is fine — update this line with the reword
+	// rather than dropping it.
+	it("states the recognized status rather than an application waiting on the IRS", () => {
+		expect(COPY).toContain("classified it as a public charity under § 509(a)(2)");
 	});
 
-	// 🚨 The co-presence rule, same shape as "free forever" beside the monthly limit: a
-	// user who meets "donations become tax-deductible" without the correction beside it
-	// will hear that theirs is, and that one has a cash consequence. Conditional on the
-	// mention, because deleting the deductibility line entirely is a legitimate edit —
-	// what is not legitimate is keeping it and dropping the sentence that dates it.
-	it("never says donations become deductible without saying they are not yet", () => {
-		if (COPY.includes("tax-deductible") || COPY.includes("tax deductible")) {
-			expect(COPY).toContain("until the determination letter arrives, they aren't");
+	// 🚨 The co-presence rule, and the letter flipped which side needs the guard. A
+	// deductibility sentence is true now, but a user who meets "gifts are deductible"
+	// without the correction beside it will take their monthly support for a charitable
+	// contribution, and that one has a cash consequence. Conditional on the mention,
+	// because deleting the deductibility line entirely is a legitimate edit; what is not
+	// legitimate is keeping it and dropping the sentence that bounds it.
+	it("never says a gift is deductible without saying monthly support is not", () => {
+		if (/\b(?:is|are) (?:tax[- ]?deductible|deductible)\b/.test(COPY)) {
+			expect(COPY).toContain("monthly support is not a gift");
+			expect(COPY).toContain("never deductible");
 		}
 	});
 

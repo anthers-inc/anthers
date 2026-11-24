@@ -110,7 +110,7 @@ export const COMPLIANCE_OBLIGATIONS: readonly ComplianceObligation[] = [
 		consequence:
 			"Three consecutive misses is automatic revocation of exempt status under IRC § 6033(j) — no notice, no hearing.",
 		terminal: true,
-		note: "Owed even while the Form 1023 is pending. Which form applies turns on the flow-through reading of gross receipts.",
+		note: "Required now that the IRS has recognized the exemption (determination 2026-11-13, effective 2026-08-07). Which form applies turns on the flow-through reading of gross receipts.",
 		// The 15th day of the 5th month after a December 31 fiscal year end — May 15. First instance
 		// is the short year's return, due 2027-05-15.
 		recurrence: { kind: "annual", first: "2027-05-15", month: 5, day: 15 },

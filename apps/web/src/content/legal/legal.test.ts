@@ -250,10 +250,11 @@ describe("published legal documents", () => {
 		expect(text).not.toContain("no lasting profile of you exists at Stripe");
 	});
 
-	it("makes no claim Anthers is a 501(c)(3)", () => {
-		// Copy rule, and a live one until the determination letter arrives: the honest
-		// word is "nonprofit". Asserted here because a legal page is the most plausible
-		// place for it to creep in.
+	it("keeps the served legal texts free of a status claim", () => {
+		// The texts still say "nonprofit", which remains true, and make no claim of
+		// their own about the 501(c)(3) recognition: that belongs to the pages whose
+		// subject it is. Asserted here because a legal page is the most plausible
+		// surface for a status claim to creep in unreviewed.
 		for (const doc of Object.values(LEGAL_DOCUMENTS)) {
 			const text = doc.blocks.join("\n").toLowerCase();
 			expect(text).not.toContain("501(c)");
