@@ -146,8 +146,8 @@ const WHAT_IT_MEANS = [
 	"Anthers' purposes are fixed in the Articles, and they are specific: making creative and educational work freely available to the public, releasing the platform's technology under open-source licenses, and enabling creators to host and deliver their own work independently of Anthers.",
 	"On November 13, 2026, the Internal Revenue Service recognized Anthers as exempt under § 501(c)(3) and classified it as a public charity under § 509(a)(2), with the exemption effective from August 7, 2026, the day Anthers was incorporated. Gifts to Anthers are deductible under § 170.",
 	"Monthly support is not a gift: it buys something, which makes it program-service revenue rather than a charitable contribution, so it is never deductible. The word donation is reserved for an actual gift, and there is no giving channel yet.",
-	"A Form 990 return is due every year. The first covers the short first year, from August 7 to December 31, 2026, and is due May 15, 2027. No return has been filed yet.",
-	"Anthers is one person. Parker is its only director, there is no audit, and no board beyond him.",
+	"A Form 990-series return is due every year. The first covers the short first year, from August 7 to December 31, 2026, and is due May 15, 2027. No return has been filed yet.",
+	"Anthers is one person. Parker is its only director. There is no audit, and no board beyond him.",
 ];
 
 /* ------------------------------------------------------------------ */
@@ -217,9 +217,8 @@ export default function AboutPage() {
 					<H2>What Anthers Is</H2>
 					<Lede>
 						Anthers, Inc. is a Colorado nonprofit corporation, Secretary of State ID 20261969882,
-						and the Internal Revenue Service recognizes it as a 501(c)(3) public charity. Those are
-						two facts about one organization, and the useful part is not the label but what it binds
-						us to.
+						and the Internal Revenue Service recognizes it as a 501(c)(3) public charity. What
+						matters is not the label but what it binds us to.
 					</Lede>
 				</Reveal>
 
@@ -227,7 +226,7 @@ export default function AboutPage() {
 					<div className="mx-auto mt-12 max-w-3xl text-left">
 						<FactCard
 							title="What Being a Nonprofit Means"
-							note="The limits the filings set, and what Anthers does not have yet"
+							note="The limits the filings set and what Anthers does not have yet"
 							items={WHAT_IT_MEANS}
 						/>
 					</div>
